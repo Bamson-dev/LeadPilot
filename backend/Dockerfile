@@ -31,7 +31,7 @@ COPY shared/package.json shared/tsconfig.json shared/index.ts ./shared/
 COPY shared/types ./shared/types
 COPY shared/utils ./shared/utils
 COPY backend/package.json backend/tsconfig.json ./backend/
-RUN npm ci --workspace=@leadpilot/shared --workspace=@leadpilot/backend
+RUN npm ci --include=dev --workspace=@leadpilot/shared --workspace=@leadpilot/backend
 
 COPY shared ./shared
 COPY backend ./backend
