@@ -1,0 +1,11 @@
+{
+  "name": "leadpilot-canvas-ad",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "export": "node export-video.mjs"
+  },
+  "dependencies": {
+    "ffmpeg-static": "^5.2.0"
+  }
+}

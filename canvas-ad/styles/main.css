@@ -1,0 +1,121 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-height: 100vh;
+  background: #1a1a22;
+  color: #f4f4ff;
+  font-family: Figtree, system-ui, sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px;
+  gap: 20px;
+}
+
+h1 {
+  font-family: "Bricolage Grotesque", sans-serif;
+  font-size: 1.25rem;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  max-width: 900px;
+}
+
+button {
+  font-family: Figtree, sans-serif;
+  font-weight: 600;
+  font-size: 15px;
+  padding: 14px 28px;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: transform 0.15s, opacity 0.15s;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+#btnRecord {
+  background: linear-gradient(135deg, #7c3aed, #a855f7);
+  color: white;
+  font-size: 17px;
+  padding: 16px 36px;
+}
+
+#btnConvert {
+  background: #0f0f14;
+  color: #f4f4ff;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.status {
+  font-size: 14px;
+  color: #6b6b80;
+  text-align: center;
+  min-height: 22px;
+}
+
+.progress-wrap {
+  width: min(400px, 90vw);
+  height: 8px;
+  background: #0f0f14;
+  border-radius: 999px;
+  overflow: hidden;
+  display: none;
+}
+
+.progress-wrap.visible {
+  display: block;
+}
+
+.progress-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #7c3aed, #10b981);
+  border-radius: 999px;
+  transition: width 0.2s;
+}
+
+.preview-wrap {
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+canvas {
+  display: block;
+  width: 360px;
+  height: 640px;
+  background: #07070a;
+}
+
+.hint {
+  font-size: 13px;
+  color: #6b6b80;
+  max-width: 520px;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.convert-note {
+  font-size: 12px;
+  color: #6b6b80;
+  max-width: 480px;
+  text-align: center;
+}

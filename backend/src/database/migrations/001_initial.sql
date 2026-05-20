@@ -1,6 +1,6 @@
 create extension if not exists "uuid-ossp";
 
-create table if not exists search_jobs (
+create table search_jobs (
   id uuid primary key default uuid_generate_v4(),
   query text not null,
   location text not null,
@@ -12,7 +12,7 @@ create table if not exists search_jobs (
   updated_at timestamptz default now()
 );
 
-create table if not exists business_leads (
+create table business_leads (
   id uuid primary key default uuid_generate_v4(),
   search_id uuid references search_jobs(id) on delete cascade,
   name text not null,
@@ -30,18 +30,18 @@ create table if not exists business_leads (
   created_at timestamptz default now()
 );
 
-create index if not exists idx_business_leads_search_id on business_leads(search_id);
-create index if not exists idx_search_jobs_status on search_jobs(status);
-create index if not exists idx_search_jobs_created_at on search_jobs(created_at desc);
+create index idx_business_leads_search_id on business_leads(search_id);
+create index idx_search_jobs_status on search_jobs(status);
+create index idx_search_jobs_created_at on search_jobs(created_at desc);
 
-create table if not exists users (
+create table users (
   id uuid primary key default uuid_generate_v4(),
   email text unique not null,
   plan text default 'free',
   created_at timestamptz default now()
 );
 
-create table if not exists credits (
+create table credits (
   id uuid primary key default uuid_generate_v4(),
   user_id uuid references users(id),
   amount integer not null,
@@ -49,7 +49,7 @@ create table if not exists credits (
   created_at timestamptz default now()
 );
 
-create table if not exists saved_searches (
+create table saved_searches (
   id uuid primary key default uuid_generate_v4(),
   user_id uuid references users(id),
   query text not null,

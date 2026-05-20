@@ -1,0 +1,23 @@
+{
+  "name": "leadpilot-motion",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hardcoded LeadPilot motion design — render to MP4",
+  "scripts": {
+    "studio": "remotion studio",
+    "render": "remotion render LeadPilotPromo out/leadpilot-promo.mp4",
+    "render:screen": "remotion render LeadPilotScreenDemo out/leadpilot-screen-demo.mp4",
+    "render:4k": "remotion render LeadPilotPromo out/leadpilot-promo-4k.mp4 --scale=2",
+    "render:vertical": "remotion render LeadPilotPromoVertical out/leadpilot-promo-vertical.mp4"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.286",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "^4.0.286"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.18",
+    "typescript": "^5.8.2"
+  }
+}

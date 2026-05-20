@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LeadPilot Ad — Canvas Recorder</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;700;800&family=Figtree:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="styles/main.css" />
+</head>
+<body>
+  <h1>LeadPilot — 9:16 Ad (1080×1920 · 45s)</h1>
+  <p class="hint">
+    Click <strong>Record 45s Video</strong> to play from frame zero and auto-download
+    <code>leadpilot-ad.webm</code>. Use <strong>Convert to MP4</strong> or convert via
+    <a href="https://cloudconvert.com/webm-to-mp4" target="_blank" rel="noopener">CloudConvert</a>.
+  </p>
+  <div class="controls">
+    <button type="button" id="btnRecord">Record 45s Video</button>
+    <button type="button" id="btnConvert" disabled>Convert to MP4</button>
+  </div>
+  <p class="status" id="status">Loading fonts…</p>
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-bar" id="progressBar"></div>
+  </div>
+  <div class="preview-wrap">
+    <canvas id="c" width="1080" height="1920"></canvas>
+  </div>
+  <p class="convert-note" id="convertNote"></p>
+  <script defer src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
+  <script defer src="https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/util.js"></script>
+  <script defer src="animation.js"></script>
+  <script defer src="recorder.js"></script>
+</body>
+</html>
