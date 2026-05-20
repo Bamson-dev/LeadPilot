@@ -1,12 +1,9 @@
 import type { LaunchOptions } from "playwright";
 
-/** Shared Chromium flags tuned for Docker VPS (low memory, stable launches). */
+/** Chromium flags for Docker — uses browsers bundled in Playwright base image. */
 export function getChromiumLaunchOptions(): LaunchOptions {
-  const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
-
   return {
     headless: true,
-    ...(executablePath ? { executablePath } : {}),
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
