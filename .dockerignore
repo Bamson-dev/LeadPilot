@@ -11,5 +11,6 @@ test-results
 .DS_Store
 canvas-ad
 motion-video
-frontend
 .github
+frontend/.next
+frontend/node_modules
