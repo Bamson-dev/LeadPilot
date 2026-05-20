@@ -126,6 +126,9 @@ searchRouter.get("/:id/stream", async (req: Request, res: Response) => {
     req.on("close", () => {
       clearInterval(heartbeat);
       unsubscribe();
+      if (!res.writableEnded) {
+        res.end();
+      }
     });
   } catch (err) {
     logger.error("GET /search/:id/stream failed", {

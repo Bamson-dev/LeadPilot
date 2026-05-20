@@ -122,7 +122,7 @@ export function ResultsTable({ leads, isLoading }: ResultsTableProps) {
 
   return (
     <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0F0F14]">
-      <div className="flex flex-wrap gap-3 border-b border-white/[0.08] px-4 py-3">
+      <div className="flex flex-col gap-2 border-b border-white/[0.08] px-4 py-3 sm:flex-row sm:flex-wrap sm:gap-3">
         <select value={hasWebsite === null ? "all" : hasWebsite ? "yes" : "no"}
           onChange={(e) => setHasWebsite(e.target.value === "all" ? null : e.target.value === "yes")}
           className="rounded-md border border-white/10 bg-[#16161E] px-2 py-1 text-xs text-[#F4F4FF]">
@@ -146,7 +146,7 @@ export function ResultsTable({ leads, isLoading }: ResultsTableProps) {
       </div>
 
       <div ref={parentRef} className="max-h-[600px] overflow-auto">
-        <table className="w-full min-w-[1000px] text-sm">
+        <table className="w-full min-w-[720px] text-sm sm:min-w-[1000px]">
           <thead className="sticky top-0 z-10 bg-[#0F0F14]/95 backdrop-blur">
             <tr className="border-b border-white/[0.08]">
               {(["business_name", "category", "address", "phone", "email", "website", "rating", "reviews_count"] as const).map((key) => (

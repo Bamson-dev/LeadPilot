@@ -21,7 +21,7 @@ export default function DashboardPage() {
   return (
     <main className="min-h-screen bg-[#09090B]">
       <Navbar />
-      <div className="mx-auto max-w-6xl px-6 pt-24 pb-16">
+      <div className="mx-auto max-w-6xl px-4 pt-20 pb-12 sm:px-6 sm:pt-24 sm:pb-16">
         <Suspense
           fallback={
             <div className="glass rounded-2xl p-8 text-center text-zinc-400">

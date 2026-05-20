@@ -75,10 +75,10 @@ cp backend/.env.example backend/.env
 # Fill SUPABASE_URL and SUPABASE_SERVICE_KEY
 
 cp frontend/.env.local.example frontend/.env.local
-# Set NEXT_PUBLIC_API_URL=http://localhost:3001
+# Set NEXT_PUBLIC_API_URL=http://localhost:3000
 
 npm run build --workspace=@leadpilot/shared
-npm run dev:backend    # port 3001
+npm run dev:backend    # port 3000
 npm run dev            # port 3000
 ```
 
@@ -105,7 +105,7 @@ See **[deploy/VPS.md](./deploy/VPS.md)** — GitHub Actions auto-deploys backend
 
 | Variable | Example |
 |----------|---------|
-| `NEXT_PUBLIC_API_URL` | `http://localhost:3001` |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:3000` |
 | `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Your anon key |
 
@@ -113,7 +113,9 @@ See **[deploy/VPS.md](./deploy/VPS.md)** — GitHub Actions auto-deploys backend
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | `3001` | HTTP port |
+| `PORT` | `3000` | HTTP port |
+| `CORS_ORIGINS` | — | Optional extra CORS origins |
+| `RATE_LIMIT_MAX` | `30` | Requests per IP per window |
 | `NODE_ENV` | `development` | Environment |
 | `SUPABASE_URL` | — | Required |
 | `SUPABASE_SERVICE_KEY` | — | Required |
@@ -122,7 +124,7 @@ See **[deploy/VPS.md](./deploy/VPS.md)** — GitHub Actions auto-deploys backend
 
 ## API reference
 
-Base URL: `http://localhost:3001` (local) or your VPS API URL.
+Base URL: `http://localhost:3000` (local) or your VPS API URL.
 
 ### `POST /search`
 

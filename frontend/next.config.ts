@@ -1,5 +1,11 @@
 import type { NextConfig } from "next";
 
+if (process.env.NODE_ENV === "production" && !process.env.NEXT_PUBLIC_API_URL?.trim()) {
+  throw new Error(
+    "NEXT_PUBLIC_API_URL is required for production builds. Set it in Vercel."
+  );
+}
+
 const nextConfig: NextConfig = {
   transpilePackages: ["@leadpilot/shared"],
   // Standalone is for Docker only — breaks default Vercel Next.js deploy

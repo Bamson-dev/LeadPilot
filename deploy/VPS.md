@@ -28,9 +28,20 @@ bash scripts/deploy-vps.sh
 Verify:
 
 ```bash
-curl http://127.0.0.1:3001/health
-# {"status":"ok"}
+curl http://127.0.0.1:3000/health
+# OK
 ```
+
+---
+
+## Supabase (production)
+
+Run migrations in the Supabase SQL editor (or CLI) for your **production** project:
+
+1. `supabase/migrations/001_initial.sql` (if not already applied)
+2. `supabase/migrations/003_enable_rls.sql` — enables RLS with no permissive policies (backend uses `service_role` only)
+
+Never put `SUPABASE_SERVICE_KEY` in Vercel or the browser — backend only.
 
 ---
 
@@ -47,7 +58,8 @@ On the VPS, create `/opt/leadpilot/.env.production` from:
 | `SUPABASE_SERVICE_KEY` | Service role key (secret) |
 | `FRONTEND_URL` | Vercel app URL (CORS) |
 | `SCRAPER_CONCURRENCY` | `2` recommended on 4GB VPS |
-| `BACKEND_PORT` | Host port (default `3001`) |
+| `BACKEND_PORT` | Host port (default `3000`) |
+| `CORS_ORIGINS` | Optional comma-separated extra origins (Vercel previews) |
 
 ---
 
@@ -98,7 +110,7 @@ server {
     server_name api.yourdomain.com;
 
     location / {
-        proxy_pass http://127.0.0.1:3001;
+        proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -134,7 +146,7 @@ bash scripts/deploy-vps.sh
 |-------|-----|
 | Chromium crashes | Ensure `shm_size: 512mb` in compose; lower `SCRAPER_CONCURRENCY` to `2` |
 | Health check fails | `docker compose logs backend` — check Supabase env vars |
-| CORS errors | Set `FRONTEND_URL` to exact Vercel URL (no trailing slash) |
+| CORS errors | Set `FRONTEND_URL` to exact Vercel URL (no trailing slash); add previews to `CORS_ORIGINS` |
 | SSE disconnects | Disable proxy buffering in Nginx |
 
-Verbose health: `curl http://127.0.0.1:3001/health?verbose=1`
+Deep health (Playwright): `curl http://127.0.0.1:3000/health/ready`

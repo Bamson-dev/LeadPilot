@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Lead } from "@/types/lead";
-import { checkHealth, startSearch, streamResults } from "@/services/api";
+import { checkBackendReady, checkHealth, startSearch, streamResults } from "@/services/api";
 
 export function useSearch() {
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -67,41 +67,54 @@ export function useSearch() {
     setIsSearching(true);
     leadIdsRef.current.clear();
     setSearchMeta({ business: businessType.trim(), location: location.trim() });
-    setPhaseMessage("Starting discovery…");
+    setPhaseMessage("Checking backend…");
 
     try {
       const health = await checkHealth();
-      if (health.playwright !== "ready") {
-        setError(health.message ?? "Backend scraper is not ready.");
+      if (!health.ok) {
+        setError(health.message ?? "Backend is not reachable.");
         setIsSearching(false);
         setPhaseMessage(null);
         return;
       }
 
+      setPhaseMessage("Checking scraper…");
+      const ready = await checkBackendReady();
+      if (!ready.ok) {
+        setError(ready.message ?? "Scraper is not ready. Try again shortly.");
+        setIsSearching(false);
+        setPhaseMessage(null);
+        return;
+      }
+
+      setPhaseMessage("Starting discovery…");
       const { searchId } = await startSearch(businessType.trim(), location.trim());
 
       cleanupRef.current = streamResults(searchId, {
         onPhase: setPhaseMessage,
         onProgress: (count, max) => {
-          setProgress(Math.min(100, (count / max) * 100));
+          setProgress(Math.min(100, max > 0 ? (count / max) * 100 : 0));
         },
         onLead: scheduleBatch,
         onComplete: () => {
           flushBatch();
           setProgress(100);
           setPhaseMessage(null);
-          setTimeout(() => setIsSearching(false), 2000);
+          closeStream();
+          setTimeout(() => setIsSearching(false), 1500);
         },
         onError: (message) => {
           setError(message);
           setIsSearching(false);
           setPhaseMessage(null);
+          closeStream();
         },
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start search.");
       setIsSearching(false);
       setPhaseMessage(null);
+      closeStream();
     }
   };
 

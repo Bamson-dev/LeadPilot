@@ -86,7 +86,10 @@ export function SearchDashboard() {
         </div>
 
         {error && (
-          <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3">
+          <div
+            role="alert"
+            className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3"
+          >
             <p className="text-sm text-red-300">{error}</p>
           </div>
         )}
@@ -94,10 +97,10 @@ export function SearchDashboard() {
 
       {(isSearching || leads.length > 0) && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <LiveCounter count={leads.length} isSearching={isSearching} />
             {isSearching && (
-              <span className="flex items-center gap-2 text-xs text-[#A855F7] max-w-[50%] truncate">
+              <span className="flex items-center gap-2 text-xs text-[#A855F7] sm:max-w-[50%] sm:truncate">
                 <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
                 {phaseMessage ?? "Live discovery in progress…"}
               </span>
