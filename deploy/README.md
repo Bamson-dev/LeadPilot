@@ -41,6 +41,10 @@ cp render.env.example render.env    # edit values, then upload to Render
 | `SUPABASE_SERVICE_KEY` | Supabase → Project Settings → API → **service_role** key (secret) |
 | `FRONTEND_URL` | Your Vercel URL after deploy, e.g. `https://your-app.vercel.app` |
 
+## Vercel 404?
+
+If you see `DEPLOYMENT_NOT_FOUND`, follow **[VERCEL.md](./VERCEL.md)** (Root Directory must be `frontend`).
+
 ## Local development
 
 Copy the workspace examples instead:

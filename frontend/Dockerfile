@@ -15,6 +15,7 @@ COPY package.json package-lock.json ./
 COPY shared ./shared
 COPY frontend ./frontend
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV DOCKER_BUILD=1
 RUN npm run build --workspace=@leadpilot/shared
 RUN npm run build --workspace=@leadpilot/frontend
 

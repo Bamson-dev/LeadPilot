@@ -178,8 +178,11 @@ Server-Sent Events stream. Event types: `lead`, `progress`, `phase`, `complete`,
 
 ### Vercel (frontend)
 
-1. Import repo at [vercel.com](https://vercel.com) — **leave Root Directory blank** (uses repo root + root `vercel.json`)
-2. Add environment variables:
+See **[deploy/VERCEL.md](./deploy/VERCEL.md)** if you get `404 DEPLOYMENT_NOT_FOUND`.
+
+1. Import repo at [vercel.com](https://vercel.com)
+2. Set **Root Directory** to `frontend`
+3. Add environment variables:
    - `NEXT_PUBLIC_API_URL` → your Render backend URL (e.g. `https://leadpilot-backend.onrender.com`)
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
