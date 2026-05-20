@@ -16,14 +16,25 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 
 app.use("/search", searchRouter);
 app.use("/health", healthRouter);
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  logger.error("Unhandled error", { message: err.message });
+  logger.error("Unhandled error", { message: err.message, stack: err.stack });
   res.status(500).json({ error: "Internal server error" });
+});
+
+process.on("unhandledRejection", (reason) => {
+  logger.error("Unhandled promise rejection", {
+    error: reason instanceof Error ? reason.message : String(reason),
+  });
+});
+
+process.on("uncaughtException", (err) => {
+  logger.error("Uncaught exception", { message: err.message, stack: err.stack });
+  process.exit(1);
 });
 
 async function start(): Promise<void> {
@@ -31,19 +42,23 @@ async function start(): Promise<void> {
   const pool = getBrowserPool();
   await pool.init();
 
-  const server = app.listen(env.PORT, () => {
-    logger.info("Backend server started", { port: env.PORT });
+  const server = app.listen(env.PORT, "0.0.0.0", () => {
+    logger.info("Backend server started", {
+      port: env.PORT,
+      nodeEnv: env.NODE_ENV,
+      scraperConcurrency: env.SCRAPER_CONCURRENCY,
+    });
   });
 
-  const shutdown = async () => {
-    logger.info("Shutting down...");
+  const shutdown = async (signal: string) => {
+    logger.info("Shutting down", { signal });
     server.close();
     await pool.shutdown();
     process.exit(0);
   };
 
-  process.on("SIGTERM", shutdown);
-  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  process.on("SIGINT", () => void shutdown("SIGINT"));
 }
 
 if (require.main === module) {

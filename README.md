@@ -1,6 +1,6 @@
 # LeadPilot
 
-LeadPilot is the **paying customer product** — a business discovery and prospecting platform. It runs as a monorepo with a Next.js frontend (Vercel), Express + Playwright backend (Render), and Supabase database.
+LeadPilot is the **paying customer product** — a business discovery and prospecting platform. It runs as a monorepo with a Next.js frontend (Vercel), Express + Playwright backend (Contabo VPS), and Supabase database.
 
 > **Note:** The sales landing page is a standalone HTML file on WordPress/Elementor. It is **not** part of this repository.
 
@@ -9,17 +9,17 @@ LeadPilot is the **paying customer product** — a business discovery and prospe
 ```mermaid
 flowchart LR
   User[Customer Browser] --> Vercel[Vercel Frontend]
-  Vercel -->|REST + SSE| Render[Render Backend]
-  Render -->|Playwright| Maps[Google Maps]
-  Render -->|fetch| Websites[Business Websites]
-  Render -->|Service Key| Supabase[(Supabase Postgres)]
+  Vercel -->|REST + SSE| VPS[Contabo VPS Backend]
+  VPS -->|Playwright| Maps[Google Maps]
+  VPS -->|fetch| Websites[Business Websites]
+  VPS -->|Service Key| Supabase[(Supabase Postgres)]
   Vercel -->|Anon Key| Supabase
 ```
 
 | Layer | Tech | Deploy |
 |-------|------|--------|
 | Frontend | Next.js 15, React 19 | Vercel |
-| Backend | Express, Playwright | Render (Docker) |
+| Backend | Express, Playwright | Contabo VPS (Docker + GitHub Actions) |
 | Database | Supabase Postgres | Supabase |
 | Shared | TypeScript types/utils | npm workspace |
 
@@ -82,20 +82,24 @@ npm run dev:backend    # port 3001
 npm run dev            # port 3000
 ```
 
-### With Docker
+### With Docker (local dev)
 
 ```bash
-export SUPABASE_URL=...
-export SUPABASE_SERVICE_KEY=...
-docker-compose up --build
+cp backend/.env.example backend/.env
+docker compose -f docker-compose.dev.yml up --build
 ```
+
+### Production VPS
+
+See **[deploy/VPS.md](./deploy/VPS.md)** — GitHub Actions auto-deploys backend on push to `main`.
 
 ## Environment variables
 
 **Deployment uploads:** download ready-to-fill files from [`deploy/`](./deploy/README.md):
 
-- [`deploy/vercel.env.example`](./deploy/vercel.env.example) → Vercel → Settings → Environment Variables → **Import .env**
-- [`deploy/render.env.example`](./deploy/render.env.example) → Render → Environment → **Add from .env**
+- [`deploy/vercel.env.example`](./deploy/vercel.env.example) → Vercel → **Import .env**
+- [`.env.production.example`](./.env.production.example) → VPS → `/opt/leadpilot/.env.production`
+- [`deploy/vps.env.example`](./deploy/vps.env.example) → downloadable VPS env template
 
 ### Frontend (`frontend/.env.local`)
 
@@ -118,7 +122,7 @@ docker-compose up --build
 
 ## API reference
 
-Base URL: `http://localhost:3001` (local) or your Render URL.
+Base URL: `http://localhost:3001` (local) or your VPS API URL.
 
 ### `POST /search`
 
@@ -165,14 +169,10 @@ Server-Sent Events stream. Event types: `lead`, `progress`, `phase`, `complete`,
 
 **Response**
 ```json
-{
-  "status": "ok",
-  "playwright": "ready",
-  "network": "ok",
-  "timestamp": "...",
-  "version": "0.1.0"
-}
+{ "status": "ok" }
 ```
+
+Add `?verbose=1` for playwright/network details.
 
 ## Deployment
 
@@ -183,20 +183,19 @@ See **[deploy/VERCEL.md](./deploy/VERCEL.md)** if you get `404 DEPLOYMENT_NOT_FO
 1. Import repo at [vercel.com](https://vercel.com)
 2. Set **Root Directory** to `frontend`
 3. Add environment variables:
-   - `NEXT_PUBLIC_API_URL` → your Render backend URL (e.g. `https://leadpilot-backend.onrender.com`)
+   - `NEXT_PUBLIC_API_URL` → your VPS API URL (e.g. `https://api.yourdomain.com`)
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-3. Deploy
+4. Deploy
 
-### Render (backend)
+### Contabo VPS (backend)
 
-1. New **Web Service** → connect this repo
-2. Use **Blueprint** (`render.yaml` at repo root) or set:
-   - Runtime: Docker
-   - Dockerfile path: `backend/Dockerfile`
-   - Docker context: `.` (repo root)
-   - Health check path: `/health`
-3. Add environment variables: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `FRONTEND_URL` (your Vercel URL)
+Full guide: **[deploy/VPS.md](./deploy/VPS.md)**
+
+1. Run `scripts/vps-setup.sh` on the VPS
+2. Create `/opt/leadpilot/.env.production` from `.env.production.example`
+3. Add GitHub secrets: `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`
+4. Push to `main` — GitHub Actions deploys automatically
 
 ### Supabase
 

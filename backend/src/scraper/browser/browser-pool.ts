@@ -1,11 +1,13 @@
 import { chromium, type Browser } from "playwright";
 import { getEnv } from "../../config/env";
 import { logger } from "../../utils/logger";
+import { getChromiumLaunchOptions } from "./chromium-options";
 
 export class BrowserPool {
   private browsers: Browser[] = [];
   private available: Browser[] = [];
   private readonly size: number;
+  private healthTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(size?: number) {
     this.size = size ?? getEnv().SCRAPER_CONCURRENCY;
@@ -18,16 +20,18 @@ export class BrowserPool {
       this.available.push(browser);
     }
     logger.info("Browser pool initialized", { size: this.size });
+
+    this.healthTimer = setInterval(() => {
+      void this.healthCheck().catch((err) => {
+        logger.error("Browser pool health check failed", {
+          error: err instanceof Error ? err.message : "unknown",
+        });
+      });
+    }, 60_000);
   }
 
   private async launchBrowser(): Promise<Browser> {
-    const args = [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-blink-features=AutomationControlled",
-    ];
-    return chromium.launch({ headless: true, args });
+    return chromium.launch(getChromiumLaunchOptions());
   }
 
   async acquire(): Promise<Browser> {
@@ -36,8 +40,7 @@ export class BrowserPool {
     }
     const browser = this.available.pop();
     if (!browser || !browser.isConnected()) {
-      const replacement = await this.launchBrowser();
-      return replacement;
+      return this.launchBrowser();
     }
     return browser;
   }
@@ -52,14 +55,18 @@ export class BrowserPool {
     for (let i = 0; i < this.browsers.length; i++) {
       if (!this.browsers[i].isConnected()) {
         logger.warn("Restarting crashed browser", { index: i });
-        const replacement = await this.launchBrowser();
-        this.browsers[i] = replacement;
+        await this.browsers[i].close().catch(() => undefined);
+        this.browsers[i] = await this.launchBrowser();
       }
     }
     this.available = this.browsers.filter((b) => b.isConnected());
   }
 
   async shutdown(): Promise<void> {
+    if (this.healthTimer) {
+      clearInterval(this.healthTimer);
+      this.healthTimer = null;
+    }
     await Promise.all(this.browsers.map((b) => b.close().catch(() => undefined)));
     this.browsers = [];
     this.available = [];

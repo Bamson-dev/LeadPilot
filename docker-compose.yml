@@ -1,26 +1,36 @@
+# Production — Contabo VPS (backend only)
+# Usage: docker compose --env-file .env.production up -d --build
+
 services:
   backend:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    container_name: leadpilot-backend
+    restart: always
     ports:
-      - "3001:3001"
+      - "${BACKEND_PORT:-3001}:3001"
+    env_file:
+      - .env.production
     environment:
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
-      - FRONTEND_URL=http://localhost:3000
-      - SCRAPER_CONCURRENCY=3
-      - NODE_ENV=production
-    restart: unless-stopped
-
-  frontend:
-    build:
-      context: .
-      dockerfile: frontend/Dockerfile
-    ports:
-      - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=http://backend:3001
-    depends_on:
-      - backend
-    restart: unless-stopped
+      NODE_ENV: production
+      PORT: 3001
+    # Required for stable Chromium in Docker
+    shm_size: "512mb"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
