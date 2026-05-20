@@ -18,6 +18,10 @@ RUN npm run build --workspace=@leadpilot/shared \
   && npm prune --omit=dev
 
 FROM mcr.microsoft.com/playwright:v1.60.0-jammy AS runner
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends curl \
+  && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -35,6 +39,6 @@ WORKDIR /app/backend
 EXPOSE 3001
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD curl -fsS http://127.0.0.1:3001/health || exit 1
 
 CMD ["npm", "run", "start"]
