@@ -19,7 +19,7 @@ RUN npm run build --workspace=@leadpilot/shared \
   && npm run build --workspace=@leadpilot/backend \
   && npm prune --omit=dev
 
-FROM mcr.microsoft.com/playwright:v1.53.0-jammy AS runner
+FROM mcr.microsoft.com/playwright:v1.60.0-jammy AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
