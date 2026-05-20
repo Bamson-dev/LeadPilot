@@ -92,6 +92,11 @@ docker-compose up --build
 
 ## Environment variables
 
+**Deployment uploads:** download ready-to-fill files from [`deploy/`](./deploy/README.md):
+
+- [`deploy/vercel.env.example`](./deploy/vercel.env.example) → Vercel → Settings → Environment Variables → **Import .env**
+- [`deploy/render.env.example`](./deploy/render.env.example) → Render → Environment → **Add from .env**
+
 ### Frontend (`frontend/.env.local`)
 
 | Variable | Example |
