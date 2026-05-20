@@ -6,51 +6,35 @@ import { getChromiumLaunchOptions } from "../scraper/browser/chromium-options";
 
 export const healthRouter = Router();
 
-async function checkNetwork(): Promise<boolean> {
-  try {
-    await lookup("google.com");
-    return true;
-  } catch {
-    return false;
-  }
-}
+/** Fast liveness probe — used by Docker/Coolify (must not launch browsers). */
+healthRouter.get("/", (_req: Request, res: Response) => {
+  res.status(200).type("text/plain").send("OK");
+});
 
-async function checkPlaywright(): Promise<boolean> {
+/** Deep readiness probe — Playwright + network (optional). */
+healthRouter.get("/ready", async (_req: Request, res: Response) => {
   try {
-    const browser = await chromium.launch(getChromiumLaunchOptions());
-    await browser.close();
-    return true;
-  } catch (err) {
-    logger.error("Playwright health check failed", {
-      error: err instanceof Error ? err.message : "unknown",
-    });
-    return false;
-  }
-}
-
-healthRouter.get("/", async (req: Request, res: Response) => {
-  try {
-    const verbose = req.query.verbose === "1";
     const [networkOk, playwrightOk] = await Promise.all([
-      checkNetwork(),
-      checkPlaywright(),
+      lookup("google.com").then(() => true).catch(() => false),
+      chromium
+        .launch(getChromiumLaunchOptions())
+        .then((b) => b.close().then(() => true))
+        .catch(() => false),
     ]);
-    const healthy = networkOk && playwrightOk;
 
-    if (healthy && !verbose) {
-      res.status(200).json({ status: "ok" });
+    if (!networkOk || !playwrightOk) {
+      logger.warn("Readiness check degraded", { networkOk, playwrightOk });
+      res.status(503).json({
+        status: "degraded",
+        playwright: playwrightOk ? "ready" : "missing",
+        network: networkOk ? "ok" : "failed",
+      });
       return;
     }
 
-    res.status(healthy ? 200 : 503).json({
-      status: healthy ? "ok" : "degraded",
-      playwright: playwrightOk ? "ready" : "missing",
-      network: networkOk ? "ok" : "failed",
-      timestamp: new Date().toISOString(),
-      version: process.env.npm_package_version ?? "0.1.0",
-    });
+    res.status(200).json({ status: "ok", playwright: "ready", network: "ok" });
   } catch (err) {
-    logger.error("Health check error", {
+    logger.error("Readiness check error", {
       error: err instanceof Error ? err.message : "unknown",
     });
     res.status(503).json({ status: "error" });

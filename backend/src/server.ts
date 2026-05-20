@@ -39,21 +39,31 @@ process.on("uncaughtException", (err) => {
 
 async function start(): Promise<void> {
   const env = getEnv();
-  const pool = getBrowserPool();
-  await pool.init();
+  const host = "0.0.0.0";
+  const port = Number(process.env.PORT) || 3000;
 
-  const server = app.listen(env.PORT, "0.0.0.0", () => {
+  const server = app.listen(port, host, () => {
     logger.info("Backend server started", {
-      port: env.PORT,
+      host,
+      port,
       nodeEnv: env.NODE_ENV,
       scraperConcurrency: env.SCRAPER_CONCURRENCY,
     });
   });
 
+  void getBrowserPool()
+    .init()
+    .then(() => logger.info("Browser pool ready"))
+    .catch((err) => {
+      logger.error("Browser pool init failed", {
+        error: err instanceof Error ? err.message : "unknown",
+      });
+    });
+
   const shutdown = async (signal: string) => {
     logger.info("Shutting down", { signal });
     server.close();
-    await pool.shutdown();
+    await getBrowserPool().shutdown();
     process.exit(0);
   };
 
