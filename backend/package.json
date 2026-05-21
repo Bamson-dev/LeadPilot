@@ -12,6 +12,9 @@
   "dependencies": {
     "@leadpilot/shared": "*",
     "@supabase/supabase-js": "^2.49.1",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.13.10",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "playwright": "^1.51.1",
@@ -20,9 +23,6 @@
     "typescript": "^5.8.2"
   },
   "devDependencies": {
-    "@types/cors": "^2.8.17",
-    "@types/express": "^5.0.0",
-    "@types/node": "^22.13.10",
     "tsx": "^4.19.3"
   }
 }
