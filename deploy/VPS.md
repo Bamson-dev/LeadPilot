@@ -1,5 +1,7 @@
 # LeadPilot Backend — Contabo VPS Deployment
 
+**Coolify:** Base Directory `/`, Dockerfile `backend/Dockerfile` — see [DEPLOYMENT.md](../DEPLOYMENT.md).
+
 Architecture: **Vercel (frontend)** + **Contabo VPS (backend)** + **Supabase (database)**
 
 Deploy flow: push to `main` → GitHub Actions → SSH → Docker rebuild → auto restart

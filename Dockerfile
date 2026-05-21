@@ -1,46 +1,57 @@
-# LeadPilot root Dockerfile — Coolify backend (same stack as backend/Dockerfile)
-FROM node:20-slim AS builder
+# DEPRECATED — Coolify must use backend/Dockerfile with Base Directory = /
+# See DEPLOYMENT.md. This file exists only for backwards compatibility.
+
+FROM node:20-slim AS base
+
+RUN apt-get update && apt-get install -y \
+  chromium \
+  chromium-sandbox \
+  fonts-noto-color-emoji \
+  fonts-liberation \
+  libasound2 \
+  libatk-bridge2.0-0 \
+  libatk1.0-0 \
+  libcups2 \
+  libdbus-1-3 \
+  libdrm2 \
+  libgbm1 \
+  libgtk-3-0 \
+  libnspr4 \
+  libnss3 \
+  libxcomposite1 \
+  libxdamage1 \
+  libxfixes3 \
+  libxkbcommon0 \
+  libxrandr2 \
+  xdg-utils \
+  curl \
+  --no-install-recommends \
+  && rm -rf /var/lib/apt/lists/*
+
+ENV PLAYWRIGHT_BROWSERS_PATH=/usr/bin
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+ENV NODE_ENV=production
+
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-COPY shared/package.json shared/tsconfig.json shared/index.ts ./shared/
-COPY shared/types ./shared/types
-COPY shared/utils ./shared/utils
 COPY backend/package.json backend/tsconfig.json ./backend/
-COPY frontend/package.json frontend/tsconfig.json frontend/next.config.ts ./frontend/
+COPY shared/package.json shared/tsconfig.json ./shared/
 
-RUN npm ci --include=dev
+RUN npm install --workspace=@leadpilot/backend --workspace=@leadpilot/shared --ignore-scripts
 
-COPY shared ./shared
-COPY backend ./backend
-COPY frontend ./frontend
+COPY shared/ ./shared/
+COPY backend/ ./backend/
 
 RUN npm run build --workspace=@leadpilot/shared \
-  && npm run build --workspace=@leadpilot/backend \
-  && npm prune --omit=dev
-
-FROM mcr.microsoft.com/playwright:v1.60.0-jammy AS runner
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends curl \
-  && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-
-ENV NODE_ENV=production
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/shared/dist ./shared/dist
-COPY --from=builder /app/shared/package.json ./shared/package.json
-COPY --from=builder /app/backend/dist ./backend/dist
-COPY --from=builder /app/backend/package.json ./backend/package.json
+  && npm run build --workspace=@leadpilot/backend
 
 WORKDIR /app/backend
 
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD curl -fsS http://127.0.0.1:3000/health || exit 1
+  CMD curl -f http://localhost:3000/health || exit 1
 
-CMD ["npm", "run", "start"]
+CMD ["node", "dist/server.js"]

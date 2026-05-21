@@ -1,8 +1,8 @@
 import express, { type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
-import { getCorsOrigins, getEnv, loadEnv } from "./config/env";
+import { getEnv, loadEnv } from "./config/env";
 import { searchRouter } from "./api/search-router";
-import { mountHealthRoutes } from "./api/health-router";
+import healthRouter from "./api/health-router";
 import { rateLimit } from "./middleware/rate-limit";
 import { getBrowserPool } from "./scraper/browser/browser-pool";
 import { logger } from "./utils/logger";
@@ -13,27 +13,52 @@ app.set("trust proxy", 1);
 app.disable("x-powered-by");
 
 // Health routes first — no env/CORS dependency; must work for Docker/Coolify probes.
-mountHealthRoutes(app, "/health");
-mountHealthRoutes(app, "/api/health");
+app.use("/health", healthRouter);
+app.use("/api/health", healthRouter);
 
 let routesRegistered = false;
+
+function getAllowedOrigins(): string[] {
+  const fromEnv = [
+    process.env.FRONTEND_URL,
+    process.env.CORS_ORIGINS?.split(",").map((o) => o.trim()),
+  ]
+    .flat()
+    .filter(Boolean) as string[];
+
+  const defaults = [
+    "https://www.leadpilot.live",
+    "https://leadpilot.live",
+    "http://localhost:3000",
+    "http://localhost:3001",
+  ];
+
+  return [...new Set([...fromEnv, ...defaults])];
+}
 
 function registerRoutes(): void {
   if (routesRegistered) return;
   routesRegistered = true;
 
-  const corsOrigins = getCorsOrigins();
+  const allowedOrigins = getAllowedOrigins();
 
   app.use(
     cors({
       origin(origin, callback) {
-        if (!origin || corsOrigins.includes(origin)) {
+        if (!origin || allowedOrigins.includes(origin)) {
           callback(null, true);
           return;
         }
         callback(new Error(`CORS blocked: ${origin}`));
       },
       credentials: true,
+      methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      allowedHeaders: [
+        "Content-Type",
+        "Authorization",
+        "X-Admin-Secret",
+        "x-paystack-signature",
+      ],
     })
   );
 
@@ -75,15 +100,11 @@ process.on("uncaughtException", (err) => {
 });
 
 async function start(): Promise<void> {
+  const PORT = parseInt(process.env.PORT || "3000", 10);
   const host = "0.0.0.0";
-  const port = Number(process.env.PORT) || 3000;
 
-  const server = app.listen(port, host, () => {
-    logger.info("Backend listening", {
-      host,
-      port,
-      healthPaths: ["/health", "/health/ready", "/api/health", "/api/health/ready"],
-    });
+  const server = app.listen(PORT, host, () => {
+    logger.info("Backend listening", { port: PORT, host });
   });
 
   try {
@@ -93,7 +114,7 @@ async function start(): Promise<void> {
     logger.info("Backend routes ready", {
       nodeEnv: env.NODE_ENV,
       scraperConcurrency: env.SCRAPER_CONCURRENCY,
-      corsOrigins: getCorsOrigins(),
+      corsOrigins: getAllowedOrigins(),
     });
   } catch (err) {
     logger.error("Backend configuration failed — /health works, API routes disabled", {

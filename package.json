@@ -9,16 +9,15 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace=@leadpilot/frontend",
+    "dev:frontend": "npm run dev --workspace=@leadpilot/frontend",
     "dev:backend": "npm run dev --workspace=@leadpilot/backend",
-    "dev:all": "npm run dev:backend & npm run dev",
-    "build": "npm run build --workspace=@leadpilot/shared && npm run build --workspace=@leadpilot/backend && npm run build --workspace=@leadpilot/frontend",
+    "dev:all": "npm run dev:backend & npm run dev:frontend",
+    "build": "npm run build:all",
+    "build:all": "npm run build --workspace=@leadpilot/shared && npm run build --workspace=@leadpilot/backend && npm run build --workspace=@leadpilot/frontend",
+    "build:backend": "npm run build --workspace=@leadpilot/shared && npm run build --workspace=@leadpilot/backend",
     "build:frontend": "npm run build --workspace=@leadpilot/frontend",
-    "build:backend": "npm run build --workspace=@leadpilot/backend",
     "lint": "npm run lint --workspace=@leadpilot/frontend && npm run lint --workspace=@leadpilot/backend",
     "setup": "npx playwright install chromium",
-    "check-playwright": "node -e \"require('playwright').chromium.launch().then(b=>b.close()).then(()=>console.log('Playwright OK')).catch(e=>{console.error(e.message);process.exit(1)})\"",
-    "motion:render": "cd motion-video && npm install && npm run render",
-    "motion:studio": "cd motion-video && npm install && npm run studio",
-    "canvas-ad:export": "cd canvas-ad && npm install && node export-video.mjs"
+    "check-playwright": "node -e \"require('playwright').chromium.launch().then(b=>b.close()).then(()=>console.log('Playwright OK')).catch(e=>{console.error(e.message);process.exit(1)})\""
   }
 }

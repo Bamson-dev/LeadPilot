@@ -19,6 +19,18 @@ export async function checkHealth(): Promise<HealthStatus> {
     }
     const text = (await res.text()).trim();
     if (text === "OK") return { ok: true };
+    try {
+      const data = JSON.parse(text) as { status?: string };
+      if (data.status === "ok") return { ok: true };
+    } catch {
+      /* not JSON */
+    }
+    if (text.toLowerCase().includes("next.js")) {
+      return {
+        ok: false,
+        message: "Backend URL is serving Next.js — check Coolify Dockerfile Path (backend/Dockerfile)",
+      };
+    }
     return { ok: false, message: text || "Unexpected health response" };
   } catch (err) {
     const message =

@@ -1,5 +1,7 @@
-# Production — Contabo VPS (backend only)
-# Usage: docker compose --env-file .env.production up -d --build
+# Local testing — build from monorepo root (same as Coolify).
+# Production VPS: docker compose --env-file .env.production up -d --build
+
+version: "3.8"
 
 services:
   backend:
@@ -7,30 +9,26 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     container_name: leadpilot-backend
-    restart: always
     ports:
-      - "${BACKEND_PORT:-3000}:3000"
+      - "3000:3000"
     env_file:
       - .env.production
     environment:
       NODE_ENV: production
       PORT: 3000
-    # Required for stable Chromium in Docker
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
+      SCRAPER_CONCURRENCY: ${SCRAPER_CONCURRENCY:-2}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY:-}
+      BREVO_API_KEY: ${BREVO_API_KEY:-}
+      BREVO_SENDER_EMAIL: ${BREVO_SENDER_EMAIL:-}
+      ADMIN_SECRET: ${ADMIN_SECRET:-}
+    restart: unless-stopped
     shm_size: "512mb"
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-        reservations:
-          memory: 512M
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
