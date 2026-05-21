@@ -71,108 +71,10 @@ const CONTACT_PREFIXES = [
   "appointments",
 ];
 
-const VALID_TLDS = new Set([
-  "com",
-  "org",
-  "net",
-  "io",
-  "app",
-  "live",
-  "co",
-  "uk",
-  "ng",
-  "us",
-  "ca",
-  "au",
-  "de",
-  "fr",
-  "es",
-  "it",
-  "nl",
-  "be",
-  "ch",
-  "at",
-  "se",
-  "no",
-  "dk",
-  "fi",
-  "pl",
-  "cz",
-  "ie",
-  "pt",
-  "gr",
-  "ro",
-  "hu",
-  "bg",
-  "hr",
-  "sk",
-  "lt",
-  "lv",
-  "ee",
-  "za",
-  "ke",
-  "gh",
-  "tz",
-  "ug",
-  "rw",
-  "zm",
-  "zw",
-  "bw",
-  "mu",
-  "ae",
-  "sa",
-  "qa",
-  "kw",
-  "bh",
-  "om",
-  "in",
-  "pk",
-  "bd",
-  "lk",
-  "np",
-  "sg",
-  "my",
-  "ph",
-  "th",
-  "vn",
-  "id",
-  "jp",
-  "kr",
-  "cn",
-  "hk",
-  "tw",
-  "mx",
-  "br",
-  "ar",
-  "cl",
-  "co",
-  "pe",
-  "ec",
-  "ve",
-  "edu",
-  "gov",
-  "mil",
-  "int",
-  "info",
-  "biz",
-  "dev",
-  "tech",
-  "store",
-  "shop",
-  "online",
-  "site",
-  "xyz",
-  "me",
-  "tv",
-  "cc",
-  "ai",
-]);
-
 export function isValidEmail(email: string): boolean {
   if (!email || typeof email !== "string") return false;
 
   const lower = email.toLowerCase().trim();
-
   const atCount = (lower.match(/@/g) || []).length;
   if (atCount !== 1) return false;
 
@@ -181,55 +83,22 @@ export function isValidEmail(email: string): boolean {
   if (!local || local.length < 2 || local.length > 64) return false;
   if (!domain || !domain.includes(".")) return false;
 
-  const domainLabels = domain.split(".").filter(Boolean);
-  if (domainLabels[0] === "www" || domain.startsWith("www.")) return false;
-  if (domainLabels.some((label) => label.length < 2)) return false;
+  if (domain.startsWith("www.") || domain.split(".")[0] === "www") return false;
 
   if (IMAGE_EXTENSIONS.some((ext) => lower.endsWith(ext))) return false;
   if (IMAGE_PATTERNS.some((pattern) => local.includes(pattern))) return false;
   if (/\d+x\d+/.test(local) || /\d+x-\d+/.test(local)) return false;
-  if (/@\d+x/i.test(lower) || /-\d+x\d+/i.test(domain)) return false;
 
   if (PLACEHOLDER_EMAILS.has(lower)) return false;
-
-  const domainBase = domain.split(".")[0];
-  if (local === domainBase) return false;
-
-  const suspiciousLocals = new Set(["only", "online", "email", "name", "user", "test"]);
-  if (suspiciousLocals.has(local) && (domain.includes("aaa.") || domain.includes("example"))) {
-    return false;
-  }
-
   if (GENERIC_DOMAINS.has(domain)) return false;
 
   const hasNoreplyWord = NOREPLY_LOCAL_PARTS.some((w) => local.includes(w));
-  if (
-    hasNoreplyWord &&
-    (GENERIC_DOMAINS.has(domain) ||
-      domain.endsWith(".example.com") ||
-      domain.endsWith(".domain.com"))
-  ) {
-    return false;
-  }
-
   if (hasNoreplyWord && local === "postmaster") return false;
 
-  const labels = domain.split(".").filter(Boolean);
-  const tld = labels[labels.length - 1];
-  if (!tld || /\d/.test(tld) || tld.length < 2 || tld.length > 12) return false;
+  const tld = domain.split(".").pop();
+  if (!tld || /\d/.test(tld) || tld.length < 2 || tld.length > 6) return false;
 
-  const secondLevel = labels.length >= 2 ? labels[labels.length - 2] : "";
-  const compoundTld =
-    secondLevel === "co" || secondLevel === "com" || secondLevel === "org"
-      ? `${secondLevel}.${tld}`
-      : null;
-
-  if (!VALID_TLDS.has(tld) && compoundTld !== "co.uk" && compoundTld !== "com.ng") {
-    if (!/^[a-z]{2,12}$/.test(tld)) return false;
-  }
-
-  if (!/^[a-z0-9._%+\-]+$/.test(local)) return false;
-
+  if (!/^[a-zA-Z0-9._%+\-]+$/.test(local)) return false;
   if (local.includes("..") || domain.includes("..")) return false;
 
   return true;

@@ -18,7 +18,7 @@ export function getPredictedEmails(
   return lead.predicted_emails ?? [];
 }
 
-/** Verified first, then predicted — max 2, no labels in UI. */
+/** Verified first, then predicted — max 3, no labels in UI. */
 export function getAllEmailsForDisplay(
   lead: Pick<
     Lead,
@@ -36,7 +36,7 @@ export function getAllEmailsForDisplay(
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(addr);
-    if (out.length >= 2) break;
+    if (out.length >= 3) break;
   }
 
   return out;

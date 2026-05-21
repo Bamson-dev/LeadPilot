@@ -60,13 +60,39 @@ export function mergeEmails(...inputs: unknown[]): string[] {
   return filterValidEmails([...set]);
 }
 
+function appendSuggestedInfoEmail(
+  picked: string[],
+  businessWebsite: string | null | undefined,
+  max: number
+): string[] {
+  if (!businessWebsite || picked.length >= max) return picked;
+
+  const domain = businessWebsite
+    .replace(/^https?:\/\//i, "")
+    .replace(/^www\./i, "")
+    .split("/")[0]
+    ?.toLowerCase();
+
+  if (!domain || !domain.includes(".")) return picked;
+
+  const suggested = `info@${domain}`;
+  if (!isValidEmail(suggested)) return picked;
+  if (picked.some((e) => e.toLowerCase() === suggested)) return picked;
+
+  return [...picked, suggested].slice(0, max);
+}
+
 /** Top emails for storage (comma-separated) and display. */
 export function formatEmailsForDisplay(
   emails: string[],
   businessWebsite?: string | null,
   max = MAX_DISPLAY_EMAILS
 ): string | null {
-  const picked = pickBestEmail(emails, businessWebsite, max);
+  const picked = appendSuggestedInfoEmail(
+    pickBestEmail(emails, businessWebsite, max),
+    businessWebsite,
+    max
+  );
   if (picked.length === 0) return null;
   return picked.join(", ");
 }

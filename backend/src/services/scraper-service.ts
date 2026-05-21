@@ -162,6 +162,11 @@ export async function runScraperJob(
     searchComplete = true;
     clearTimeout(runningEmailTimer);
 
+    const enrichDeadline = Date.now() + 120_000;
+    while (pendingEnrich > 0 && Date.now() < enrichDeadline) {
+      await new Promise((r) => setTimeout(r, 400));
+    }
+
     await updateSearchJob(searchId, { processed: progress, totalFound: total });
     await markSearchComplete(searchId, total);
 

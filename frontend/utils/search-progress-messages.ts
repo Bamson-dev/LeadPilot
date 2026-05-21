@@ -38,9 +38,9 @@ export function getSearchProgressMessage(
   return `Found ${count} businesses. Wrapping up...`;
 }
 
-/** Progress bar: leads found / 60, capped at 99% until complete. */
+/** Progress bar: leads found / 250, capped at 99% until complete. */
 export function getSearchProgressPercent(count: number, isComplete: boolean): number {
   if (isComplete) return 100;
   if (count <= 0) return 5;
-  return Math.min(99, Math.round((count / 60) * 100));
+  return Math.min(99, Math.round((count / 250) * 100));
 }

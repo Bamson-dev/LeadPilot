@@ -7,6 +7,7 @@ import {
 } from "../utils/data-quality";
 import { extractAllEmailsFromText, formatEmailsForDisplay, mergeEmails } from "../parsers/email-filter";
 import { filterValidEmails } from "../parsers/email-validation";
+import { extractPhoneNumber } from "../googleMaps/extract-phone";
 import {
   extractPhoneFromLabel,
   normalizePhoneForLocation,
@@ -186,6 +187,11 @@ export async function buildLeadFromPanel(
     const phoneBtn = page.locator('[role="main"] button[data-item-id*="phone"]').first();
     const ariaLabel = await phoneBtn.getAttribute("aria-label").catch(() => null);
     phone = normalizePhoneForLocation(extractPhoneFromLabel(ariaLabel ?? ""), location);
+  }
+
+  if (!phone) {
+    const fallback = await extractPhoneNumber(page);
+    phone = normalizePhoneForLocation(fallback, location);
   }
 
   const website = normalizeWebsite((raw.website as string) ?? null);
