@@ -1,6 +1,6 @@
 # Use backend/Dockerfile — Base Directory = / , see DEPLOYMENT.md
 
-FROM mcr.microsoft.com/playwright:v1.44.0-jammy
+FROM mcr.microsoft.com/playwright:v1.60.0-jammy
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends curl \

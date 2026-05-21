@@ -1,14 +1,13 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { getEnv } from "../config/env";
+import { createClient } from "@supabase/supabase-js";
+import ws from "ws";
 
-let client: SupabaseClient | null = null;
-
-export function getSupabase(): SupabaseClient {
-  if (!client) {
-    const env = getEnv();
-    client = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY, {
-      auth: { persistSession: false },
-    });
+export const supabase = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_KEY!,
+  {
+    auth: { persistSession: false },
+    realtime: {
+      transport: ws as unknown as import("@supabase/supabase-js").WebSocketLikeConstructor,
+    },
   }
-  return client;
-}
+);

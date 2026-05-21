@@ -1,5 +1,5 @@
 import type { BusinessLead, SearchJob } from "@leadpilot/shared";
-import { getSupabase } from "./client";
+import { supabase } from "./client";
 
 interface DbSearchJob {
   id: string;
@@ -75,7 +75,6 @@ export async function createSearchJob(
   query: string,
   location: string
 ): Promise<SearchJob> {
-  const supabase = getSupabase();
   const { data, error } = await supabase
     .from("search_jobs")
     .insert({ query, location, status: "pending" })
@@ -97,7 +96,6 @@ export async function updateSearchJob(
     error: string | null;
   }>
 ): Promise<void> {
-  const supabase = getSupabase();
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (patch.status) update.status = patch.status;
   if (patch.totalFound != null) update.total_found = patch.totalFound;
@@ -109,7 +107,6 @@ export async function updateSearchJob(
 }
 
 export async function getSearchJob(id: string): Promise<SearchJob | null> {
-  const supabase = getSupabase();
   const { data, error } = await supabase
     .from("search_jobs")
     .select("*")
@@ -121,7 +118,6 @@ export async function getSearchJob(id: string): Promise<SearchJob | null> {
 }
 
 export async function insertBusinessLead(lead: BusinessLead): Promise<BusinessLead> {
-  const supabase = getSupabase();
   const dbSource =
     lead.emailSource === "website"
       ? "extracted"
@@ -161,7 +157,6 @@ export async function insertBusinessLeads(leads: BusinessLead[]): Promise<void> 
   const batchSize = 50;
   for (let i = 0; i < leads.length; i += batchSize) {
     const batch = leads.slice(i, i + batchSize);
-    const supabase = getSupabase();
     const rows = batch.map((lead) => ({
       id: lead.id,
       search_id: lead.searchId,
@@ -194,7 +189,6 @@ export async function getSearchResults(
   page: number,
   limit: number
 ): Promise<{ leads: BusinessLead[]; total: number }> {
-  const supabase = getSupabase();
   const from = (page - 1) * limit;
   const to = from + limit - 1;
 

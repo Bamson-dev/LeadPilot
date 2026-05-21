@@ -7,7 +7,7 @@
 # Secrets (SUPABASE_SERVICE_KEY, PAYSTACK_SECRET_KEY, etc.) must be set
 # in Coolify runtime environment only — never use ARG or ENV for them here.
 
-FROM mcr.microsoft.com/playwright:v1.44.0-jammy
+FROM mcr.microsoft.com/playwright:v1.60.0-jammy
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends curl \
