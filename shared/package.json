@@ -22,7 +22,7 @@
     "build": "tsc",
     "lint": "tsc --noEmit"
   },
-  "devDependencies": {
+  "dependencies": {
     "typescript": "^5.8.2"
   }
 }

@@ -16,13 +16,14 @@ COPY package.json ./
 COPY backend/package.json ./backend/
 COPY shared/package.json ./shared/
 
-RUN npm install --workspace=backend --workspace=shared --ignore-scripts
+RUN npm install --workspace=backend --workspace=shared
 
 COPY shared/ ./shared/
 COPY backend/ ./backend/
 
 RUN npm run build --workspace=shared
 RUN npm run build --workspace=backend
+RUN npm prune --omit=dev
 
 WORKDIR /app/backend
 
