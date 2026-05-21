@@ -1,7 +1,10 @@
 import type { BusinessLead } from "@leadpilot/shared";
 import type { RawLeadInput } from "../types/scraper";
 import { crawlEmailForWebsite } from "../scraper/emailCrawler/email-crawler";
-import { parseMapsEmailsFromLead, resolveLeadEmailFields } from "../scraper/utils/lead-email";
+import {
+  parseMapsEmailsFromLead,
+  resolveLeadEmailFields,
+} from "../scraper/utils/lead-email";
 
 export function rawLeadToBusinessLead(
   raw: RawLeadInput,
@@ -13,6 +16,14 @@ export function rawLeadToBusinessLead(
     website?.includes("instagram.com") || website?.includes("instagr.am")
   );
 
+  const emailFields = resolveLeadEmailFields({
+    mapsEmails,
+    websiteEmails: [],
+    website,
+    category: raw.category ?? null,
+    businessName: raw.business_name,
+  });
+
   return {
     id: crypto.randomUUID(),
     searchId,
@@ -20,11 +31,11 @@ export function rawLeadToBusinessLead(
     category: raw.category ?? "",
     address: raw.address ?? "",
     phone: raw.phone,
-    email: raw.email,
+    email: emailFields.email,
     emailSource:
-      raw.email_source === "extracted"
+      emailFields.email_source === "extracted"
         ? "website"
-        : raw.email_source === "generated"
+        : emailFields.email_source === "generated"
           ? "generated"
           : "none",
     website,

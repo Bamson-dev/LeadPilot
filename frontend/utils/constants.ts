@@ -1,4 +1,4 @@
-export const MAX_LEADS_PER_SEARCH = 200;
+export const MAX_LEADS_PER_SEARCH = 300;
 export const MAX_EXPORT_ROWS = 200;
 export const RATE_LIMIT_WINDOW_MS = 60_000;
 export const RATE_LIMIT_MAX_REQUESTS = 5;

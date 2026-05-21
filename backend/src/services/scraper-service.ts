@@ -5,8 +5,10 @@ import {
   insertBusinessLead,
   markSearchComplete,
   markSearchFailed,
+  updateBusinessLeadEmail,
   updateSearchJob,
 } from "../database/search-repository";
+import { enqueueEmailEnrich } from "../utils/email-enrich-queue";
 import { formatScraperError } from "../scraper/utils/scraper-errors";
 import { logger } from "../utils/logger";
 import { enrichLeadEmail, rawLeadToBusinessLead } from "../utils/lead-mapper";
@@ -74,9 +76,20 @@ export async function runScraperJob(
         });
       });
 
-      void enrichLeadEmail(basic).then((enriched) => {
-        if (enriched.email !== basic.email || enriched.emailSource !== basic.emailSource) {
+      enqueueEmailEnrich(async () => {
+        const enriched = await enrichLeadEmail(basic);
+        if (
+          enriched.email !== basic.email ||
+          enriched.emailSource !== basic.emailSource
+        ) {
           emitLead(emit, enriched);
+          await updateBusinessLeadEmail(enriched).catch((err) => {
+            logger.warn("Failed to update lead email", {
+              searchId,
+              leadId: enriched.id,
+              error: err instanceof Error ? err.message : "unknown",
+            });
+          });
         }
       });
 

@@ -21,7 +21,7 @@ interface SearchState {
 }
 
 const POLL_INTERVAL_MS = 5000;
-const SEARCH_TIMEOUT_MS = 3 * 60 * 1000;
+const SEARCH_TIMEOUT_MS = 15 * 60 * 1000;
 
 export function useSearch() {
   const [state, setState] = useState<SearchState>({
@@ -71,10 +71,23 @@ export function useSearch() {
   const mergeLeads = useCallback((incoming: BusinessLead[]) => {
     if (incoming.length === 0) return;
     setState((prev) => {
-      const existingIds = new Set(prev.leads.map((l) => l.id));
-      const unique = incoming.filter((l) => l.id && !existingIds.has(l.id));
-      if (unique.length === 0) return prev;
-      const merged = [...prev.leads, ...unique];
+      const byId = new Map(prev.leads.map((l) => [l.id, l]));
+      let changed = false;
+      for (const lead of incoming) {
+        if (!lead.id) continue;
+        const existing = byId.get(lead.id);
+        if (
+          !existing ||
+          existing.email !== lead.email ||
+          existing.emailSource !== lead.emailSource ||
+          existing.website !== lead.website
+        ) {
+          byId.set(lead.id, lead);
+          changed = true;
+        }
+      }
+      if (!changed) return prev;
+      const merged = [...byId.values()];
       return {
         ...prev,
         leads: merged,

@@ -20,7 +20,7 @@ import {
   SIDEBAR_STABLE_ROUNDS,
 } from "../utils/constants";
 
-const BATCH_SIZE = 5;
+const BATCH_SIZE = 10;
 const TIMEOUT_MS = 8000;
 
 export interface MapsScrapeOptions {
@@ -100,9 +100,11 @@ async function scrollResults(
   const hasFeed = (await feed.count().catch(() => 0)) > 0;
 
   if (!hasFeed) {
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 25; i++) {
       await page.mouse.wheel(0, 1400);
       await page.waitForTimeout(SIDEBAR_SCROLL_WAIT_MS);
+      const count = await page.locator('a[href*="/maps/place/"]').count().catch(() => 0);
+      if (count >= MAX_LEADS_PER_SEARCH) break;
     }
     return;
   }
