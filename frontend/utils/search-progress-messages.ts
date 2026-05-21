@@ -21,7 +21,7 @@ export function getSearchProgressMessage(
   }
 
   if (count === 0) {
-    return "Connecting to Google Maps...";
+    return "Starting your search...";
   }
   if (count <= 5) {
     return "Found first businesses. Extracting contact details...";

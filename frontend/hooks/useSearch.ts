@@ -107,10 +107,27 @@ export function useSearch(options?: UseSearchOptions) {
   const mergeLeads = useCallback((incoming: BusinessLead[]) => {
     if (incoming.length === 0) return;
     setState((prev) => {
-      const existingIds = new Set(prev.leads.map((l) => l.id));
-      const unique = incoming.filter((l) => l.id && !existingIds.has(l.id));
-      if (unique.length === 0) return prev;
-      const merged = [...prev.leads, ...unique];
+      const byId = new Map(prev.leads.map((l) => [l.id, l]));
+      let changed = false;
+
+      for (const lead of incoming) {
+        if (!lead.id) continue;
+        const existing = byId.get(lead.id);
+        if (
+          !existing ||
+          existing.email !== lead.email ||
+          existing.emailSource !== lead.emailSource ||
+          existing.verifiedEmails.length !== lead.verifiedEmails.length ||
+          existing.predictedEmails.length !== lead.predictedEmails.length
+        ) {
+          byId.set(lead.id, lead);
+          changed = true;
+        }
+      }
+
+      if (!changed) return prev;
+
+      const merged = [...byId.values()];
       const count = merged.length;
       return {
         ...prev,
@@ -122,36 +139,65 @@ export function useSearch(options?: UseSearchOptions) {
     });
   }, [progressMessage]);
 
-  const syncFromApi = useCallback(
-    async (searchId: string) => {
-      const { leads: fetched } = await getResults(searchId);
-      if (fetched.length === 0) return;
-      mergeLeads(fetched.map((l) => leadRowToBusinessLead(l)));
+  const replaceLeads = useCallback(
+    (incoming: BusinessLead[]) => {
+      const count = incoming.length;
+      setState((prev) => ({
+        ...prev,
+        leads: incoming,
+        totalFound: count,
+        message: progressMessage(count, prev.status === "completed" ? "completed" : "running", prev.queuePosition),
+      }));
     },
-    [mergeLeads]
+    [progressMessage]
+  );
+
+  const syncFromApi = useCallback(
+    async (searchId: string, replace = false) => {
+      const { leads: fetched } = await getResults(searchId, 1, 250);
+      if (fetched.length === 0) return;
+      const mapped = fetched.map((l) => leadRowToBusinessLead(l));
+      if (replace) {
+        replaceLeads(mapped);
+      } else {
+        mergeLeads(mapped);
+      }
+    },
+    [mergeLeads, replaceLeads]
   );
 
   const finishSearch = useCallback(
     (total: number, message?: string) => {
       closeStream();
-      setState((prev) => {
-        const totalFound = total || prev.leads.length;
-        onCompleteRef.current?.(
-          prev.leads,
-          queryRef.current,
-          locationRef.current,
-          totalFound
-        );
-        return {
-          ...prev,
-          status: "completed",
-          totalFound,
-          queuePosition: 0,
-          message: message ?? progressMessage(totalFound, "completed", 0),
-        };
-      });
+      const searchId = searchIdRef.current;
+      void (async () => {
+        if (searchId) {
+          await new Promise((r) => setTimeout(r, 1500));
+          try {
+            await syncFromApi(searchId, true);
+          } catch {
+            /* keep streamed leads */
+          }
+        }
+        setState((prev) => {
+          const totalFound = total || prev.leads.length;
+          onCompleteRef.current?.(
+            prev.leads,
+            queryRef.current,
+            locationRef.current,
+            totalFound
+          );
+          return {
+            ...prev,
+            status: "completed",
+            totalFound,
+            queuePosition: 0,
+            message: message ?? progressMessage(totalFound, "completed", 0),
+          };
+        });
+      })();
     },
-    [closeStream, progressMessage]
+    [closeStream, progressMessage, syncFromApi]
   );
 
   const startPolling = useCallback(

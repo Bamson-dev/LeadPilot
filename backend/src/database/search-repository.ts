@@ -190,12 +190,12 @@ export async function getSearchJob(id: string): Promise<SearchJob | null> {
 export async function insertBusinessLead(lead: BusinessLead): Promise<BusinessLead> {
   const { data, error } = await supabase
     .from("business_leads")
-    .insert(leadToDbInsert(lead))
+    .upsert(leadToDbInsert(lead), { onConflict: "id" })
     .select("*")
     .single();
 
   if (error || !data) {
-    throw new Error(error?.message ?? "Failed to insert lead");
+    throw new Error(error?.message ?? "Failed to upsert lead");
   }
   return mapBusinessLead(data as DbBusinessLead);
 }

@@ -1,5 +1,5 @@
 import { extractAllEmailsFromText } from "../parsers/email-filter";
-import { resolveBusinessWebsite } from "../utils/website-utils";
+import { resolveEffectiveBusinessWebsite } from "../utils/effective-website";
 import { EMAIL_CRAWL_PATHS, EMAIL_FETCH_TIMEOUT_MS } from "../utils/constants";
 
 export interface EmailCrawlResult {
@@ -38,7 +38,7 @@ function extractFromHtml(html: string): string[] {
 export async function crawlEmailForWebsite(
   website: string | null | undefined
 ): Promise<EmailCrawlResult> {
-  const baseUrl = resolveBusinessWebsite(website);
+  const baseUrl = await resolveEffectiveBusinessWebsite(website);
   if (!baseUrl) {
     return { email: null, emailSource: "none" };
   }

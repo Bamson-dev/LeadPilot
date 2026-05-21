@@ -283,7 +283,7 @@ export function SearchDashboard() {
               lineHeight: 1.6,
             }}
           >
-            Tip: Google Maps shows 60 to 120 businesses per search. Use the area suggestions below
+            Tip: Each search typically returns 60 to 120 businesses. Use the area suggestions below
             to search specific neighborhoods and build a larger list. New results are added without
             clearing your current ones.
           </div>
@@ -398,7 +398,7 @@ export function SearchDashboard() {
               }}
             >
               {suggestionsMessage ||
-                `Google Maps shows 60 to 120 businesses per search. Click an area below to find more businesses and add them to your list.`}
+                `Each search typically returns 60 to 120 businesses. Click an area below to find more businesses and add them to your list.`}
             </p>
             <p
               style={{
@@ -450,7 +450,7 @@ export function SearchDashboard() {
           </div>
 
           <p style={{ color: "#6B6B80", fontSize: 11, margin: 0 }}>
-            Powered by AI — suggestions are generated for your specific search and location
+            Powered by LeadPilot — suggestions are generated for your specific search and location
           </p>
         </div>
       )}

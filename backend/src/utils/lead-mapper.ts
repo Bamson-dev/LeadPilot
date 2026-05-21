@@ -1,8 +1,11 @@
 import type { BusinessLead, PredictedEmail } from "@leadpilot/shared";
 import type { RawLeadInput } from "../types/scraper";
 import { crawlEmailForWebsite } from "../scraper/emailCrawler/email-crawler";
+import { resolveEffectiveBusinessWebsite } from "../scraper/utils/effective-website";
 import { parseMapsEmailsFromLead } from "../scraper/utils/lead-email";
 import { mergeEmails, parseEmailList } from "../scraper/parsers/email-filter";
+import { generateEmailsFromWebsite } from "../scraper/parsers/email-generator";
+import { resolveGenerationDomain } from "../scraper/utils/domain-utils";
 import {
   formatPredictedEmailsForStorage,
   generatePredictedEmails,
@@ -73,7 +76,10 @@ export async function enrichLeadEmail(
         ? parseEmailList(lead.email)
         : [];
 
-  const crawl = await crawlEmailForWebsite(lead.website);
+  const effectiveWebsite =
+    (await resolveEffectiveBusinessWebsite(lead.website)) ?? lead.website;
+
+  const crawl = await crawlEmailForWebsite(effectiveWebsite);
   const websiteVerified =
     crawl.emailSource === "website" && crawl.email
       ? parseEmailList(crawl.email)
@@ -84,7 +90,7 @@ export async function enrichLeadEmail(
     return buildVerifiedLead(lead, verified);
   }
 
-  if (!lead.website?.trim()) {
+  if (!effectiveWebsite?.trim() && !lead.website?.trim()) {
     return {
       ...lead,
       verifiedEmails: [],
@@ -96,26 +102,52 @@ export async function enrichLeadEmail(
 
   const predictions = await generatePredictedEmails({
     businessName: lead.name,
-    website: lead.website,
+    website: effectiveWebsite ?? lead.website,
     category: lead.category,
   });
 
-  if (predictions.length === 0) {
+  if (predictions.length > 0) {
     return {
       ...lead,
       verifiedEmails: [],
-      predictedEmails: [],
+      predictedEmails: predictions,
       email: null,
-      emailSource: "none",
+      emailSource: "predicted",
     };
+  }
+
+  const domain = resolveGenerationDomain(effectiveWebsite ?? lead.website);
+  if (domain) {
+    const fallbackAddresses = generateEmailsFromWebsite(
+      effectiveWebsite ?? lead.website,
+      lead.category,
+      lead.name
+    );
+    if (fallbackAddresses.length > 0) {
+      const predictedEmails: PredictedEmail[] = fallbackAddresses
+        .slice(0, 2)
+        .map((email) => ({
+          email,
+          confidence: 78,
+          label: "medium" as const,
+          source: "business_pattern" as const,
+        }));
+      return {
+        ...lead,
+        verifiedEmails: [],
+        predictedEmails,
+        email: null,
+        emailSource: "predicted",
+      };
+    }
   }
 
   return {
     ...lead,
     verifiedEmails: [],
-    predictedEmails: predictions,
+    predictedEmails: [],
     email: null,
-    emailSource: "predicted",
+    emailSource: "none",
   };
 }
 

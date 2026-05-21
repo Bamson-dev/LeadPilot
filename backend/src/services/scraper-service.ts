@@ -109,14 +109,14 @@ export async function runScraperJob(
 
       void enrichLeadEmail(basic)
         .then((enriched) => {
-          const changed =
-            enriched.email !== basic.email ||
-            enriched.emailSource !== basic.emailSource ||
-            enriched.predictedEmails.length !== basic.predictedEmails.length ||
-            enriched.verifiedEmails.length !== basic.verifiedEmails.length;
-          if (!changed) return;
           emitLead(emit, enriched);
-          void insertBusinessLead(enriched).catch(() => undefined);
+          void insertBusinessLead(enriched).catch((err) => {
+            logger.warn("Failed to upsert enriched lead", {
+              searchId,
+              name: enriched.name,
+              error: err instanceof Error ? err.message : "unknown",
+            });
+          });
         })
         .catch((err) => {
           logger.warn("Email enrich failed", {

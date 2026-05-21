@@ -61,7 +61,7 @@ export function exportToCSV(leads: (Lead | BusinessLead)[], filename: string): v
     "Website",
     "Rating",
     "Reviews",
-    "Google Maps URL",
+    "Maps URL",
   ];
 
   const rows = leads.map((lead) => {
@@ -118,7 +118,7 @@ export function leadsToCsv(leads: Lead[]): string {
     "Website",
     "Rating",
     "Reviews",
-    "Google Maps URL",
+    "Maps URL",
   ];
   const rows = leads.map((lead) => {
     const bl = businessLeadToLead(
