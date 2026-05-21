@@ -317,7 +317,6 @@ async function loadMapsSearchPage(page: Page, searchUrl: string): Promise<void> 
   if (!consentOk) {
     logger.error("Failed to pass Google consent", { url: page.url().slice(0, 160) });
   }
-  await page.waitForLoadState("networkidle", { timeout: 12000 }).catch(() => undefined);
   await page.waitForTimeout(2500);
   if (await isOnConsentPage(page)) {
     await acceptGoogleConsent(page, 6);
@@ -325,37 +324,76 @@ async function loadMapsSearchPage(page: Page, searchUrl: string): Promise<void> 
 }
 
 async function autoScroll(page: Page): Promise<void> {
-  await page.evaluate(async (maxMs: number) => {
-    const feed = document.querySelector('[role="feed"]') as HTMLElement | null;
-    if (!feed) return;
+  try {
+    await page.evaluate(async () => {
+      await new Promise<void>((resolve) => {
+        const feed =
+          document.querySelector('[role="feed"]') ||
+          document.querySelector('div[aria-label*="Results"]') ||
+          document.querySelector(".m6QErb");
 
-    await new Promise<void>((resolve) => {
-      let lastHeight = 0;
-      let unchangedCount = 0;
+        if (!feed) {
+          let lastCount = 0;
+          let unchanged = 0;
 
-      const interval = setInterval(() => {
-        feed.scrollTop = feed.scrollHeight;
+          const interval = setInterval(() => {
+            window.scrollBy(0, 500);
+            const links = document.querySelectorAll('a[href*="/maps/place/"]').length;
 
-        const newHeight = feed.scrollHeight;
-        if (newHeight === lastHeight) {
-          unchangedCount++;
-          if (unchangedCount >= 6) {
+            if (links === lastCount) {
+              unchanged++;
+              if (unchanged >= 5) {
+                clearInterval(interval);
+                resolve();
+              }
+            } else {
+              unchanged = 0;
+              lastCount = links;
+            }
+          }, 800);
+
+          setTimeout(() => {
             clearInterval(interval);
             resolve();
-          }
-        } else {
-          unchangedCount = 0;
-          lastHeight = newHeight;
-        }
-      }, 800);
+          }, 45000);
 
-      setTimeout(() => {
-        clearInterval(interval);
-        resolve();
-      }, maxMs);
+          return;
+        }
+
+        let lastHeight = 0;
+        let unchangedCount = 0;
+
+        const interval = setInterval(() => {
+          (feed as HTMLElement).scrollTop += 800;
+
+          const el = feed as HTMLElement;
+          const newHeight = el.scrollTop + el.clientHeight;
+          if (Math.abs(newHeight - lastHeight) < 10) {
+            unchangedCount++;
+            if (unchangedCount >= 6) {
+              clearInterval(interval);
+              resolve();
+            }
+          } else {
+            unchangedCount = 0;
+            lastHeight = newHeight;
+          }
+        }, 800);
+
+        setTimeout(() => {
+          clearInterval(interval);
+          resolve();
+        }, 45000);
+      });
     });
-  }, SIDEBAR_SCROLL_TIMEOUT_MS);
+  } catch (err) {
+    logger.warn("Auto-scroll error — continuing with available results", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+  }
 }
+
+const STRATEGY_TIMEOUT_MS = 60_000;
 
 async function scrapeUrlsFromPage(
   context: BrowserContext,
@@ -368,11 +406,15 @@ async function scrapeUrlsFromPage(
   try {
     logger.info("Maps search starting", { searchUrl, query, location });
 
-    await gotoWithRetry(page, withMapsLocale(searchUrl), {
-      waitUntil: "networkidle",
-      timeout: 30000,
-      retries: 1,
+    await page.setExtraHTTPHeaders({
+      "Accept-Language": "en-US,en;q=0.9",
     });
+
+    await page.goto(withMapsLocale(searchUrl), {
+      waitUntil: "domcontentloaded",
+      timeout: 20000,
+    });
+
     await acceptGoogleConsent(page);
 
     const blocked = await detectBlockedPage(page);
@@ -381,15 +423,31 @@ async function scrapeUrlsFromPage(
       return [];
     }
 
-    await page
-      .waitForSelector('[role="feed"]', { timeout: 15000 })
-      .catch(() => logger.warn("Feed selector not found", { searchUrl }));
+    await Promise.race([
+      page.waitForSelector('[role="feed"]', { timeout: 15000 }),
+      page.waitForSelector('a[href*="/maps/place/"]', { timeout: 15000 }),
+    ]).catch(() => {
+      logger.warn("Feed selector timeout — attempting extraction anyway", { searchUrl });
+    });
+
+    await page.waitForTimeout(2000);
 
     await autoScroll(page);
 
-    const urls = await collectPlaceUrls(page);
+    const urls = await page.evaluate(() => {
+      const links = Array.from(
+        document.querySelectorAll('a[href*="/maps/place/"]')
+      );
+      const unique = new Set(links.map((a) => (a as HTMLAnchorElement).href));
+      return Array.from(unique);
+    });
 
-    logger.info("Maps place URLs collected", { count: urls.length, searchUrl });
+    logger.info("Maps place URLs collected", {
+      count: urls.length,
+      searchUrl,
+      query,
+      location,
+    });
 
     return urls;
   } catch (err) {
@@ -418,7 +476,17 @@ async function getBusinessUrls(
   });
 
   const results = await Promise.allSettled(
-    searchStrategies.map((url) => scrapeUrlsFromPage(context, url, query, location))
+    searchStrategies.map((url) =>
+      Promise.race([
+        scrapeUrlsFromPage(context, url, query, location),
+        new Promise<string[]>((_, reject) =>
+          setTimeout(
+            () => reject(new Error("Strategy timeout after 60s")),
+            STRATEGY_TIMEOUT_MS
+          )
+        ),
+      ])
+    )
   );
 
   for (const result of results) {
@@ -431,11 +499,14 @@ async function getBusinessUrls(
   }
 
   const merged = [...allUrls];
-  logger.info("Multi-strategy URLs merged", {
+  const strategiesSucceeded = results.filter((r) => r.status === "fulfilled").length;
+
+  logger.info("URL collection complete — starting extraction", {
     query,
     location,
-    total: merged.length,
-    strategies: searchStrategies.length,
+    urlsCollected: merged.length,
+    strategiesRun: searchStrategies.length,
+    strategiesSucceeded,
   });
 
   return merged.slice(0, MAX_LEADS_PER_SEARCH);
@@ -455,11 +526,11 @@ async function extractBusinessDetails(
 
     await page.goto(placeUrl, {
       waitUntil: "domcontentloaded",
-      timeout: 10000,
+      timeout: 12000,
     });
     await acceptGoogleConsent(page);
-    await page.waitForSelector("h1", { timeout: 5000 }).catch(() => undefined);
-    await page.waitForTimeout(1500);
+    await page.waitForSelector("h1", { timeout: 6000 }).catch(() => undefined);
+    await page.waitForTimeout(1000);
 
     if (!(await waitForDetailPanel(page, 6000))) {
       logger.warn("Business extraction returned null — skipping", { url: placeUrl });

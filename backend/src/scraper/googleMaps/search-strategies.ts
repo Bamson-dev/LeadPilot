@@ -2,6 +2,30 @@
  * Build Maps search URL variants for a query/location pair.
  * Multiple phrasings and sub-areas increase unique place URLs past the ~120 Maps viewport cap.
  */
+
+const NIGERIA_CITIES = [
+  "abuja",
+  "lagos",
+  "port harcourt",
+  "kano",
+  "ibadan",
+  "enugu",
+  "benin",
+  "kaduna",
+  "owerri",
+  "uyo",
+  "calabar",
+  "warri",
+];
+
+export function isNigeriaLocation(location: string): boolean {
+  const lower = location.toLowerCase();
+  return (
+    lower.includes("nigeria") ||
+    NIGERIA_CITIES.some((city) => lower.includes(city))
+  );
+}
+
 export function getLocationVariants(location: string): string[] {
   const trimmed = location.trim();
   const lower = trimmed.toLowerCase();
@@ -54,22 +78,34 @@ export function getLocationVariants(location: string): string[] {
   return [...variants];
 }
 
+function phrasesForQueryLocation(query: string, loc: string): string[] {
+  const q = query.trim();
+  const phrases = [
+    `${q} in ${loc}`,
+    `${loc} ${q}`,
+    `best ${q} ${loc}`,
+  ];
+  return phrases;
+}
+
 export function buildSearchStrategyUrls(query: string, location: string): string[] {
   const q = query.trim();
-  const locations = getLocationVariants(location);
+  const locTrimmed = location.trim();
+  const locations = getLocationVariants(locTrimmed);
   const urls = new Set<string>();
 
   for (const loc of locations) {
-    const phrases = [
-      `${q} in ${loc}`,
-      `${loc} ${q}`,
-      `${q} near ${loc}`,
-    ];
-    for (const phrase of phrases) {
+    for (const phrase of phrasesForQueryLocation(q, loc)) {
       urls.add(
         `https://www.google.com/maps/search/${encodeURIComponent(phrase)}`
       );
     }
+  }
+
+  if (isNigeriaLocation(locTrimmed)) {
+    urls.add(
+      `https://www.google.com/maps/search/${encodeURIComponent(`${q} ${locTrimmed} Nigeria`)}`
+    );
   }
 
   return [...urls];

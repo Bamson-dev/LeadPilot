@@ -80,8 +80,17 @@ function generatedEmailsForDomain(websiteUrl: string): string[] {
 export async function crawlEmailsFromWebsite(
   websiteUrl: string | null | undefined
 ): Promise<string[]> {
+  logger.info("Starting email crawl", { websiteUrl: websiteUrl ?? null });
+
   const baseUrl = await resolveEffectiveBusinessWebsite(websiteUrl);
-  if (!baseUrl) return [];
+  if (!baseUrl) {
+    logger.info("Email crawl complete", {
+      websiteUrl: websiteUrl ?? null,
+      emailsFound: 0,
+      emails: [],
+    });
+    return [];
+  }
 
   const validEmails = new Set<string>();
   const base = baseUrl.replace(/\/$/, "");
@@ -109,11 +118,16 @@ export async function crawlEmailsFromWebsite(
 
   const emailArray = sortEmailsByPriority(filterValidEmails([...validEmails]));
 
-  if (emailArray.length === 0) {
-    return generatedEmailsForDomain(baseUrl);
-  }
+  const result =
+    emailArray.length === 0 ? generatedEmailsForDomain(baseUrl) : emailArray;
 
-  return emailArray;
+  logger.info("Email crawl complete", {
+    websiteUrl: baseUrl,
+    emailsFound: result.length,
+    emails: result,
+  });
+
+  return result;
 }
 
 export async function crawlEmailForWebsite(
