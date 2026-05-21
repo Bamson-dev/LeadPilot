@@ -74,6 +74,32 @@ searchRouter.get("/suggestions", async (req: Request, res: Response) => {
   }
 });
 
+searchRouter.get("/activity", async (_req: Request, res: Response) => {
+  try {
+    const { data } = await supabase
+      .from("user_searches")
+      .select("query, location, total_found, created_at")
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    res.json({ activity: data || [] });
+  } catch {
+    res.json({ activity: [] });
+  }
+});
+
+searchRouter.get("/stats/total", async (_req: Request, res: Response) => {
+  try {
+    const { count } = await supabase
+      .from("business_leads")
+      .select("*", { count: "exact", head: true });
+
+    res.json({ total: count || 0 });
+  } catch {
+    res.json({ total: 0 });
+  }
+});
+
 searchRouter.get("/history", async (req: Request, res: Response) => {
   try {
     const licenseKey = req.headers["x-license-key"] as string;

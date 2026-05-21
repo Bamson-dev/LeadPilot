@@ -2,17 +2,23 @@
 
 import { motion } from "framer-motion";
 import { Search, Download, RotateCcw, Trash2, Loader2 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { BusinessLead } from "@leadpilot/shared";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { LiveCounter } from "@/components/dashboard/live-counter";
 import { SearchHistory } from "@/components/dashboard/search-history";
+import { WelcomeState } from "@/components/dashboard/welcome-state";
 import { ResultsTable } from "@/features/results/results-table";
 import { useSearch } from "@/hooks/useSearch";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { exportToCSV } from "@/features/export/csv-export";
-import { getSearchSuggestions } from "@/services/api";
+import {
+  getSearchSuggestions,
+  getRecentActivity,
+  getTotalDiscovered,
+} from "@/services/api";
 import { businessLeadToLead } from "@/types/lead";
 import type { Lead } from "@/types/lead";
 
@@ -29,7 +35,15 @@ function dedupeLeads(
   return [...prev, ...unique];
 }
 
+interface ActivityItem {
+  query: string;
+  location: string;
+  total_found: number;
+  created_at: string;
+}
+
 export function SearchDashboard() {
+  const isMobile = useIsMobile();
   const [businessType, setBusinessType] = useState("");
   const [location, setLocation] = useState("");
   const [savedBanner, setSavedBanner] = useState<string | null>(null);
@@ -40,6 +54,9 @@ export function SearchDashboard() {
   >([]);
   const [suggestionsMessage, setSuggestionsMessage] = useState("");
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [totalDiscovered, setTotalDiscovered] = useState(0);
 
   const fetchSuggestions = useCallback(
     async (query: string, loc: string, totalFound: number) => {
@@ -87,6 +104,34 @@ export function SearchDashboard() {
     loadSavedLeads,
   } = useSearch({ onSearchComplete });
 
+  useEffect(() => {
+    if (status === "completed") {
+      setShowSuccess(true);
+      const t = setTimeout(() => setShowSuccess(false), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [status]);
+
+  useEffect(() => {
+    async function loadActivity() {
+      const data = await getRecentActivity();
+      setActivity(data.activity || []);
+    }
+    void loadActivity();
+    const interval = setInterval(() => void loadActivity(), 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    async function loadTotal() {
+      const data = await getTotalDiscovered();
+      setTotalDiscovered(data.total || 0);
+    }
+    void loadTotal();
+    const interval = setInterval(() => void loadTotal(), 60000);
+    return () => clearInterval(interval);
+  }, []);
+
   const query = searchMeta.business || businessType;
   const loc = searchMeta.location || location;
 
@@ -120,6 +165,13 @@ export function SearchDashboard() {
     void runSearch(businessType, location);
   };
 
+  const handleExampleSearch = (exampleQuery: string, exampleLocation: string) => {
+    setSavedBanner(null);
+    setBusinessType(exampleQuery);
+    setLocation(exampleLocation);
+    void runSearch(exampleQuery, exampleLocation);
+  };
+
   const handleAreaSearch = (areaQuery: string, areaLocation: string) => {
     setSavedBanner(null);
     setBusinessType(areaQuery);
@@ -132,10 +184,7 @@ export function SearchDashboard() {
   };
 
   const handleDownload = () => {
-    exportToCSV(
-      leadsToExport,
-      `leadpilot-${query}-${loc}-${Date.now()}.csv`
-    );
+    exportToCSV(leadsToExport, `leadpilot-${query}-${loc}-${Date.now()}.csv`);
   };
 
   const startNewSession = () => {
@@ -163,15 +212,53 @@ export function SearchDashboard() {
   };
 
   const displayCount =
-    sessionSearchCount > 1 ? mergedSessionLeads.length : isSearching ? rawLeads.length : tableLeads.length;
+    sessionSearchCount > 1
+      ? mergedSessionLeads.length
+      : isSearching
+        ? rawLeads.length
+        : tableLeads.length;
+
+  const showWelcome =
+    status === "idle" &&
+    allLeads.length === 0 &&
+    tableLeads.length === 0 &&
+    !isSearching &&
+    !savedBanner;
+
+  const exportCount = leadsToExport.length;
+  const exportPulse = status === "completed" && exportCount > 0;
 
   return (
-    <div className="space-y-8">
-      <div className="glass rounded-2xl p-6">
-        <h1 className="text-2xl font-bold text-[#F4F4FF]">Discover Prospects</h1>
+    <div className="space-y-6 sm:space-y-8">
+      <div className="glass rounded-2xl p-4 sm:p-6">
+        <h1 className="text-xl sm:text-2xl font-bold text-[#F4F4FF]">
+          Discover Prospects
+        </h1>
         <p className="mt-1 text-sm text-[#6B6B80]">
-          Build client lists by niche and location — contacts stream in realtime.
+          Type a niche. Pick a city. Get contacts in seconds.
         </p>
+
+        {totalDiscovered > 0 && (
+          <div
+            className="flex items-center gap-1.5 mt-2"
+            style={{ marginTop: 6 }}
+          >
+            <span
+              className="inline-block rounded-full status-pulse-dot"
+              style={{
+                width: 6,
+                height: 6,
+                background: "#10B981",
+              }}
+            />
+            <span style={{ color: "#6B6B80", fontSize: 12 }}>
+              <strong style={{ color: "#F4F4FF" }}>
+                {totalDiscovered.toLocaleString()}
+              </strong>{" "}
+              businesses discovered and counting
+            </span>
+          </div>
+        )}
 
         {searchesRemaining != null && (
           <p className="mt-3 text-xs text-[#6B6B80]">
@@ -179,39 +266,75 @@ export function SearchDashboard() {
           </p>
         )}
 
-        <div className="mt-6 grid gap-4 sm:grid-cols-2">
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-[#6B6B80]">Business type</label>
+        <div
+          className="mt-6 gap-3"
+          style={{
+            display: "flex",
+            flexDirection: isMobile ? "column" : "row",
+            gap: isMobile ? 10 : 12,
+          }}
+        >
+          <div className={isMobile ? "w-full" : "flex-1 min-w-0"}>
+            <label className="mb-1.5 block text-xs font-medium text-[#6B6B80]">
+              Business type
+            </label>
             <Input
               placeholder="e.g. restaurants, dentists, gyms"
               value={businessType}
               onChange={(e) => setBusinessType(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={isSearching}
+              className="w-full"
             />
           </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-[#6B6B80]">Location</label>
+          <div className={isMobile ? "w-full" : "flex-1 min-w-0"}>
+            <label className="mb-1.5 block text-xs font-medium text-[#6B6B80]">
+              Location
+            </label>
             <Input
               placeholder="e.g. Lagos Nigeria, London UK, California USA"
               value={location}
               onChange={(e) => setLocation(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={isSearching}
+              className="w-full"
             />
           </div>
         </div>
 
-        {sessionSearchCount > 1 && (
+        {activity.length > 0 && status === "idle" && !isSearching && (
           <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              marginTop: 16,
-              marginBottom: 0,
-            }}
+            className="flex flex-wrap gap-2 mt-3 mb-1"
+            style={{ marginTop: 12, marginBottom: 4 }}
           >
+            <span
+              className="text-[11px] self-center whitespace-nowrap"
+              style={{ color: "#6B6B80" }}
+            >
+              Recent:
+            </span>
+            {activity.slice(0, isMobile ? 3 : 5).map((a, i) => (
+              <div
+                key={`${a.query}-${a.location}-${i}`}
+                style={{
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.06)",
+                  borderRadius: 100,
+                  padding: "4px 10px",
+                  fontSize: 11,
+                  color: "#A1A1AA",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <span style={{ color: "#F4F4FF" }}>{a.total_found}</span> {a.query}{" "}
+                in {a.location}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {sessionSearchCount > 1 && (
+          <div className="flex flex-wrap items-center gap-3 mt-4">
             <p
               style={{
                 color: "#A855F7",
@@ -241,8 +364,24 @@ export function SearchDashboard() {
           </div>
         )}
 
-        <div className="mt-4 flex flex-wrap gap-3">
-          <Button type="button" variant="glow" onClick={handleSearch} disabled={isSearching}>
+        <div
+          className="mt-4 gap-2.5"
+          style={{
+            display: "flex",
+            flexDirection: isMobile ? "column" : "row",
+            flexWrap: isMobile ? "nowrap" : "wrap",
+            gap: 10,
+            marginTop: 10,
+          }}
+        >
+          <Button
+            type="button"
+            variant="glow"
+            onClick={handleSearch}
+            disabled={isSearching}
+            className={isMobile ? "w-full" : ""}
+            style={isMobile ? { flex: 1, width: "100%" } : undefined}
+          >
             {isSearching ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
@@ -253,22 +392,62 @@ export function SearchDashboard() {
           <Button
             variant="outline"
             onClick={handleDownload}
-            disabled={leadsToExport.length === 0}
+            disabled={exportCount === 0}
+            className={[
+              isMobile ? "w-full" : "",
+              exportPulse ? "export-pulse-btn" : "",
+            ].join(" ")}
+            style={isMobile ? { flex: 1, width: "100%" } : undefined}
           >
             <Download className="h-4 w-4" />
-            Export {leadsToExport.length} leads to CSV
+            Download {exportCount > 0 ? exportCount : ""} Leads
           </Button>
           {(tableLeads.length > 0 || isSearching) && (
             <>
-              <Button variant="ghost" onClick={handleNewSearch}>
+              <Button
+                variant="ghost"
+                onClick={handleNewSearch}
+                className={isMobile ? "w-full" : ""}
+                style={isMobile ? { flex: 1, width: "100%" } : undefined}
+              >
                 <RotateCcw className="h-4 w-4" /> New Search
               </Button>
-              <Button variant="ghost" onClick={handleClearResults}>
+              <Button
+                variant="ghost"
+                onClick={handleClearResults}
+                className={isMobile ? "w-full" : ""}
+                style={isMobile ? { flex: 1, width: "100%" } : undefined}
+              >
                 <Trash2 className="h-4 w-4" /> Clear Results
               </Button>
             </>
           )}
         </div>
+
+        {showSuccess && (
+          <div
+            className="success-banner-fade mt-4"
+            style={{
+              background: "rgba(16,185,129,0.1)",
+              border: "1px solid rgba(16,185,129,0.2)",
+              borderRadius: 10,
+              padding: "12px 16px",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <span style={{ fontSize: 20 }}>✓</span>
+            <div>
+              <div style={{ color: "#10B981", fontWeight: 700, fontSize: 14 }}>
+                Search complete
+              </div>
+              <div style={{ color: "#6B6B80", fontSize: 12 }}>
+                Found {totalFound} businesses. Your leads are ready to export.
+              </div>
+            </div>
+          </div>
+        )}
 
         {status === "completed" && sessionSearchCount === 1 && !error && !savedBanner && (
           <div
@@ -283,9 +462,9 @@ export function SearchDashboard() {
               lineHeight: 1.6,
             }}
           >
-            Tip: Each search typically returns 60 to 120 businesses. Use the area suggestions below
-            to search specific neighborhoods and build a larger list. New results are added without
-            clearing your current ones.
+            Tip: Each search typically returns 60 to 120 businesses. Use the area
+            suggestions below to search specific neighborhoods and build a larger
+            list. New results are added without clearing your current ones.
           </div>
         )}
 
@@ -297,8 +476,9 @@ export function SearchDashboard() {
             <p className="text-sm text-red-300">{error}</p>
             {showLimitMessage && (
               <p className="mt-2 text-sm text-[#A1A1B5]">
-                You have used all your searches for this month. Your searches reset on the date
-                shown in the message above. Contact support to increase your limit.
+                You have used all your searches for this month. Your searches reset on
+                the date shown in the message above. Contact support to increase your
+                limit.
               </p>
             )}
             <Button variant="outline" size="sm" className="mt-3" onClick={handleClearResults}>
@@ -307,7 +487,7 @@ export function SearchDashboard() {
           </div>
         )}
 
-        {status === "completed" && !error && !savedBanner && (
+        {status === "completed" && !error && !savedBanner && !showSuccess && (
           <p className="mt-4 text-sm text-[#A1A1B5]">
             Search complete. Found {totalFound} businesses.
           </p>
@@ -315,6 +495,7 @@ export function SearchDashboard() {
       </div>
 
       <SearchHistory
+        isMobile={isMobile}
         onViewResults={(historyLeads, meta) => {
           loadSavedLeads(historyLeads);
           setSavedBanner(
@@ -322,6 +503,8 @@ export function SearchDashboard() {
           );
         }}
       />
+
+      {showWelcome && <WelcomeState onExampleSearch={handleExampleSearch} />}
 
       {(isSearching || tableLeads.length > 0) && (
         <motion.div
@@ -349,7 +532,14 @@ export function SearchDashboard() {
         </motion.div>
       )}
 
-      <ResultsTable leads={tableLeads} isLoading={isSearching && tableLeads.length === 0} />
+      {(isSearching || tableLeads.length > 0 || savedBanner) && (
+        <ResultsTable
+          leads={tableLeads}
+          isLoading={isSearching && tableLeads.length === 0}
+          isMobile={isMobile}
+          hideEmptyPlaceholder={showWelcome}
+        />
+      )}
 
       {loadingSuggestions && status === "completed" && (
         <div
@@ -373,7 +563,7 @@ export function SearchDashboard() {
             background: "#0F0F14",
             border: "1px solid rgba(124,58,237,0.2)",
             borderRadius: 14,
-            padding: 24,
+            padding: isMobile ? 16 : 24,
             marginTop: 16,
           }}
         >
@@ -412,7 +602,16 @@ export function SearchDashboard() {
             </p>
           </div>
 
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: isMobile
+                ? "1fr 1fr"
+                : "repeat(auto-fill, minmax(200px, 1fr))",
+              gap: 8,
+              marginBottom: 12,
+            }}
+          >
             {suggestions.map((s, i) => (
               <button
                 key={`${s.location}-${i}`}
@@ -431,6 +630,7 @@ export function SearchDashboard() {
                   transition: "all 0.15s",
                   fontFamily: "Figtree, sans-serif",
                   opacity: isSearching ? 0.5 : 1,
+                  textAlign: "center",
                 }}
                 onMouseOver={(e) => {
                   if (isSearching) return;
@@ -450,9 +650,49 @@ export function SearchDashboard() {
           </div>
 
           <p style={{ color: "#6B6B80", fontSize: 11, margin: 0 }}>
-            Powered by LeadPilot — suggestions are generated for your specific search and location
+            Powered by LeadPilot — suggestions are generated for your specific search and
+            location
           </p>
         </div>
+      )}
+
+      {isMobile && exportCount > 0 && (
+        <>
+          <div style={{ height: 80 }} />
+          <div
+            style={{
+              position: "fixed",
+              bottom: 0,
+              left: 0,
+              right: 0,
+              padding: "12px 16px",
+              background: "rgba(7,7,10,0.95)",
+              backdropFilter: "blur(20px)",
+              borderTop: "1px solid rgba(255,255,255,0.07)",
+              zIndex: 50,
+            }}
+          >
+            <button
+              type="button"
+              onClick={handleDownload}
+              className={exportPulse ? "export-pulse-btn" : ""}
+              style={{
+                width: "100%",
+                background: "#7C3AED",
+                color: "white",
+                border: "none",
+                padding: "14px",
+                borderRadius: 10,
+                fontSize: 15,
+                fontWeight: 700,
+                cursor: "pointer",
+                fontFamily: "Figtree, sans-serif",
+              }}
+            >
+              Download {exportCount} Leads
+            </button>
+          </div>
+        </>
       )}
     </div>
   );

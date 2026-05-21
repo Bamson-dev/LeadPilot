@@ -206,6 +206,40 @@ export async function getSearchSuggestions(
   }
 }
 
+export async function getRecentActivity(): Promise<{
+  activity: Array<{
+    query: string;
+    location: string;
+    total_found: number;
+    created_at: string;
+  }>;
+}> {
+  try {
+    const res = await fetch(`${getApiUrl()}/search/activity`, { cache: "no-store" });
+    if (!res.ok) return { activity: [] };
+    return res.json() as Promise<{
+      activity: Array<{
+        query: string;
+        location: string;
+        total_found: number;
+        created_at: string;
+      }>;
+    }>;
+  } catch {
+    return { activity: [] };
+  }
+}
+
+export async function getTotalDiscovered(): Promise<{ total: number }> {
+  try {
+    const res = await fetch(`${getApiUrl()}/search/stats/total`, { cache: "no-store" });
+    if (!res.ok) return { total: 0 };
+    return res.json() as Promise<{ total: number }>;
+  } catch {
+    return { total: 0 };
+  }
+}
+
 export async function getSearchHistory(): Promise<{
   history: Array<{
     id: string;

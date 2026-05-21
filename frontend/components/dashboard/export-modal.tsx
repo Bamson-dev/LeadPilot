@@ -37,7 +37,7 @@ export function ExportModal({
         </DialogHeader>
         <Button variant="glow" className="w-full" onClick={onDownload}>
           <Download className="h-4 w-4" />
-          Download CSV
+          Download Leads
         </Button>
       </DialogContent>
     </Dialog>

@@ -9,7 +9,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "LeadPilot — Business Discovery & Prospecting Intelligence",
+  title: "LeadPilot — Find Businesses To Pitch In Seconds",
   description:
     "Discover targeted business leads instantly. Premium prospect intelligence for freelancers, agencies, marketers, and outreach teams.",
 };
