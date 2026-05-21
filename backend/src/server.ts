@@ -1,5 +1,6 @@
 import express, { type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
+import type { Server } from "http";
 import { getEnv, loadEnv } from "./config/env";
 import { searchRouter } from "./api/search-router";
 import healthRouter from "./api/health-router";
@@ -12,7 +13,7 @@ export const app = express();
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
 
-// Health routes first — no env/CORS dependency; must work for Docker/Coolify probes.
+// Health routes first — respond immediately; no env or browser dependency.
 app.use("/health", healthRouter);
 app.use("/api/health", healthRouter);
 
@@ -88,6 +89,25 @@ function registerRoutes(): void {
   });
 }
 
+async function initBrowserPoolSafe(): Promise<void> {
+  if (!routesRegistered) return;
+  try {
+    await getBrowserPool().init();
+    logger.info("Browser pool ready");
+  } catch (err) {
+    logger.error("Browser pool init failed — server stays up, /health remains available", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+  }
+}
+
+function listen(port: number, host: string): Promise<Server> {
+  return new Promise((resolve, reject) => {
+    const server = app.listen(port, host, () => resolve(server));
+    server.on("error", reject);
+  });
+}
+
 process.on("unhandledRejection", (reason) => {
   logger.error("Unhandled promise rejection", {
     error: reason instanceof Error ? reason.message : String(reason),
@@ -103,9 +123,11 @@ async function start(): Promise<void> {
   const PORT = parseInt(process.env.PORT || "3000", 10);
   const host = "0.0.0.0";
 
-  const server = app.listen(PORT, host, () => {
-    logger.info("Backend listening", { port: PORT, host });
-  });
+  const server = await listen(PORT, host);
+  logger.info("Backend listening", { port: PORT, host });
+
+  server.requestTimeout = 120_000;
+  server.headersTimeout = 125_000;
 
   try {
     loadEnv();
@@ -122,19 +144,8 @@ async function start(): Promise<void> {
     });
   }
 
-  server.requestTimeout = 120_000;
-  server.headersTimeout = 125_000;
-
-  if (routesRegistered) {
-    void getBrowserPool()
-      .init()
-      .then(() => logger.info("Browser pool ready"))
-      .catch((err) => {
-        logger.error("Browser pool init failed", {
-          error: err instanceof Error ? err.message : "unknown",
-        });
-      });
-  }
+  // Non-blocking: health already accepts traffic while Playwright initializes.
+  void initBrowserPoolSafe();
 
   let shuttingDown = false;
   const shutdown = async (signal: string) => {
