@@ -74,7 +74,7 @@ export function ResultsTable({ leads, isLoading }: ResultsTableProps) {
       <div className="flex flex-col items-center justify-center rounded-2xl border border-white/[0.08] bg-[#0F0F14] py-24 text-center">
         <p className="text-lg font-medium text-[#F4F4FF]">No leads yet</p>
         <p className="mt-2 max-w-sm text-sm text-[#6B6B80]">
-          Enter a business type and location, then hit Find Leads.
+          Enter a business type and location, then click Search.
         </p>
       </div>
     );

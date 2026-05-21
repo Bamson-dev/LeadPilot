@@ -73,7 +73,7 @@ export function LeadsTable({ leads, isLoading }: LeadsTableProps) {
       <div className="flex flex-col items-center justify-center rounded-2xl border border-white/[0.08] bg-[#111113] py-24 text-center">
         <p className="text-lg font-medium text-zinc-300">No leads yet</p>
         <p className="mt-2 max-w-sm text-sm text-zinc-500">
-          Enter a business type and location, then hit Find Leads to start discovering businesses.
+          Enter a business type and location, then click Search to start discovering businesses.
         </p>
       </div>
     );
