@@ -63,6 +63,26 @@ export async function buildLeadFromPanel(
     const authority = main.querySelector('a[data-item-id="authority"]') as HTMLAnchorElement | null;
     if (authority?.href) result.website = authority.href;
 
+    if (!result.website) {
+      const candidates = Array.from(
+        main.querySelectorAll(
+          'a[href^="http"]:not([href*="google.com/maps"]):not([href*="google.com/search"])'
+        )
+      );
+      for (const link of candidates) {
+        const href = (link as HTMLAnchorElement).href;
+        if (
+          href &&
+          !href.includes("google.com/url") &&
+          !href.includes("accounts.google") &&
+          !href.includes("support.google")
+        ) {
+          result.website = href;
+          break;
+        }
+      }
+    }
+
     const addressBtn = main.querySelector('button[data-item-id="address"]');
     if (addressBtn) {
       const label = addressBtn.getAttribute("aria-label") || "";

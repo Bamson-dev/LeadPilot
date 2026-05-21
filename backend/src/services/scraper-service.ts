@@ -5,10 +5,8 @@ import {
   insertBusinessLead,
   markSearchComplete,
   markSearchFailed,
-  updateBusinessLeadEmail,
   updateSearchJob,
 } from "../database/search-repository";
-import { enqueueEmailEnrich } from "../utils/email-enrich-queue";
 import { formatScraperError } from "../scraper/utils/scraper-errors";
 import { logger } from "../utils/logger";
 import { enrichLeadEmail, rawLeadToBusinessLead } from "../utils/lead-mapper";
@@ -57,10 +55,21 @@ export async function runScraperJob(
       max: 0,
     });
 
-    const onBusinessFound = (raw: RawLeadInput) => {
+    const onBusinessFound = async (raw: RawLeadInput) => {
       const basic = rawLeadToBusinessLead(raw, searchId);
+      let lead = basic;
+      try {
+        lead = await enrichLeadEmail(basic);
+      } catch (err) {
+        logger.warn("Email enrich failed", {
+          searchId,
+          name: basic.name,
+          error: err instanceof Error ? err.message : "unknown",
+        });
+      }
+
       progress++;
-      emitLead(emit, basic);
+      emitLead(emit, lead);
       emit({
         type: "progress",
         message: `Found ${progress} businesses so far...`,
@@ -69,28 +78,11 @@ export async function runScraperJob(
         max: progressMax,
       });
 
-      void insertBusinessLead(basic).catch((err) => {
+      void insertBusinessLead(lead).catch((err) => {
         logger.error("Failed to insert business lead", {
           searchId,
           error: err instanceof Error ? err.message : "unknown",
         });
-      });
-
-      enqueueEmailEnrich(async () => {
-        const enriched = await enrichLeadEmail(basic);
-        if (
-          enriched.email !== basic.email ||
-          enriched.emailSource !== basic.emailSource
-        ) {
-          emitLead(emit, enriched);
-          await updateBusinessLeadEmail(enriched).catch((err) => {
-            logger.warn("Failed to update lead email", {
-              searchId,
-              leadId: enriched.id,
-              error: err instanceof Error ? err.message : "unknown",
-            });
-          });
-        }
       });
 
       if (progress % 3 === 0) {

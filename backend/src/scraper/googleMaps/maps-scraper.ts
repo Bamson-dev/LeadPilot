@@ -20,8 +20,7 @@ import {
   SIDEBAR_STABLE_ROUNDS,
 } from "../utils/constants";
 
-const BATCH_SIZE = 10;
-const TIMEOUT_MS = 8000;
+const BATCH_SIZE = 5;
 
 export interface MapsScrapeOptions {
   query: string;
@@ -88,6 +87,26 @@ async function waitForResultsPanel(page: Page, timeoutMs = 28000): Promise<boole
   }
 }
 
+async function tryLoadMoreResults(page: Page): Promise<void> {
+  for (const sel of [
+    'button[aria-label*="More results"]',
+    'button[aria-label*="more results"]',
+    'button:has-text("More results")',
+    'button:has-text("More places")',
+  ]) {
+    try {
+      const btn = page.locator(sel).first();
+      if (await btn.isVisible({ timeout: 600 })) {
+        await btn.click({ timeout: 4000 });
+        await page.waitForTimeout(2000);
+        return;
+      }
+    } catch {
+      // continue
+    }
+  }
+}
+
 async function scrollResults(
   page: Page,
   query: string,
@@ -100,11 +119,9 @@ async function scrollResults(
   const hasFeed = (await feed.count().catch(() => 0)) > 0;
 
   if (!hasFeed) {
-    for (let i = 0; i < 25; i++) {
+    for (let i = 0; i < 18; i++) {
       await page.mouse.wheel(0, 1400);
       await page.waitForTimeout(SIDEBAR_SCROLL_WAIT_MS);
-      const count = await page.locator('a[href*="/maps/place/"]').count().catch(() => 0);
-      if (count >= MAX_LEADS_PER_SEARCH) break;
     }
     return;
   }
@@ -122,10 +139,19 @@ async function scrollResults(
     }
     await page.waitForTimeout(SIDEBAR_SCROLL_WAIT_MS);
 
+    if (i > 0 && i % 8 === 0) {
+      await tryLoadMoreResults(page);
+    }
+
     const count = await page.locator('a[href*="/maps/place/"]').count().catch(() => 0);
     if (count === prevCount && count > 0) {
       stableRounds++;
-      if (stableRounds >= SIDEBAR_STABLE_ROUNDS) break;
+      if (stableRounds >= SIDEBAR_STABLE_ROUNDS) {
+        await tryLoadMoreResults(page);
+        const afterMore = await page.locator('a[href*="/maps/place/"]').count().catch(() => 0);
+        if (afterMore <= count) break;
+        stableRounds = 0;
+      }
     } else {
       stableRounds = 0;
     }
@@ -243,7 +269,7 @@ async function extractLeadsViaFeedClicks(
       seen.add(key);
       count++;
       onProgress?.(count, max);
-      if (onLead) void onLead(lead);
+      if (onLead) await onLead(lead);
     } catch (err) {
       logger.warn("Feed article click failed", {
         index: i,
@@ -398,7 +424,7 @@ export async function scrapeGoogleMaps(
         batch.map((url) =>
           processWithTimeout(
             extractBusinessDetails(context, url, query),
-            TIMEOUT_MS,
+            PLACE_TIMEOUT_MS,
             null
           )
         )
@@ -412,7 +438,7 @@ export async function scrapeGoogleMaps(
         seen.add(key);
         count++;
         onProgress?.(count, max);
-        if (onLead) void onLead(lead);
+        if (onLead) await onLead(lead);
       }
     }
 
