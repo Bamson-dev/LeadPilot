@@ -5,8 +5,8 @@ import { requireAdminAuth } from "../middleware/admin-auth";
 import { signAdminToken } from "../utils/jwt";
 import {
   createLicenseKey,
-  getLicenseKeyByEmail,
   listRecentLicenses,
+  lookupLicensesByEmail,
   truncateLicenseKey,
 } from "../database/license-repository";
 import { supabase } from "../database/client";
@@ -49,6 +49,19 @@ async function verifyAdminPassword(input: string, stored: string): Promise<boole
     return bcrypt.compare(input, stored);
   }
   return input === stored;
+}
+
+async function fetchLatestLicenseByEmail(email: string) {
+  const normalized = email.toLowerCase().trim();
+  const { data, error } = await supabase
+    .from("license_keys")
+    .select("*")
+    .eq("email", normalized)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (error) throw error;
+  return data?.[0] ?? null;
 }
 
 export const adminRouter = Router();
@@ -96,6 +109,167 @@ adminRouter.post("/login", async (req: Request, res: Response) => {
   }
 });
 
+adminRouter.get("/lookup", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const email = String(req.query.email ?? "").trim();
+
+    if (!email) {
+      res.status(400).json({ error: "Email required" });
+      return;
+    }
+
+    const licenses = await lookupLicensesByEmail(email);
+
+    if (licenses.length === 0) {
+      res.status(404).json({ error: "No license found for this email" });
+      return;
+    }
+
+    res.json({ licenses });
+  } catch (err) {
+    logger.error("Lookup failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Lookup failed" });
+  }
+});
+
+adminRouter.post("/update-limit", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { email, newLimit } = req.body as { email?: string; newLimit?: number };
+
+    if (!email || newLimit === undefined) {
+      res.status(400).json({ error: "Email and newLimit required" });
+      return;
+    }
+
+    if (newLimit < 0 || newLimit > 100_000) {
+      res.status(400).json({ error: "Limit must be between 0 and 100000" });
+      return;
+    }
+
+    const license = await fetchLatestLicenseByEmail(email);
+    if (!license) {
+      res.status(404).json({ error: "No license found for this email" });
+      return;
+    }
+
+    const { error } = await supabase
+      .from("license_keys")
+      .update({ monthly_search_limit: newLimit })
+      .eq("id", license.id as string);
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      message: `Search limit updated to ${newLimit} for ${email}`,
+    });
+  } catch (err) {
+    logger.error("Update limit failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to update limit" });
+  }
+});
+
+adminRouter.post("/suspend", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { email, reason } = req.body as { email?: string; reason?: string };
+    if (!email) {
+      res.status(400).json({ error: "Email required" });
+      return;
+    }
+
+    const license = await fetchLatestLicenseByEmail(email);
+    if (!license) {
+      res.status(404).json({ error: "License not found" });
+      return;
+    }
+
+    const { error } = await supabase
+      .from("license_keys")
+      .update({
+        is_suspended: true,
+        suspension_reason: reason || "Suspended by admin",
+      })
+      .eq("id", license.id as string);
+
+    if (error) throw error;
+
+    res.json({ success: true, message: `Account suspended for ${email}` });
+  } catch (err) {
+    logger.error("Suspend failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to suspend account" });
+  }
+});
+
+adminRouter.post("/unsuspend", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body as { email?: string };
+    if (!email) {
+      res.status(400).json({ error: "Email required" });
+      return;
+    }
+
+    const license = await fetchLatestLicenseByEmail(email);
+    if (!license) {
+      res.status(404).json({ error: "License not found" });
+      return;
+    }
+
+    const { error } = await supabase
+      .from("license_keys")
+      .update({ is_suspended: false, suspension_reason: null })
+      .eq("id", license.id as string);
+
+    if (error) throw error;
+
+    res.json({ success: true, message: `Account unsuspended for ${email}` });
+  } catch (err) {
+    logger.error("Unsuspend failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to unsuspend account" });
+  }
+});
+
+adminRouter.post("/reset-searches", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body as { email?: string };
+    if (!email) {
+      res.status(400).json({ error: "Email required" });
+      return;
+    }
+
+    const license = await fetchLatestLicenseByEmail(email);
+    if (!license) {
+      res.status(404).json({ error: "License not found" });
+      return;
+    }
+
+    const { error } = await supabase
+      .from("license_keys")
+      .update({
+        search_count: 0,
+        searches_used: 0,
+        last_reset_at: new Date().toISOString(),
+      })
+      .eq("id", license.id as string);
+
+    if (error) throw error;
+
+    res.json({ success: true, message: `Search count reset for ${email}` });
+  } catch (err) {
+    logger.error("Reset searches failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to reset searches" });
+  }
+});
+
 adminRouter.post("/generate-access", requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const { email } = req.body as { email?: string };
@@ -134,13 +308,14 @@ adminRouter.post("/resend-access", requireAdminAuth, async (req: Request, res: R
       return;
     }
 
-    const license = await getLicenseKeyByEmail(email);
-    if (!license) {
+    const data = await fetchLatestLicenseByEmail(email);
+
+    if (!data) {
       res.status(404).json({ error: "No license key found for this email" });
       return;
     }
 
-    await sendActivationEmail(email, license.key);
+    await sendActivationEmail(email.toLowerCase().trim(), data.key as string);
 
     res.json({
       success: true,

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Bricolage_Grotesque } from "next/font/google";
+import { AccountLookup } from "@/components/admin/account-lookup";
 import {
   adminLogin,
   clearAdminToken,
@@ -9,7 +10,6 @@ import {
   getAdminStats,
   getAdminToken,
   getLicenses,
-  resendAccess,
   setAdminToken,
   type AdminLicense,
   type AdminStats,
@@ -35,11 +35,9 @@ export default function AdminPage() {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [licenses, setLicenses] = useState<AdminLicense[]>([]);
   const [generateEmail, setGenerateEmail] = useState("");
-  const [resendEmail, setResendEmail] = useState("");
   const [generateMsg, setGenerateMsg] = useState<{ type: "ok" | "err"; text: string } | null>(
     null
   );
-  const [resendMsg, setResendMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -125,26 +123,6 @@ export default function AdminPage() {
     }
   };
 
-  const handleResend = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setResendMsg(null);
-    setLoading(true);
-    try {
-      const result = (await resendAccess(resendEmail.trim())) as { message?: string };
-      setResendMsg({ type: "ok", text: result.message ?? "Email resent" });
-      setResendEmail("");
-    } catch (err) {
-      if (!handleSessionError(err)) {
-        setResendMsg({
-          type: "err",
-          text: err instanceof Error ? err.message : "Failed to resend",
-        });
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
   if (!token) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#09090B] px-4">
@@ -222,7 +200,11 @@ export default function AdminPage() {
         ))}
       </div>
 
-      <div className="mx-auto mt-8 grid max-w-6xl gap-6 lg:grid-cols-2">
+      <div className="mt-8">
+        <AccountLookup onSessionExpired={handleLogout} />
+      </div>
+
+      <div className="mx-auto mt-8 max-w-6xl">
         <section className="glass rounded-2xl p-6">
           <h2 className="text-lg font-semibold text-[#F4F4FF]">Generate Access</h2>
           <form onSubmit={handleGenerate} className="mt-4 space-y-3">
@@ -250,34 +232,6 @@ export default function AdminPage() {
             </p>
           )}
         </section>
-
-        <section className="glass rounded-2xl p-6">
-          <h2 className="text-lg font-semibold text-[#F4F4FF]">Resend Access</h2>
-          <form onSubmit={handleResend} className="mt-4 space-y-3">
-            <label className="text-xs text-[#6B6B80]">Buyer Email Address</label>
-            <input
-              type="email"
-              value={resendEmail}
-              onChange={(e) => setResendEmail(e.target.value)}
-              className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-[#F4F4FF] outline-none focus:border-[#7C3AED]"
-              required
-            />
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-lg border border-[#7C3AED]/50 py-2.5 font-semibold text-[#C4B5FD] hover:bg-[#7C3AED]/10 disabled:opacity-60"
-            >
-              Resend Activation Email
-            </button>
-          </form>
-          {resendMsg && (
-            <p
-              className={`mt-3 text-sm ${resendMsg.type === "ok" ? "text-emerald-400" : "text-red-400"}`}
-            >
-              {resendMsg.text}
-            </p>
-          )}
-        </section>
       </div>
 
       <section className="glass mx-auto mt-8 max-w-6xl overflow-hidden rounded-2xl p-6">
@@ -302,7 +256,11 @@ export default function AdminPage() {
                   <td className="py-3 pr-4">{row.email}</td>
                   <td className="py-3 pr-4 font-mono text-xs">{row.key}</td>
                   <td className="py-3 pr-4">
-                    {row.activated ? (
+                    {row.is_suspended ? (
+                      <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-xs text-red-400">
+                        Suspended
+                      </span>
+                    ) : row.activated ? (
                       <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-400">
                         Activated
                       </span>
@@ -318,7 +276,9 @@ export default function AdminPage() {
                       {row.payment_channel === "paystack" ? "Paystack" : "Bank Transfer"}
                     </span>
                   </td>
-                  <td className="py-3 pr-4">{row.searches_used}</td>
+                  <td className="py-3 pr-4">
+                    {row.search_count ?? row.searches_used} / {row.monthly_search_limit ?? 100}
+                  </td>
                   <td className="py-3 pr-4">{row.exports_used}</td>
                   <td className="py-3">{formatDate(row.created_at)}</td>
                 </tr>

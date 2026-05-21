@@ -23,6 +23,10 @@ function getAdminHeaders(): HeadersInit {
   };
 }
 
+async function handleAdminResponse(res: Response): Promise<void> {
+  if (res.status === 401) throw new Error("SESSION_EXPIRED");
+}
+
 export async function adminLogin(email: string, password: string) {
   const res = await fetch(`${getApiUrl()}/admin/login`, {
     method: "POST",
@@ -42,7 +46,7 @@ export async function generateAccess(email: string) {
     headers: getAdminHeaders(),
     body: JSON.stringify({ email }),
   });
-  if (res.status === 401) throw new Error("SESSION_EXPIRED");
+  await handleAdminResponse(res);
   if (!res.ok) {
     const data = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(data.error ?? "Failed to generate access");
@@ -56,7 +60,7 @@ export async function resendAccess(email: string) {
     headers: getAdminHeaders(),
     body: JSON.stringify({ email }),
   });
-  if (res.status === 401) throw new Error("SESSION_EXPIRED");
+  await handleAdminResponse(res);
   if (!res.ok) {
     const data = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(data.error ?? "Failed to resend access");
@@ -74,7 +78,68 @@ export interface AdminLicense {
   payment_reference: string | null;
   searches_used: number;
   exports_used: number;
+  search_count?: number;
+  monthly_search_limit?: number;
+  export_count?: number;
+  is_suspended?: boolean;
+  suspension_reason?: string | null;
+  last_reset_at?: string | null;
   created_at: string;
+}
+
+export async function lookupLicense(email: string): Promise<{ licenses: AdminLicense[] } | null> {
+  const res = await fetch(
+    `${getApiUrl()}/admin/lookup?email=${encodeURIComponent(email)}`,
+    { headers: getAdminHeaders() }
+  );
+  if (res.status === 401) throw new Error("SESSION_EXPIRED");
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error("Lookup failed");
+  return res.json();
+}
+
+export async function updateSearchLimit(email: string, newLimit: number) {
+  const res = await fetch(`${getApiUrl()}/admin/update-limit`, {
+    method: "POST",
+    headers: getAdminHeaders(),
+    body: JSON.stringify({ email, newLimit }),
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to update limit");
+  return res.json();
+}
+
+export async function suspendAccount(email: string, reason: string) {
+  const res = await fetch(`${getApiUrl()}/admin/suspend`, {
+    method: "POST",
+    headers: getAdminHeaders(),
+    body: JSON.stringify({ email, reason }),
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to suspend");
+  return res.json();
+}
+
+export async function unsuspendAccount(email: string) {
+  const res = await fetch(`${getApiUrl()}/admin/unsuspend`, {
+    method: "POST",
+    headers: getAdminHeaders(),
+    body: JSON.stringify({ email }),
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to unsuspend");
+  return res.json();
+}
+
+export async function resetSearches(email: string) {
+  const res = await fetch(`${getApiUrl()}/admin/reset-searches`, {
+    method: "POST",
+    headers: getAdminHeaders(),
+    body: JSON.stringify({ email }),
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to reset searches");
+  return res.json();
 }
 
 export async function getLicenses(): Promise<{ licenses: AdminLicense[] }> {
