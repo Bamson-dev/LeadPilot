@@ -9,6 +9,7 @@ import {
   markSearchFailed,
 } from "../database/search-repository";
 import { getCachedResults } from "../services/cache-service";
+import { MIN_CACHE_LEADS_TO_REUSE } from "../scraper/utils/constants";
 import { searchQueue, getQueuePosition } from "../queues/search-queue";
 import { checkSearchLimit } from "../middleware/check-search-limit";
 import { trackSearch } from "../services/abuse-detection";
@@ -42,7 +43,10 @@ searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => 
     }
 
     const cachedResults = await getCachedResults(trimmedQuery, trimmedLocation);
-    if (cachedResults && cachedResults.length > 0) {
+    if (
+      cachedResults &&
+      cachedResults.length >= MIN_CACHE_LEADS_TO_REUSE
+    ) {
       const searchJob = await createSearchJob(trimmedQuery, trimmedLocation);
       await copyLeadsToSearch(searchJob.id, cachedResults);
       await markSearchComplete(searchJob.id, cachedResults.length);

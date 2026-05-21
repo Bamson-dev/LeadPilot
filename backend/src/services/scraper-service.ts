@@ -55,21 +55,10 @@ export async function runScraperJob(
       max: 0,
     });
 
-    const onBusinessFound = async (raw: RawLeadInput) => {
+    const onBusinessFound = (raw: RawLeadInput) => {
       const basic = rawLeadToBusinessLead(raw, searchId);
-      let lead = basic;
-      try {
-        lead = await enrichLeadEmail(basic);
-      } catch (err) {
-        logger.warn("Email enrich failed", {
-          searchId,
-          name: basic.name,
-          error: err instanceof Error ? err.message : "unknown",
-        });
-      }
-
       progress++;
-      emitLead(emit, lead);
+      emitLead(emit, basic);
       emit({
         type: "progress",
         message: `Found ${progress} businesses so far...`,
@@ -78,12 +67,31 @@ export async function runScraperJob(
         max: progressMax,
       });
 
-      void insertBusinessLead(lead).catch((err) => {
+      void insertBusinessLead(basic).catch((err) => {
         logger.error("Failed to insert business lead", {
           searchId,
           error: err instanceof Error ? err.message : "unknown",
         });
       });
+
+      void enrichLeadEmail(basic)
+        .then((enriched) => {
+          const changed =
+            enriched.email !== basic.email ||
+            enriched.emailSource !== basic.emailSource ||
+            enriched.predictedEmails.length !== basic.predictedEmails.length ||
+            enriched.verifiedEmails.length !== basic.verifiedEmails.length;
+          if (!changed) return;
+          emitLead(emit, enriched);
+          void insertBusinessLead(enriched).catch(() => undefined);
+        })
+        .catch((err) => {
+          logger.warn("Email enrich failed", {
+            searchId,
+            name: basic.name,
+            error: err instanceof Error ? err.message : "unknown",
+          });
+        });
 
       if (progress % 3 === 0) {
         void updateSearchJob(searchId, {

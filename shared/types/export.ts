@@ -3,7 +3,7 @@ export const CSV_HEADERS = [
   "Category",
   "Address",
   "Phone",
-  "Verified Email",
+  "Email",
   "Predicted Email",
   "Prediction Confidence",
   "Email Source",

@@ -143,7 +143,7 @@ async function scrollResults(
       await tryLoadMoreResults(page);
     }
 
-    const count = await page.locator('a[href*="/maps/place/"]').count().catch(() => 0);
+    const count = await countListingsOnPage(page);
     if (count === prevCount && count > 0) {
       stableRounds++;
       if (stableRounds >= SIDEBAR_STABLE_ROUNDS) {
@@ -180,12 +180,20 @@ async function collectPlaceUrls(page: Page): Promise<string[]> {
 
     document
       .querySelectorAll(
-        'a[href*="/maps/place/"], a[href*="google.com/maps/place"], a.hfpxzc'
+        'a[href*="/maps/place/"], a[href*="google.com/maps/place"], a.hfpxzc, div[role="article"] a[href*="place"]'
       )
       .forEach((anchor) => add((anchor as HTMLAnchorElement).href));
 
     return results;
   });
+}
+
+async function countListingsOnPage(page: Page): Promise<number> {
+  const [links, articles] = await Promise.all([
+    page.locator('a[href*="/maps/place/"]').count().catch(() => 0),
+    page.locator('div[role="feed"] [role="article"]').count().catch(() => 0),
+  ]);
+  return Math.max(links, articles);
 }
 
 async function logMapsDiagnostics(page: Page, query: string, location: string): Promise<void> {
@@ -383,12 +391,36 @@ export async function scrapeGoogleMaps(
     return businessUrls.slice(0, MAX_LEADS_PER_SEARCH);
   };
 
-  try {
-    let businessUrls = await runListingPass(searchUrl, "default");
-
-    if (businessUrls.length === 0) {
-      businessUrls = await runListingPass(geoSearchUrl, "geo");
+  const mergePlaceUrls = (...lists: string[][]): string[] => {
+    const seen = new Set<string>();
+    const merged: string[] = [];
+    for (const list of lists) {
+      for (const url of list) {
+        const key = url.split("?")[0] ?? url;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged.push(url);
+        if (merged.length >= MAX_LEADS_PER_SEARCH) return merged;
+      }
     }
+    return merged;
+  };
+
+  try {
+    const defaultUrls = await runListingPass(searchUrl, "default");
+    const geoUrls =
+      defaultUrls.length < MAX_LEADS_PER_SEARCH
+        ? await runListingPass(geoSearchUrl, "geo")
+        : [];
+    let businessUrls = mergePlaceUrls(defaultUrls, geoUrls);
+
+    logger.info("Maps URLs merged", {
+      query,
+      location,
+      default: defaultUrls.length,
+      geo: geoUrls.length,
+      total: businessUrls.length,
+    });
 
     if (businessUrls.length === 0) {
       onPhase?.(formatSearchMessage(query, location));
@@ -438,7 +470,7 @@ export async function scrapeGoogleMaps(
         seen.add(key);
         count++;
         onProgress?.(count, max);
-        if (onLead) await onLead(lead);
+        if (onLead) onLead(lead);
       }
     }
 

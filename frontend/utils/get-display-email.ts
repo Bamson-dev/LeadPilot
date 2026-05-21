@@ -18,6 +18,30 @@ export function getPredictedEmails(
   return lead.predicted_emails ?? [];
 }
 
+/** Verified first, then predicted — max 2, no labels in UI. */
+export function getAllEmailsForDisplay(
+  lead: Pick<
+    Lead,
+    "email" | "extracted_email" | "verified_emails" | "predicted_emails"
+  >
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  for (const addr of [
+    ...getVerifiedEmails(lead),
+    ...getPredictedEmails(lead).map((p) => p.email),
+  ]) {
+    const key = addr.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(addr);
+    if (out.length >= 2) break;
+  }
+
+  return out;
+}
+
 export function hasAnyEmail(
   lead: Pick<Lead, "email" | "extracted_email" | "verified_emails" | "predicted_emails">
 ): boolean {
