@@ -263,7 +263,7 @@ export function useSearch() {
     clearResults: reset,
     closeStream: reset,
     showLimitMessage:
-      Boolean(state.error) &&
+      !!state.error &&
       (state.error.includes("limit") ||
         state.error.includes("Monthly") ||
         state.error.includes("search limit")),

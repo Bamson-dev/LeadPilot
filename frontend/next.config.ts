@@ -7,6 +7,7 @@ if (process.env.NODE_ENV === "production" && !process.env.NEXT_PUBLIC_API_URL?.t
 }
 
 const nextConfig: NextConfig = {
+  outputFileTracingRoot: require("path").join(__dirname, ".."),
   transpilePackages: ["@leadpilot/shared"],
   // Standalone is for Docker only — breaks default Vercel Next.js deploy
   ...(process.env.DOCKER_BUILD === "1" ? { output: "standalone" as const } : {}),
