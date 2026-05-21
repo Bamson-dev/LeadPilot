@@ -63,10 +63,19 @@ export function useSearch() {
       eventSourceRef.current.close();
     }
 
-    const es = new EventSource(`${getApiUrl()}/search/${searchId}/stream`);
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL?.trim()?.replace(/\/$/, "") || getApiUrl();
+    const streamUrl = `${apiUrl}/search/${searchId}/stream`;
+    console.log("Connecting to SSE stream:", streamUrl);
+
+    const es = new EventSource(streamUrl);
     eventSourceRef.current = es;
 
+    es.onopen = () => {
+      console.log("SSE connection opened");
+    };
+
     es.onmessage = (event) => {
+      console.log("SSE message received:", event.data);
       try {
         const data = JSON.parse(event.data) as {
           type: string;
@@ -136,7 +145,8 @@ export function useSearch() {
       }
     };
 
-    es.onerror = () => {
+    es.onerror = (err) => {
+      console.error("SSE connection error:", err);
       es.close();
       if (reconnectCountRef.current < 3) {
         reconnectCountRef.current += 1;
@@ -161,7 +171,17 @@ export function useSearch() {
 
   const search = useCallback(
     async (query: string, location: string) => {
-      if (!query.trim() || !location.trim()) return;
+      console.log("useSearch.search called:", { query, location });
+
+      if (!query.trim() || !location.trim()) {
+        console.warn("Empty query or location");
+        setState((prev) => ({
+          ...prev,
+          status: "error",
+          error: "Please enter both business type and location.",
+        }));
+        return;
+      }
 
       queryRef.current = query.trim();
       locationRef.current = location.trim();
@@ -183,7 +203,10 @@ export function useSearch() {
       });
 
       try {
+        console.log("Calling startSearch...");
         const result = await startSearch(query.trim(), location.trim());
+        console.log("startSearch result:", result);
+
         searchIdRef.current = result.searchId;
 
         setState((prev) => ({
@@ -208,10 +231,11 @@ export function useSearch() {
 
         connectToStream(result.searchId);
       } catch (err) {
+        console.error("Search error:", err);
         setState((prev) => ({
           ...prev,
           status: "error",
-          error: err instanceof Error ? err.message : "Failed to start search. Please try again.",
+          error: err instanceof Error ? err.message : "Failed to start search",
         }));
       }
     },

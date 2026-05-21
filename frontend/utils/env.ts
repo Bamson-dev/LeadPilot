@@ -1,14 +1,7 @@
-/** API base URL — must be set in production (Vercel env). */
+/** API base URL from build-time env (NEXT_PUBLIC_*). Never throws — callers validate. */
 export function getApiUrl(): string {
   const url = process.env.NEXT_PUBLIC_API_URL?.trim();
-  if (!url) {
-    if (process.env.NODE_ENV === "production") {
-      throw new Error(
-        "NEXT_PUBLIC_API_URL is not configured. Set it in Vercel environment variables."
-      );
-    }
-    return "";
-  }
+  if (!url) return "";
   return url.replace(/\/$/, "");
 }
 

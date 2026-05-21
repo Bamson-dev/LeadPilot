@@ -85,32 +85,83 @@ export async function startSearch(
   query: string,
   location: string
 ): Promise<SearchResponse> {
-  const res = await fetch(`${getApiUrl()}/search`, {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL?.trim()?.replace(/\/$/, "") ?? "";
+  const email =
+    typeof window !== "undefined" ? localStorage.getItem("leadpilot_email") || "" : "";
+  const key =
+    typeof window !== "undefined" ? localStorage.getItem("leadpilot_key") || "" : "";
+
+  console.log("Starting search:", {
+    query,
+    location,
+    apiUrl: apiUrl || "(missing)",
+    hasEmail: !!email,
+    hasKey: !!key,
+  });
+
+  if (!apiUrl) {
+    throw new Error(
+      "API URL not configured. Check NEXT_PUBLIC_API_URL environment variable."
+    );
+  }
+
+  const url = `${apiUrl}/search`;
+  console.log("POST", url);
+
+  const res = await fetch(url, {
     method: "POST",
-    headers: getLicenseHeaders(),
+    headers: {
+      "Content-Type": "application/json",
+      "x-license-key": key,
+      "x-license-email": email,
+    },
     body: JSON.stringify({ query, location }),
   });
 
+  console.log("Search response status:", res.status);
+
   if (res.status === 401) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    console.error("Auth error:", data);
     if (typeof window !== "undefined") {
       localStorage.removeItem("leadpilot_email");
       localStorage.removeItem("leadpilot_key");
       window.location.href = "/activate";
     }
-    throw new Error("Invalid license");
+    throw new Error(data.error || "Invalid license");
   }
 
   if (res.status === 429) {
     const data = (await res.json().catch(() => ({}))) as { error?: string };
+    console.error("Limit error:", data);
     throw new Error(data.error || "Monthly search limit reached");
   }
 
   if (!res.ok) {
-    const data = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(data.error ?? "Failed to start search");
+    const data = (await res.json().catch(() => ({ error: "Unknown error" }))) as {
+      error?: string;
+    };
+    console.error("Search failed:", data);
+    throw new Error(data.error || "Failed to start search");
   }
 
-  return res.json() as Promise<SearchResponse>;
+  const data = (await res.json()) as SearchResponse;
+  console.log("Search created:", data);
+  return data;
+}
+
+export async function testBackendConnection(): Promise<string> {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL?.trim()?.replace(/\/$/, "") ?? "";
+  if (!apiUrl) {
+    return "Failed: NEXT_PUBLIC_API_URL is not set";
+  }
+  try {
+    const res = await fetch(`${apiUrl}/health`, { cache: "no-store" });
+    const text = await res.text();
+    return `Connected (${res.status}): ${text.slice(0, 200)}`;
+  } catch (err) {
+    return `Failed: ${err instanceof Error ? err.message : "Unknown error"}`;
+  }
 }
 
 export async function getSearch(id: string): Promise<SearchJob> {

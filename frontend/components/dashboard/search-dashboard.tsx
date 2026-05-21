@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { Search, Download, RotateCcw, Trash2, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -10,6 +10,7 @@ import { LiveCounter } from "@/components/dashboard/live-counter";
 import { ExportModal } from "@/components/dashboard/export-modal";
 import { ResultsTable } from "@/features/results/results-table";
 import { useSearch } from "@/hooks/useSearch";
+import { testBackendConnection } from "@/services/api";
 import { exportCSV } from "@/features/export/csv-export";
 import { MAX_EXPORT_ROWS } from "@/utils/constants";
 
@@ -17,6 +18,17 @@ export function SearchDashboard() {
   const [businessType, setBusinessType] = useState("");
   const [location, setLocation] = useState("");
   const [exportOpen, setExportOpen] = useState(false);
+  const [connectionTest, setConnectionTest] = useState<string | null>(null);
+
+  useEffect(() => {
+    const email = localStorage.getItem("leadpilot_email");
+    const key = localStorage.getItem("leadpilot_key");
+    console.log("SearchDashboard license check:", {
+      hasEmail: !!email,
+      hasKey: !!key,
+      apiUrl: process.env.NEXT_PUBLIC_API_URL ?? "(missing)",
+    });
+  }, []);
   const {
     leads,
     isSearching,
@@ -32,7 +44,17 @@ export function SearchDashboard() {
     closeStream,
   } = useSearch();
 
-  const handleSearch = () => runSearch(businessType, location);
+  const handleSearch = () => {
+    console.log("Search button clicked:", { businessType, location });
+    void runSearch(businessType, location);
+  };
+
+  async function testConnection() {
+    console.log("Testing backend connection...");
+    const result = await testBackendConnection();
+    console.log("Connection test result:", result);
+    setConnectionTest(result);
+  }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") handleSearch();
@@ -62,6 +84,29 @@ export function SearchDashboard() {
           Build client lists by niche and location — contacts stream in realtime.
         </p>
 
+        {process.env.NODE_ENV === "development" && (
+          <p className="mt-2 text-[10px] text-[#6B6B80]">
+            API: {process.env.NEXT_PUBLIC_API_URL ?? "(not set)"}
+          </p>
+        )}
+
+        <div className="mt-3 flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => void testConnection()}
+            className="w-fit rounded border border-white/10 px-2 py-1 text-xs text-[#9CA3AF] hover:bg-white/5"
+          >
+            Test Backend Connection
+          </button>
+          {connectionTest && (
+            <p
+              className={`text-xs ${connectionTest.includes("Failed") ? "text-red-400" : "text-emerald-400"}`}
+            >
+              {connectionTest}
+            </p>
+          )}
+        </div>
+
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           <div>
             <label className="mb-1.5 block text-xs font-medium text-[#6B6B80]">Business type</label>
@@ -86,7 +131,7 @@ export function SearchDashboard() {
         </div>
 
         <div className="mt-4 flex flex-wrap gap-3">
-          <Button variant="glow" onClick={handleSearch} disabled={isSearching}>
+          <Button type="button" variant="glow" onClick={handleSearch} disabled={isSearching}>
             {isSearching ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
