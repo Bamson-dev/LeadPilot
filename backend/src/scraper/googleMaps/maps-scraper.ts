@@ -141,14 +141,133 @@ async function collectPlaceUrls(page: Page): Promise<string[]> {
   return page.evaluate(() => {
     const results: string[] = [];
     const seen = new Set<string>();
-    document.querySelectorAll('a[href*="/maps/place/"]').forEach((anchor) => {
-      const href = (anchor as HTMLAnchorElement).href;
-      if (!href || seen.has(href)) return;
+    const add = (raw: string | null | undefined) => {
+      if (!raw || raw.startsWith("javascript:")) return;
+      const href = raw.split("?")[0] || raw;
+      if (
+        !href.includes("/maps/place/") &&
+        !href.includes("google.com/maps/place")
+      ) {
+        return;
+      }
+      if (seen.has(href)) return;
       seen.add(href);
-      results.push(href);
-    });
+      results.push(raw);
+    };
+
+    document
+      .querySelectorAll(
+        'a[href*="/maps/place/"], a[href*="google.com/maps/place"], a.hfpxzc'
+      )
+      .forEach((anchor) => add((anchor as HTMLAnchorElement).href));
+
     return results;
   });
+}
+
+async function logMapsDiagnostics(page: Page, query: string, location: string): Promise<void> {
+  const diagnostics = await page
+    .evaluate(() => ({
+      title: document.title,
+      pageUrl: window.location.href,
+      placeLinks: document.querySelectorAll('a[href*="/maps/place/"]').length,
+      hpfxzc: document.querySelectorAll("a.hfpxzc").length,
+      feed: document.querySelectorAll('div[role="feed"]').length,
+      feedArticles: document.querySelectorAll('div[role="feed"] [role="article"]').length,
+      articles: document.querySelectorAll('[role="article"]').length,
+      bodyPreview: document.body.innerText.slice(0, 280).replace(/\s+/g, " "),
+    }))
+    .catch(() => null);
+
+  logger.warn("Maps scrape diagnostics", { query, location, diagnostics });
+}
+
+async function backToResultsList(page: Page): Promise<void> {
+  for (const sel of [
+    'button[aria-label="Back"]',
+    'button[aria-label="Close"]',
+    'button[jsaction*="back"]',
+  ]) {
+    try {
+      const btn = page.locator(sel).first();
+      if (await btn.isVisible({ timeout: 1200 })) {
+        await btn.click({ timeout: 3000 });
+        await page.waitForTimeout(700);
+        return;
+      }
+    } catch {
+      // try next
+    }
+  }
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(700);
+}
+
+/** When listing cards have no place hrefs, open each result in the side panel. */
+async function extractLeadsViaFeedClicks(
+  page: Page,
+  query: string,
+  location: string,
+  seen: Set<string>,
+  onProgress?: (count: number, max: number) => void,
+  onLead?: (lead: RawLeadInput) => void | Promise<void>
+): Promise<number> {
+  const articles = page.locator('div[role="feed"] [role="article"]');
+  let articleCount = await articles.count().catch(() => 0);
+  if (articleCount === 0) {
+    articleCount = await page.locator('[role="article"]').count().catch(() => 0);
+  }
+
+  logger.info("Maps feed click fallback", { query, location, articleCount });
+  if (articleCount === 0) return 0;
+
+  const max = Math.min(articleCount, MAX_LEADS_PER_SEARCH);
+  let count = 0;
+  onProgress?.(0, max);
+
+  for (let i = 0; i < max; i++) {
+    const article = page.locator('div[role="feed"] [role="article"]').nth(i);
+    try {
+      await article.scrollIntoViewIfNeeded({ timeout: 8000 });
+      await article.click({ timeout: 10000 });
+      await page.waitForTimeout(DETAIL_PANEL_WAIT_MS + 500);
+
+      if (!(await waitForDetailPanel(page, 12000))) {
+        await backToResultsList(page);
+        continue;
+      }
+
+      const lead = await buildLeadFromPanel(page, query, page.url());
+      await backToResultsList(page);
+
+      if (!lead) continue;
+      const key = dedupeKey(lead);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      count++;
+      onProgress?.(count, max);
+      if (onLead) void onLead(lead);
+    } catch (err) {
+      logger.warn("Feed article click failed", {
+        index: i,
+        error: err instanceof Error ? err.message : "unknown",
+      });
+      await backToResultsList(page).catch(() => undefined);
+    }
+  }
+
+  return count;
+}
+
+async function loadMapsSearchPage(page: Page, searchUrl: string): Promise<void> {
+  await gotoWithRetry(page, searchUrl, {
+    waitUntil: "domcontentloaded",
+    timeout: 40000,
+    retries: 2,
+  });
+  await dismissConsent(page);
+  await page.waitForLoadState("networkidle", { timeout: 12000 }).catch(() => undefined);
+  await page.waitForTimeout(3000);
 }
 
 async function extractBusinessDetails(
@@ -198,48 +317,66 @@ export async function scrapeGoogleMaps(
   });
 
   const searchPage = await context.newPage();
-  const searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(`${query} in ${location}`)}`;
+  const searchPhrase = `${query} in ${location}`;
+  const searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(searchPhrase)}`;
+  const geoSearchUrl = `https://www.google.com/maps/search/${encodeURIComponent(query)}/@6.5244,3.3792,12z`;
   const seen = new Set<string>();
   let count = 0;
 
-  try {
-    logger.info("Maps search starting", { query, location, searchUrl });
-
-    await gotoWithRetry(searchPage, searchUrl, {
-      waitUntil: "domcontentloaded",
-      timeout: 35000,
-      retries: 2,
-    });
-    await dismissConsent(searchPage);
-    await searchPage.waitForTimeout(2500);
+  const runListingPass = async (url: string, label: string): Promise<string[]> => {
+    logger.info("Maps search starting", { query, location, label, searchUrl: url });
+    await loadMapsSearchPage(searchPage, url);
 
     const blocked = await detectBlockedPage(searchPage);
     if (blocked) throw new Error(blocked);
 
     const panelReady = await waitForResultsPanel(searchPage);
     if (!panelReady) {
-      logger.warn("Maps results panel slow — continuing with scroll", { query, location });
+      logger.warn("Maps results panel slow — continuing with scroll", { query, location, label });
     }
 
     await scrollResults(searchPage, query, location, onPhase);
 
     let businessUrls = await collectPlaceUrls(searchPage);
-    logger.info("Maps place URLs collected", {
-      query,
-      location,
-      count: businessUrls.length,
-    });
-
     if (businessUrls.length === 0) {
-      await searchPage.waitForTimeout(3000);
+      await searchPage.waitForTimeout(3500);
       businessUrls = await collectPlaceUrls(searchPage);
     }
 
-    businessUrls = businessUrls.slice(0, MAX_LEADS_PER_SEARCH);
+    logger.info("Maps place URLs collected", {
+      query,
+      location,
+      label,
+      count: businessUrls.length,
+    });
+
+    return businessUrls.slice(0, MAX_LEADS_PER_SEARCH);
+  };
+
+  try {
+    let businessUrls = await runListingPass(searchUrl, "default");
+
+    if (businessUrls.length === 0) {
+      businessUrls = await runListingPass(geoSearchUrl, "geo");
+    }
+
+    if (businessUrls.length === 0) {
+      onPhase?.(formatSearchMessage(query, location));
+      const feedCount = await extractLeadsViaFeedClicks(
+        searchPage,
+        query,
+        location,
+        seen,
+        onProgress,
+        onLead
+      );
+      if (feedCount > 0) return feedCount;
+    }
 
     if (businessUrls.length === 0) {
       const blockedAgain = await detectBlockedPage(searchPage);
       if (blockedAgain) throw new Error(blockedAgain);
+      await logMapsDiagnostics(searchPage, query, location);
       throw new Error(
         "No businesses found on Google Maps for this search. Try different wording or location."
       );
