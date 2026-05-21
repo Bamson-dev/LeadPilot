@@ -4,10 +4,7 @@ import {
   emailFieldsForLeadEmit,
   parseMapsEmailsFromLead,
 } from "./lead-email";
-import {
-  isValidPhoneForLocation,
-  normalizePanelPhone,
-} from "./phone-validation";
+import { normalizePhoneForLocation } from "./phone-validation";
 import { resolveBusinessWebsite } from "./website-utils";
 
 const BLOCKED_STRINGS = [
@@ -29,11 +26,10 @@ export function isBlockedText(value: unknown): boolean {
 /** Panel-only phone — does not scan full page text. */
 export function extractPhoneNumber(
   raw: string | null | undefined,
-  location?: string
+  location = ""
 ): string | null {
-  const phone = normalizePanelPhone(raw);
+  const phone = normalizePhoneForLocation(raw, location);
   if (!phone || isBlockedText(phone)) return null;
-  if (location && !isValidPhoneForLocation(phone, location)) return null;
   return phone;
 }
 

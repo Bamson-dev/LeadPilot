@@ -57,7 +57,6 @@ export async function crawlEmailForWebsite(
   for (const url of urls) {
     const html = await fetchPageText(url);
     found.push(...extractFromHtml(html));
-    if (found.length > 0) break;
   }
 
   const emails = pickBestEmail(found, baseUrl);

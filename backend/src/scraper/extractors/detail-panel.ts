@@ -5,11 +5,11 @@ import {
   isBlockedText,
   normalizeWebsite,
 } from "../utils/data-quality";
-import { formatEmailsForDisplay, mergeEmails } from "../parsers/email-filter";
+import { extractAllEmailsFromText, formatEmailsForDisplay, mergeEmails } from "../parsers/email-filter";
 import { filterValidEmails } from "../parsers/email-validation";
 import {
-  isValidPhoneForLocation,
-  normalizePanelPhone,
+  extractPhoneFromLabel,
+  normalizePhoneForLocation,
 } from "../utils/phone-validation";
 
 export async function waitForDetailPanel(page: Page, timeoutMs = 8000): Promise<boolean> {
@@ -18,13 +18,15 @@ export async function waitForDetailPanel(page: Page, timeoutMs = 8000): Promise<
       () => {
         const h1 = document.querySelector("h1");
         if (!h1?.textContent?.trim()) return false;
-        const hasPhone = !!document.querySelector(
-          'button[data-item-id^="phone:tel:"], a[href^="tel:"]'
+        const main = document.querySelector('[role="main"]');
+        if (!main) return false;
+        const hasPhone = !!main.querySelector(
+          'button[data-item-id^="phone"], button[data-item-id*="phone:tel"], a[href^="tel:"], button[aria-label*="Phone"], button[aria-label*="phone"]'
         );
-        const hasWebsite = !!document.querySelector(
+        const hasWebsite = !!main.querySelector(
           'a[data-item-id="authority"][href^="http"], a[href^="http"]:not([href*="google.com"])'
         );
-        const hasAddress = !!document.querySelector(
+        const hasAddress = !!main.querySelector(
           'button[data-item-id="address"], button[data-item-id^="oloc"]'
         );
         return hasPhone || hasWebsite || hasAddress;
@@ -52,18 +54,54 @@ export async function buildLeadFromPanel(
     const name = main.querySelector("h1")?.textContent?.trim();
     if (name) result.business_name = name;
 
-    const phoneBtn = main.querySelector('button[data-item-id^="phone:tel:"]');
-    if (phoneBtn) {
-      const dataId = phoneBtn.getAttribute("data-item-id") || "";
-      const telMatch = dataId.match(/tel:([^;]+)/i);
-      if (telMatch) result.phone = decodeURIComponent(telMatch[1]);
+    const tryTel = (value: string | null | undefined): string | null => {
+      if (!value?.trim()) return null;
+      const decoded = decodeURIComponent(value.replace(/^tel:/i, "").trim());
+      if (/[\d+()]/.test(decoded) && decoded.replace(/\D/g, "").length >= 10) {
+        return decoded;
+      }
+      return null;
+    };
+
+    main
+      .querySelectorAll('button[data-item-id^="phone"], button[data-item-id*="phone:tel"]')
+      .forEach((btn) => {
+        if (result.phone) return;
+        const dataId = btn.getAttribute("data-item-id") || "";
+        const telMatch = dataId.match(/tel:([^;]+)/i);
+        if (telMatch) {
+          const fromId = tryTel(telMatch[1]);
+          if (fromId) {
+            result.phone = fromId;
+            return;
+          }
+        }
+        const label = btn.getAttribute("aria-label") || btn.textContent || "";
+        const fromLabel = label.match(
+          /(\+\d{1,3}[\s.-]?\(?\d{2,4}\)?[\s.-]?\d{3,4}[\s.-]?\d{3,4}|\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})/
+        );
+        if (fromLabel?.[1]) result.phone = fromLabel[1].trim();
+      });
+
+    if (!result.phone) {
+      main.querySelectorAll('a[href^="tel:"]').forEach((link) => {
+        if (result.phone) return;
+        const href = (link as HTMLAnchorElement).href || "";
+        const fromHref = tryTel(href.replace(/^tel:/i, "").split("?")[0]);
+        if (fromHref) result.phone = fromHref;
+      });
     }
 
     if (!result.phone) {
-      const telLink = main.querySelector('a[href^="tel:"]') as HTMLAnchorElement | null;
-      if (telLink?.href) {
-        result.phone = telLink.href.replace(/^tel:/i, "").split("?")[0]?.trim();
-      }
+      main.querySelectorAll("[aria-label]").forEach((el) => {
+        if (result.phone) return;
+        const label = el.getAttribute("aria-label") || "";
+        if (!/^phone[:\s]/i.test(label) && !/^call[:\s]/i.test(label)) return;
+        const match = label.match(
+          /(\+\d{1,3}[\s.-]?\(?\d{2,4}\)?[\s.-]?\d{3,4}[\s.-]?\d{3,4}|\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})/
+        );
+        if (match?.[1]) result.phone = match[1].trim();
+      });
     }
 
     const emailsFound: string[] = [];
@@ -115,19 +153,39 @@ export async function buildLeadFromPanel(
       result.reviews_count = parseInt(blockMatch[2].replace(/,/g, ""), 10);
     }
 
+    let contactText = "";
+    main
+      .querySelectorAll(
+        'button[data-item-id], a[href^="mailto:"], [aria-label*="Phone"], [aria-label*="phone"]'
+      )
+      .forEach((el) => {
+        contactText += ` ${el.getAttribute("aria-label") || ""} ${el.textContent || ""}`;
+      });
+    result.contactText = contactText.slice(0, 2000);
     result.emails = emailsFound;
     return result;
-  })) as Record<string, unknown> & { emails?: string[] };
+  })) as Record<string, unknown> & { emails?: string[]; contactText?: string };
 
-  const panelEmails = filterValidEmails(mergeEmails(raw.emails ?? []));
+  const panelEmails = filterValidEmails(
+    mergeEmails(
+      raw.emails ?? [],
+      extractAllEmailsFromText(
+        typeof raw.contactText === "string" ? raw.contactText : ""
+      )
+    )
+  );
+
   const business_name = cleanBusinessName(
     typeof raw.business_name === "string" ? raw.business_name : null
   );
   if (!business_name) return null;
 
-  let phone = normalizePanelPhone(raw.phone as string | null);
-  if (phone && !isValidPhoneForLocation(phone, location)) {
-    phone = null;
+  let phone = normalizePhoneForLocation(raw.phone as string | null, location);
+
+  if (!phone) {
+    const phoneBtn = page.locator('[role="main"] button[data-item-id*="phone"]').first();
+    const ariaLabel = await phoneBtn.getAttribute("aria-label").catch(() => null);
+    phone = normalizePhoneForLocation(extractPhoneFromLabel(ariaLabel ?? ""), location);
   }
 
   const website = normalizeWebsite((raw.website as string) ?? null);

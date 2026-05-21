@@ -181,6 +181,10 @@ export function isValidEmail(email: string): boolean {
   if (!local || local.length < 2 || local.length > 64) return false;
   if (!domain || !domain.includes(".")) return false;
 
+  const domainLabels = domain.split(".").filter(Boolean);
+  if (domainLabels[0] === "www" || domain.startsWith("www.")) return false;
+  if (domainLabels.some((label) => label.length < 2)) return false;
+
   if (IMAGE_EXTENSIONS.some((ext) => lower.endsWith(ext))) return false;
   if (IMAGE_PATTERNS.some((pattern) => local.includes(pattern))) return false;
   if (/\d+x\d+/.test(local) || /\d+x-\d+/.test(local)) return false;
@@ -190,6 +194,11 @@ export function isValidEmail(email: string): boolean {
 
   const domainBase = domain.split(".")[0];
   if (local === domainBase) return false;
+
+  const suspiciousLocals = new Set(["only", "online", "email", "name", "user", "test"]);
+  if (suspiciousLocals.has(local) && (domain.includes("aaa.") || domain.includes("example"))) {
+    return false;
+  }
 
   if (GENERIC_DOMAINS.has(domain)) return false;
 

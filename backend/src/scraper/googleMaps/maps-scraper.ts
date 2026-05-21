@@ -3,6 +3,7 @@ import type { RawLeadInput } from "../../types/scraper";
 import { buildLeadFromPanel, waitForDetailPanel } from "../extractors/detail-panel";
 import { gotoWithRetry } from "../parsers/page-navigation";
 import { dedupeKey, sanitizeLead } from "../utils/data-quality";
+import { getGeoForLocation } from "../utils/location-geo";
 import { logger } from "../../utils/logger";
 import { formatSearchMessage } from "../../utils/search-messages";
 import {
@@ -352,13 +353,21 @@ export async function scrapeGoogleMaps(
   options: MapsScrapeOptions
 ): Promise<number> {
   const { query, location, onPhase, onProgress, onLead } = options;
+  const geo = getGeoForLocation(location);
+  const timezoneId =
+    geo.longitude < -30
+      ? "America/Los_Angeles"
+      : geo.longitude > 20
+        ? "Africa/Lagos"
+        : "Europe/London";
+
   const context = await browser.newContext({
     userAgent:
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
     viewport: { width: 1400, height: 900 },
     locale: "en-US",
-    timezoneId: "Africa/Lagos",
-    geolocation: { latitude: 6.5244, longitude: 3.3792 },
+    timezoneId,
+    geolocation: { latitude: geo.latitude, longitude: geo.longitude },
     permissions: ["geolocation"],
     extraHTTPHeaders: {
       "Accept-Language": "en-US,en;q=0.9",
@@ -373,7 +382,7 @@ export async function scrapeGoogleMaps(
   const searchPage = await context.newPage();
   const searchPhrase = `${query} in ${location}`;
   const searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(searchPhrase)}`;
-  const geoSearchUrl = `https://www.google.com/maps/search/${encodeURIComponent(query)}/@6.5244,3.3792,12z`;
+  const geoSearchUrl = `https://www.google.com/maps/search/${encodeURIComponent(query)}/@${geo.latitude},${geo.longitude},${geo.zoom}z`;
   const seen = new Set<string>();
   let count = 0;
 

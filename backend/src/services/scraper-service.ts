@@ -87,6 +87,8 @@ export async function runScraperJob(
       max: 0,
     });
 
+    let pendingEnrich = 0;
+
     const onBusinessFound = (raw: RawLeadInput) => {
       const basic = rawLeadToBusinessLead(raw, searchId);
       progress++;
@@ -107,6 +109,7 @@ export async function runScraperJob(
         });
       });
 
+      pendingEnrich++;
       void enrichLeadEmail(basic)
         .then((enriched) => {
           emitLead(emit, enriched);
@@ -124,6 +127,9 @@ export async function runScraperJob(
             name: basic.name,
             error: err instanceof Error ? err.message : "unknown",
           });
+        })
+        .finally(() => {
+          pendingEnrich--;
         });
 
       if (progress % 3 === 0) {

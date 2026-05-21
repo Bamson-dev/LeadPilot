@@ -172,7 +172,7 @@ export function useSearch(options?: UseSearchOptions) {
       const searchId = searchIdRef.current;
       void (async () => {
         if (searchId) {
-          await new Promise((r) => setTimeout(r, 1500));
+          await new Promise((r) => setTimeout(r, 4000));
           try {
             await syncFromApi(searchId, true);
           } catch {

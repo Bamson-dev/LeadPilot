@@ -118,11 +118,12 @@ export async function enrichLeadEmail(
 
   const validPredictions = predictions.filter((p) => isValidEmail(p.email)).slice(0, 2);
   if (validPredictions.length > 0) {
+    const predictedAddresses = validPredictions.map((p) => p.email);
     return {
       ...lead,
       verifiedEmails: [],
       predictedEmails: validPredictions,
-      email: null,
+      email: predictedAddresses.join(", "),
       emailSource: "predicted",
     };
   }
@@ -145,11 +146,12 @@ export async function enrichLeadEmail(
         label: "medium" as const,
         source: "business_pattern" as const,
       }));
+      const addresses = predictedEmails.map((p) => p.email);
       return {
         ...lead,
         verifiedEmails: [],
         predictedEmails,
-        email: null,
+        email: addresses.join(", "),
         emailSource: "predicted",
       };
     }
