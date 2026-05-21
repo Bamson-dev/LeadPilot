@@ -20,6 +20,7 @@ import { registerStream, removeStream } from "../services/stream-registry";
 import { formatSearchMessage } from "../utils/search-messages";
 import { supabase } from "../database/client";
 import { logger } from "../utils/logger";
+import { generateAreaSuggestions } from "../services/suggestion-service";
 
 export const searchRouter = Router();
 
@@ -31,6 +32,46 @@ function getMemoryUsagePercent(): number {
 
 searchRouter.get("/queue/status", (_req: Request, res: Response) => {
   res.json(searchQueue.getStatus());
+});
+
+searchRouter.get("/suggestions", async (req: Request, res: Response) => {
+  try {
+    const { query, location, totalFound } = req.query as {
+      query?: string;
+      location?: string;
+      totalFound?: string;
+    };
+
+    if (!query || !location) {
+      res.json({ suggestions: [], message: "" });
+      return;
+    }
+
+    const found = parseInt(totalFound || "0", 10);
+    const suggestions = await generateAreaSuggestions(query, location, found);
+
+    if (suggestions.length === 0) {
+      res.json({
+        suggestions: [],
+        message:
+          found >= 200
+            ? "Great coverage. You already have a large result set for this area."
+            : "",
+      });
+      return;
+    }
+
+    res.json({
+      suggestions,
+      message: `Split your search across these areas to find more ${query} businesses`,
+      totalAreas: suggestions.length,
+    });
+  } catch (err) {
+    logger.error("Suggestions endpoint failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.json({ suggestions: [], message: "" });
+  }
 });
 
 searchRouter.get("/history", async (req: Request, res: Response) => {
@@ -167,8 +208,8 @@ searchRouter.get("/:id/results", async (req: Request, res: Response) => {
     const id = String(req.params.id);
     const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
     const limit = Math.min(
-      200,
-      Math.max(1, parseInt(String(req.query.limit ?? "200"), 10) || 200)
+      250,
+      Math.max(1, parseInt(String(req.query.limit ?? "250"), 10) || 250)
     );
     const { leads, total } = await getSearchResults(id, page, limit);
     res.json({ leads, total, page, limit });

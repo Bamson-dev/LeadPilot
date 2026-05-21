@@ -16,6 +16,7 @@ import {
   PLACE_PAGE_TIMEOUT_MS,
   PLACE_TIMEOUT_MS,
   SIDEBAR_SCROLL_MAX_ROUNDS,
+  SIDEBAR_SCROLL_TIMEOUT_MS,
   SIDEBAR_SCROLL_WAIT_MS,
   SIDEBAR_STABLE_ROUNDS,
 } from "../utils/constants";
@@ -115,49 +116,61 @@ async function scrollResults(
 ): Promise<void> {
   onPhase?.(formatSearchMessage(query, location));
 
-  const feed = page.locator('div[role="feed"]').first();
-  const hasFeed = (await feed.count().catch(() => 0)) > 0;
+  const scrollWork = async (): Promise<void> => {
+    const feed = page.locator('div[role="feed"]').first();
+    const hasFeed = (await feed.count().catch(() => 0)) > 0;
 
-  if (!hasFeed) {
-    for (let i = 0; i < 18; i++) {
-      await page.mouse.wheel(0, 1400);
+    if (!hasFeed) {
+      for (let i = 0; i < 18; i++) {
+        await page.mouse.wheel(0, 1400);
+        await page.waitForTimeout(SIDEBAR_SCROLL_WAIT_MS);
+      }
+      return;
+    }
+
+    let prevCount = 0;
+    let stableRounds = 0;
+
+    for (let i = 0; i < SIDEBAR_SCROLL_MAX_ROUNDS; i++) {
+      try {
+        await feed.evaluate((el: HTMLElement) => {
+          el.scrollTop = el.scrollHeight;
+        });
+      } catch {
+        await page.mouse.wheel(0, 1600);
+      }
       await page.waitForTimeout(SIDEBAR_SCROLL_WAIT_MS);
-    }
-    return;
-  }
 
-  let prevCount = 0;
-  let stableRounds = 0;
-
-  for (let i = 0; i < SIDEBAR_SCROLL_MAX_ROUNDS; i++) {
-    try {
-      await feed.evaluate((el: HTMLElement) => {
-        el.scrollTop = el.scrollHeight;
-      });
-    } catch {
-      await page.mouse.wheel(0, 1600);
-    }
-    await page.waitForTimeout(SIDEBAR_SCROLL_WAIT_MS);
-
-    if (i > 0 && i % 8 === 0) {
-      await tryLoadMoreResults(page);
-    }
-
-    const count = await countListingsOnPage(page);
-    if (count === prevCount && count > 0) {
-      stableRounds++;
-      if (stableRounds >= SIDEBAR_STABLE_ROUNDS) {
+      if (i > 0 && i % 8 === 0) {
         await tryLoadMoreResults(page);
-        const afterMore = await page.locator('a[href*="/maps/place/"]').count().catch(() => 0);
-        if (afterMore <= count) break;
+      }
+
+      const count = await countListingsOnPage(page);
+      if (count === prevCount && count > 0) {
+        stableRounds++;
+        if (stableRounds >= SIDEBAR_STABLE_ROUNDS) {
+          await tryLoadMoreResults(page);
+          const afterMore = await page
+            .locator('a[href*="/maps/place/"]')
+            .count()
+            .catch(() => 0);
+          if (afterMore <= count) break;
+          stableRounds = 0;
+        }
+      } else {
         stableRounds = 0;
       }
-    } else {
-      stableRounds = 0;
+      prevCount = count;
+      if (count >= MAX_LEADS_PER_SEARCH) break;
     }
-    prevCount = count;
-    if (count >= MAX_LEADS_PER_SEARCH) break;
-  }
+  };
+
+  await Promise.race([
+    scrollWork(),
+    new Promise<void>((resolve) => {
+      setTimeout(resolve, SIDEBAR_SCROLL_TIMEOUT_MS);
+    }),
+  ]);
 }
 
 async function collectPlaceUrls(page: Page): Promise<string[]> {

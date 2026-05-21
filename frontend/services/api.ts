@@ -174,6 +174,38 @@ export async function getSearch(id: string): Promise<SearchJob> {
   return parseJson<SearchJob>(res);
 }
 
+export async function getSearchSuggestions(
+  query: string,
+  location: string,
+  totalFound: number
+): Promise<{
+  suggestions: Array<{ query: string; location: string; label: string }>;
+  message: string;
+  totalAreas?: number;
+}> {
+  try {
+    const params = new URLSearchParams({
+      query,
+      location,
+      totalFound: totalFound.toString(),
+    });
+
+    const res = await fetch(`${getApiUrl()}/search/suggestions?${params}`, {
+      headers: getLicenseHeaders(),
+      cache: "no-store",
+    });
+
+    if (!res.ok) return { suggestions: [], message: "" };
+    return res.json() as Promise<{
+      suggestions: Array<{ query: string; location: string; label: string }>;
+      message: string;
+      totalAreas?: number;
+    }>;
+  } catch {
+    return { suggestions: [], message: "" };
+  }
+}
+
 export async function getSearchHistory(): Promise<{
   history: Array<{
     id: string;

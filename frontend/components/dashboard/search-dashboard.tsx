@@ -2,7 +2,8 @@
 
 import { motion } from "framer-motion";
 import { Search, Download, RotateCcw, Trash2, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import type { BusinessLead } from "@leadpilot/shared";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -11,12 +12,66 @@ import { SearchHistory } from "@/components/dashboard/search-history";
 import { ResultsTable } from "@/features/results/results-table";
 import { useSearch } from "@/hooks/useSearch";
 import { exportToCSV } from "@/features/export/csv-export";
+import { getSearchSuggestions } from "@/services/api";
+import { businessLeadToLead } from "@/types/lead";
+import type { Lead } from "@/types/lead";
+
+function dedupeLeads(
+  prev: BusinessLead[],
+  incoming: BusinessLead[]
+): BusinessLead[] {
+  const existingKeys = new Set(
+    prev.map((l) => `${l.name?.toLowerCase() ?? ""}-${l.phone ?? ""}`)
+  );
+  const unique = incoming.filter(
+    (l) => !existingKeys.has(`${l.name?.toLowerCase() ?? ""}-${l.phone ?? ""}`)
+  );
+  return [...prev, ...unique];
+}
+
 export function SearchDashboard() {
   const [businessType, setBusinessType] = useState("");
   const [location, setLocation] = useState("");
   const [savedBanner, setSavedBanner] = useState<string | null>(null);
+  const [allLeads, setAllLeads] = useState<BusinessLead[]>([]);
+  const [sessionSearchCount, setSessionSearchCount] = useState(0);
+  const [suggestions, setSuggestions] = useState<
+    Array<{ query: string; location: string; label: string }>
+  >([]);
+  const [suggestionsMessage, setSuggestionsMessage] = useState("");
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+
+  const fetchSuggestions = useCallback(
+    async (query: string, loc: string, totalFound: number) => {
+      setLoadingSuggestions(true);
+      try {
+        const data = await getSearchSuggestions(query, loc, totalFound);
+        setSuggestions(data.suggestions || []);
+        setSuggestionsMessage(data.message || "");
+      } finally {
+        setLoadingSuggestions(false);
+      }
+    },
+    []
+  );
+
+  const onSearchComplete = useCallback(
+    (
+      newLeads: BusinessLead[],
+      query: string,
+      loc: string,
+      totalFound: number
+    ) => {
+      setAllLeads((prev) => dedupeLeads(prev, newLeads));
+      setSessionSearchCount((prev) => prev + 1);
+      void fetchSuggestions(query, loc, totalFound);
+    },
+    [fetchSuggestions]
+  );
+
   const {
     leads,
+    rawLeads,
     isSearching,
     progress,
     error,
@@ -28,13 +83,48 @@ export function SearchDashboard() {
     searchesRemaining,
     runSearch,
     clearResults,
-    closeStream,
+    reset,
     loadSavedLeads,
-  } = useSearch();
+  } = useSearch({ onSearchComplete });
+
+  const query = searchMeta.business || businessType;
+  const loc = searchMeta.location || location;
+
+  const mergedSessionLeads =
+    sessionSearchCount > 1 ? dedupeLeads(allLeads, rawLeads) : rawLeads;
+
+  const tableLeads: Lead[] =
+    sessionSearchCount > 1
+      ? mergedSessionLeads.map((l) =>
+          businessLeadToLead({
+            ...l,
+            searchId: l.searchId ?? "",
+            createdAt: l.createdAt ?? new Date().toISOString(),
+          })
+        )
+      : leads;
+
+  const leadsToExport =
+    sessionSearchCount > 1
+      ? mergedSessionLeads.map((l) =>
+          businessLeadToLead({
+            ...l,
+            searchId: l.searchId ?? "",
+            createdAt: l.createdAt ?? new Date().toISOString(),
+          })
+        )
+      : leads;
 
   const handleSearch = () => {
     setSavedBanner(null);
     void runSearch(businessType, location);
+  };
+
+  const handleAreaSearch = (areaQuery: string, areaLocation: string) => {
+    setSavedBanner(null);
+    setBusinessType(areaQuery);
+    setLocation(areaLocation);
+    void runSearch(areaQuery, areaLocation, { accumulate: true });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -43,18 +133,37 @@ export function SearchDashboard() {
 
   const handleDownload = () => {
     exportToCSV(
-      leads,
-      `leadpilot-${searchMeta.business || businessType}-${searchMeta.location || location}-${Date.now()}.csv`
+      leadsToExport,
+      `leadpilot-${query}-${loc}-${Date.now()}.csv`
     );
   };
 
-  const handleNewSearch = () => {
-    closeStream();
-    clearResults();
+  const startNewSession = () => {
+    reset();
+    setAllLeads([]);
+    setSessionSearchCount(0);
+    setSuggestions([]);
+    setSuggestionsMessage("");
     setSavedBanner(null);
     setBusinessType("");
     setLocation("");
   };
+
+  const handleNewSearch = () => {
+    startNewSession();
+  };
+
+  const handleClearResults = () => {
+    clearResults();
+    setAllLeads([]);
+    setSessionSearchCount(0);
+    setSuggestions([]);
+    setSuggestionsMessage("");
+    setSavedBanner(null);
+  };
+
+  const displayCount =
+    sessionSearchCount > 1 ? mergedSessionLeads.length : isSearching ? rawLeads.length : tableLeads.length;
 
   return (
     <div className="space-y-8">
@@ -93,6 +202,45 @@ export function SearchDashboard() {
           </div>
         </div>
 
+        {sessionSearchCount > 1 && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              marginTop: 16,
+              marginBottom: 0,
+            }}
+          >
+            <p
+              style={{
+                color: "#A855F7",
+                fontSize: 13,
+                fontWeight: 600,
+                margin: 0,
+              }}
+            >
+              {allLeads.length} total businesses across {sessionSearchCount} searches
+            </p>
+            <button
+              type="button"
+              onClick={startNewSession}
+              style={{
+                background: "transparent",
+                border: "1px solid rgba(255,255,255,0.1)",
+                color: "#6B6B80",
+                padding: "4px 12px",
+                borderRadius: 6,
+                fontSize: 11,
+                cursor: "pointer",
+                fontFamily: "Figtree, sans-serif",
+              }}
+            >
+              Clear all and start fresh
+            </button>
+          </div>
+        )}
+
         <div className="mt-4 flex flex-wrap gap-3">
           <Button type="button" variant="glow" onClick={handleSearch} disabled={isSearching}>
             {isSearching ? (
@@ -105,22 +253,41 @@ export function SearchDashboard() {
           <Button
             variant="outline"
             onClick={handleDownload}
-            disabled={leads.length === 0}
+            disabled={leadsToExport.length === 0}
           >
             <Download className="h-4 w-4" />
-            Export {leads.length} leads to CSV
+            Export {leadsToExport.length} leads to CSV
           </Button>
-          {leads.length > 0 && (
+          {(tableLeads.length > 0 || isSearching) && (
             <>
               <Button variant="ghost" onClick={handleNewSearch}>
                 <RotateCcw className="h-4 w-4" /> New Search
               </Button>
-              <Button variant="ghost" onClick={clearResults}>
+              <Button variant="ghost" onClick={handleClearResults}>
                 <Trash2 className="h-4 w-4" /> Clear Results
               </Button>
             </>
           )}
         </div>
+
+        {status === "completed" && sessionSearchCount === 1 && !error && !savedBanner && (
+          <div
+            style={{
+              background: "rgba(124,58,237,0.05)",
+              border: "1px solid rgba(124,58,237,0.12)",
+              borderRadius: 8,
+              padding: "10px 14px",
+              marginTop: 8,
+              fontSize: 12,
+              color: "#6B6B80",
+              lineHeight: 1.6,
+            }}
+          >
+            Tip: Google Maps shows 60 to 120 businesses per search. Use the area suggestions below
+            to search specific neighborhoods and build a larger list. New results are added without
+            clearing your current ones.
+          </div>
+        )}
 
         {error && (
           <div
@@ -130,11 +297,11 @@ export function SearchDashboard() {
             <p className="text-sm text-red-300">{error}</p>
             {showLimitMessage && (
               <p className="mt-2 text-sm text-[#A1A1B5]">
-                You have used all your searches for this month. Your searches reset on the
-                date shown in the message above. Contact support to increase your limit.
+                You have used all your searches for this month. Your searches reset on the date
+                shown in the message above. Contact support to increase your limit.
               </p>
             )}
-            <Button variant="outline" size="sm" className="mt-3" onClick={clearResults}>
+            <Button variant="outline" size="sm" className="mt-3" onClick={handleClearResults}>
               Try Again
             </Button>
           </div>
@@ -156,7 +323,7 @@ export function SearchDashboard() {
         }}
       />
 
-      {(isSearching || leads.length > 0) && (
+      {(isSearching || tableLeads.length > 0) && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -168,7 +335,7 @@ export function SearchDashboard() {
             </div>
           )}
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <LiveCounter count={leads.length} isSearching={isSearching} />
+            <LiveCounter count={displayCount} isSearching={isSearching} />
             {(isSearching || phaseMessage) && (
               <span className="flex items-center gap-2 text-sm text-[#A1A1B5] sm:max-w-[65%]">
                 {isSearching && (
@@ -182,7 +349,111 @@ export function SearchDashboard() {
         </motion.div>
       )}
 
-      <ResultsTable leads={leads} isLoading={isSearching && leads.length === 0} />
+      <ResultsTable leads={tableLeads} isLoading={isSearching && tableLeads.length === 0} />
+
+      {loadingSuggestions && status === "completed" && (
+        <div
+          style={{
+            background: "#0F0F14",
+            border: "1px solid rgba(255,255,255,0.07)",
+            borderRadius: 14,
+            padding: 16,
+            marginTop: 16,
+            color: "#6B6B80",
+            fontSize: 13,
+          }}
+        >
+          Generating smart suggestions for your search...
+        </div>
+      )}
+
+      {suggestions.length > 0 && status === "completed" && (
+        <div
+          style={{
+            background: "#0F0F14",
+            border: "1px solid rgba(124,58,237,0.2)",
+            borderRadius: 14,
+            padding: 24,
+            marginTop: 16,
+          }}
+        >
+          <div style={{ marginBottom: 14 }}>
+            <p
+              style={{
+                color: "#F4F4FF",
+                fontWeight: 700,
+                fontSize: 15,
+                margin: "0 0 6px",
+                fontFamily: "Bricolage Grotesque, sans-serif",
+              }}
+            >
+              Want more results?
+            </p>
+            <p
+              style={{
+                color: "#6B6B80",
+                fontSize: 13,
+                margin: "0 0 4px",
+                lineHeight: 1.6,
+              }}
+            >
+              {suggestionsMessage ||
+                `Google Maps shows 60 to 120 businesses per search. Click an area below to find more businesses and add them to your list.`}
+            </p>
+            <p
+              style={{
+                color: "#A855F7",
+                fontSize: 12,
+                margin: 0,
+                fontWeight: 500,
+              }}
+            >
+              Each area search adds new businesses without clearing your current results.
+            </p>
+          </div>
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+            {suggestions.map((s, i) => (
+              <button
+                key={`${s.location}-${i}`}
+                type="button"
+                onClick={() => handleAreaSearch(s.query, s.location)}
+                disabled={isSearching}
+                style={{
+                  background: "transparent",
+                  border: "1px solid rgba(124,58,237,0.3)",
+                  color: "#A855F7",
+                  padding: "8px 16px",
+                  borderRadius: 8,
+                  fontSize: 13,
+                  cursor: isSearching ? "not-allowed" : "pointer",
+                  fontWeight: 500,
+                  transition: "all 0.15s",
+                  fontFamily: "Figtree, sans-serif",
+                  opacity: isSearching ? 0.5 : 1,
+                }}
+                onMouseOver={(e) => {
+                  if (isSearching) return;
+                  e.currentTarget.style.background = "rgba(124,58,237,0.12)";
+                  e.currentTarget.style.borderColor = "#7C3AED";
+                  e.currentTarget.style.color = "#F4F4FF";
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = "transparent";
+                  e.currentTarget.style.borderColor = "rgba(124,58,237,0.3)";
+                  e.currentTarget.style.color = "#A855F7";
+                }}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+
+          <p style={{ color: "#6B6B80", fontSize: 11, margin: 0 }}>
+            Powered by AI — suggestions are generated for your specific search and location
+          </p>
+        </div>
+      )}
     </div>
   );
 }

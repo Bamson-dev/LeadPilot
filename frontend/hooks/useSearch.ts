@@ -27,7 +27,22 @@ interface SearchState {
 const POLL_INTERVAL_MS = 5000;
 const SEARCH_TIMEOUT_MS = 10 * 60 * 1000;
 
-export function useSearch() {
+export interface UseSearchOptions {
+  onSearchComplete?: (
+    leads: BusinessLead[],
+    query: string,
+    location: string,
+    totalFound: number
+  ) => void;
+}
+
+export interface RunSearchOptions {
+  accumulate?: boolean;
+}
+
+export function useSearch(options?: UseSearchOptions) {
+  const onCompleteRef = useRef(options?.onSearchComplete);
+  onCompleteRef.current = options?.onSearchComplete;
   const [state, setState] = useState<SearchState>({
     status: "idle",
     leads: [],
@@ -119,15 +134,22 @@ export function useSearch() {
   const finishSearch = useCallback(
     (total: number, message?: string) => {
       closeStream();
-      setState((prev) => ({
-        ...prev,
-        status: "completed",
-        totalFound: total || prev.leads.length,
-        queuePosition: 0,
-        message:
-          message ??
-          progressMessage(total || prev.leads.length, "completed", 0),
-      }));
+      setState((prev) => {
+        const totalFound = total || prev.leads.length;
+        onCompleteRef.current?.(
+          prev.leads,
+          queryRef.current,
+          locationRef.current,
+          totalFound
+        );
+        return {
+          ...prev,
+          status: "completed",
+          totalFound,
+          queuePosition: 0,
+          message: message ?? progressMessage(totalFound, "completed", 0),
+        };
+      });
     },
     [closeStream, progressMessage]
   );
@@ -286,7 +308,11 @@ export function useSearch() {
   );
 
   const search = useCallback(
-    async (query: string, location: string) => {
+    async (
+      query: string,
+      location: string,
+      runOptions?: RunSearchOptions
+    ) => {
       if (!query.trim() || !location.trim()) {
         setState((prev) => ({
           ...prev,
@@ -296,6 +322,8 @@ export function useSearch() {
         return;
       }
 
+      const accumulate = runOptions?.accumulate === true;
+
       closeStream();
       completedRef.current = false;
       queryRef.current = query.trim();
@@ -304,16 +332,20 @@ export function useSearch() {
       reconnectCountRef.current = 0;
       searchIdRef.current = null;
 
-      setState({
+      setState((prev) => ({
         status: "starting",
-        leads: [],
+        leads: accumulate ? prev.leads : [],
         searchId: null,
-        message: progressMessage(0, "running", 0),
-        totalFound: 0,
-        searchesRemaining: null,
+        message: progressMessage(
+          accumulate ? prev.leads.length : 0,
+          "running",
+          0
+        ),
+        totalFound: accumulate ? prev.leads.length : 0,
+        searchesRemaining: prev.searchesRemaining,
         queuePosition: 0,
         error: null,
-      });
+      }));
 
       try {
         const result = await startSearch(query.trim(), location.trim());
@@ -323,15 +355,27 @@ export function useSearch() {
         if (result.cached && result.status === "completed") {
           const { leads: cached } = await getResults(result.searchId);
           const mapped = cached.map((l) => leadRowToBusinessLead(l));
-          setState({
-            status: "completed",
-            leads: mapped,
-            searchId: result.searchId,
-            message: `Found ${result.totalFound ?? mapped.length} businesses instantly from recent search`,
-            totalFound: result.totalFound ?? mapped.length,
-            searchesRemaining: result.searchesRemaining ?? null,
-            queuePosition: 0,
-            error: null,
+          setState((prev) => {
+            const merged = accumulate
+              ? [...prev.leads, ...mapped.filter((l) => !prev.leads.some((p) => p.id === l.id))]
+              : mapped;
+            const totalFound = result.totalFound ?? merged.length;
+            onCompleteRef.current?.(
+              merged,
+              queryRef.current,
+              locationRef.current,
+              totalFound
+            );
+            return {
+              status: "completed",
+              leads: merged,
+              searchId: result.searchId,
+              message: `Found ${result.totalFound ?? mapped.length} businesses instantly from recent search`,
+              totalFound,
+              searchesRemaining: result.searchesRemaining ?? null,
+              queuePosition: 0,
+              error: null,
+            };
           });
           return;
         }
@@ -392,6 +436,8 @@ export function useSearch() {
     closeStream();
     searchIdRef.current = null;
     pendingLeadsRef.current = [];
+    queryRef.current = "";
+    locationRef.current = "";
     setState({
       status: "idle",
       leads: [],
@@ -402,6 +448,22 @@ export function useSearch() {
       queuePosition: 0,
       error: null,
     });
+  }, [closeStream]);
+
+  const clearResults = useCallback(() => {
+    closeStream();
+    searchIdRef.current = null;
+    pendingLeadsRef.current = [];
+    setState((prev) => ({
+      ...prev,
+      status: "idle",
+      leads: [],
+      searchId: null,
+      message: "",
+      totalFound: 0,
+      queuePosition: 0,
+      error: null,
+    }));
   }, [closeStream]);
 
   const loadSavedLeads = useCallback((leads: Lead[]) => {
@@ -443,8 +505,9 @@ export function useSearch() {
     ),
     searchMeta: { business: queryRef.current, location: locationRef.current },
     runSearch: search,
-    clearResults: reset,
-    closeStream: reset,
+    clearResults,
+    closeStream: closeStream,
+    reset,
     loadSavedLeads,
     showLimitMessage:
       !!state.error &&

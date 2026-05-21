@@ -69,7 +69,7 @@ export async function getCachedSearch(
     .from("business_leads")
     .select("*")
     .eq("search_id", cachedJob.id)
-    .limit(60);
+    .limit(250);
 
   if (leadsError || !rows || rows.length === 0) return null;
 
