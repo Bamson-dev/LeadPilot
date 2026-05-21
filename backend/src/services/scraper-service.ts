@@ -120,7 +120,7 @@ export async function runScraperJob(
     await markSearchFailed(searchId, message);
     emit({
       type: "error",
-      message: "Search encountered an error. Please try again.",
+      message,
     });
     throw err;
   } finally {

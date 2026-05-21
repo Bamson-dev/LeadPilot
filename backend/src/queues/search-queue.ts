@@ -3,6 +3,16 @@ import { markSearchFailed } from "../database/search-repository";
 import { logger } from "../utils/logger";
 import { runScraperJob } from "../services/scraper-service";
 import { clearStreamBuffer, emitToStream } from "../services/stream-registry";
+import { SEARCH_JOB_TIMEOUT_MS } from "../scraper/utils/constants";
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error(message)), ms);
+    }),
+  ]);
+}
 
 class SearchQueue {
   private queue: Array<{
@@ -40,10 +50,17 @@ class SearchQueue {
     };
 
     try {
-      await runScraperJob(job.searchId, job.query, job.location, emit);
+      await withTimeout(
+        runScraperJob(job.searchId, job.query, job.location, emit),
+        SEARCH_JOB_TIMEOUT_MS,
+        "Search timed out on the server. Try a broader location or a simpler business type."
+      );
       job.resolve();
     } catch (err) {
-      job.reject(err instanceof Error ? err : new Error(String(err)));
+      const message = err instanceof Error ? err.message : String(err);
+      emitToStream(job.searchId, { type: "error", message });
+      markSearchFailed(job.searchId, message).catch(() => undefined);
+      job.reject(err instanceof Error ? err : new Error(message));
     } finally {
       this.running--;
       void this.process();

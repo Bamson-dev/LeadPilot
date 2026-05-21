@@ -21,7 +21,7 @@ interface SearchState {
 }
 
 const POLL_INTERVAL_MS = 5000;
-const SEARCH_TIMEOUT_MS = 4 * 60 * 1000;
+const SEARCH_TIMEOUT_MS = 3 * 60 * 1000;
 
 export function useSearch() {
   const [state, setState] = useState<SearchState>({
@@ -334,11 +334,18 @@ export function useSearch() {
             }
             completedRef.current = true;
             closeStream();
+            let errMsg =
+              "Search is taking too long. Try a broader location (e.g. Lagos Nigeria) or wait and try again.";
+            try {
+              const job = await getSearch(result.searchId);
+              if (job.error) errMsg = job.error;
+            } catch {
+              /* use default */
+            }
             setState((prev) => ({
               ...prev,
               status: "error",
-              error:
-                "Search is taking too long. The scraper may be overloaded — try again in a few minutes.",
+              error: errMsg,
             }));
           })();
         }, SEARCH_TIMEOUT_MS);

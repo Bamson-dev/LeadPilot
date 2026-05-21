@@ -144,8 +144,25 @@ export async function scrapeGoogleMaps(
   let count = 0;
 
   try {
-    await gotoWithRetry(searchPage, searchUrl, { timeout: 45000, retries: 2 });
+    await gotoWithRetry(searchPage, searchUrl, { timeout: 30000, retries: 1 });
     await dismissConsent(searchPage);
+
+    const hasFeed = await searchPage
+      .locator('div[role="feed"]')
+      .count()
+      .catch(() => 0);
+    if (hasFeed === 0) {
+      const bodyText = await searchPage.locator("body").innerText().catch(() => "");
+      if (/unusual traffic|captcha|not a robot/i.test(bodyText)) {
+        throw new Error(
+          "Google Maps blocked automated access. Try again in a few minutes or contact support."
+        );
+      }
+      throw new Error(
+        "Google Maps did not load any results. Try a broader location (e.g. Lagos Nigeria instead of a single area)."
+      );
+    }
+
     await scrollSidebar(searchPage, query, location, onPhase);
 
     const businessUrls = (await collectPlaceUrls(searchPage)).slice(0, MAX_LEADS_PER_SEARCH);
