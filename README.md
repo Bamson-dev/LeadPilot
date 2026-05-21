@@ -167,7 +167,7 @@ Paginated business leads.
 
 Server-Sent Events stream. Event types: `lead`, `progress`, `phase`, `complete`, `error`.
 
-### `GET /health`
+### `GET /health` (alias: `GET /api/health`)
 
 **Response**
 ```json

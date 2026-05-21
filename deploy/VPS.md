@@ -30,6 +30,8 @@ Verify:
 ```bash
 curl http://127.0.0.1:3000/health
 # OK
+
+Coolify health check path: **`/health`** (not `/api/health` unless you configure a path prefix).
 ```
 
 ---

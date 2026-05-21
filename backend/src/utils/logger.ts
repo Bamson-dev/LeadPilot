@@ -1,5 +1,3 @@
-import { getEnv } from "../config/env";
-
 type LogLevel = "debug" | "info" | "warn" | "error";
 
 interface LogPayload {
@@ -17,7 +15,7 @@ function write(level: LogLevel, message: string, meta?: Record<string, unknown>)
     ...meta,
   };
 
-  if (getEnv().NODE_ENV === "production") {
+  if (process.env.NODE_ENV === "production") {
     const line = JSON.stringify(payload);
     if (level === "error") {
       process.stderr.write(`${line}\n`);
