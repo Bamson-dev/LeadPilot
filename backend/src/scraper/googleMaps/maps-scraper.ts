@@ -15,7 +15,6 @@ import {
   SIDEBAR_STABLE_ROUNDS,
 } from "../utils/constants";
 
-const SIDEBAR_ARTICLE = 'div[role="feed"] [role="article"]';
 const BATCH_SIZE = 5;
 const TIMEOUT_MS = 8000;
 
@@ -39,11 +38,17 @@ async function processWithTimeout<T>(
 }
 
 async function dismissConsent(page: Page): Promise<void> {
-  for (const sel of ['button:has-text("Accept all")', "#L2AGLb"]) {
+  for (const sel of [
+    'button:has-text("Accept all")',
+    'button:has-text("Accept All")',
+    'button:has-text("Reject all")',
+    "#L2AGLb",
+  ]) {
     try {
       const btn = page.locator(sel).first();
       if (await btn.isVisible({ timeout: 1500 })) {
         await btn.click({ timeout: 3000 });
+        await page.waitForTimeout(500);
         return;
       }
     } catch {
@@ -52,16 +57,63 @@ async function dismissConsent(page: Page): Promise<void> {
   }
 }
 
-async function scrollSidebar(
+async function detectBlockedPage(page: Page): Promise<string | null> {
+  const bodyText = await page.locator("body").innerText().catch(() => "");
+  if (/unusual traffic|captcha|not a robot|sorry/i.test(bodyText)) {
+    return "Google Maps blocked automated access. Try again in a few minutes.";
+  }
+  return null;
+}
+
+/** Wait until Maps shows listing links or the results feed. */
+async function waitForResultsPanel(page: Page, timeoutMs = 28000): Promise<boolean> {
+  const selectors = [
+    'a[href*="/maps/place/"]',
+    'div[role="feed"] [role="article"]',
+    'div[role="feed"]',
+  ];
+
+  try {
+    await Promise.race(
+      selectors.map((sel) =>
+        page.waitForSelector(sel, { timeout: timeoutMs, state: "attached" })
+      )
+    );
+    return true;
+  } catch {
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline) {
+      for (const sel of selectors) {
+        const count = await page.locator(sel).count().catch(() => 0);
+        if (count > 0) return true;
+      }
+      await page.waitForTimeout(600);
+    }
+    return false;
+  }
+}
+
+async function scrollResults(
   page: Page,
   query: string,
   location: string,
   onPhase?: (m: string) => void
 ): Promise<void> {
+  onPhase?.(formatSearchMessage(query, location));
+
   const feed = page.locator('div[role="feed"]').first();
+  const hasFeed = (await feed.count().catch(() => 0)) > 0;
+
+  if (!hasFeed) {
+    for (let i = 0; i < 10; i++) {
+      await page.mouse.wheel(0, 1400);
+      await page.waitForTimeout(SIDEBAR_SCROLL_WAIT_MS);
+    }
+    return;
+  }
+
   let prevCount = 0;
   let stableRounds = 0;
-  onPhase?.(formatSearchMessage(query, location));
 
   for (let i = 0; i < SIDEBAR_SCROLL_MAX_ROUNDS; i++) {
     try {
@@ -72,7 +124,8 @@ async function scrollSidebar(
       await page.mouse.wheel(0, 1600);
     }
     await page.waitForTimeout(SIDEBAR_SCROLL_WAIT_MS);
-    const count = await page.locator(SIDEBAR_ARTICLE).count().catch(() => 0);
+
+    const count = await page.locator('a[href*="/maps/place/"]').count().catch(() => 0);
     if (count === prevCount && count > 0) {
       stableRounds++;
       if (stableRounds >= SIDEBAR_STABLE_ROUNDS) break;
@@ -88,12 +141,11 @@ async function collectPlaceUrls(page: Page): Promise<string[]> {
   return page.evaluate(() => {
     const results: string[] = [];
     const seen = new Set<string>();
-    document.querySelectorAll('div[role="feed"] [role="article"]').forEach((article) => {
-      const link = article.querySelector('a[href*="/maps/place/"]') as HTMLAnchorElement | null;
-      if (link?.href && !seen.has(link.href)) {
-        seen.add(link.href);
-        results.push(link.href);
-      }
+    document.querySelectorAll('a[href*="/maps/place/"]').forEach((anchor) => {
+      const href = (anchor as HTMLAnchorElement).href;
+      if (!href || seen.has(href)) return;
+      seen.add(href);
+      results.push(href);
     });
     return results;
   });
@@ -130,8 +182,15 @@ export async function scrapeGoogleMaps(
   const { query, location, onPhase, onProgress, onLead } = options;
   const context = await browser.newContext({
     userAgent:
-      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
     viewport: { width: 1400, height: 900 },
+    locale: "en-US",
+    timezoneId: "Africa/Lagos",
+    geolocation: { latitude: 6.5244, longitude: 3.3792 },
+    permissions: ["geolocation"],
+    extraHTTPHeaders: {
+      "Accept-Language": "en-US,en;q=0.9",
+    },
   });
 
   await context.addInitScript(() => {
@@ -144,30 +203,46 @@ export async function scrapeGoogleMaps(
   let count = 0;
 
   try {
-    await gotoWithRetry(searchPage, searchUrl, { timeout: 30000, retries: 1 });
-    await dismissConsent(searchPage);
+    logger.info("Maps search starting", { query, location, searchUrl });
 
-    const hasFeed = await searchPage
-      .locator('div[role="feed"]')
-      .count()
-      .catch(() => 0);
-    if (hasFeed === 0) {
-      const bodyText = await searchPage.locator("body").innerText().catch(() => "");
-      if (/unusual traffic|captcha|not a robot/i.test(bodyText)) {
-        throw new Error(
-          "Google Maps blocked automated access. Try again in a few minutes or contact support."
-        );
-      }
-      throw new Error(
-        "Google Maps did not load any results. Try a broader location (e.g. Lagos Nigeria instead of a single area)."
-      );
+    await gotoWithRetry(searchPage, searchUrl, {
+      waitUntil: "domcontentloaded",
+      timeout: 35000,
+      retries: 2,
+    });
+    await dismissConsent(searchPage);
+    await searchPage.waitForTimeout(2500);
+
+    const blocked = await detectBlockedPage(searchPage);
+    if (blocked) throw new Error(blocked);
+
+    const panelReady = await waitForResultsPanel(searchPage);
+    if (!panelReady) {
+      logger.warn("Maps results panel slow — continuing with scroll", { query, location });
     }
 
-    await scrollSidebar(searchPage, query, location, onPhase);
+    await scrollResults(searchPage, query, location, onPhase);
 
-    const businessUrls = (await collectPlaceUrls(searchPage)).slice(0, MAX_LEADS_PER_SEARCH);
+    let businessUrls = await collectPlaceUrls(searchPage);
+    logger.info("Maps place URLs collected", {
+      query,
+      location,
+      count: businessUrls.length,
+    });
+
     if (businessUrls.length === 0) {
-      throw new Error("No businesses found. Try a different niche or location.");
+      await searchPage.waitForTimeout(3000);
+      businessUrls = await collectPlaceUrls(searchPage);
+    }
+
+    businessUrls = businessUrls.slice(0, MAX_LEADS_PER_SEARCH);
+
+    if (businessUrls.length === 0) {
+      const blockedAgain = await detectBlockedPage(searchPage);
+      if (blockedAgain) throw new Error(blockedAgain);
+      throw new Error(
+        "No businesses found on Google Maps for this search. Try different wording or location."
+      );
     }
 
     const max = businessUrls.length;
