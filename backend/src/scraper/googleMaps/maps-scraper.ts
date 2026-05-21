@@ -24,7 +24,7 @@ import {
   SIDEBAR_STABLE_ROUNDS,
 } from "../utils/constants";
 
-const BATCH_SIZE = 8;
+const BATCH_SIZE = 10;
 
 export interface MapsScrapeOptions {
   query: string;
@@ -393,6 +393,28 @@ async function autoScroll(page: Page): Promise<void> {
   }
 }
 
+async function tryLoadMoreAndScroll(page: Page): Promise<void> {
+  try {
+    const selectors = [
+      'button[jsaction*="pane.paginationSection"]',
+      '[aria-label*="Next page"]',
+      'button[data-value="Load more"]',
+    ];
+
+    for (const sel of selectors) {
+      const loadMoreButton = await page.$(sel);
+      if (loadMoreButton) {
+        await loadMoreButton.click();
+        await page.waitForTimeout(2000);
+        await autoScroll(page);
+        return;
+      }
+    }
+  } catch {
+    // No load more button — that is fine
+  }
+}
+
 const STRATEGY_TIMEOUT_MS = 60_000;
 
 async function scrapeUrlsFromPage(
@@ -433,6 +455,7 @@ async function scrapeUrlsFromPage(
     await page.waitForTimeout(2000);
 
     await autoScroll(page);
+    await tryLoadMoreAndScroll(page);
 
     const urls = await page.evaluate(() => {
       const links = Array.from(
@@ -498,7 +521,32 @@ async function getBusinessUrls(
     }
   }
 
-  const merged = [...allUrls];
+  let merged = [...allUrls];
+
+  if (merged.length < 20) {
+    logger.warn("Parallel strategies returned low results — trying sequential fallback", {
+      query,
+      location,
+      count: merged.length,
+    });
+
+    for (const strategyUrl of searchStrategies) {
+      const urls = await scrapeUrlsFromPage(context, strategyUrl, query, location);
+      for (const url of urls) {
+        const key = url.split("?")[0] ?? url;
+        allUrls.add(key);
+      }
+      if (allUrls.size >= 100) break;
+    }
+
+    merged = [...allUrls];
+    logger.info("Sequential fallback complete", {
+      query,
+      location,
+      total: merged.length,
+    });
+  }
+
   const strategiesSucceeded = results.filter((r) => r.status === "fulfilled").length;
 
   logger.info("URL collection complete — starting extraction", {
