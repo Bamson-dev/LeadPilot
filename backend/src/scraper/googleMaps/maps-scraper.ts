@@ -6,6 +6,11 @@ import { dedupeKey, sanitizeLead } from "../utils/data-quality";
 import { logger } from "../../utils/logger";
 import { formatSearchMessage } from "../../utils/search-messages";
 import {
+  acceptGoogleConsent,
+  isOnConsentPage,
+  seedGoogleConsentCookies,
+} from "./google-consent";
+import {
   DETAIL_PANEL_WAIT_MS,
   MAX_LEADS_PER_SEARCH,
   PLACE_PAGE_TIMEOUT_MS,
@@ -37,27 +42,17 @@ async function processWithTimeout<T>(
   return Promise.race([promise, timeout]);
 }
 
-async function dismissConsent(page: Page): Promise<void> {
-  for (const sel of [
-    'button:has-text("Accept all")',
-    'button:has-text("Accept All")',
-    'button:has-text("Reject all")',
-    "#L2AGLb",
-  ]) {
-    try {
-      const btn = page.locator(sel).first();
-      if (await btn.isVisible({ timeout: 1500 })) {
-        await btn.click({ timeout: 3000 });
-        await page.waitForTimeout(500);
-        return;
-      }
-    } catch {
-      // continue
-    }
-  }
+function withMapsLocale(url: string): string {
+  const parsed = new URL(url);
+  parsed.searchParams.set("hl", "en");
+  parsed.searchParams.set("gl", "NG");
+  return parsed.toString();
 }
 
 async function detectBlockedPage(page: Page): Promise<string | null> {
+  if (await isOnConsentPage(page)) {
+    return "Google cookie consent blocked the search. Please try again in a minute.";
+  }
   const bodyText = await page.locator("body").innerText().catch(() => "");
   if (/unusual traffic|captcha|not a robot|sorry/i.test(bodyText)) {
     return "Google Maps blocked automated access. Try again in a few minutes.";
@@ -260,14 +255,20 @@ async function extractLeadsViaFeedClicks(
 }
 
 async function loadMapsSearchPage(page: Page, searchUrl: string): Promise<void> {
-  await gotoWithRetry(page, searchUrl, {
+  await gotoWithRetry(page, withMapsLocale(searchUrl), {
     waitUntil: "domcontentloaded",
     timeout: 40000,
     retries: 2,
   });
-  await dismissConsent(page);
+  const consentOk = await acceptGoogleConsent(page);
+  if (!consentOk) {
+    logger.error("Failed to pass Google consent", { url: page.url().slice(0, 160) });
+  }
   await page.waitForLoadState("networkidle", { timeout: 12000 }).catch(() => undefined);
-  await page.waitForTimeout(3000);
+  await page.waitForTimeout(2500);
+  if (await isOnConsentPage(page)) {
+    await acceptGoogleConsent(page, 6);
+  }
 }
 
 async function extractBusinessDetails(
@@ -278,7 +279,7 @@ async function extractBusinessDetails(
   const page = await context.newPage();
   try {
     await gotoWithRetry(page, placeUrl, { timeout: PLACE_PAGE_TIMEOUT_MS, retries: 1 });
-    await dismissConsent(page);
+    await acceptGoogleConsent(page);
     await page.waitForTimeout(DETAIL_PANEL_WAIT_MS);
     if (!(await waitForDetailPanel(page, 6000))) return null;
     const lead = await buildLeadFromPanel(page, searchTerm, placeUrl);
@@ -315,6 +316,7 @@ export async function scrapeGoogleMaps(
   await context.addInitScript(() => {
     Object.defineProperty(navigator, "webdriver", { get: () => undefined });
   });
+  await seedGoogleConsentCookies(context);
 
   const searchPage = await context.newPage();
   const searchPhrase = `${query} in ${location}`;
