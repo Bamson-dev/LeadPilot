@@ -82,7 +82,7 @@ export async function sendSearchCompleteEmail(
           <div style="color:#A1A1AA;font-size:14px;margin-top:6px;">businesses found with contact details</div>
         </div>
         <p style="color:#A1A1AA;font-size:14px;line-height:1.6;margin:0 0 28px;">
-          Your results include business names, phone numbers, addresses, websites, and ratings. Go to your dashboard to view and export your CSV file.
+          Your results include business names, phone numbers, emails, addresses, websites, and ratings. WE LOVE YOU. Go to your dashboard to view and export your CSV file.
         </p>
         <a href="${dashboardUrl}" style="display:block;background:#7C3AED;color:white;padding:16px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:16px;text-align:center;margin-bottom:24px;">
           View My Results
@@ -124,7 +124,7 @@ export async function sendSearchRunningEmail(
         </p>
         <div style="background:#0F0F14;border:1px solid rgba(124,58,237,0.2);border-radius:12px;padding:24px;margin-bottom:28px;">
           <p style="color:#F4F4FF;font-size:14px;line-height:1.7;margin:0;">
-            We are still scanning businesses and collecting contact details for you. You do not need to keep the page open. Your results will be saved automatically to your dashboard the moment the search finishes.
+            We are still scanning businesses and collecting business names, phone numbers, emails, addresses, websites, and ratings for you. WE LOVE YOU. You do not need to keep the page open. Your results will be saved automatically to your dashboard the moment the search finishes.
           </p>
         </div>
         <a href="${dashboardUrl}" style="display:block;background:#7C3AED;color:white;padding:16px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:16px;text-align:center;margin-bottom:24px;">
