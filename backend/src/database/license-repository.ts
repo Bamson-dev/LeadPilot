@@ -26,7 +26,7 @@ export async function createLicenseKey(params: {
   paymentReference: string;
 }): Promise<LicenseKey> {
   const email = params.email.toLowerCase().trim();
-  const key = generateLicenseKeyValue();
+  const key = generateLicenseKeyValue().toUpperCase();
 
   const { data, error } = await supabase
     .from("license_keys")
@@ -47,6 +47,18 @@ export async function createLicenseKey(params: {
   return data as LicenseKey;
 }
 
+export async function getLicenseKeyByKey(key: string): Promise<LicenseKey | null> {
+  const normalized = key.trim().toUpperCase();
+  const { data, error } = await supabase
+    .from("license_keys")
+    .select("*")
+    .eq("key", normalized)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data ? (data as LicenseKey) : null;
+}
+
 export async function getLicenseKeyByEmail(email: string): Promise<LicenseKey | null> {
   const { data, error } = await supabase
     .from("license_keys")
@@ -58,6 +70,24 @@ export async function getLicenseKeyByEmail(email: string): Promise<LicenseKey | 
 
   if (error) throw new Error(error.message);
   return data ? (data as LicenseKey) : null;
+}
+
+export async function activateLicense(licenseId: string): Promise<LicenseKey> {
+  const { data, error } = await supabase
+    .from("license_keys")
+    .update({
+      activated: true,
+      activated_at: new Date().toISOString(),
+    })
+    .eq("id", licenseId)
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "Failed to activate license");
+  }
+
+  return data as LicenseKey;
 }
 
 export async function getLicenseByPaymentReference(

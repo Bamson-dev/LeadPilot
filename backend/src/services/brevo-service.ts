@@ -7,7 +7,7 @@ export async function sendActivationEmail(email: string, licenseKey: string): Pr
     throw new Error("BREVO_API_KEY is not configured");
   }
 
-  const activateUrl = `${config.FRONTEND_URL}/dashboard?key=${encodeURIComponent(licenseKey)}`;
+  const activateUrl = `${config.FRONTEND_URL}/activate?key=${encodeURIComponent(licenseKey)}`;
 
   const html = `
     <div style="font-family: Inter, Arial, sans-serif; max-width: 560px; margin: 0 auto; color: #111;">

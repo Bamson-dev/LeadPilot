@@ -21,11 +21,12 @@ async function enrichLead(raw: RawLeadInput, searchId: string): Promise<Business
 
   if (lead.website) {
     try {
-      const crawl = await crawlEmailForWebsite(
-        lead.website,
-        lead.category,
-        lead.name
-      );
+      const crawl = await Promise.race([
+        crawlEmailForWebsite(lead.website, lead.category, lead.name),
+        new Promise<{ email: string | null; emailSource: "none" }>((resolve) =>
+          setTimeout(() => resolve({ email: null, emailSource: "none" }), 4000)
+        ),
+      ]);
       const mapsEmails = parseMapsEmailsFromLead(raw);
       const fields = resolveLeadEmailFields({
         mapsEmails,
@@ -48,7 +49,7 @@ async function enrichLead(raw: RawLeadInput, searchId: string): Promise<Business
               : "none",
       };
     } catch {
-      // emit lead without email enrichment
+      // keep basic lead
     }
   }
 
@@ -64,26 +65,31 @@ export async function runScraperJob(
   const pool = getBrowserPool();
   const browser = await pool.acquire();
   let progress = 0;
+  let progressMax = 50;
 
   try {
     await updateSearchJob(searchId, { status: "running" });
     emit({ type: "started", searchId });
 
     const onBusinessFound = async (raw: RawLeadInput) => {
-      const lead = await enrichLead(raw, searchId);
+      const basic = rawLeadToBusinessLead(raw, searchId);
+      progress++;
+      emit({ type: "lead", lead: basic });
+      emit({ type: "progress", processed: progress, count: progress, max: progressMax });
 
-      emit({ type: "lead", lead });
-
-      insertBusinessLead(lead).catch((err) => {
-        logger.error("Failed to insert business lead", {
-          searchId,
-          error: err instanceof Error ? err.message : "unknown",
+      void enrichLead(raw, searchId).then((enriched) => {
+        if (enriched.email !== basic.email || enriched.emailSource !== basic.emailSource) {
+          emit({ type: "lead", lead: enriched });
+        }
+        insertBusinessLead(enriched).catch((err) => {
+          logger.error("Failed to insert business lead", {
+            searchId,
+            error: err instanceof Error ? err.message : "unknown",
+          });
         });
       });
 
-      progress++;
-      if (progress % 5 === 0) {
-        emit({ type: "progress", processed: progress, count: progress });
+      if (progress % 3 === 0) {
         updateSearchJob(searchId, { processed: progress, totalFound: progress }).catch(
           () => undefined
         );
@@ -94,14 +100,14 @@ export async function runScraperJob(
       query,
       location,
       onPhase: (phase) => emit({ type: "phase", phase }),
-      onProgress: (count, max) => emit({ type: "progress", count, max }),
+      onProgress: (count, max) => {
+        progressMax = max;
+        emit({ type: "progress", count, max, processed: count });
+      },
       onLead: onBusinessFound,
     });
 
-    if (progress % 5 !== 0) {
-      await updateSearchJob(searchId, { processed: progress, totalFound: progress });
-    }
-
+    await updateSearchJob(searchId, { processed: progress, totalFound: total });
     await markSearchComplete(searchId, total);
     emit({ type: "complete", total });
   } catch (err) {

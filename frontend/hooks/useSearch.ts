@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Lead } from "@/types/lead";
 import {
-  checkBackendReady,
   checkHealth,
   getResults,
+  getSearch,
   startSearch,
   streamResults,
 } from "@/services/api";
+
+const POLL_INTERVAL_MS = 8000;
 
 export function useSearch() {
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -19,6 +21,8 @@ export function useSearch() {
   const [searchMeta, setSearchMeta] = useState({ business: "", location: "" });
   const [totalFound, setTotalFound] = useState(0);
   const cleanupRef = useRef<(() => void) | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const searchIdRef = useRef<string | null>(null);
   const leadIdsRef = useRef<Set<string>>(new Set());
 
   const appendLead = useCallback((lead: Lead) => {
@@ -27,28 +31,86 @@ export function useSearch() {
     setLeads((prev) => [...prev, lead]);
   }, []);
 
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
   const closeStream = useCallback(() => {
     cleanupRef.current?.();
     cleanupRef.current = null;
-  }, []);
+    stopPolling();
+  }, [stopPolling]);
+
+  const syncFromResults = useCallback(async (searchId: string) => {
+    try {
+      const { leads: fetched, total } = await getResults(searchId);
+      if (fetched.length > 0) {
+        for (const lead of fetched) {
+          appendLead(lead);
+        }
+        setTotalFound(total);
+        setProgress(Math.min(100, total > 0 ? (fetched.length / total) * 100 : 0));
+      }
+    } catch {
+      /* polling is best-effort */
+    }
+  }, [appendLead]);
+
+  const startPolling = useCallback(
+    (searchId: string) => {
+      stopPolling();
+      pollRef.current = setInterval(() => {
+        void syncFromResults(searchId);
+        void getSearch(searchId).then((job) => {
+          if (job.status === "completed") {
+            stopPolling();
+            void syncFromResults(searchId).then(() => {
+              setProgress(100);
+              setPhaseMessage(`Search complete — ${job.totalFound} businesses found.`);
+              setIsSearching(false);
+              closeStream();
+            });
+          } else if (job.status === "failed") {
+            stopPolling();
+            setError(job.error ?? "Search failed");
+            setIsSearching(false);
+            closeStream();
+          } else if (job.processed > 0) {
+            setPhaseMessage(`Found ${job.processed} businesses so far…`);
+          }
+        });
+      }, POLL_INTERVAL_MS);
+    },
+    [stopPolling, syncFromResults, closeStream]
+  );
 
   useEffect(() => () => closeStream(), [closeStream]);
 
   const openStream = useCallback(
     (searchId: string) => {
+      searchIdRef.current = searchId;
+      startPolling(searchId);
+
       cleanupRef.current = streamResults(searchId, {
         onStarted: () => {
           setPhaseMessage("Search started — scraping businesses…");
         },
         onPhase: setPhaseMessage,
         onProgress: (count, max) => {
-          setProgress(Math.min(100, max && max > 0 ? (count / max) * 100 : count));
+          setProgress(Math.min(100, max && max > 0 ? (count / max) * 100 : Math.min(count, 99)));
+          if (count > 0) {
+            setPhaseMessage(`Found ${count} businesses so far…`);
+          }
         },
         onLead: appendLead,
         onComplete: (total) => {
           setTotalFound(total);
           setProgress(100);
           setPhaseMessage(`Search complete — ${total} businesses found.`);
+          stopPolling();
           closeStream();
           setTimeout(() => {
             setIsSearching(false);
@@ -56,6 +118,10 @@ export function useSearch() {
           }, 2000);
         },
         onError: (message) => {
+          if (message.includes("Connection lost")) {
+            setPhaseMessage("Stream reconnecting — results still loading…");
+            return;
+          }
           setError(message);
           setIsSearching(false);
           setPhaseMessage(null);
@@ -66,7 +132,7 @@ export function useSearch() {
         },
       });
     },
-    [appendLead, closeStream]
+    [appendLead, closeStream, startPolling, stopPolling]
   );
 
   const runSearch = async (businessType: string, location: string) => {
@@ -83,21 +149,12 @@ export function useSearch() {
     setIsSearching(true);
     leadIdsRef.current.clear();
     setSearchMeta({ business: businessType.trim(), location: location.trim() });
-    setPhaseMessage("Checking backend…");
+    setPhaseMessage("Connecting to backend…");
 
     try {
       const health = await checkHealth();
       if (!health.ok) {
         setError(health.message ?? "Backend is not reachable.");
-        setIsSearching(false);
-        setPhaseMessage(null);
-        return;
-      }
-
-      setPhaseMessage("Checking scraper…");
-      const ready = await checkBackendReady();
-      if (!ready.ok) {
-        setError(ready.message ?? "Scraper is not ready. Try again shortly.");
         setIsSearching(false);
         setPhaseMessage(null);
         return;
@@ -145,6 +202,7 @@ export function useSearch() {
     setError(null);
     setIsSearching(false);
     leadIdsRef.current.clear();
+    searchIdRef.current = null;
   };
 
   return {

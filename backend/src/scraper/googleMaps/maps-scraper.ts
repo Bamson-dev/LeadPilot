@@ -172,7 +172,7 @@ export async function scrapeGoogleMaps(
         seen.add(key);
         count++;
         onProgress?.(count, max);
-        if (onLead) await onLead(lead);
+        if (onLead) void onLead(lead);
       }
     }
 
