@@ -13,55 +13,35 @@ export const app = express();
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
 
-// Health routes first — respond immediately; no env or browser dependency.
+const corsOptions = {
+  origin: [
+    "https://www.leadpilot.live",
+    "https://leadpilot.live",
+    "http://localhost:3000",
+    "http://localhost:3001",
+  ],
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Admin-Secret",
+    "x-paystack-signature",
+  ],
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
+
+// Health routes — CORS applied above so browser fetches from www.leadpilot.live work.
 app.use("/health", healthRouter);
 app.use("/api/health", healthRouter);
 
 let routesRegistered = false;
 
-function getAllowedOrigins(): string[] {
-  const fromEnv = [
-    process.env.FRONTEND_URL,
-    process.env.CORS_ORIGINS?.split(",").map((o) => o.trim()),
-  ]
-    .flat()
-    .filter(Boolean) as string[];
-
-  const defaults = [
-    "https://www.leadpilot.live",
-    "https://leadpilot.live",
-    "http://localhost:3000",
-    "http://localhost:3001",
-  ];
-
-  return [...new Set([...fromEnv, ...defaults])];
-}
-
 function registerRoutes(): void {
   if (routesRegistered) return;
   routesRegistered = true;
-
-  const allowedOrigins = getAllowedOrigins();
-
-  app.use(
-    cors({
-      origin(origin, callback) {
-        if (!origin || allowedOrigins.includes(origin)) {
-          callback(null, true);
-          return;
-        }
-        callback(new Error(`CORS blocked: ${origin}`));
-      },
-      credentials: true,
-      methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-      allowedHeaders: [
-        "Content-Type",
-        "Authorization",
-        "X-Admin-Secret",
-        "x-paystack-signature",
-      ],
-    })
-  );
 
   app.use((_req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
@@ -72,14 +52,6 @@ function registerRoutes(): void {
 
   app.use(express.json({ limit: "1mb" }));
   app.use("/search", rateLimit, searchRouter);
-
-  app.use((err: Error, _req: Request, res: Response, next: NextFunction) => {
-    if (err.message.startsWith("CORS blocked")) {
-      res.status(403).json({ error: "Origin not allowed" });
-      return;
-    }
-    next(err);
-  });
 
   app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
     logger.error("Unhandled error", { message: err.message, stack: err.stack });
@@ -136,7 +108,7 @@ async function start(): Promise<void> {
     logger.info("Backend routes ready", {
       nodeEnv: env.NODE_ENV,
       scraperConcurrency: env.SCRAPER_CONCURRENCY,
-      corsOrigins: getAllowedOrigins(),
+      corsOrigins: corsOptions.origin,
     });
   } catch (err) {
     logger.error("Backend configuration failed — /health works, API routes disabled", {
@@ -144,7 +116,6 @@ async function start(): Promise<void> {
     });
   }
 
-  // Non-blocking: health already accepts traffic while Playwright initializes.
   void initBrowserPoolSafe();
 
   let shuttingDown = false;
