@@ -23,13 +23,17 @@ function buildVerifiedLead(
   lead: BusinessLead,
   verified: string[]
 ): BusinessLead {
-  const primary = verified[0] ?? null;
+  const emails = pickBestEmail(
+    verified.filter(isValidEmail),
+    lead.website
+  );
+  const display = emails.length > 0 ? emails : verified.filter(isValidEmail).slice(0, 2);
   return {
     ...lead,
-    verifiedEmails: verified,
+    verifiedEmails: display,
     predictedEmails: [],
-    email: primary,
-    emailSource: verified.length > 0 ? "website" : "none",
+    email: display.length > 0 ? display.join(", ") : null,
+    emailSource: display.length > 0 ? "website" : "none",
   };
 }
 
@@ -65,7 +69,7 @@ export function rawLeadToBusinessLead(
 
   if (mapsVerified.length > 0) {
     const best = pickBestEmail(mapsVerified, website);
-    return buildVerifiedLead(base, best ? [best] : mapsVerified);
+    return buildVerifiedLead(base, best.length > 0 ? best : mapsVerified);
   }
 
   return base;
@@ -92,8 +96,8 @@ export async function enrichLeadEmail(
 
   const mergedVerified = mergeEmails(mapsVerified, websiteVerified);
   const bestVerified = pickBestEmail(mergedVerified, effectiveWebsite ?? lead.website);
-  if (bestVerified) {
-    return buildVerifiedLead(lead, [bestVerified]);
+  if (bestVerified.length > 0) {
+    return buildVerifiedLead(lead, bestVerified);
   }
 
   if (!effectiveWebsite?.trim() && !lead.website?.trim()) {
@@ -112,7 +116,7 @@ export async function enrichLeadEmail(
     category: lead.category,
   });
 
-  const validPredictions = predictions.filter((p) => isValidEmail(p.email)).slice(0, 1);
+  const validPredictions = predictions.filter((p) => isValidEmail(p.email)).slice(0, 2);
   if (validPredictions.length > 0) {
     return {
       ...lead,
@@ -130,19 +134,17 @@ export async function enrichLeadEmail(
       lead.category,
       lead.name
     ).filter(isValidEmail);
-    const fallbackEmail = pickBestEmail(
+    const fallbackEmails = pickBestEmail(
       fallbackAddresses,
       effectiveWebsite ?? lead.website
     );
-    if (fallbackEmail) {
-      const predictedEmails: PredictedEmail[] = [
-        {
-          email: fallbackEmail,
-          confidence: 78,
-          label: "medium" as const,
-          source: "business_pattern" as const,
-        },
-      ];
+    if (fallbackEmails.length > 0) {
+      const predictedEmails: PredictedEmail[] = fallbackEmails.map((email) => ({
+        email,
+        confidence: 78,
+        label: "medium" as const,
+        source: "business_pattern" as const,
+      }));
       return {
         ...lead,
         verifiedEmails: [],

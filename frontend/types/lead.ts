@@ -26,7 +26,7 @@ export function businessLeadToLead(lead: BusinessLead): Lead {
     lead.verifiedEmails?.length > 0
       ? lead.verifiedEmails
       : lead.email
-        ? [lead.email]
+        ? lead.email.split(/,\s*/).map((e) => e.trim()).filter(Boolean)
         : [];
 
   return {
@@ -34,7 +34,7 @@ export function businessLeadToLead(lead: BusinessLead): Lead {
     search_id: lead.searchId,
     business_name: lead.name,
     phone: lead.phone,
-    email: verified[0] ?? null,
+    email: verified.length > 0 ? verified.join(", ") : null,
     verified_emails: verified,
     predicted_emails: lead.predictedEmails ?? [],
     extracted_email: lead.emailSource === "website" ? verified.join(", ") || null : null,

@@ -36,7 +36,7 @@ export function getAllEmailsForDisplay(
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(addr);
-    if (out.length >= 1) break;
+    if (out.length >= 2) break;
   }
 
   return out;

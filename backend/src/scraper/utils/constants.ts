@@ -19,6 +19,6 @@ export const SEARCH_JOB_TIMEOUT_MS = parseInt(process.env.SEARCH_JOB_TIMEOUT_MS 
 export const EMAIL_FETCH_TIMEOUT_MS = 8000;
 export const EMAIL_REGEX =
   /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-export const MAX_DISPLAY_EMAILS = 1;
+export const MAX_DISPLAY_EMAILS = 2;
 export const MAX_GENERATED_EMAILS = 2;
 export const EMAIL_CRAWL_PATHS = ["/contact", "/about"];

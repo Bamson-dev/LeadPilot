@@ -60,13 +60,15 @@ export function mergeEmails(...inputs: unknown[]): string[] {
   return filterValidEmails([...set]);
 }
 
-/** Single best email for storage and display. */
+/** Top emails for storage (comma-separated) and display. */
 export function formatEmailsForDisplay(
   emails: string[],
   businessWebsite?: string | null,
-  _max = MAX_DISPLAY_EMAILS
+  max = MAX_DISPLAY_EMAILS
 ): string | null {
-  return pickBestEmail(emails, businessWebsite);
+  const picked = pickBestEmail(emails, businessWebsite, max);
+  if (picked.length === 0) return null;
+  return picked.join(", ");
 }
 
 export function parseEmailList(value: string | null | undefined): string[] {

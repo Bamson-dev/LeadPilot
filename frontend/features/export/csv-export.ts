@@ -18,9 +18,9 @@ function leadEmail(lead: Lead | BusinessLead): string {
       out.push(e);
       if (out.length >= 2) break;
     }
-    return out.join(", ");
+    return out.join("; ");
   }
-  return getAllEmailsForDisplay(lead as Lead).join(", ");
+  return getAllEmailsForDisplay(lead as Lead).join("; ");
 }
 
 function toBusinessLead(lead: Lead | BusinessLead): BusinessLead {
@@ -129,7 +129,7 @@ export function leadsToCsv(leads: Lead[]): string {
       bl.category ?? "",
       bl.address ?? "",
       bl.phone ?? "",
-      getAllEmailsForDisplay(bl).join(", "),
+      getAllEmailsForDisplay(bl).join("; "),
       bl.website ?? "",
       bl.rating != null ? String(bl.rating) : "",
       bl.reviews_count != null ? String(bl.reviews_count) : "",

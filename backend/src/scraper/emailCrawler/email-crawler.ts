@@ -60,9 +60,9 @@ export async function crawlEmailForWebsite(
     if (found.length > 0) break;
   }
 
-  const email = pickBestEmail(found, baseUrl);
-  if (email) {
-    return { email, emailSource: "website" };
+  const emails = pickBestEmail(found, baseUrl);
+  if (emails.length > 0) {
+    return { email: emails.join(", "), emailSource: "website" };
   }
 
   return { email: null, emailSource: "none" };

@@ -1,4 +1,5 @@
 import { extractDomainLoose } from "../utils/domain-utils";
+import { MAX_DISPLAY_EMAILS } from "../utils/constants";
 
 const IMAGE_EXTENSIONS = [
   ".png",
@@ -237,41 +238,63 @@ export function filterValidEmails(emails: string[]): string[] {
   return out;
 }
 
-/** Pick one contact email using priority rules. */
+function isContactStyleEmail(local: string): boolean {
+  return CONTACT_PREFIXES.some(
+    (prefix) =>
+      local === prefix ||
+      local.startsWith(`${prefix}.`) ||
+      local.startsWith(`${prefix}+`) ||
+      local.includes(prefix)
+  );
+}
+
+function matchesBusinessDomain(email: string, businessDomain: string): boolean {
+  const emailDomain = email.split("@")[1] ?? "";
+  return (
+    emailDomain === businessDomain ||
+    emailDomain.endsWith(`.${businessDomain}`) ||
+    businessDomain.endsWith(`.${emailDomain}`)
+  );
+}
+
+/** Pick up to MAX_DISPLAY_EMAILS contact emails using priority rules. */
 export function pickBestEmail(
   emails: string[],
-  businessWebsite?: string | null
-): string | null {
+  businessWebsite?: string | null,
+  max = MAX_DISPLAY_EMAILS
+): string[] {
   const valid = filterValidEmails(emails);
-  if (valid.length === 0) return null;
+  if (valid.length === 0) return [];
 
   const businessDomain = businessWebsite
     ? extractDomainLoose(businessWebsite)
     : null;
 
-  const priorityMatch = valid.find((email) => {
-    const local = email.split("@")[0] ?? "";
-    return CONTACT_PREFIXES.some(
-      (prefix) =>
-        local === prefix ||
-        local.startsWith(`${prefix}.`) ||
-        local.startsWith(`${prefix}+`) ||
-        local.includes(prefix)
-    );
-  });
-  if (priorityMatch) return priorityMatch;
+  const contactStyle: string[] = [];
+  const domainMatch: string[] = [];
+  const other: string[] = [];
 
-  if (businessDomain) {
-    const domainMatch = valid.find((email) => {
-      const emailDomain = email.split("@")[1] ?? "";
-      return (
-        emailDomain === businessDomain ||
-        emailDomain.endsWith(`.${businessDomain}`) ||
-        businessDomain.endsWith(`.${emailDomain}`)
-      );
-    });
-    if (domainMatch) return domainMatch;
+  for (const email of valid) {
+    const local = email.split("@")[0] ?? "";
+    if (isContactStyleEmail(local)) {
+      contactStyle.push(email);
+    } else if (businessDomain && matchesBusinessDomain(email, businessDomain)) {
+      domainMatch.push(email);
+    } else {
+      other.push(email);
+    }
   }
 
-  return valid[0];
+  const ordered = [...contactStyle, ...domainMatch, ...other];
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  for (const email of ordered) {
+    if (seen.has(email)) continue;
+    seen.add(email);
+    out.push(email);
+    if (out.length >= max) break;
+  }
+
+  return out;
 }
