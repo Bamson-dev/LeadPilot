@@ -22,7 +22,7 @@ export interface LicenseKey {
 }
 
 export function normalizeLicenseRow(row: Record<string, unknown>): LicenseKey {
-  const license = row as LicenseKey;
+  const license = row as unknown as LicenseKey;
   return {
     ...license,
     search_count:
