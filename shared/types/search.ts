@@ -4,7 +4,7 @@ export interface SearchJob {
   id: string;
   query: string;
   location: string;
-  status: "pending" | "running" | "completed" | "failed";
+  status: "pending" | "queued" | "running" | "completed" | "failed";
   totalFound: number;
   processed: number;
   createdAt: string;
@@ -20,9 +20,12 @@ export interface SearchRequest {
 export interface SearchResponse {
   searchId: string;
   status: string;
+  cached?: boolean;
+  totalFound?: number;
 }
 
 export type StreamEventType =
+  | "started"
   | "lead"
   | "progress"
   | "complete"
@@ -31,9 +34,11 @@ export type StreamEventType =
 
 export interface StreamEvent {
   type: StreamEventType;
+  searchId?: string;
   lead?: BusinessLead;
   count?: number;
   max?: number;
+  processed?: number;
   total?: number;
   message?: string;
   phase?: string;

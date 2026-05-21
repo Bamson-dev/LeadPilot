@@ -1,5 +1,5 @@
 export const MAX_LEADS_PER_SEARCH = 200;
-export const SCRAPE_CONCURRENCY = 3;
+export const SCRAPE_CONCURRENCY = 5;
 export const PLACE_TIMEOUT_MS = 8000;
 export const SIDEBAR_MIN_LISTINGS = 15;
 export const SIDEBAR_SCROLL_MAX_ROUNDS = 48;

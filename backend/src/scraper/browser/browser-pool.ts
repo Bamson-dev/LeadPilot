@@ -34,6 +34,10 @@ export class BrowserPool {
     return chromium.launch(getChromiumLaunchOptions());
   }
 
+  isReady(): boolean {
+    return this.browsers.length > 0 && this.browsers.some((b) => b.isConnected());
+  }
+
   async acquire(): Promise<Browser> {
     while (this.available.length === 0) {
       await new Promise((r) => setTimeout(r, 200));

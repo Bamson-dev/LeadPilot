@@ -12,8 +12,48 @@ import { formatScraperError } from "../scraper/utils/scraper-errors";
 import { logger } from "../utils/logger";
 import { rawLeadToBusinessLead } from "../utils/lead-mapper";
 import { parseMapsEmailsFromLead, resolveLeadEmailFields } from "../scraper/utils/lead-email";
+import type { RawLeadInput } from "../types/scraper";
 
 export type ScrapeEmitter = (event: StreamEvent) => void;
+
+async function enrichLead(raw: RawLeadInput, searchId: string): Promise<BusinessLead> {
+  let lead = rawLeadToBusinessLead(raw, searchId);
+
+  if (lead.website) {
+    try {
+      const crawl = await crawlEmailForWebsite(
+        lead.website,
+        lead.category,
+        lead.name
+      );
+      const mapsEmails = parseMapsEmailsFromLead(raw);
+      const fields = resolveLeadEmailFields({
+        mapsEmails,
+        websiteEmails:
+          crawl.emailSource === "website" && crawl.email
+            ? crawl.email.split(", ")
+            : [],
+        website: lead.website,
+        category: lead.category,
+        businessName: lead.name,
+      });
+      lead = {
+        ...lead,
+        email: fields.email,
+        emailSource:
+          fields.email_source === "extracted"
+            ? "website"
+            : fields.email_source === "generated"
+              ? "generated"
+              : "none",
+      };
+    } catch {
+      // emit lead without email enrichment
+    }
+  }
+
+  return lead;
+}
 
 export async function runScraperJob(
   searchId: string,
@@ -23,58 +63,47 @@ export async function runScraperJob(
 ): Promise<void> {
   const pool = getBrowserPool();
   const browser = await pool.acquire();
-  let processed = 0;
+  let progress = 0;
 
   try {
     await updateSearchJob(searchId, { status: "running" });
+    emit({ type: "started", searchId });
 
-    for await (const raw of scrapeGoogleMaps(browser, {
+    const onBusinessFound = async (raw: RawLeadInput) => {
+      const lead = await enrichLead(raw, searchId);
+
+      emit({ type: "lead", lead });
+
+      insertBusinessLead(lead).catch((err) => {
+        logger.error("Failed to insert business lead", {
+          searchId,
+          error: err instanceof Error ? err.message : "unknown",
+        });
+      });
+
+      progress++;
+      if (progress % 5 === 0) {
+        emit({ type: "progress", processed: progress, count: progress });
+        updateSearchJob(searchId, { processed: progress, totalFound: progress }).catch(
+          () => undefined
+        );
+      }
+    };
+
+    const total = await scrapeGoogleMaps(browser, {
       query,
       location,
       onPhase: (phase) => emit({ type: "phase", phase }),
       onProgress: (count, max) => emit({ type: "progress", count, max }),
-    })) {
-      let lead = rawLeadToBusinessLead(raw, searchId);
+      onLead: onBusinessFound,
+    });
 
-      if (lead.website) {
-        const crawl = await crawlEmailForWebsite(
-          lead.website,
-          lead.category,
-          lead.name
-        );
-        const mapsEmails = parseMapsEmailsFromLead(raw);
-        const fields = resolveLeadEmailFields({
-          mapsEmails,
-          websiteEmails:
-            crawl.emailSource === "website" && crawl.email
-              ? crawl.email.split(", ")
-              : [],
-          website: lead.website,
-          category: lead.category,
-          businessName: lead.name,
-        });
-        lead = {
-          ...lead,
-          email: fields.email,
-          emailSource:
-            fields.email_source === "extracted"
-              ? "website"
-              : fields.email_source === "generated"
-                ? "generated"
-                : "none",
-        };
-      }
-
-      await insertBusinessLead(lead);
-      processed++;
-      if (processed % 10 === 0) {
-        await updateSearchJob(searchId, { processed, totalFound: processed });
-      }
-      emit({ type: "lead", lead });
+    if (progress % 5 !== 0) {
+      await updateSearchJob(searchId, { processed: progress, totalFound: progress });
     }
 
-    await markSearchComplete(searchId, processed);
-    emit({ type: "complete", total: processed });
+    await markSearchComplete(searchId, total);
+    emit({ type: "complete", total });
   } catch (err) {
     const message = formatScraperError(err);
     logger.error("Scraper job failed", { searchId, message });
@@ -85,3 +114,5 @@ export async function runScraperJob(
     pool.release(browser);
   }
 }
+
+export const runSearch = runScraperJob;

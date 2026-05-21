@@ -9,19 +9,32 @@ import {
   MAX_LEADS_PER_SEARCH,
   PLACE_PAGE_TIMEOUT_MS,
   PLACE_TIMEOUT_MS,
-  SCRAPE_CONCURRENCY,
   SIDEBAR_SCROLL_MAX_ROUNDS,
   SIDEBAR_SCROLL_WAIT_MS,
   SIDEBAR_STABLE_ROUNDS,
 } from "../utils/constants";
 
 const SIDEBAR_ARTICLE = 'div[role="feed"] [role="article"]';
+const BATCH_SIZE = 5;
+const TIMEOUT_MS = 8000;
 
 export interface MapsScrapeOptions {
   query: string;
   location: string;
   onPhase?: (message: string) => void;
   onProgress?: (count: number, max: number) => void;
+  onLead?: (lead: RawLeadInput) => void | Promise<void>;
+}
+
+async function processWithTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  fallback: T
+): Promise<T> {
+  const timeout = new Promise<T>((resolve) =>
+    setTimeout(() => resolve(fallback), timeoutMs)
+  );
+  return Promise.race([promise, timeout]);
 }
 
 async function dismissConsent(page: Page): Promise<void> {
@@ -46,7 +59,9 @@ async function scrollSidebar(page: Page, onPhase?: (m: string) => void): Promise
 
   for (let i = 0; i < SIDEBAR_SCROLL_MAX_ROUNDS; i++) {
     try {
-      await feed.evaluate((el: HTMLElement) => { el.scrollTop = el.scrollHeight; });
+      await feed.evaluate((el: HTMLElement) => {
+        el.scrollTop = el.scrollHeight;
+      });
     } catch {
       await page.mouse.wheel(0, 1600);
     }
@@ -78,24 +93,19 @@ async function collectPlaceUrls(page: Page): Promise<string[]> {
   });
 }
 
-async function scrapePlace(
+async function extractBusinessDetails(
   context: BrowserContext,
   placeUrl: string,
   searchTerm: string
 ): Promise<RawLeadInput | null> {
   const page = await context.newPage();
   try {
-    return await Promise.race([
-      (async () => {
-        await gotoWithRetry(page, placeUrl, { timeout: PLACE_PAGE_TIMEOUT_MS, retries: 1 });
-        await dismissConsent(page);
-        await page.waitForTimeout(DETAIL_PANEL_WAIT_MS);
-        if (!(await waitForDetailPanel(page, 6000))) return null;
-        const lead = await buildLeadFromPanel(page, searchTerm, placeUrl);
-        return lead ? sanitizeLead(lead) : null;
-      })(),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), PLACE_TIMEOUT_MS)),
-    ]);
+    await gotoWithRetry(page, placeUrl, { timeout: PLACE_PAGE_TIMEOUT_MS, retries: 1 });
+    await dismissConsent(page);
+    await page.waitForTimeout(DETAIL_PANEL_WAIT_MS);
+    if (!(await waitForDetailPanel(page, 6000))) return null;
+    const lead = await buildLeadFromPanel(page, searchTerm, placeUrl);
+    return lead ? sanitizeLead(lead) : null;
   } catch (err) {
     logger.warn("Place scrape failed", {
       url: placeUrl.slice(0, 80),
@@ -107,11 +117,11 @@ async function scrapePlace(
   }
 }
 
-export async function* scrapeGoogleMaps(
+export async function scrapeGoogleMaps(
   browser: Browser,
   options: MapsScrapeOptions
-): AsyncGenerator<RawLeadInput> {
-  const { query, location, onPhase, onProgress } = options;
+): Promise<number> {
+  const { query, location, onPhase, onProgress, onLead } = options;
   const context = await browser.newContext({
     userAgent:
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
@@ -124,6 +134,8 @@ export async function* scrapeGoogleMaps(
 
   const searchPage = await context.newPage();
   const searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(`${query} in ${location}`)}`;
+  const seen = new Set<string>();
+  let count = 0;
 
   try {
     await gotoWithRetry(searchPage, searchUrl, { timeout: 45000, retries: 2 });
@@ -131,35 +143,70 @@ export async function* scrapeGoogleMaps(
     onPhase?.("Opening discovery feed…");
     await scrollSidebar(searchPage, onPhase);
 
-    const listings = (await collectPlaceUrls(searchPage)).slice(0, MAX_LEADS_PER_SEARCH);
-    if (listings.length === 0) {
+    const businessUrls = (await collectPlaceUrls(searchPage)).slice(0, MAX_LEADS_PER_SEARCH);
+    if (businessUrls.length === 0) {
       throw new Error("No businesses found. Try a different niche or location.");
     }
 
-    const max = listings.length;
-    const seen = new Set<string>();
-    let count = 0;
+    const max = businessUrls.length;
     onProgress?.(0, max);
     onPhase?.("Streaming prospects to your table…");
 
-    for (let i = 0; i < listings.length; i += SCRAPE_CONCURRENCY) {
-      const batch = listings.slice(i, i + SCRAPE_CONCURRENCY);
-      const results = await Promise.all(
-        batch.map((url) => scrapePlace(context, url, query))
+    for (let i = 0; i < businessUrls.length; i += BATCH_SIZE) {
+      const batch = businessUrls.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map((url) =>
+          processWithTimeout(
+            extractBusinessDetails(context, url, query),
+            TIMEOUT_MS,
+            null
+          )
+        )
       );
 
-      for (const lead of results) {
-        if (!lead) continue;
+      for (const result of results) {
+        if (result.status !== "fulfilled" || !result.value) continue;
+        const lead = result.value;
         const key = dedupeKey(lead);
         if (seen.has(key)) continue;
         seen.add(key);
         count++;
         onProgress?.(count, max);
-        yield lead;
+        if (onLead) await onLead(lead);
       }
     }
+
+    return count;
   } finally {
     await searchPage.close().catch(() => undefined);
     await context.close().catch(() => undefined);
   }
+}
+
+/** Async generator wrapper for backward compatibility. */
+export async function* scrapeGoogleMapsStream(
+  browser: Browser,
+  options: MapsScrapeOptions
+): AsyncGenerator<RawLeadInput> {
+  const buffer: RawLeadInput[] = [];
+  let done = false;
+
+  const scrapePromise = scrapeGoogleMaps(browser, {
+    ...options,
+    onLead: (lead) => {
+      buffer.push(lead);
+    },
+  }).then(() => {
+    done = true;
+  });
+
+  while (!done || buffer.length > 0) {
+    if (buffer.length > 0) {
+      yield buffer.shift()!;
+    } else {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+  }
+
+  await scrapePromise;
 }

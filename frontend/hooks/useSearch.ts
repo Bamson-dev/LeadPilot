@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Lead } from "@/types/lead";
-import { checkBackendReady, checkHealth, startSearch, streamResults } from "@/services/api";
+import {
+  checkBackendReady,
+  checkHealth,
+  getResults,
+  startSearch,
+  streamResults,
+} from "@/services/api";
 
 export function useSearch() {
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -11,48 +17,57 @@ export function useSearch() {
   const [error, setError] = useState<string | null>(null);
   const [phaseMessage, setPhaseMessage] = useState<string | null>(null);
   const [searchMeta, setSearchMeta] = useState({ business: "", location: "" });
+  const [totalFound, setTotalFound] = useState(0);
   const cleanupRef = useRef<(() => void) | null>(null);
-  const batchRef = useRef<Lead[]>([]);
-  const batchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const leadIdsRef = useRef<Set<string>>(new Set());
 
-  const flushBatch = useCallback(() => {
-    if (batchRef.current.length === 0) return;
-    const batch = batchRef.current;
-    batchRef.current = [];
-    setLeads((prev) => {
-      const next = [...prev];
-      for (const lead of batch) {
-        if (!leadIdsRef.current.has(lead.id)) {
-          leadIdsRef.current.add(lead.id);
-          next.push(lead);
-        }
-      }
-      return next;
-    });
+  const appendLead = useCallback((lead: Lead) => {
+    if (leadIdsRef.current.has(lead.id)) return;
+    leadIdsRef.current.add(lead.id);
+    setLeads((prev) => [...prev, lead]);
   }, []);
-
-  const scheduleBatch = useCallback(
-    (lead: Lead) => {
-      if (leadIdsRef.current.has(lead.id)) return;
-      batchRef.current.push(lead);
-      if (batchTimerRef.current) clearTimeout(batchTimerRef.current);
-      batchTimerRef.current = setTimeout(flushBatch, 200);
-    },
-    [flushBatch]
-  );
 
   const closeStream = useCallback(() => {
     cleanupRef.current?.();
     cleanupRef.current = null;
-    if (batchTimerRef.current) {
-      clearTimeout(batchTimerRef.current);
-      batchTimerRef.current = null;
-    }
-    flushBatch();
-  }, [flushBatch]);
+  }, []);
 
   useEffect(() => () => closeStream(), [closeStream]);
+
+  const openStream = useCallback(
+    (searchId: string) => {
+      cleanupRef.current = streamResults(searchId, {
+        onStarted: () => {
+          setPhaseMessage("Search started — scraping businesses…");
+        },
+        onPhase: setPhaseMessage,
+        onProgress: (count, max) => {
+          setProgress(Math.min(100, max && max > 0 ? (count / max) * 100 : count));
+        },
+        onLead: appendLead,
+        onComplete: (total) => {
+          setTotalFound(total);
+          setProgress(100);
+          setPhaseMessage(`Search complete — ${total} businesses found.`);
+          closeStream();
+          setTimeout(() => {
+            setIsSearching(false);
+            setPhaseMessage(null);
+          }, 2000);
+        },
+        onError: (message) => {
+          setError(message);
+          setIsSearching(false);
+          setPhaseMessage(null);
+          closeStream();
+        },
+        onReconnecting: (attempt) => {
+          setPhaseMessage(`Connection interrupted — reconnecting (${attempt}/3)…`);
+        },
+      });
+    },
+    [appendLead, closeStream]
+  );
 
   const runSearch = async (businessType: string, location: string) => {
     if (!businessType.trim() || !location.trim()) {
@@ -64,6 +79,7 @@ export function useSearch() {
     setError(null);
     setLeads([]);
     setProgress(0);
+    setTotalFound(0);
     setIsSearching(true);
     leadIdsRef.current.clear();
     setSearchMeta({ business: businessType.trim(), location: location.trim() });
@@ -88,28 +104,31 @@ export function useSearch() {
       }
 
       setPhaseMessage("Starting discovery…");
-      const { searchId } = await startSearch(businessType.trim(), location.trim());
+      const response = await startSearch(businessType.trim(), location.trim());
 
-      cleanupRef.current = streamResults(searchId, {
-        onPhase: setPhaseMessage,
-        onProgress: (count, max) => {
-          setProgress(Math.min(100, max > 0 ? (count / max) * 100 : 0));
-        },
-        onLead: scheduleBatch,
-        onComplete: () => {
-          flushBatch();
-          setProgress(100);
-          setPhaseMessage(null);
-          closeStream();
-          setTimeout(() => setIsSearching(false), 1500);
-        },
-        onError: (message) => {
-          setError(message);
+      if (response.cached && response.status === "completed") {
+        setPhaseMessage("Loading cached results…");
+        const { leads: cachedLeads, total } = await getResults(response.searchId);
+        leadIdsRef.current.clear();
+        for (const lead of cachedLeads) {
+          leadIdsRef.current.add(lead.id);
+        }
+        setLeads(cachedLeads);
+        setTotalFound(total);
+        setProgress(100);
+        setPhaseMessage(`Loaded ${total} cached results instantly.`);
+        setTimeout(() => {
           setIsSearching(false);
           setPhaseMessage(null);
-          closeStream();
-        },
-      });
+        }, 2000);
+        return;
+      }
+
+      if (response.status === "queued") {
+        setPhaseMessage("Your search is queued — results will appear shortly…");
+      }
+
+      openStream(response.searchId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start search.");
       setIsSearching(false);
@@ -122,6 +141,7 @@ export function useSearch() {
     closeStream();
     setLeads([]);
     setProgress(0);
+    setTotalFound(0);
     setError(null);
     setIsSearching(false);
     leadIdsRef.current.clear();
@@ -134,6 +154,7 @@ export function useSearch() {
     error,
     phaseMessage,
     searchMeta,
+    totalFound,
     runSearch,
     clearResults,
     closeStream,

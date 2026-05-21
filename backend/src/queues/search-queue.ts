@@ -1,4 +1,5 @@
 import { getEnv } from "../config/env";
+import { markSearchFailed } from "../database/search-repository";
 import { logger } from "../utils/logger";
 import { runScraperJob, type ScrapeEmitter } from "../services/scraper-service";
 
@@ -7,11 +8,10 @@ interface QueueJob {
   query: string;
   location: string;
   emit: ScrapeEmitter;
-  retries: number;
+  resolve: () => void;
+  reject: (err: Error) => void;
 }
 
-const queue: QueueJob[] = [];
-let active = 0;
 const subscribers = new Map<string, Set<ScrapeEmitter>>();
 
 export function subscribeToSearch(searchId: string, emit: ScrapeEmitter): () => void {
@@ -34,44 +34,78 @@ function broadcast(searchId: string, event: Parameters<ScrapeEmitter>[0]): void 
   });
 }
 
+class SearchQueue {
+  private queue: QueueJob[] = [];
+  private running = 0;
+  private readonly maxConcurrent: number;
+
+  constructor(maxConcurrent = 5) {
+    this.maxConcurrent = maxConcurrent;
+  }
+
+  async add(
+    searchId: string,
+    query: string,
+    location: string,
+    emit: ScrapeEmitter
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.queue.push({ searchId, query, location, emit, resolve, reject });
+      void this.process();
+    });
+  }
+
+  private async process(): Promise<void> {
+    if (this.running >= this.maxConcurrent || this.queue.length === 0) return;
+
+    const job = this.queue.shift()!;
+    this.running++;
+
+    try {
+      await runScraperJob(job.searchId, job.query, job.location, job.emit);
+      job.resolve();
+    } catch (err) {
+      job.reject(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      this.running--;
+      void this.process();
+    }
+  }
+
+  getStatus() {
+    return {
+      running: this.running,
+      queued: this.queue.length,
+      maxConcurrent: this.maxConcurrent,
+    };
+  }
+
+  getQueuePosition(searchId: string): number | null {
+    const idx = this.queue.findIndex((j) => j.searchId === searchId);
+    return idx >= 0 ? idx + 1 : null;
+  }
+}
+
+export const searchQueue = new SearchQueue(
+  parseInt(process.env.SCRAPER_CONCURRENCY || "5", 10)
+);
+
 export function enqueueSearch(
   searchId: string,
   query: string,
   location: string
 ): void {
   const emit: ScrapeEmitter = (event) => broadcast(searchId, event);
-  queue.push({ searchId, query, location, emit, retries: 0 });
-  void drainQueue();
+
+  searchQueue.add(searchId, query, location, emit).catch((err) => {
+    logger.error("Search queue error", {
+      searchId,
+      error: err.message,
+    });
+    markSearchFailed(searchId, err.message).catch(() => undefined);
+  });
 }
 
-async function drainQueue(): Promise<void> {
-  const maxConcurrency = getEnv().SCRAPER_CONCURRENCY;
-  while (queue.length > 0 && active < maxConcurrency) {
-    const job = queue.shift();
-    if (!job) break;
-    active++;
-    void processJob(job).finally(() => {
-      active--;
-      void drainQueue();
-    });
-  }
-}
-
-async function processJob(job: QueueJob): Promise<void> {
-  try {
-    await runScraperJob(job.searchId, job.query, job.location, job.emit);
-  } catch (err) {
-    if (job.retries < 2) {
-      const delay = Math.pow(2, job.retries) * 1000;
-      logger.warn("Retrying search job", { searchId: job.searchId, retry: job.retries + 1 });
-      await new Promise((r) => setTimeout(r, delay));
-      queue.push({ ...job, retries: job.retries + 1 });
-      void drainQueue();
-      return;
-    }
-    logger.error("Search job failed after retries", {
-      searchId: job.searchId,
-      error: err instanceof Error ? err.message : "unknown",
-    });
-  }
+export function getQueuePosition(searchId: string): number | null {
+  return searchQueue.getQueuePosition(searchId);
 }

@@ -89,7 +89,7 @@ export async function getSearch(id: string): Promise<SearchJob> {
 export async function getResults(
   id: string,
   page = 1,
-  limit = 50
+  limit = 200
 ): Promise<{ leads: Lead[]; total: number }> {
   const res = await fetch(
     `${getApiUrl()}/search/${id}/results?page=${page}&limit=${limit}`,
@@ -107,36 +107,62 @@ export async function getResults(
 
 export interface StreamCallbacks {
   onLead: (lead: Lead) => void;
-  onProgress: (count: number, max: number) => void;
+  onProgress: (count: number, max?: number) => void;
   onComplete: (total: number) => void;
   onError: (message: string) => void;
   onPhase?: (phase: string) => void;
+  onStarted?: () => void;
+  onReconnecting?: (attempt: number) => void;
 }
+
+const MAX_RECONNECT_ATTEMPTS = 3;
+const RECONNECT_DELAY_MS = 3000;
 
 export function streamResults(
   searchId: string,
   callbacks: StreamCallbacks
 ): () => void {
-  const es = new EventSource(`${getApiUrl()}/search/${searchId}/stream`);
   let completed = false;
+  let reconnectAttempts = 0;
+  let es: EventSource | null = null;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-  es.onmessage = (event) => {
+  const cleanup = () => {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    if (es) {
+      es.close();
+      es = null;
+    }
+  };
+
+  const handleMessage = (event: MessageEvent) => {
     try {
       const payload = JSON.parse(event.data) as {
         type: string;
         lead?: BusinessLead;
         count?: number;
         max?: number;
+        processed?: number;
         total?: number;
         message?: string;
         phase?: string;
+        searchId?: string;
       };
 
+      if (payload.type === "started") {
+        callbacks.onStarted?.();
+        callbacks.onPhase?.("Search started — finding businesses…");
+      }
       if (payload.type === "phase" && payload.phase) {
         callbacks.onPhase?.(payload.phase);
       }
-      if (payload.type === "progress" && payload.count != null && payload.max) {
-        callbacks.onProgress(payload.count, payload.max);
+      if (payload.type === "progress") {
+        const count = payload.processed ?? payload.count ?? 0;
+        const max = payload.max ?? count;
+        callbacks.onProgress(count, max);
       }
       if (payload.type === "lead" && payload.lead) {
         callbacks.onLead(businessLeadToLead(payload.lead));
@@ -144,33 +170,48 @@ export function streamResults(
       if (payload.type === "complete" && payload.total != null) {
         completed = true;
         callbacks.onComplete(payload.total);
-        es.close();
+        cleanup();
       }
       if (payload.type === "error") {
         completed = true;
         callbacks.onError(payload.message ?? "Search failed");
-        es.close();
+        cleanup();
       }
     } catch {
       if (!completed) {
         completed = true;
         callbacks.onError("Invalid stream data");
-        es.close();
+        cleanup();
       }
     }
   };
 
-  es.onerror = () => {
-    if (!completed) {
-      completed = true;
-      callbacks.onError("Connection lost during search. Retry in a moment.");
-      es.close();
-    }
+  const connect = () => {
+    cleanup();
+    es = new EventSource(`${getApiUrl()}/search/${searchId}/stream`);
+    es.onmessage = handleMessage;
+    es.onerror = () => {
+      if (completed) {
+        cleanup();
+        return;
+      }
+      cleanup();
+      reconnectAttempts++;
+      if (reconnectAttempts <= MAX_RECONNECT_ATTEMPTS) {
+        callbacks.onReconnecting?.(reconnectAttempts);
+        reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS);
+      } else {
+        completed = true;
+        callbacks.onError("Connection lost after multiple retries. Please try again.");
+      }
+    };
   };
+
+  connect();
 
   return () => {
     completed = true;
-    es.close();
+    cleanup();
   };
 }
 

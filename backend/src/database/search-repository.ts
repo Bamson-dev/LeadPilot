@@ -71,13 +71,21 @@ function mapBusinessLead(row: DbBusinessLead): BusinessLead {
   };
 }
 
+function normalizeSearchText(value: string): string {
+  return value.toLowerCase().trim();
+}
+
 export async function createSearchJob(
   query: string,
   location: string
 ): Promise<SearchJob> {
   const { data, error } = await supabase
     .from("search_jobs")
-    .insert({ query, location, status: "pending" })
+    .insert({
+      query: normalizeSearchText(query),
+      location: normalizeSearchText(location),
+      status: "pending",
+    })
     .select("*")
     .single();
 
@@ -220,4 +228,58 @@ export async function markSearchComplete(
 
 export async function markSearchFailed(id: string, errorMessage: string): Promise<void> {
   await updateSearchJob(id, { status: "failed", error: errorMessage });
+}
+
+/** Copy cached leads into a new search job (new IDs). */
+export async function copyLeadsToSearch(
+  searchId: string,
+  leads: BusinessLead[]
+): Promise<void> {
+  const { randomUUID } = await import("crypto");
+  const copied = leads.map((lead) => ({
+    id: randomUUID(),
+    search_id: searchId,
+    name: lead.name,
+    category: lead.category,
+    address: lead.address,
+    phone: lead.phone,
+    email: lead.email,
+    email_source:
+      lead.emailSource === "website"
+        ? "extracted"
+        : lead.emailSource === "generated"
+          ? "generated"
+          : "none",
+    website: lead.website,
+    rating: lead.rating,
+    review_count: lead.reviewCount,
+    google_maps_url: lead.googleMapsUrl,
+    has_website: lead.hasWebsite,
+    has_instagram: lead.hasInstagram,
+  }));
+
+  await insertBusinessLeads(
+    copied.map((row) => ({
+      id: row.id,
+      searchId: row.search_id,
+      name: row.name,
+      category: row.category ?? "",
+      address: row.address ?? "",
+      phone: row.phone,
+      email: row.email,
+      emailSource:
+        row.email_source === "extracted"
+          ? "website"
+          : row.email_source === "generated"
+            ? "generated"
+            : "none",
+      website: row.website,
+      rating: row.rating,
+      reviewCount: row.review_count,
+      googleMapsUrl: row.google_maps_url,
+      hasWebsite: row.has_website,
+      hasInstagram: row.has_instagram,
+      createdAt: new Date().toISOString(),
+    }))
+  );
 }

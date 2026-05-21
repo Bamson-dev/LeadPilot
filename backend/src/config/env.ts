@@ -6,7 +6,7 @@ const envSchema = z
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
     SUPABASE_URL: z.string().url(),
     SUPABASE_SERVICE_KEY: z.string().min(20),
-    SCRAPER_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(3),
+    SCRAPER_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(5),
     FRONTEND_URL: z.string().url(),
     CORS_ORIGINS: z.string().optional(),
     RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),

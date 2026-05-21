@@ -2,11 +2,14 @@ import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import type { SearchResponse } from "@leadpilot/shared";
 import {
+  copyLeadsToSearch,
   createSearchJob,
   getSearchJob,
   getSearchResults,
+  markSearchComplete,
 } from "../database/search-repository";
-import { enqueueSearch, subscribeToSearch } from "../queues/search-queue";
+import { getCachedResults } from "../services/cache-service";
+import { enqueueSearch, getQueuePosition, searchQueue, subscribeToSearch } from "../queues/search-queue";
 import { logger } from "../utils/logger";
 
 const searchBodySchema = z.object({
@@ -16,23 +19,45 @@ const searchBodySchema = z.object({
 
 export const searchRouter = Router();
 
+searchRouter.get("/queue/status", (_req: Request, res: Response) => {
+  res.json(searchQueue.getStatus());
+});
+
 searchRouter.post("/", async (req: Request, res: Response) => {
   try {
     const parsed = searchBodySchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: "Invalid search. Provide query and location." });
+      res.status(400).json({ error: "query and location are required" });
       return;
     }
 
-    const { query, location } = parsed.data;
-    const job = await createSearchJob(query.trim(), location.trim());
-    enqueueSearch(job.id, job.query, job.location);
+    const query = parsed.data.query.trim();
+    const location = parsed.data.location.trim();
 
-    const response: SearchResponse = {
-      searchId: job.id,
-      status: job.status,
-    };
-    res.status(201).json(response);
+    const cachedResults = await getCachedResults(query, location);
+    if (cachedResults && cachedResults.length > 0) {
+      const searchJob = await createSearchJob(query, location);
+      await copyLeadsToSearch(searchJob.id, cachedResults);
+      await markSearchComplete(searchJob.id, cachedResults.length);
+
+      const response: SearchResponse = {
+        searchId: searchJob.id,
+        status: "completed",
+        cached: true,
+        totalFound: cachedResults.length,
+      };
+      res.status(201).json(response);
+      return;
+    }
+
+    const searchJob = await createSearchJob(query, location);
+
+    res.status(201).json({
+      searchId: searchJob.id,
+      status: "queued",
+    } satisfies SearchResponse);
+
+    enqueueSearch(searchJob.id, query, location);
   } catch (err) {
     logger.error("POST /search failed", {
       error: err instanceof Error ? err.message : "unknown",
@@ -49,7 +74,11 @@ searchRouter.get("/:id", async (req: Request, res: Response) => {
       res.status(404).json({ error: "Search not found" });
       return;
     }
-    res.json(job);
+    const position = getQueuePosition(id);
+    res.json({
+      ...job,
+      queuePosition: position,
+    });
   } catch (err) {
     logger.error("GET /search/:id failed", {
       error: err instanceof Error ? err.message : "unknown",
@@ -62,7 +91,7 @@ searchRouter.get("/:id/results", async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
     const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? "50"), 10) || 50));
+    const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit ?? "50"), 10) || 50));
     const { leads, total } = await getSearchResults(id, page, limit);
     res.json({ leads, total, page, limit });
   } catch (err) {
@@ -93,17 +122,17 @@ searchRouter.get("/:id/stream", async (req: Request, res: Response) => {
       res.write(`data: ${JSON.stringify(data)}\n\n`);
     };
 
-    send({ type: "progress", count: job.processed, max: job.totalFound || 200 });
+    send({ type: "started", searchId });
 
     const heartbeat = setInterval(() => {
       res.write(": heartbeat\n\n");
-    }, 15000);
+    }, 5000);
 
     const unsubscribe = subscribeToSearch(searchId, (event) => {
       send(event);
       if (event.type === "complete" || event.type === "error") {
         clearInterval(heartbeat);
-        res.end();
+        if (!res.writableEnded) res.end();
       }
     });
 
@@ -121,6 +150,14 @@ searchRouter.get("/:id/stream", async (req: Request, res: Response) => {
       unsubscribe();
       res.end();
       return;
+    }
+
+    const position = getQueuePosition(searchId);
+    if (position != null) {
+      send({
+        type: "phase",
+        phase: `Your search is queued (position ${position}). Results will appear shortly.`,
+      });
     }
 
     req.on("close", () => {
