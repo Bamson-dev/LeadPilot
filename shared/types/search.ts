@@ -22,6 +22,7 @@ export interface SearchResponse {
   status: string;
   cached?: boolean;
   totalFound?: number;
+  searchesRemaining?: number;
 }
 
 export type StreamEventType =

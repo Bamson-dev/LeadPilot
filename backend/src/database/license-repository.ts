@@ -162,3 +162,96 @@ export function truncateLicenseKey(key: string): string {
   if (key.length <= 12) return key;
   return `${key.slice(0, 12)}...`;
 }
+
+export async function getLicenseByKeyAndEmail(
+  key: string,
+  email: string
+): Promise<LicenseKey | null> {
+  const normalizedKey = key.trim().toUpperCase();
+  const normalizedEmail = email.toLowerCase().trim();
+
+  const { data, error } = await supabase
+    .from("license_keys")
+    .select("*")
+    .eq("key", normalizedKey)
+    .eq("email", normalizedEmail)
+    .eq("activated", true)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data ? normalizeLicenseRow(data as Record<string, unknown>) : null;
+}
+
+export async function checkAndIncrementSearchCount(licenseId: string): Promise<{
+  allowed: boolean;
+  remaining: number;
+  reason?: string;
+}> {
+  const { data, error } = await supabase
+    .from("license_keys")
+    .select(
+      "search_count, monthly_search_limit, is_suspended, suspension_reason, last_reset_at"
+    )
+    .eq("id", licenseId)
+    .single();
+
+  if (error || !data) {
+    return { allowed: false, remaining: 0, reason: "License not found" };
+  }
+
+  if (data.is_suspended) {
+    return {
+      allowed: false,
+      remaining: 0,
+      reason:
+        (data.suspension_reason as string | null) ||
+        "Account suspended. Contact support.",
+    };
+  }
+
+  const lastReset = new Date(data.last_reset_at as string);
+  const now = new Date();
+  const daysSinceReset =
+    (now.getTime() - lastReset.getTime()) / (1000 * 60 * 60 * 24);
+
+  let currentCount = (data.search_count as number) ?? 0;
+  const monthlyLimit = (data.monthly_search_limit as number) ?? 100;
+
+  if (daysSinceReset >= 30) {
+    await supabase
+      .from("license_keys")
+      .update({ search_count: 0, last_reset_at: now.toISOString() })
+      .eq("id", licenseId);
+    currentCount = 0;
+  }
+
+  const remaining = monthlyLimit - currentCount;
+
+  if (remaining <= 0) {
+    const resetDate = new Date(lastReset);
+    resetDate.setDate(resetDate.getDate() + 30);
+    const resetDateStr = resetDate.toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+    return {
+      allowed: false,
+      remaining: 0,
+      reason: `Monthly search limit reached. Your ${monthlyLimit} searches reset on ${resetDateStr}.`,
+    };
+  }
+
+  const { error: rpcError } = await supabase.rpc("increment_search_count", {
+    license_id: licenseId,
+  });
+
+  if (rpcError) {
+    await supabase
+      .from("license_keys")
+      .update({ search_count: currentCount + 1 })
+      .eq("id", licenseId);
+  }
+
+  return { allowed: true, remaining: remaining - 1 };
+}

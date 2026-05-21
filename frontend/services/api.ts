@@ -8,6 +8,18 @@ export interface HealthStatus {
   message?: string;
 }
 
+function getLicenseHeaders(): HeadersInit {
+  const email =
+    typeof window !== "undefined" ? localStorage.getItem("leadpilot_email") || "" : "";
+  const key =
+    typeof window !== "undefined" ? localStorage.getItem("leadpilot_key") || "" : "";
+  return {
+    "Content-Type": "application/json",
+    "x-license-key": key,
+    "x-license-email": email,
+  };
+}
+
 export async function checkHealth(): Promise<HealthStatus> {
   try {
     const res = await fetch(`${getApiUrl()}/health`, {
@@ -75,10 +87,30 @@ export async function startSearch(
 ): Promise<SearchResponse> {
   const res = await fetch(`${getApiUrl()}/search`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: getLicenseHeaders(),
     body: JSON.stringify({ query, location }),
   });
-  return parseJson<SearchResponse>(res);
+
+  if (res.status === 401) {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("leadpilot_email");
+      localStorage.removeItem("leadpilot_key");
+      window.location.href = "/activate";
+    }
+    throw new Error("Invalid license");
+  }
+
+  if (res.status === 429) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error || "Monthly search limit reached");
+  }
+
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error ?? "Failed to start search");
+  }
+
+  return res.json() as Promise<SearchResponse>;
 }
 
 export async function getSearch(id: string): Promise<SearchJob> {
@@ -143,6 +175,7 @@ export function streamResults(
       const payload = JSON.parse(event.data) as {
         type: string;
         lead?: BusinessLead;
+        data?: BusinessLead;
         count?: number;
         max?: number;
         processed?: number;
@@ -164,8 +197,9 @@ export function streamResults(
         const max = payload.max ?? count;
         callbacks.onProgress(count, max);
       }
-      if (payload.type === "lead" && payload.lead) {
-        callbacks.onLead(businessLeadToLead(payload.lead));
+      if (payload.type === "lead") {
+        const raw = payload.lead ?? payload.data;
+        if (raw) callbacks.onLead(businessLeadToLead(raw));
       }
       if (payload.type === "complete" && payload.total != null) {
         completed = true;
@@ -202,7 +236,7 @@ export function streamResults(
         reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS);
       } else {
         completed = true;
-        callbacks.onError("Connection lost after multiple retries. Please try again.");
+        callbacks.onError("Connection lost. Please try your search again.");
       }
     };
   };

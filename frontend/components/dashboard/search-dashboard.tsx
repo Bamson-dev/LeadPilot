@@ -22,8 +22,10 @@ export function SearchDashboard() {
     isSearching,
     progress,
     error,
+    showLimitMessage,
     phaseMessage,
     searchMeta,
+    searchesRemaining,
     runSearch,
     clearResults,
     closeStream,
@@ -69,6 +71,12 @@ export function SearchDashboard() {
           </div>
         </div>
 
+        {searchesRemaining !== null && (
+          <p className="mt-4 text-sm text-[#6B6B80]">
+            {searchesRemaining} searches remaining this month
+          </p>
+        )}
+
         <div className="mt-4 flex flex-wrap gap-3">
           <Button variant="glow" onClick={handleSearch} disabled={isSearching}>
             {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
@@ -91,6 +99,12 @@ export function SearchDashboard() {
             className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3"
           >
             <p className="text-sm text-red-300">{error}</p>
+            {showLimitMessage && (
+              <p className="mt-2 text-sm text-[#A1A1B5]">
+                You have used all your searches for this month. Your searches reset on the
+                date shown above. Contact support to increase your limit.
+              </p>
+            )}
           </div>
         )}
       </div>

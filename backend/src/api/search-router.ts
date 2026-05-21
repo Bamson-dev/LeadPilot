@@ -9,7 +9,15 @@ import {
   markSearchComplete,
 } from "../database/search-repository";
 import { getCachedResults } from "../services/cache-service";
-import { enqueueSearch, getQueuePosition, searchQueue, subscribeToSearch } from "../queues/search-queue";
+import { enqueueSearch, getQueuePosition, searchQueue } from "../queues/search-queue";
+import { checkSearchLimit } from "../middleware/check-search-limit";
+import { trackSearch } from "../services/abuse-detection";
+import {
+  emitToStream,
+  onStreamEvent,
+  registerStream,
+  removeStream,
+} from "../services/stream-registry";
 import { logger } from "../utils/logger";
 
 const searchBodySchema = z.object({
@@ -23,7 +31,7 @@ searchRouter.get("/queue/status", (_req: Request, res: Response) => {
   res.json(searchQueue.getStatus());
 });
 
-searchRouter.post("/", async (req: Request, res: Response) => {
+searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => {
   try {
     const parsed = searchBodySchema.safeParse(req.body);
     if (!parsed.success) {
@@ -33,6 +41,8 @@ searchRouter.post("/", async (req: Request, res: Response) => {
 
     const query = parsed.data.query.trim();
     const location = parsed.data.location.trim();
+
+    trackSearch(req.licenseId!);
 
     const cachedResults = await getCachedResults(query, location);
     if (cachedResults && cachedResults.length > 0) {
@@ -45,6 +55,7 @@ searchRouter.post("/", async (req: Request, res: Response) => {
         status: "completed",
         cached: true,
         totalFound: cachedResults.length,
+        searchesRemaining: req.searchesRemaining,
       };
       res.status(201).json(response);
       return;
@@ -55,6 +66,7 @@ searchRouter.post("/", async (req: Request, res: Response) => {
     res.status(201).json({
       searchId: searchJob.id,
       status: "queued",
+      searchesRemaining: req.searchesRemaining,
     } satisfies SearchResponse);
 
     enqueueSearch(searchJob.id, query, location);
@@ -112,49 +124,54 @@ searchRouter.get("/:id/stream", async (req: Request, res: Response) => {
       return;
     }
 
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache, no-transform");
-    res.setHeader("Connection", "keep-alive");
-    res.setHeader("X-Accel-Buffering", "no");
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+      "Access-Control-Allow-Origin": "*",
+    });
     res.flushHeaders();
 
-    const send = (data: unknown) => {
-      res.write(`data: ${JSON.stringify(data)}\n\n`);
-    };
-
-    send({ type: "started", searchId });
+    registerStream(searchId, res);
+    emitToStream(searchId, { type: "started", searchId });
 
     const heartbeat = setInterval(() => {
-      res.write(": heartbeat\n\n");
+      if (!res.writableEnded) {
+        res.write(": heartbeat\n\n");
+      }
     }, 5000);
 
-    const unsubscribe = subscribeToSearch(searchId, (event) => {
-      send(event);
+    const endStream = () => {
+      clearInterval(heartbeat);
+      removeStream(searchId);
+      if (!res.writableEnded) {
+        res.end();
+      }
+    };
+
+    const unsubscribe = onStreamEvent(searchId, (data) => {
+      const event = data as { type?: string };
       if (event.type === "complete" || event.type === "error") {
-        clearInterval(heartbeat);
-        if (!res.writableEnded) res.end();
+        endStream();
       }
     });
 
     if (job.status === "completed") {
-      send({ type: "complete", total: job.totalFound });
-      clearInterval(heartbeat);
-      unsubscribe();
-      res.end();
+      emitToStream(searchId, { type: "complete", total: job.totalFound });
+      endStream();
       return;
     }
 
     if (job.status === "failed") {
-      send({ type: "error", message: job.error ?? "Search failed" });
-      clearInterval(heartbeat);
-      unsubscribe();
-      res.end();
+      emitToStream(searchId, { type: "error", message: job.error ?? "Search failed" });
+      endStream();
       return;
     }
 
     const position = getQueuePosition(searchId);
     if (position != null) {
-      send({
+      emitToStream(searchId, {
         type: "phase",
         phase: `Your search is queued (position ${position}). Results will appear shortly.`,
       });
@@ -163,9 +180,7 @@ searchRouter.get("/:id/stream", async (req: Request, res: Response) => {
     req.on("close", () => {
       clearInterval(heartbeat);
       unsubscribe();
-      if (!res.writableEnded) {
-        res.end();
-      }
+      removeStream(searchId);
     });
   } catch (err) {
     logger.error("GET /search/:id/stream failed", {
