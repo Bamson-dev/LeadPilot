@@ -262,6 +262,8 @@ export function generateDemoLeads(config: DemoScenarioConfig): Lead[] {
       business_name: name,
       phone: phone(rand),
       email,
+      verified_emails: [email],
+      predicted_emails: [],
       extracted_email: email,
       generated_email: null,
       email_source: "extracted",
