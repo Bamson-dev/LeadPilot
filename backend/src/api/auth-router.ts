@@ -1,5 +1,10 @@
 import { Router, type Request, type Response } from "express";
-import { activateLicense, getLicenseKeyByKey } from "../database/license-repository";
+import {
+  activateLicense,
+  getLicenseByKeyAndEmail,
+  getLicenseKeyByKey,
+  registerDevice,
+} from "../database/license-repository";
 import { logger } from "../utils/logger";
 
 export const authRouter = Router();
@@ -71,6 +76,43 @@ authRouter.get("/status", async (req: Request, res: Response) => {
       error: err instanceof Error ? err.message : "unknown",
     });
     res.status(500).json({ error: "Status check failed" });
+  }
+});
+
+authRouter.post("/register-device", async (req: Request, res: Response) => {
+  try {
+    const { email, key, deviceSignature } = req.body as {
+      email?: string;
+      key?: string;
+      deviceSignature?: string;
+    };
+
+    if (!email || !key || !deviceSignature) {
+      res.status(400).json({ error: "Missing required fields" });
+      return;
+    }
+
+    const license = await getLicenseByKeyAndEmail(key, email);
+    if (!license) {
+      res.status(401).json({ error: "Invalid license" });
+      return;
+    }
+
+    const result = await registerDevice(license.id, deviceSignature);
+    if (!result.allowed) {
+      res.status(403).json({
+        error: result.reason,
+        code: "MAX_DEVICES",
+      });
+      return;
+    }
+
+    res.json({ allowed: true });
+  } catch (err) {
+    logger.error("Device registration failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Device registration failed" });
   }
 });
 

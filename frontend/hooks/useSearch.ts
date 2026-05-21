@@ -4,7 +4,10 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import type { BusinessLead } from "@leadpilot/shared";
 import { getResults, getSearch, startSearch } from "@/services/api";
 import { getApiUrl } from "@/utils/env";
-import { formatSearchMessage } from "@/utils/search-messages";
+import {
+  getSearchProgressMessage,
+  getSearchProgressPercent,
+} from "@/utils/search-progress-messages";
 import { businessLeadToLead } from "@/types/lead";
 import type { Lead } from "@/types/lead";
 
@@ -17,6 +20,7 @@ interface SearchState {
   message: string;
   totalFound: number;
   searchesRemaining: number | null;
+  queuePosition: number;
   error: string | null;
 }
 
@@ -31,6 +35,7 @@ export function useSearch() {
     message: "",
     totalFound: 0,
     searchesRemaining: null,
+    queuePosition: 0,
     error: null,
   });
 
@@ -68,6 +73,22 @@ export function useSearch() {
     stopTimeout();
   }, [stopPolling, stopTimeout]);
 
+  const progressMessage = useCallback(
+    (
+      count: number,
+      status: "running" | "completed" | "failed" | "queued",
+      queuePosition: number
+    ) =>
+      getSearchProgressMessage(
+        count,
+        queryRef.current,
+        locationRef.current,
+        status,
+        queuePosition
+      ),
+    []
+  );
+
   const mergeLeads = useCallback((incoming: BusinessLead[]) => {
     if (incoming.length === 0) return;
     setState((prev) => {
@@ -75,14 +96,16 @@ export function useSearch() {
       const unique = incoming.filter((l) => l.id && !existingIds.has(l.id));
       if (unique.length === 0) return prev;
       const merged = [...prev.leads, ...unique];
+      const count = merged.length;
       return {
         ...prev,
         leads: merged,
-        totalFound: merged.length,
+        totalFound: count,
         status: prev.status === "starting" ? "running" : prev.status,
+        message: progressMessage(count, "running", prev.queuePosition),
       };
     });
-  }, []);
+  }, [progressMessage]);
 
   const syncFromApi = useCallback(
     async (searchId: string) => {
@@ -94,16 +117,19 @@ export function useSearch() {
   );
 
   const finishSearch = useCallback(
-    (total: number, message: string) => {
+    (total: number, message?: string) => {
       closeStream();
       setState((prev) => ({
         ...prev,
         status: "completed",
         totalFound: total || prev.leads.length,
-        message,
+        queuePosition: 0,
+        message:
+          message ??
+          progressMessage(total || prev.leads.length, "completed", 0),
       }));
     },
-    [closeStream]
+    [closeStream, progressMessage]
   );
 
   const startPolling = useCallback(
@@ -119,7 +145,7 @@ export function useSearch() {
             if (job.status === "completed") {
               finishSearch(
                 job.totalFound,
-                `Search complete. Found ${job.totalFound} businesses.`
+                progressMessage(job.totalFound, "completed", 0)
               );
             } else if (job.status === "failed") {
               completedRef.current = true;
@@ -127,12 +153,8 @@ export function useSearch() {
               setState((prev) => ({
                 ...prev,
                 status: "error",
-                error: job.error ?? "Search failed. Please try again.",
-              }));
-            } else if (job.processed > 0) {
-              setState((prev) => ({
-                ...prev,
-                message: `Found ${job.processed} businesses so far...`,
+                error: progressMessage(0, "failed", 0),
+                message: progressMessage(0, "failed", 0),
               }));
             }
           } catch {
@@ -141,7 +163,7 @@ export function useSearch() {
         })();
       }, POLL_INTERVAL_MS);
     },
-    [stopPolling, syncFromApi, finishSearch, closeStream]
+    [stopPolling, syncFromApi, finishSearch, closeStream, progressMessage]
   );
 
   useEffect(() => {
@@ -162,8 +184,7 @@ export function useSearch() {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL?.trim()?.replace(/\/$/, "") || getApiUrl();
       if (!apiUrl) return;
 
-      const streamUrl = `${apiUrl}/search/${searchId}/stream`;
-      const es = new EventSource(streamUrl);
+      const es = new EventSource(`${apiUrl}/search/${searchId}/stream`);
       eventSourceRef.current = es;
 
       es.onopen = () => {
@@ -187,7 +208,7 @@ export function useSearch() {
               setState((prev) => ({
                 ...prev,
                 status: "running",
-                message: formatSearchMessage(queryRef.current, locationRef.current),
+                message: progressMessage(prev.leads.length, "running", prev.queuePosition),
               }));
               break;
 
@@ -198,25 +219,36 @@ export function useSearch() {
             }
 
             case "progress":
-              setState((prev) => ({
-                ...prev,
-                message:
-                  data.message ||
-                  `Found ${data.processed ?? prev.leads.length} businesses...`,
-              }));
+              setState((prev) => {
+                const count = data.processed ?? prev.leads.length;
+                return {
+                  ...prev,
+                  message: progressMessage(count, "running", prev.queuePosition),
+                };
+              });
               break;
 
             case "phase": {
               const phase = data.phase ?? data.message;
-              if (phase) setState((prev) => ({ ...prev, message: phase }));
+              if (phase?.includes("queued") || phase?.includes("Position")) {
+                setState((prev) => {
+                  const match = phase.match(/Position\s+(\d+)/i);
+                  const pos = match ? parseInt(match[1], 10) : 0;
+                  return {
+                    ...prev,
+                    queuePosition: pos,
+                    message: progressMessage(prev.leads.length, "queued", pos),
+                  };
+                });
+              }
               break;
             }
 
             case "complete":
               finishSearch(
                 data.total ?? 0,
-                data.message ||
-                  `Search complete. Found ${data.total ?? 0} businesses.`
+                data.message ??
+                  progressMessage(data.total ?? 0, "completed", 0)
               );
               break;
 
@@ -226,7 +258,8 @@ export function useSearch() {
               setState((prev) => ({
                 ...prev,
                 status: "error",
-                error: data.message || "Search failed. Please try again.",
+                error: data.message || progressMessage(0, "failed", 0),
+                message: progressMessage(0, "failed", 0),
               }));
               break;
           }
@@ -241,10 +274,6 @@ export function useSearch() {
         eventSourceRef.current = null;
         if (reconnectCountRef.current < 3) {
           reconnectCountRef.current += 1;
-          setState((prev) => ({
-            ...prev,
-            message: `Reconnecting... (attempt ${reconnectCountRef.current} of 3)`,
-          }));
           setTimeout(() => {
             if (searchIdRef.current && !completedRef.current) {
               connectToStream(searchIdRef.current);
@@ -253,7 +282,7 @@ export function useSearch() {
         }
       };
     },
-    [closeStream, finishSearch]
+    [closeStream, finishSearch, progressMessage]
   );
 
   const search = useCallback(
@@ -279,23 +308,17 @@ export function useSearch() {
         status: "starting",
         leads: [],
         searchId: null,
-        message: `Starting search for ${query.trim()} in ${location.trim()}...`,
+        message: progressMessage(0, "running", 0),
         totalFound: 0,
         searchesRemaining: null,
+        queuePosition: 0,
         error: null,
       });
 
       try {
         const result = await startSearch(query.trim(), location.trim());
         searchIdRef.current = result.searchId;
-
-        setState((prev) => ({
-          ...prev,
-          searchId: result.searchId,
-          searchesRemaining: result.searchesRemaining ?? null,
-          message: formatSearchMessage(query.trim(), location.trim()),
-          status: "running",
-        }));
+        const queuePosition = result.queuePosition ?? 0;
 
         if (result.cached && result.status === "completed") {
           const { leads: cached } = await getResults(result.searchId);
@@ -304,13 +327,23 @@ export function useSearch() {
             status: "completed",
             leads: mapped,
             searchId: result.searchId,
-            message: `Search complete. Found ${mapped.length} businesses.`,
-            totalFound: mapped.length,
+            message: `Found ${result.totalFound ?? mapped.length} businesses instantly from recent search`,
+            totalFound: result.totalFound ?? mapped.length,
             searchesRemaining: result.searchesRemaining ?? null,
+            queuePosition: 0,
             error: null,
           });
           return;
         }
+
+        setState((prev) => ({
+          ...prev,
+          searchId: result.searchId,
+          searchesRemaining: result.searchesRemaining ?? null,
+          queuePosition,
+          status: "running",
+          message: progressMessage(0, queuePosition > 0 ? "queued" : "running", queuePosition),
+        }));
 
         connectToStream(result.searchId);
         startPolling(result.searchId);
@@ -330,22 +363,15 @@ export function useSearch() {
                 return;
               }
             } catch {
-              /* fall through to error */
+              /* fall through */
             }
             completedRef.current = true;
             closeStream();
-            let errMsg =
-              "Search is taking too long. Try a broader location (e.g. Lagos Nigeria) or wait and try again.";
-            try {
-              const job = await getSearch(result.searchId);
-              if (job.error) errMsg = job.error;
-            } catch {
-              /* use default */
-            }
             setState((prev) => ({
               ...prev,
               status: "error",
-              error: errMsg,
+              error: progressMessage(0, "failed", 0),
+              message: progressMessage(0, "failed", 0),
             }));
           })();
         }, SEARCH_TIMEOUT_MS);
@@ -355,10 +381,11 @@ export function useSearch() {
           ...prev,
           status: "error",
           error: err instanceof Error ? err.message : "Failed to start search",
+          message: progressMessage(0, "failed", 0),
         }));
       }
     },
-    [closeStream, connectToStream, startPolling, stopTimeout, syncFromApi, finishSearch]
+    [closeStream, connectToStream, startPolling, stopTimeout, syncFromApi, finishSearch, progressMessage]
   );
 
   const reset = useCallback(() => {
@@ -372,9 +399,25 @@ export function useSearch() {
       message: "",
       totalFound: 0,
       searchesRemaining: null,
+      queuePosition: 0,
       error: null,
     });
   }, [closeStream]);
+
+  const loadSavedLeads = useCallback((leads: Lead[]) => {
+    closeStream();
+    const mapped = leads.map((l) => leadRowToBusinessLead(l));
+    setState({
+      status: "completed",
+      leads: mapped,
+      searchId: null,
+      message: progressMessage(mapped.length, "completed", 0),
+      totalFound: mapped.length,
+      searchesRemaining: state.searchesRemaining,
+      queuePosition: 0,
+      error: null,
+    });
+  }, [closeStream, progressMessage, state.searchesRemaining]);
 
   useEffect(() => () => closeStream(), [closeStream]);
 
@@ -394,16 +437,15 @@ export function useSearch() {
     rawLeads: state.leads,
     isSearching,
     phaseMessage: state.message,
-    progress:
-      state.totalFound > 0
-        ? Math.min(99, state.totalFound)
-        : isSearching
-          ? 15
-          : 0,
+    progress: getSearchProgressPercent(
+      state.leads.length,
+      state.status === "completed"
+    ),
     searchMeta: { business: queryRef.current, location: locationRef.current },
     runSearch: search,
     clearResults: reset,
     closeStream: reset,
+    loadSavedLeads,
     showLimitMessage:
       !!state.error &&
       (state.error.includes("limit") ||

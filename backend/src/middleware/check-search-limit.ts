@@ -3,6 +3,8 @@ import {
   checkAndIncrementSearchCount,
   getLicenseByKeyAndEmail,
 } from "../database/license-repository";
+import { supabase } from "../database/client";
+import { sendLimitReachedEmail } from "../services/brevo-service";
 import { logger } from "../utils/logger";
 
 export async function checkSearchLimit(
@@ -30,9 +32,9 @@ export async function checkSearchLimit(
         error: dbErr instanceof Error ? dbErr.message : "unknown",
       });
       req.licenseId = "unknown";
+      req.licenseKey = licenseKey;
       req.searchesRemaining = 99;
-      next();
-      return;
+      return next();
     }
 
     if (!license) {
@@ -45,7 +47,8 @@ export async function checkSearchLimit(
 
     if (license.is_suspended) {
       res.status(403).json({
-        error: license.suspension_reason || "Account suspended. Contact support.",
+        error:
+          license.suspension_reason || "Account suspended. Contact support.",
         code: "SUSPENDED",
       });
       return;
@@ -64,6 +67,34 @@ export async function checkSearchLimit(
     }
 
     if (!limitCheck.allowed) {
+      const { data: row } = await supabase
+        .from("license_keys")
+        .select("limit_email_sent, last_reset_at, email")
+        .eq("id", license.id)
+        .single();
+
+      if (row && !row.limit_email_sent) {
+        const resetDate = new Date(row.last_reset_at as string);
+        resetDate.setDate(resetDate.getDate() + 30);
+        const resetDateStr = resetDate.toLocaleDateString("en-GB", {
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        });
+
+        await supabase
+          .from("license_keys")
+          .update({ limit_email_sent: true })
+          .eq("id", license.id);
+
+        void sendLimitReachedEmail(row.email as string, resetDateStr).catch(
+          (err) =>
+            logger.error("Failed to send limit email", {
+              error: err instanceof Error ? err.message : "unknown",
+            })
+        );
+      }
+
       res.status(429).json({
         error: limitCheck.reason,
         code: "LIMIT_REACHED",
@@ -73,6 +104,7 @@ export async function checkSearchLimit(
     }
 
     req.licenseId = license.id;
+    req.licenseKey = licenseKey;
     req.searchesRemaining = limitCheck.remaining;
     next();
   } catch (err) {

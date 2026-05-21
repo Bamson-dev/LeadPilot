@@ -1,12 +1,42 @@
 import { config } from "../config/env";
 import { logger } from "../utils/logger";
 
-export async function sendActivationEmail(email: string, licenseKey: string): Promise<void> {
+async function sendEmail(params: {
+  to: string;
+  subject: string;
+  html: string;
+}): Promise<void> {
   const apiKey = config.BREVO_API_KEY;
   if (!apiKey) {
     throw new Error("BREVO_API_KEY is not configured");
   }
 
+  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      "api-key": apiKey,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      sender: { email: config.BREVO_SENDER_EMAIL, name: "LeadPilot" },
+      to: [{ email: params.to }],
+      subject: params.subject,
+      htmlContent: params.html,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    logger.error("Brevo send failed", {
+      status: res.status,
+      body: body.slice(0, 200),
+    });
+    throw new Error("Failed to send email");
+  }
+}
+
+export async function sendActivationEmail(email: string, licenseKey: string): Promise<void> {
   const activateUrl = `${config.FRONTEND_URL}/activate?key=${encodeURIComponent(licenseKey)}`;
 
   const html = `
@@ -19,24 +49,194 @@ export async function sendActivationEmail(email: string, licenseKey: string): Pr
     </div>
   `;
 
-  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
-    method: "POST",
-    headers: {
-      "api-key": apiKey,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({
-      sender: { email: config.BREVO_SENDER_EMAIL, name: "LeadPilot" },
-      to: [{ email }],
-      subject: "Your LeadPilot activation key",
-      htmlContent: html,
-    }),
+  await sendEmail({
+    to: email,
+    subject: "Your LeadPilot activation key",
+    html,
   });
+}
 
-  if (!res.ok) {
-    const body = await res.text();
-    logger.error("Brevo send failed", { status: res.status, body: body.slice(0, 200) });
-    throw new Error("Failed to send activation email");
-  }
+export async function sendSearchCompleteEmail(
+  email: string,
+  query: string,
+  location: string,
+  totalFound: number
+): Promise<void> {
+  const dashboardUrl = `${config.FRONTEND_URL}/dashboard`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+    <body style="margin:0;padding:0;background:#07070A;font-family:Arial,sans-serif;">
+      <div style="max-width:520px;margin:0 auto;padding:40px 24px;">
+        <div style="margin-bottom:32px;">
+          <span style="background:#7C3AED;color:white;padding:6px 14px;border-radius:100px;font-size:12px;font-weight:700;letter-spacing:0.05em;">LEADPILOT</span>
+        </div>
+        <h1 style="color:#F4F4FF;font-size:28px;font-weight:800;margin:0 0 12px;line-height:1.2;">Your results are ready</h1>
+        <p style="color:#A1A1AA;font-size:15px;line-height:1.6;margin:0 0 24px;">
+          Your search for <strong style="color:#F4F4FF;">${query}</strong> in <strong style="color:#F4F4FF;">${location}</strong> is complete.
+        </p>
+        <div style="background:#0F0F14;border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:24px;margin-bottom:28px;text-align:center;">
+          <div style="font-size:56px;font-weight:800;color:#A855F7;line-height:1;">${totalFound}</div>
+          <div style="color:#A1A1AA;font-size:14px;margin-top:6px;">businesses found with contact details</div>
+        </div>
+        <p style="color:#A1A1AA;font-size:14px;line-height:1.6;margin:0 0 28px;">
+          Your results include business names, phone numbers, addresses, websites, and ratings. Go to your dashboard to view and export your CSV file.
+        </p>
+        <a href="${dashboardUrl}" style="display:block;background:#7C3AED;color:white;padding:16px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:16px;text-align:center;margin-bottom:24px;">
+          View My Results
+        </a>
+        <p style="color:#6B6B80;font-size:12px;line-height:1.6;margin:0;border-top:1px solid rgba(255,255,255,0.07);padding-top:20px;">
+          LeadPilot — Business Discovery Intelligence<br>Your results are saved and available any time you log in.
+        </p>
+      </div>
+    </body>
+    </html>
+  `;
+
+  await sendEmail({
+    to: email,
+    subject: `Your search found ${totalFound} businesses — LeadPilot`,
+    html,
+  });
+}
+
+export async function sendSearchRunningEmail(
+  email: string,
+  query: string,
+  location: string
+): Promise<void> {
+  const dashboardUrl = `${config.FRONTEND_URL}/dashboard`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+    <body style="margin:0;padding:0;background:#07070A;font-family:Arial,sans-serif;">
+      <div style="max-width:520px;margin:0 auto;padding:40px 24px;">
+        <div style="margin-bottom:32px;">
+          <span style="background:#7C3AED;color:white;padding:6px 14px;border-radius:100px;font-size:12px;font-weight:700;letter-spacing:0.05em;">LEADPILOT</span>
+        </div>
+        <h1 style="color:#F4F4FF;font-size:28px;font-weight:800;margin:0 0 12px;line-height:1.2;">Still searching. Hang tight.</h1>
+        <p style="color:#A1A1AA;font-size:15px;line-height:1.6;margin:0 0 24px;">
+          Your search for <strong style="color:#F4F4FF;">${query}</strong> in <strong style="color:#F4F4FF;">${location}</strong> is taking a bit longer than usual.
+        </p>
+        <div style="background:#0F0F14;border:1px solid rgba(124,58,237,0.2);border-radius:12px;padding:24px;margin-bottom:28px;">
+          <p style="color:#F4F4FF;font-size:14px;line-height:1.7;margin:0;">
+            We are still scanning businesses and collecting contact details for you. You do not need to keep the page open. Your results will be saved automatically to your dashboard the moment the search finishes.
+          </p>
+        </div>
+        <a href="${dashboardUrl}" style="display:block;background:#7C3AED;color:white;padding:16px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:16px;text-align:center;margin-bottom:24px;">
+          Go to Dashboard
+        </a>
+        <p style="color:#6B6B80;font-size:12px;line-height:1.6;margin:0;border-top:1px solid rgba(255,255,255,0.07);padding-top:20px;">
+          LeadPilot — Business Discovery Intelligence<br>We will notify you again when your results are ready.
+        </p>
+      </div>
+    </body>
+    </html>
+  `;
+
+  await sendEmail({
+    to: email,
+    subject: "Your LeadPilot search is still running — we will notify you when done",
+    html,
+  });
+}
+
+export async function sendSearchFailedEmail(
+  email: string,
+  query: string,
+  location: string
+): Promise<void> {
+  const dashboardUrl = `${config.FRONTEND_URL}/dashboard`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+    <body style="margin:0;padding:0;background:#07070A;font-family:Arial,sans-serif;">
+      <div style="max-width:520px;margin:0 auto;padding:40px 24px;">
+        <div style="margin-bottom:32px;">
+          <span style="background:#7C3AED;color:white;padding:6px 14px;border-radius:100px;font-size:12px;font-weight:700;letter-spacing:0.05em;">LEADPILOT</span>
+        </div>
+        <h1 style="color:#F4F4FF;font-size:28px;font-weight:800;margin:0 0 12px;line-height:1.2;">Search did not complete</h1>
+        <p style="color:#A1A1AA;font-size:15px;line-height:1.6;margin:0 0 24px;">
+          Your search for <strong style="color:#F4F4FF;">${query}</strong> in <strong style="color:#F4F4FF;">${location}</strong> did not return results this time.
+        </p>
+        <div style="background:#0F0F14;border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:24px;margin-bottom:28px;">
+          <p style="color:#F4F4FF;font-size:14px;font-weight:700;margin:0 0 12px;">Try these to get better results:</p>
+          <ul style="color:#A1A1AA;font-size:14px;line-height:1.8;margin:0;padding-left:20px;">
+            <li>Use a broader location. Instead of Lekki Lagos try Lagos Nigeria</li>
+            <li>Use a common business type. Instead of fine dining try restaurants</li>
+            <li>Try a different city or niche combination</li>
+            <li>Wait a few minutes and try again</li>
+          </ul>
+        </div>
+        <p style="color:#A1A1AA;font-size:14px;line-height:1.6;margin:0 0 28px;">
+          This search has not been counted against your monthly limit.
+        </p>
+        <a href="${dashboardUrl}" style="display:block;background:#7C3AED;color:white;padding:16px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:16px;text-align:center;margin-bottom:24px;">
+          Try Another Search
+        </a>
+        <p style="color:#6B6B80;font-size:12px;line-height:1.6;margin:0;border-top:1px solid rgba(255,255,255,0.07);padding-top:20px;">
+          LeadPilot — Business Discovery Intelligence<br>If this keeps happening contact us and we will help you out.
+        </p>
+      </div>
+    </body>
+    </html>
+  `;
+
+  await sendEmail({
+    to: email,
+    subject: "Your LeadPilot search did not complete — here is what to try",
+    html,
+  });
+}
+
+export async function sendLimitReachedEmail(
+  email: string,
+  resetDate: string
+): Promise<void> {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+    <body style="margin:0;padding:0;background:#07070A;font-family:Arial,sans-serif;">
+      <div style="max-width:520px;margin:0 auto;padding:40px 24px;">
+        <div style="margin-bottom:32px;">
+          <span style="background:#7C3AED;color:white;padding:6px 14px;border-radius:100px;font-size:12px;font-weight:700;letter-spacing:0.05em;">LEADPILOT</span>
+        </div>
+        <h1 style="color:#F4F4FF;font-size:28px;font-weight:800;margin:0 0 12px;line-height:1.2;">You have used all your searches</h1>
+        <p style="color:#A1A1AA;font-size:15px;line-height:1.6;margin:0 0 24px;">
+          You have reached your monthly search limit. Your searches will reset automatically on <strong style="color:#F4F4FF;">${resetDate}</strong>.
+        </p>
+        <div style="background:#0F0F14;border:1px solid rgba(124,58,237,0.2);border-radius:12px;padding:24px;margin-bottom:28px;">
+          <p style="color:#F4F4FF;font-size:15px;font-weight:700;margin:0 0 8px;">Need more searches before your reset date?</p>
+          <p style="color:#A1A1AA;font-size:14px;line-height:1.6;margin:0 0 16px;">
+            Contact us on WhatsApp and we will increase your limit manually.
+          </p>
+          <a href="https://wa.me/2349067285890" style="display:inline-block;background:#25D366;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;">
+            WhatsApp Us — 09067285890
+          </a>
+        </div>
+        <div style="background:#0F0F14;border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:20px;margin-bottom:28px;">
+          <p style="color:#A1A1AA;font-size:13px;line-height:1.6;margin:0;">
+            While you wait for your reset you can still view and export all results from your previous searches in your dashboard.
+          </p>
+        </div>
+        <p style="color:#6B6B80;font-size:12px;line-height:1.6;margin:0;border-top:1px solid rgba(255,255,255,0.07);padding-top:20px;">
+          LeadPilot — Business Discovery Intelligence<br>Your searches reset on ${resetDate}.
+        </p>
+      </div>
+    </body>
+    </html>
+  `;
+
+  await sendEmail({
+    to: email,
+    subject: `Your LeadPilot monthly searches have been used — reset on ${resetDate}`,
+    html,
+  });
 }

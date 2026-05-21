@@ -1,10 +1,10 @@
+import os from "os";
 import { Router } from "express";
 import { getBrowserPool } from "../scraper/browser/browser-pool";
 import { searchQueue } from "../queues/search-queue";
 
 const router = Router();
 
-/** Fast liveness — includes queue and browser status for monitoring. */
 router.get("/", (_req, res) => {
   let browser: "ready" | "initializing" = "initializing";
   try {
@@ -13,20 +13,38 @@ router.get("/", (_req, res) => {
     browser = "initializing";
   }
 
+  const totalMem = os.totalmem();
+  const freeMem = os.freemem();
+  const usedPercent = Math.round(((totalMem - freeMem) / totalMem) * 100);
+
   res.status(200).json({
     status: "ok",
     browser,
     queue: searchQueue.getStatus(),
+    memory: {
+      totalGB: (totalMem / 1024 / 1024 / 1024).toFixed(1),
+      usedPercent,
+      safe: usedPercent < 85,
+    },
     timestamp: new Date().toISOString(),
     version: process.env.npm_package_version || "1.0.0",
   });
 });
 
 router.get("/ready", (_req, res) => {
+  const totalMem = os.totalmem();
+  const freeMem = os.freemem();
+  const usedPercent = Math.round(((totalMem - freeMem) / totalMem) * 100);
+
   res.status(200).json({
     status: "ready",
     browser: getBrowserPool().isReady() ? "ready" : "initializing",
     queue: searchQueue.getStatus(),
+    memory: {
+      totalGB: (totalMem / 1024 / 1024 / 1024).toFixed(1),
+      usedPercent,
+      safe: usedPercent < 85,
+    },
     timestamp: new Date().toISOString(),
   });
 });

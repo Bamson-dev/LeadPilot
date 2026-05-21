@@ -7,6 +7,13 @@ import {
   markSearchFailed,
   updateSearchJob,
 } from "../database/search-repository";
+import { saveUserSearch } from "../database/user-search-repository";
+import { getLicenseEmailBySearchId } from "../database/license-repository";
+import {
+  sendSearchCompleteEmail,
+  sendSearchFailedEmail,
+  sendSearchRunningEmail,
+} from "../services/brevo-service";
 import { formatScraperError } from "../scraper/utils/scraper-errors";
 import { logger } from "../utils/logger";
 import { enrichLeadEmail, rawLeadToBusinessLead } from "../utils/lead-mapper";
@@ -23,9 +30,33 @@ export async function runScraperJob(
   searchId: string,
   query: string,
   location: string,
-  emit: ScrapeEmitter
+  emit: ScrapeEmitter,
+  options?: { licenseKey?: string; licenseEmail?: string }
 ): Promise<void> {
   const pool = getBrowserPool();
+  let searchComplete = false;
+  let leadsFoundSoFar = 0;
+  let runningEmailSent = false;
+
+  const resolveLicenseEmail = async (): Promise<string | null> => {
+    if (options?.licenseEmail) return options.licenseEmail;
+    return getLicenseEmailBySearchId(searchId);
+  };
+
+  const runningEmailTimer = setTimeout(() => {
+    void (async () => {
+      if (searchComplete || leadsFoundSoFar >= 5 || runningEmailSent) return;
+      runningEmailSent = true;
+      const licenseEmail = await resolveLicenseEmail();
+      if (licenseEmail) {
+        void sendSearchRunningEmail(licenseEmail, query, location).catch((err) =>
+          logger.error("Failed to send running email", {
+            error: err instanceof Error ? err.message : "unknown",
+          })
+        );
+      }
+    })();
+  }, 2 * 60 * 1000);
 
   if (!pool.isReady()) {
     emit({
@@ -34,6 +65,7 @@ export async function runScraperJob(
     });
     const ready = await pool.waitUntilReady(90_000);
     if (!ready) {
+      clearTimeout(runningEmailTimer);
       throw new Error("Scraper is not ready yet. Please try again in one minute.");
     }
   }
@@ -58,6 +90,7 @@ export async function runScraperJob(
     const onBusinessFound = (raw: RawLeadInput) => {
       const basic = rawLeadToBusinessLead(raw, searchId);
       progress++;
+      leadsFoundSoFar = progress;
       emitLead(emit, basic);
       emit({
         type: "progress",
@@ -120,17 +153,62 @@ export async function runScraperJob(
       },
     });
 
+    searchComplete = true;
+    clearTimeout(runningEmailTimer);
+
     await updateSearchJob(searchId, { processed: progress, totalFound: total });
     await markSearchComplete(searchId, total);
+
+    if (options?.licenseKey) {
+      await saveUserSearch({
+        licenseKey: options.licenseKey,
+        searchId,
+        query,
+        location,
+        totalFound: total,
+      });
+    }
+
+    const licenseEmail = await resolveLicenseEmail();
+    if (licenseEmail) {
+      if (total > 0) {
+        void sendSearchCompleteEmail(licenseEmail, query, location, total).catch(
+          (err) =>
+            logger.error("Failed to send complete email", {
+              error: err instanceof Error ? err.message : "unknown",
+            })
+        );
+      } else {
+        void sendSearchFailedEmail(licenseEmail, query, location).catch((err) =>
+          logger.error("Failed to send failed email", {
+            error: err instanceof Error ? err.message : "unknown",
+          })
+        );
+      }
+    }
+
     emit({
       type: "complete",
       total,
-      message: `Search complete. Found ${total} businesses.`,
+      message: `Search complete. Found ${total} businesses in ${location}.`,
     });
   } catch (err) {
+    searchComplete = true;
+    clearTimeout(runningEmailTimer);
+
     const message = formatScraperError(err);
     logger.error("Scraper job failed", { searchId, message });
     await markSearchFailed(searchId, message);
+
+    const licenseEmail = await resolveLicenseEmail();
+    if (licenseEmail) {
+      void sendSearchFailedEmail(licenseEmail, query, location).catch((emailErr) =>
+        logger.error("Failed to send failed email", {
+          error: emailErr instanceof Error ? emailErr.message : "unknown",
+        })
+      );
+    }
+
     emit({
       type: "error",
       message,

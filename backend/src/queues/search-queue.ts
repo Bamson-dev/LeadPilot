@@ -19,6 +19,8 @@ class SearchQueue {
     searchId: string;
     query: string;
     location: string;
+    licenseKey?: string;
+    licenseEmail?: string;
     resolve: () => void;
     reject: (err: Error) => void;
   }> = [];
@@ -29,9 +31,22 @@ class SearchQueue {
     this.maxConcurrent = maxConcurrent;
   }
 
-  async add(searchId: string, query: string, location: string): Promise<void> {
+  async add(
+    searchId: string,
+    query: string,
+    location: string,
+    options?: { licenseKey?: string; licenseEmail?: string }
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.queue.push({ searchId, query, location, resolve, reject });
+      this.queue.push({
+        searchId,
+        query,
+        location,
+        licenseKey: options?.licenseKey,
+        licenseEmail: options?.licenseEmail,
+        resolve,
+        reject,
+      });
       void this.process();
     });
   }
@@ -51,7 +66,10 @@ class SearchQueue {
 
     try {
       await withTimeout(
-        runScraperJob(job.searchId, job.query, job.location, emit),
+        runScraperJob(job.searchId, job.query, job.location, emit, {
+          licenseKey: job.licenseKey,
+          licenseEmail: job.licenseEmail,
+        }),
         SEARCH_JOB_TIMEOUT_MS,
         "Search timed out on the server. Try a broader location or a simpler business type."
       );
@@ -75,7 +93,12 @@ class SearchQueue {
     };
   }
 
-  getQueuePosition(searchId: string): number | null {
+  /** Jobs waiting in line (not including currently running). */
+  getQueuePosition(): number {
+    return this.queue.length;
+  }
+
+  getQueuePositionForSearch(searchId: string): number | null {
     const idx = this.queue.findIndex((j) => j.searchId === searchId);
     return idx >= 0 ? idx + 1 : null;
   }
@@ -88,9 +111,10 @@ export const searchQueue = new SearchQueue(
 export function enqueueSearch(
   searchId: string,
   query: string,
-  location: string
+  location: string,
+  options?: { licenseKey?: string; licenseEmail?: string }
 ): void {
-  searchQueue.add(searchId, query, location).catch((err) => {
+  searchQueue.add(searchId, query, location, options).catch((err) => {
     logger.error("Search queue error", {
       searchId,
       error: err.message,
@@ -101,5 +125,5 @@ export function enqueueSearch(
 }
 
 export function getQueuePosition(searchId: string): number | null {
-  return searchQueue.getQueuePosition(searchId);
+  return searchQueue.getQueuePositionForSearch(searchId);
 }

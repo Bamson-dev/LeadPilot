@@ -7,16 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { LiveCounter } from "@/components/dashboard/live-counter";
-import { ExportModal } from "@/components/dashboard/export-modal";
+import { SearchHistory } from "@/components/dashboard/search-history";
 import { ResultsTable } from "@/features/results/results-table";
 import { useSearch } from "@/hooks/useSearch";
-import { exportCSV } from "@/features/export/csv-export";
-import { MAX_EXPORT_ROWS } from "@/utils/constants";
-
+import { exportToCSV } from "@/features/export/csv-export";
 export function SearchDashboard() {
   const [businessType, setBusinessType] = useState("");
   const [location, setLocation] = useState("");
-  const [exportOpen, setExportOpen] = useState(false);
+  const [savedBanner, setSavedBanner] = useState<string | null>(null);
   const {
     leads,
     isSearching,
@@ -27,12 +25,15 @@ export function SearchDashboard() {
     searchMeta,
     status,
     totalFound,
+    searchesRemaining,
     runSearch,
     clearResults,
     closeStream,
+    loadSavedLeads,
   } = useSearch();
 
   const handleSearch = () => {
+    setSavedBanner(null);
     void runSearch(businessType, location);
   };
 
@@ -41,17 +42,16 @@ export function SearchDashboard() {
   };
 
   const handleDownload = () => {
-    exportCSV(
-      leads.slice(0, MAX_EXPORT_ROWS),
-      searchMeta.business || businessType,
-      searchMeta.location || location
+    exportToCSV(
+      leads,
+      `leadpilot-${searchMeta.business || businessType}-${searchMeta.location || location}-${Date.now()}.csv`
     );
-    setExportOpen(false);
   };
 
   const handleNewSearch = () => {
     closeStream();
     clearResults();
+    setSavedBanner(null);
     setBusinessType("");
     setLocation("");
   };
@@ -63,6 +63,12 @@ export function SearchDashboard() {
         <p className="mt-1 text-sm text-[#6B6B80]">
           Build client lists by niche and location — contacts stream in realtime.
         </p>
+
+        {searchesRemaining != null && (
+          <p className="mt-3 text-xs text-[#6B6B80]">
+            {searchesRemaining} searches remaining this month
+          </p>
+        )}
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           <div>
@@ -96,11 +102,16 @@ export function SearchDashboard() {
             )}
             Search
           </Button>
+          <Button
+            variant="outline"
+            onClick={handleDownload}
+            disabled={leads.length === 0}
+          >
+            <Download className="h-4 w-4" />
+            Export {leads.length} leads to CSV
+          </Button>
           {leads.length > 0 && (
             <>
-              <Button variant="outline" onClick={() => setExportOpen(true)} disabled={isSearching}>
-                <Download className="h-4 w-4" /> Export CSV
-              </Button>
               <Button variant="ghost" onClick={handleNewSearch}>
                 <RotateCcw className="h-4 w-4" /> New Search
               </Button>
@@ -120,7 +131,7 @@ export function SearchDashboard() {
             {showLimitMessage && (
               <p className="mt-2 text-sm text-[#A1A1B5]">
                 You have used all your searches for this month. Your searches reset on the
-                date shown above. Contact support to increase your limit.
+                date shown in the message above. Contact support to increase your limit.
               </p>
             )}
             <Button variant="outline" size="sm" className="mt-3" onClick={clearResults}>
@@ -129,12 +140,21 @@ export function SearchDashboard() {
           </div>
         )}
 
-        {status === "completed" && !error && (
-          <p className="mt-4 text-sm text-emerald-400">
+        {status === "completed" && !error && !savedBanner && (
+          <p className="mt-4 text-sm text-[#A1A1B5]">
             Search complete. Found {totalFound} businesses.
           </p>
         )}
       </div>
+
+      <SearchHistory
+        onViewResults={(historyLeads, meta) => {
+          loadSavedLeads(historyLeads);
+          setSavedBanner(
+            `Showing saved results from ${meta.date}. Run a new search to get fresh results.`
+          );
+        }}
+      />
 
       {(isSearching || leads.length > 0) && (
         <motion.div
@@ -142,32 +162,27 @@ export function SearchDashboard() {
           animate={{ opacity: 1, y: 0 }}
           className="space-y-4"
         >
+          {savedBanner && (
+            <div className="rounded-lg border border-violet-500/30 bg-violet-500/10 px-4 py-3 text-sm text-[#A1A1B5]">
+              {savedBanner}
+            </div>
+          )}
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <LiveCounter count={leads.length} isSearching={isSearching} />
-            {isSearching && (
-              <span className="flex items-center gap-2 text-xs text-[#A855F7] sm:max-w-[60%]">
-                <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
-                {phaseMessage || `Found ${leads.length} businesses so far...`}
+            {(isSearching || phaseMessage) && (
+              <span className="flex items-center gap-2 text-sm text-[#A1A1B5] sm:max-w-[65%]">
+                {isSearching && (
+                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#A855F7]" />
+                )}
+                {phaseMessage}
               </span>
             )}
           </div>
           {isSearching && <Progress value={progress} className="h-2" />}
-          {isSearching && leads.length > 0 && (
-            <p className="text-sm text-[#6B6B80]">
-              Found {leads.length} businesses so far...
-            </p>
-          )}
         </motion.div>
       )}
 
       <ResultsTable leads={leads} isLoading={isSearching && leads.length === 0} />
-
-      <ExportModal
-        open={exportOpen}
-        onOpenChange={setExportOpen}
-        count={Math.min(leads.length, MAX_EXPORT_ROWS)}
-        onDownload={handleDownload}
-      />
     </div>
   );
 }

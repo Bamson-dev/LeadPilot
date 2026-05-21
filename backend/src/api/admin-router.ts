@@ -8,6 +8,7 @@ import {
   listRecentLicenses,
   lookupLicensesByEmail,
   truncateLicenseKey,
+  resetDevices,
 } from "../database/license-repository";
 import { supabase } from "../database/client";
 import { sendActivationEmail } from "../services/brevo-service";
@@ -267,6 +268,30 @@ adminRouter.post("/reset-searches", requireAdminAuth, async (req: Request, res: 
       error: err instanceof Error ? err.message : "unknown",
     });
     res.status(500).json({ error: "Failed to reset searches" });
+  }
+});
+
+adminRouter.post("/reset-devices", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body as { email?: string };
+    if (!email) {
+      res.status(400).json({ error: "Email required" });
+      return;
+    }
+
+    const license = await fetchLatestLicenseByEmail(email);
+    if (!license) {
+      res.status(404).json({ error: "License not found" });
+      return;
+    }
+
+    await resetDevices(license.id as string);
+    res.json({ success: true, message: `Devices reset for ${email}` });
+  } catch (err) {
+    logger.error("Reset devices failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to reset devices" });
   }
 });
 

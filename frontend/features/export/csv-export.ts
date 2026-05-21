@@ -1,77 +1,142 @@
 import type { BusinessLead } from "@leadpilot/shared";
-import { CSV_HEADERS } from "@leadpilot/shared";
-import { escapeCsvField, slugify } from "@leadpilot/shared";
-import type { Lead } from "@/types/lead";
 import { getAllEmailsForDisplay } from "@/utils/get-display-email";
+import type { Lead } from "@/types/lead";
+import { businessLeadToLead } from "@/types/lead";
 
-function leadToRow(lead: Lead | BusinessLead): string[] {
-  const isShared = "searchId" in lead;
+function leadEmail(lead: Lead | BusinessLead): string {
+  if ("verifiedEmails" in lead) {
+    const emails = [
+      ...(lead.verifiedEmails ?? []),
+      ...(lead.predictedEmails ?? []).map((p) => p.email),
+    ];
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const e of emails) {
+      const k = e.toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(e);
+      if (out.length >= 2) break;
+    }
+    return out.join(", ");
+  }
+  return getAllEmailsForDisplay(lead as Lead).join(", ");
+}
 
-  const emails = isShared
-    ? getAllEmailsForDisplay({
-        email: lead.email,
-        extracted_email: lead.email,
-        verified_emails: lead.verifiedEmails ?? [],
-        predicted_emails: lead.predictedEmails ?? [],
-      })
-    : getAllEmailsForDisplay(lead);
-
-  const topPrediction = isShared
-    ? lead.predictedEmails?.[0]
-    : lead.predicted_emails?.[0];
-
-  const emailDisplay = emails.join(", ");
-
-  return [
-    isShared ? lead.name : lead.business_name,
-    isShared ? lead.category : lead.category ?? "",
-    isShared ? lead.address : lead.address ?? "",
-    lead.phone ?? "",
-    emailDisplay,
-    topPrediction?.email ?? "",
-    topPrediction != null ? String(topPrediction.confidence) : "",
-    isShared
-      ? lead.emailSource === "website"
-        ? "verified"
-        : lead.emailSource === "predicted"
-          ? "predicted"
-          : "none"
-      : lead.email_source === "extracted"
-        ? "verified"
+function toBusinessLead(lead: Lead | BusinessLead): BusinessLead {
+  if ("searchId" in lead) return lead;
+  return {
+    id: lead.id,
+    searchId: lead.search_id,
+    name: lead.business_name,
+    category: lead.category ?? "",
+    address: lead.address ?? "",
+    phone: lead.phone,
+    email: lead.email,
+    verifiedEmails: lead.verified_emails ?? [],
+    predictedEmails: lead.predicted_emails ?? [],
+    emailSource:
+      lead.email_source === "extracted"
+        ? "website"
         : lead.email_source === "predicted"
           ? "predicted"
           : "none",
-    lead.website ?? "",
-    lead.rating != null ? String(lead.rating) : "",
-    isShared
-      ? lead.reviewCount != null
-        ? String(lead.reviewCount)
-        : ""
-      : lead.reviews_count != null
-        ? String(lead.reviews_count)
-        : "",
+    website: lead.website,
+    rating: lead.rating,
+    reviewCount: lead.reviews_count,
+    googleMapsUrl: lead.google_maps_url,
+    hasWebsite: Boolean(lead.website),
+    hasInstagram: false,
+    createdAt: lead.created_at,
+  };
+}
+
+export function exportToCSV(leads: (Lead | BusinessLead)[], filename: string): void {
+  const headers = [
+    "Business Name",
+    "Category",
+    "Address",
+    "Phone",
+    "Email",
+    "Website",
+    "Rating",
+    "Reviews",
+    "Google Maps URL",
   ];
+
+  const rows = leads.map((lead) => {
+    const row = toBusinessLead(lead);
+    return [
+      row.name || "",
+      row.category || "",
+      row.address || "",
+      row.phone || "",
+      leadEmail(lead),
+      row.website || "",
+      row.rating?.toString() || "",
+      row.reviewCount?.toString() || "",
+      row.googleMapsUrl || "",
+    ]
+      .map((field) => `"${String(field).replace(/"/g, '""')}"`)
+      .join(",");
+  });
+
+  const csv = [headers.join(","), ...rows].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
-export function leadsToCsv(leads: Lead[]): string {
-  const header = CSV_HEADERS.join(",");
-  const body = leads
-    .map((lead) => leadToRow(lead).map(escapeCsvField).join(","))
-    .join("\n");
-  return `${header}\n${body}`;
-}
-
+/** @deprecated Use exportToCSV */
 export function exportCSV(
   leads: Lead[],
   business: string,
   location: string
 ): void {
-  const csv = leadsToCsv(leads);
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `leadpilot-${slugify(business)}-${slugify(location)}-prospects.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
+  const slug = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+  exportToCSV(
+    leads,
+    `leadpilot-${slug(business)}-${slug(location)}-${Date.now()}.csv`
+  );
+}
+
+export function leadsToCsv(leads: Lead[]): string {
+  const headers = [
+    "Business Name",
+    "Category",
+    "Address",
+    "Phone",
+    "Email",
+    "Website",
+    "Rating",
+    "Reviews",
+    "Google Maps URL",
+  ];
+  const rows = leads.map((lead) => {
+    const bl = businessLeadToLead(
+      toBusinessLead(lead) as BusinessLead & { searchId: string }
+    );
+    return [
+      bl.business_name,
+      bl.category ?? "",
+      bl.address ?? "",
+      bl.phone ?? "",
+      getAllEmailsForDisplay(bl).join(", "),
+      bl.website ?? "",
+      bl.rating != null ? String(bl.rating) : "",
+      bl.reviews_count != null ? String(bl.reviews_count) : "",
+      bl.google_maps_url ?? "",
+    ]
+      .map((f) => `"${String(f).replace(/"/g, '""')}"`)
+      .join(",");
+  });
+  return [headers.join(","), ...rows].join("\n");
 }

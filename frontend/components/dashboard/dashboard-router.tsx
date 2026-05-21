@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { DemoRecordingDashboard } from "./demo-recording-dashboard";
 import { SearchDashboard } from "./search-dashboard";
 import { hasStoredLicense } from "@/lib/license";
+import { getApiUrl } from "@/utils/env";
 
 /**
  * /dashboard?demo=recording → auto-play screen recording demo
@@ -34,6 +35,49 @@ export function DashboardRouter({ skipAccessCheck = false }: { skipAccessCheck?:
 
     setReady(true);
   }, [router, searchParams, skipAccessCheck]);
+
+  useEffect(() => {
+    if (!ready || searchParams.get("demo") === "recording") return;
+
+    const email = localStorage.getItem("leadpilot_email");
+    const key = localStorage.getItem("leadpilot_key");
+    if (!email || !key) return;
+
+    const raw = [
+      navigator.userAgent,
+      screen.width,
+      screen.height,
+      navigator.language,
+      Intl.DateTimeFormat().resolvedOptions().timeZone,
+    ].join("|");
+
+    let hash = 0;
+    for (let i = 0; i < raw.length; i++) {
+      const char = raw.charCodeAt(i);
+      hash = (hash << 5) - hash + char;
+      hash = hash & hash;
+    }
+    const deviceSignature = Math.abs(hash).toString(36);
+
+    const apiUrl = getApiUrl();
+    if (!apiUrl) return;
+
+    fetch(`${apiUrl}/auth/register-device`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, key, deviceSignature }),
+    })
+      .then((res) => {
+        if (res.status === 403) {
+          localStorage.removeItem("leadpilot_email");
+          localStorage.removeItem("leadpilot_key");
+          window.location.href = "/activate?error=max_devices";
+        }
+      })
+      .catch(() => {
+        /* silent — do not block dashboard */
+      });
+  }, [ready, searchParams]);
 
   if (!ready) {
     return (

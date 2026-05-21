@@ -387,7 +387,7 @@ export function DemoRecordingDashboard() {
                         <td className="px-4 py-3 text-zinc-400 whitespace-nowrap">
                           {lead.phone}
                         </td>
-                        <td className="px-4 py-3 text-violet-300 text-xs">
+                        <td className="px-4 py-3 text-zinc-400 text-xs">
                           {displayEmail ?? "—"}
                         </td>
                         <td className="px-4 py-3 text-amber-400 whitespace-nowrap">

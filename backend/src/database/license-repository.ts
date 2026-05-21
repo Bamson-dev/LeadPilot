@@ -220,7 +220,11 @@ export async function checkAndIncrementSearchCount(licenseId: string): Promise<{
   if (daysSinceReset >= 30) {
     await supabase
       .from("license_keys")
-      .update({ search_count: 0, last_reset_at: now.toISOString() })
+      .update({
+        search_count: 0,
+        last_reset_at: now.toISOString(),
+        limit_email_sent: false,
+      })
       .eq("id", licenseId);
     currentCount = 0;
   }
@@ -254,4 +258,83 @@ export async function checkAndIncrementSearchCount(licenseId: string): Promise<{
   }
 
   return { allowed: true, remaining: remaining - 1 };
+}
+
+export async function getLicenseEmailBySearchId(
+  searchId: string
+): Promise<string | null> {
+  try {
+    const { data: userSearch } = await supabase
+      .from("user_searches")
+      .select("license_key")
+      .eq("search_id", searchId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!userSearch?.license_key) return null;
+
+    const { data: license } = await supabase
+      .from("license_keys")
+      .select("email")
+      .eq("key", userSearch.license_key as string)
+      .maybeSingle();
+
+    return (license?.email as string) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function registerDevice(
+  licenseId: string,
+  deviceSignature: string
+): Promise<{ allowed: boolean; reason?: string }> {
+  const { data, error } = await supabase
+    .from("license_keys")
+    .select("device_one, device_two")
+    .eq("id", licenseId)
+    .single();
+
+  if (error || !data) {
+    return { allowed: false, reason: "License not found" };
+  }
+
+  if (
+    data.device_one === deviceSignature ||
+    data.device_two === deviceSignature
+  ) {
+    return { allowed: true };
+  }
+
+  if (!data.device_one) {
+    await supabase
+      .from("license_keys")
+      .update({ device_one: deviceSignature })
+      .eq("id", licenseId);
+    return { allowed: true };
+  }
+
+  if (!data.device_two) {
+    await supabase
+      .from("license_keys")
+      .update({ device_two: deviceSignature })
+      .eq("id", licenseId);
+    return { allowed: true };
+  }
+
+  return {
+    allowed: false,
+    reason:
+      "Maximum devices reached. Contact support on WhatsApp 09067285890 to add a new device.",
+  };
+}
+
+export async function resetDevices(licenseId: string): Promise<void> {
+  const { error } = await supabase
+    .from("license_keys")
+    .update({ device_one: null, device_two: null })
+    .eq("id", licenseId);
+
+  if (error) throw new Error(error.message);
 }

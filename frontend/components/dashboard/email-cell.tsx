@@ -11,11 +11,11 @@ export function EmailCell({ lead }: EmailCellProps) {
   const emails = getAllEmailsForDisplay(lead);
 
   if (emails.length === 0) {
-    return <span className="text-xs text-zinc-500">—</span>;
+    return <span className="text-zinc-400">—</span>;
   }
 
   return (
-    <div className="text-xs leading-relaxed break-words text-zinc-300">
+    <div className="text-sm text-zinc-400 leading-relaxed break-words">
       {emails.map((addr) => (
         <span key={addr} className="block truncate">
           {addr}

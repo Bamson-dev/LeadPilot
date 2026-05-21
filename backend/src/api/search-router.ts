@@ -1,26 +1,54 @@
+import os from "os";
 import { Router, type Request, type Response } from "express";
 import type { SearchResponse } from "@leadpilot/shared";
 import {
-  copyLeadsToSearch,
   createSearchJob,
   getSearchJob,
   getSearchResults,
   markSearchComplete,
   markSearchFailed,
 } from "../database/search-repository";
-import { getCachedResults } from "../services/cache-service";
-import { MIN_CACHE_LEADS_TO_REUSE } from "../scraper/utils/constants";
-import { searchQueue, getQueuePosition } from "../queues/search-queue";
+import {
+  copyCachedLeadsForInsert,
+  getCachedSearch,
+} from "../services/cache-service";
+import { getUserSearchHistory } from "../database/user-search-repository";
+import { searchQueue, getQueuePosition, enqueueSearch } from "../queues/search-queue";
 import { checkSearchLimit } from "../middleware/check-search-limit";
 import { trackSearch } from "../services/abuse-detection";
 import { registerStream, removeStream } from "../services/stream-registry";
 import { formatSearchMessage } from "../utils/search-messages";
+import { supabase } from "../database/client";
 import { logger } from "../utils/logger";
 
 export const searchRouter = Router();
 
+function getMemoryUsagePercent(): number {
+  const total = os.totalmem();
+  const free = os.freemem();
+  return ((total - free) / total) * 100;
+}
+
 searchRouter.get("/queue/status", (_req: Request, res: Response) => {
   res.json(searchQueue.getStatus());
+});
+
+searchRouter.get("/history", async (req: Request, res: Response) => {
+  try {
+    const licenseKey = req.headers["x-license-key"] as string;
+    if (!licenseKey) {
+      res.status(401).json({ error: "License key required" });
+      return;
+    }
+
+    const history = await getUserSearchHistory(licenseKey, 20);
+    res.json({ history });
+  } catch (err) {
+    logger.error("GET /search/history failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to fetch history" });
+  }
 });
 
 searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => {
@@ -38,52 +66,70 @@ searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => 
     const trimmedQuery = query.trim();
     const trimmedLocation = location.trim();
 
+    const memUsage = getMemoryUsagePercent();
+    if (memUsage > 85) {
+      res.status(503).json({
+        error: "Server is under high load. Please try again in a few minutes.",
+        code: "SERVER_BUSY",
+      });
+      return;
+    }
+
+    const queueStatus = searchQueue.getStatus();
+    if (queueStatus.queued >= 10) {
+      res.status(503).json({
+        error: "Search queue is full. Please try again in a few minutes.",
+        code: "QUEUE_FULL",
+      });
+      return;
+    }
+
     if (req.licenseId && req.licenseId !== "unknown") {
       trackSearch(req.licenseId);
     }
 
-    const cachedResults = await getCachedResults(trimmedQuery, trimmedLocation);
-    if (
-      cachedResults &&
-      cachedResults.length >= MIN_CACHE_LEADS_TO_REUSE
-    ) {
-      const searchJob = await createSearchJob(trimmedQuery, trimmedLocation);
-      await copyLeadsToSearch(searchJob.id, cachedResults);
-      await markSearchComplete(searchJob.id, cachedResults.length);
+    const cached = await getCachedSearch(trimmedQuery, trimmedLocation);
+    if (cached && cached.leads.length > 0) {
+      const newJob = await createSearchJob(trimmedQuery, trimmedLocation);
+      const rows = copyCachedLeadsForInsert(cached.leads, newJob.id);
+      const { error: insertError } = await supabase
+        .from("business_leads")
+        .insert(rows);
+
+      if (insertError) {
+        logger.error("Failed to insert cached leads", { error: insertError.message });
+      }
+
+      await markSearchComplete(newJob.id, cached.leads.length);
 
       res.status(201).json({
-        searchId: searchJob.id,
+        searchId: newJob.id,
         status: "completed",
         cached: true,
-        totalFound: cachedResults.length,
+        totalFound: cached.leads.length,
         searchesRemaining: req.searchesRemaining ?? null,
-        message: formatSearchMessage(trimmedQuery, trimmedLocation),
+        message: `Found ${cached.leads.length} businesses instantly`,
       } satisfies SearchResponse);
       return;
     }
 
     const searchJob = await createSearchJob(trimmedQuery, trimmedLocation);
+    const licenseEmail = (req.headers["x-license-email"] as string) || undefined;
+    const queuePosition = searchQueue.getQueuePosition();
 
     res.status(201).json({
       searchId: searchJob.id,
       status: "queued",
+      queuePosition,
       searchesRemaining: req.searchesRemaining ?? null,
-      message: formatSearchMessage(trimmedQuery, trimmedLocation),
+      message: `Searching for ${trimmedQuery} in ${trimmedLocation}`,
     } satisfies SearchResponse);
 
     setImmediate(() => {
-      searchQueue
-        .add(searchJob.id, trimmedQuery, trimmedLocation)
-        .catch((err) => {
-          logger.error("Queue error", {
-            searchId: searchJob.id,
-            error: err instanceof Error ? err.message : "unknown",
-          });
-          markSearchFailed(
-            searchJob.id,
-            err instanceof Error ? err.message : "Search failed"
-          ).catch(() => undefined);
-        });
+      enqueueSearch(searchJob.id, trimmedQuery, trimmedLocation, {
+        licenseKey: req.licenseKey,
+        licenseEmail,
+      });
     });
   } catch (err) {
     logger.error("POST /search failed", {
@@ -120,7 +166,10 @@ searchRouter.get("/:id/results", async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
     const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
-    const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit ?? "50"), 10) || 50));
+    const limit = Math.min(
+      200,
+      Math.max(1, parseInt(String(req.query.limit ?? "200"), 10) || 200)
+    );
     const { leads, total } = await getSearchResults(id, page, limit);
     res.json({ leads, total, page, limit });
   } catch (err) {
@@ -178,13 +227,15 @@ searchRouter.get("/:id/stream", async (req: Request, res: Response) => {
       if (existingJob && existingJob.status === "completed") {
         const { leads } = await getSearchResults(searchId, 1, 200);
         for (const lead of leads) {
-          res.write(`data: ${JSON.stringify({ type: "lead", data: lead, lead })}\n\n`);
+          res.write(
+            `data: ${JSON.stringify({ type: "lead", data: lead, lead })}\n\n`
+          );
         }
         res.write(
           `data: ${JSON.stringify({
             type: "complete",
             total: leads.length,
-            message: `Search complete. Found ${leads.length} businesses.`,
+            message: `Search complete. Found ${leads.length} businesses in ${existingJob.location}.`,
           })}\n\n`
         );
         clearInterval(heartbeat);
@@ -199,11 +250,11 @@ searchRouter.get("/:id/stream", async (req: Request, res: Response) => {
     }
 
     const position = getQueuePosition(searchId);
-    if (position != null) {
+    if (position != null && position > 0) {
       res.write(
         `data: ${JSON.stringify({
           type: "progress",
-          message: `${formatSearchMessage(job.query, job.location)} (queued position ${position})`,
+          message: `Your search is queued. Position ${position} in line.`,
           processed: 0,
         })}\n\n`
       );
@@ -218,7 +269,9 @@ searchRouter.get("/:id/stream", async (req: Request, res: Response) => {
             res.write(
               `data: ${JSON.stringify({
                 type: "error",
-                message: current.error ?? "Search failed",
+                message:
+                  current.error ??
+                  "Search did not complete. Please try a broader location or business type.",
               })}\n\n`
             );
             clearInterval(statusPoll);

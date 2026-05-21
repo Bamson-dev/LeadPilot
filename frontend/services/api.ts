@@ -137,6 +137,11 @@ export async function startSearch(
     throw new Error(data.error || "Monthly search limit reached");
   }
 
+  if (res.status === 503) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error || "Server is busy. Please try again shortly.");
+  }
+
   if (!res.ok) {
     const data = (await res.json().catch(() => ({ error: "Unknown error" }))) as {
       error?: string;
@@ -169,6 +174,33 @@ export async function getSearch(id: string): Promise<SearchJob> {
   return parseJson<SearchJob>(res);
 }
 
+export async function getSearchHistory(): Promise<{
+  history: Array<{
+    id: string;
+    query: string;
+    location: string;
+    total_found: number;
+    created_at: string;
+    search_id: string | null;
+  }>;
+}> {
+  const res = await fetch(`${getApiUrl()}/search/history`, {
+    headers: getLicenseHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) return { history: [] };
+  return res.json() as Promise<{
+    history: Array<{
+      id: string;
+      query: string;
+      location: string;
+      total_found: number;
+      created_at: string;
+      search_id: string | null;
+    }>;
+  }>;
+}
+
 export async function getResults(
   id: string,
   page = 1,
@@ -176,7 +208,7 @@ export async function getResults(
 ): Promise<{ leads: Lead[]; total: number }> {
   const res = await fetch(
     `${getApiUrl()}/search/${id}/results?page=${page}&limit=${limit}`,
-    { cache: "no-store" }
+    { headers: getLicenseHeaders(), cache: "no-store" }
   );
   const data = await parseJson<{
     leads: BusinessLead[];
@@ -300,4 +332,4 @@ export function streamResults(
   };
 }
 
-export { exportCSV } from "@/features/export/csv-export";
+export { exportCSV, exportToCSV } from "@/features/export/csv-export";
