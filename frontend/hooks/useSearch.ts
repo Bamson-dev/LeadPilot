@@ -572,7 +572,8 @@ function leadRowToBusinessLead(lead: Lead): BusinessLead {
     address: lead.address ?? "",
     phone: lead.phone,
     email: lead.email,
-    verifiedEmails: lead.verified_emails ?? [],
+    emails: lead.emails ?? lead.verified_emails ?? [],
+    verifiedEmails: lead.verified_emails ?? lead.emails ?? [],
     predictedEmails: lead.predicted_emails ?? [],
     emailSource:
       lead.email_source === "extracted"

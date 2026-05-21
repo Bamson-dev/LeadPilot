@@ -12,6 +12,7 @@ import {
   isOnConsentPage,
   seedGoogleConsentCookies,
 } from "./google-consent";
+import { buildSearchStrategyUrls } from "./search-strategies";
 import {
   DETAIL_PANEL_WAIT_MS,
   MAX_LEADS_PER_SEARCH,
@@ -23,7 +24,7 @@ import {
   SIDEBAR_STABLE_ROUNDS,
 } from "../utils/constants";
 
-const BATCH_SIZE = 5;
+const BATCH_SIZE = 8;
 
 export interface MapsScrapeOptions {
   query: string;
@@ -323,6 +324,123 @@ async function loadMapsSearchPage(page: Page, searchUrl: string): Promise<void> 
   }
 }
 
+async function autoScroll(page: Page): Promise<void> {
+  await page.evaluate(async (maxMs: number) => {
+    const feed = document.querySelector('[role="feed"]') as HTMLElement | null;
+    if (!feed) return;
+
+    await new Promise<void>((resolve) => {
+      let lastHeight = 0;
+      let unchangedCount = 0;
+
+      const interval = setInterval(() => {
+        feed.scrollTop = feed.scrollHeight;
+
+        const newHeight = feed.scrollHeight;
+        if (newHeight === lastHeight) {
+          unchangedCount++;
+          if (unchangedCount >= 6) {
+            clearInterval(interval);
+            resolve();
+          }
+        } else {
+          unchangedCount = 0;
+          lastHeight = newHeight;
+        }
+      }, 800);
+
+      setTimeout(() => {
+        clearInterval(interval);
+        resolve();
+      }, maxMs);
+    });
+  }, SIDEBAR_SCROLL_TIMEOUT_MS);
+}
+
+async function scrapeUrlsFromPage(
+  context: BrowserContext,
+  searchUrl: string,
+  query: string,
+  location: string
+): Promise<string[]> {
+  const page = await context.newPage();
+
+  try {
+    logger.info("Maps search starting", { searchUrl, query, location });
+
+    await gotoWithRetry(page, withMapsLocale(searchUrl), {
+      waitUntil: "networkidle",
+      timeout: 30000,
+      retries: 1,
+    });
+    await acceptGoogleConsent(page);
+
+    const blocked = await detectBlockedPage(page);
+    if (blocked) {
+      logger.warn("Maps strategy blocked", { searchUrl, blocked });
+      return [];
+    }
+
+    await page
+      .waitForSelector('[role="feed"]', { timeout: 15000 })
+      .catch(() => logger.warn("Feed selector not found", { searchUrl }));
+
+    await autoScroll(page);
+
+    const urls = await collectPlaceUrls(page);
+
+    logger.info("Maps place URLs collected", { count: urls.length, searchUrl });
+
+    return urls;
+  } catch (err) {
+    logger.error("Strategy search failed", {
+      searchUrl,
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    return [];
+  } finally {
+    await page.close().catch(() => undefined);
+  }
+}
+
+async function getBusinessUrls(
+  context: BrowserContext,
+  query: string,
+  location: string
+): Promise<string[]> {
+  const allUrls = new Set<string>();
+  const searchStrategies = buildSearchStrategyUrls(query, location);
+
+  logger.info("Multi-strategy Maps search", {
+    query,
+    location,
+    strategies: searchStrategies.length,
+  });
+
+  const results = await Promise.allSettled(
+    searchStrategies.map((url) => scrapeUrlsFromPage(context, url, query, location))
+  );
+
+  for (const result of results) {
+    if (result.status === "fulfilled") {
+      for (const url of result.value) {
+        const key = url.split("?")[0] ?? url;
+        allUrls.add(key);
+      }
+    }
+  }
+
+  const merged = [...allUrls];
+  logger.info("Multi-strategy URLs merged", {
+    query,
+    location,
+    total: merged.length,
+    strategies: searchStrategies.length,
+  });
+
+  return merged.slice(0, MAX_LEADS_PER_SEARCH);
+}
+
 async function extractBusinessDetails(
   context: BrowserContext,
   placeUrl: string,
@@ -403,41 +521,22 @@ export async function scrapeGoogleMaps(
   await seedGoogleConsentCookies(context);
 
   const searchPage = await context.newPage();
-  const searchPhrase = `${query} in ${location}`;
-  const searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(searchPhrase)}`;
   const seen = new Set<string>();
   let count = 0;
 
   try {
-    logger.info("Maps search starting", { query, location, searchUrl });
-    await loadMapsSearchPage(searchPage, searchUrl);
-
-    const blocked = await detectBlockedPage(searchPage);
-    if (blocked) throw new Error(blocked);
-
-    const panelReady = await waitForResultsPanel(searchPage);
-    if (!panelReady) {
-      logger.warn("Maps results panel slow — continuing with scroll", { query, location });
-    }
-
-    await scrollResults(searchPage, query, location, onPhase);
-
-    let businessUrls = await collectPlaceUrls(searchPage);
-    if (businessUrls.length === 0) {
-      await searchPage.waitForTimeout(3500);
-      businessUrls = await collectPlaceUrls(searchPage);
-    }
-
-    businessUrls = businessUrls.slice(0, MAX_LEADS_PER_SEARCH);
-
-    logger.info("Maps place URLs collected", {
-      query,
-      location,
-      count: businessUrls.length,
-    });
+    onPhase?.(formatSearchMessage(query, location));
+    let businessUrls = await getBusinessUrls(context, query, location);
 
     if (businessUrls.length === 0) {
       onPhase?.(formatSearchMessage(query, location));
+      const fallbackUrl = `https://www.google.com/maps/search/${encodeURIComponent(`${query} in ${location}`)}`;
+      await loadMapsSearchPage(searchPage, fallbackUrl);
+      await scrollResults(searchPage, query, location, onPhase);
+      businessUrls = (await collectPlaceUrls(searchPage)).slice(0, MAX_LEADS_PER_SEARCH);
+    }
+
+    if (businessUrls.length === 0) {
       const feedCount = await extractLeadsViaFeedClicks(
         searchPage,
         query,

@@ -7,8 +7,10 @@ export interface BusinessLead {
   category: string;
   address: string;
   phone: string | null;
-  /** Primary verified email only (never predicted). */
+  /** Primary email (first verified) for backwards compatibility. */
   email: string | null;
+  /** All verified emails found (Maps panel + website crawl). */
+  emails: string[];
   verifiedEmails: string[];
   predictedEmails: PredictedEmail[];
   emailSource: "website" | "predicted" | "none";

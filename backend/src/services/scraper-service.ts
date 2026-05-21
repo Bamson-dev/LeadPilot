@@ -112,6 +112,7 @@ export async function runScraperJob(
       pendingEnrich++;
       void enrichLeadEmail(basic)
         .then((enriched) => {
+          enrichedLeads.push(enriched);
           emitLead(emit, enriched);
           void insertBusinessLead(enriched).catch((err) => {
             logger.warn("Failed to upsert enriched lead", {
@@ -139,6 +140,8 @@ export async function runScraperJob(
         }).catch(() => undefined);
       }
     };
+
+    const enrichedLeads: BusinessLead[] = [];
 
     const total = await scrapeGoogleMaps(browser, {
       query,
@@ -169,6 +172,25 @@ export async function runScraperJob(
 
     await updateSearchJob(searchId, { processed: progress, totalFound: total });
     await markSearchComplete(searchId, total);
+
+    const totalFound = total;
+    const withPhone = enrichedLeads.filter((l) => l.phone).length;
+    const withEmail = enrichedLeads.filter(
+      (l) => (l.emails?.length ?? 0) > 0 || (l.verifiedEmails?.length ?? 0) > 0
+    ).length;
+    const withWebsite = enrichedLeads.filter((l) => l.website).length;
+
+    logger.info("Search completion stats", {
+      searchId,
+      totalFound,
+      withPhone,
+      withEmail,
+      withWebsite,
+      phoneRate:
+        totalFound > 0 ? `${Math.round((withPhone / totalFound) * 100)}%` : "0%",
+      emailRate:
+        totalFound > 0 ? `${Math.round((withEmail / totalFound) * 100)}%` : "0%",
+    });
 
     if (options?.licenseKey) {
       await saveUserSearch({

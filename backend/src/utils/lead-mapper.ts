@@ -23,13 +23,15 @@ function buildVerifiedLead(
   lead: BusinessLead,
   verified: string[]
 ): BusinessLead {
-  const emails = pickBestEmail(
+  const all = pickBestEmail(
     verified.filter(isValidEmail),
-    lead.website
+    lead.website,
+    100
   );
-  const display = emails.length > 0 ? emails : verified.filter(isValidEmail).slice(0, 2);
+  const display = all.length > 0 ? all : verified.filter(isValidEmail);
   return {
     ...lead,
+    emails: display,
     verifiedEmails: display,
     predictedEmails: [],
     email: display.length > 0 ? display.join(", ") : null,
@@ -55,6 +57,7 @@ export function rawLeadToBusinessLead(
     address: raw.address ?? "",
     phone: raw.phone,
     email: null,
+    emails: [],
     verifiedEmails: [],
     predictedEmails: [],
     emailSource: "none",
@@ -68,8 +71,8 @@ export function rawLeadToBusinessLead(
   };
 
   if (mapsVerified.length > 0) {
-    const best = pickBestEmail(mapsVerified, website);
-    return buildVerifiedLead(base, best.length > 0 ? best : mapsVerified);
+    const sorted = pickBestEmail(mapsVerified, website, 100);
+    return buildVerifiedLead(base, sorted.length > 0 ? sorted : mapsVerified);
   }
 
   return base;
@@ -81,28 +84,28 @@ export async function enrichLeadEmail(
   const mapsVerified =
     lead.verifiedEmails.length > 0
       ? lead.verifiedEmails
-      : lead.email
-        ? parseEmailList(lead.email)
-        : [];
+      : lead.emails.length > 0
+        ? lead.emails
+        : lead.email
+          ? parseEmailList(lead.email)
+          : [];
 
   const effectiveWebsite =
     (await resolveEffectiveBusinessWebsite(lead.website)) ?? lead.website;
 
   const crawl = await crawlEmailForWebsite(effectiveWebsite);
-  const websiteVerified =
-    crawl.emailSource === "website" && crawl.email
-      ? parseEmailList(crawl.email)
-      : [];
+  const websiteVerified = crawl.emails.length > 0 ? crawl.emails : [];
 
   const mergedVerified = mergeEmails(mapsVerified, websiteVerified);
-  const bestVerified = pickBestEmail(mergedVerified, effectiveWebsite ?? lead.website);
-  if (bestVerified.length > 0) {
-    return buildVerifiedLead(lead, bestVerified);
+  const allVerified = pickBestEmail(mergedVerified, effectiveWebsite ?? lead.website, 100);
+  if (allVerified.length > 0) {
+    return buildVerifiedLead(lead, allVerified);
   }
 
   if (!effectiveWebsite?.trim() && !lead.website?.trim()) {
     return {
       ...lead,
+      emails: [],
       verifiedEmails: [],
       predictedEmails: [],
       email: null,
@@ -116,11 +119,12 @@ export async function enrichLeadEmail(
     category: lead.category,
   });
 
-  const validPredictions = predictions.filter((p) => isValidEmail(p.email)).slice(0, 2);
+  const validPredictions = predictions.filter((p) => isValidEmail(p.email));
   if (validPredictions.length > 0) {
     const predictedAddresses = validPredictions.map((p) => p.email);
     return {
       ...lead,
+      emails: [],
       verifiedEmails: [],
       predictedEmails: validPredictions,
       email: predictedAddresses.join(", "),
@@ -137,7 +141,8 @@ export async function enrichLeadEmail(
     ).filter(isValidEmail);
     const fallbackEmails = pickBestEmail(
       fallbackAddresses,
-      effectiveWebsite ?? lead.website
+      effectiveWebsite ?? lead.website,
+      100
     );
     if (fallbackEmails.length > 0) {
       const predictedEmails: PredictedEmail[] = fallbackEmails.map((email) => ({
@@ -149,6 +154,7 @@ export async function enrichLeadEmail(
       const addresses = predictedEmails.map((p) => p.email);
       return {
         ...lead,
+        emails: [],
         verifiedEmails: [],
         predictedEmails,
         email: addresses.join(", "),
@@ -159,6 +165,7 @@ export async function enrichLeadEmail(
 
   return {
     ...lead,
+    emails: [],
     verifiedEmails: [],
     predictedEmails: [],
     email: null,
@@ -174,9 +181,11 @@ export function predictionStorageFields(lead: BusinessLead): {
   prediction_confidence_secondary: number | null;
 } {
   const verified =
-    lead.verifiedEmails.length > 0
-      ? lead.verifiedEmails.join(", ")
-      : lead.email;
+    lead.emails.length > 0
+      ? lead.emails.join(", ")
+      : lead.verifiedEmails.length > 0
+        ? lead.verifiedEmails.join(", ")
+        : lead.email;
 
   const formatted = formatPredictedEmailsForStorage(lead.predictedEmails);
 
@@ -220,5 +229,5 @@ export function predictionsFromDb(row: {
       source: "business_pattern",
     });
   }
-  return out.slice(0, 2);
+  return out;
 }

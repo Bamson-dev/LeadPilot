@@ -21,6 +21,7 @@ function mapRowToBusinessLead(row: Record<string, unknown>): BusinessLead {
     address: (row.address as string) ?? "",
     phone: row.phone as string | null,
     email: verifiedEmails[0] ?? null,
+    emails: verifiedEmails,
     verifiedEmails,
     predictedEmails: predictionsFromDb({
       predicted_email: row.predicted_email as string | null,

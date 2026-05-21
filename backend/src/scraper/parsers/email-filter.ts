@@ -1,4 +1,3 @@
-import { MAX_DISPLAY_EMAILS } from "../utils/constants";
 import { filterValidEmails, isValidEmail, pickBestEmail } from "./email-validation";
 
 function asString(value: unknown): string | null {
@@ -60,39 +59,12 @@ export function mergeEmails(...inputs: unknown[]): string[] {
   return filterValidEmails([...set]);
 }
 
-function appendSuggestedInfoEmail(
-  picked: string[],
-  businessWebsite: string | null | undefined,
-  max: number
-): string[] {
-  if (!businessWebsite || picked.length >= max) return picked;
-
-  const domain = businessWebsite
-    .replace(/^https?:\/\//i, "")
-    .replace(/^www\./i, "")
-    .split("/")[0]
-    ?.toLowerCase();
-
-  if (!domain || !domain.includes(".")) return picked;
-
-  const suggested = `info@${domain}`;
-  if (!isValidEmail(suggested)) return picked;
-  if (picked.some((e) => e.toLowerCase() === suggested)) return picked;
-
-  return [...picked, suggested].slice(0, max);
-}
-
-/** Top emails for storage (comma-separated) and display. */
+/** All valid emails for storage (comma-separated), priority-sorted, no cap. */
 export function formatEmailsForDisplay(
   emails: string[],
-  businessWebsite?: string | null,
-  max = MAX_DISPLAY_EMAILS
+  businessWebsite?: string | null
 ): string | null {
-  const picked = appendSuggestedInfoEmail(
-    pickBestEmail(emails, businessWebsite, max),
-    businessWebsite,
-    max
-  );
+  const picked = pickBestEmail(emails, businessWebsite, 100);
   if (picked.length === 0) return null;
   return picked.join(", ");
 }

@@ -5,10 +5,13 @@ import { businessLeadToLead } from "@/types/lead";
 
 function leadEmail(lead: Lead | BusinessLead): string {
   if ("verifiedEmails" in lead) {
-    const emails = [
-      ...(lead.verifiedEmails ?? []),
-      ...(lead.predictedEmails ?? []).map((p) => p.email),
-    ];
+    const emails =
+      lead.emails && lead.emails.length > 0
+        ? lead.emails
+        : [
+            ...(lead.verifiedEmails ?? []),
+            ...(lead.predictedEmails ?? []).map((p) => p.email),
+          ];
     const seen = new Set<string>();
     const out: string[] = [];
     for (const e of emails) {
@@ -16,11 +19,14 @@ function leadEmail(lead: Lead | BusinessLead): string {
       if (seen.has(k)) continue;
       seen.add(k);
       out.push(e);
-      if (out.length >= 2) break;
     }
     return out.join("; ");
   }
-  return getAllEmailsForDisplay(lead as Lead).join("; ");
+  const leadEmails =
+    (lead as Lead).emails && (lead as Lead).emails.length > 0
+      ? (lead as Lead).emails
+      : getAllEmailsForDisplay(lead as Lead);
+  return leadEmails.join("; ");
 }
 
 function toBusinessLead(lead: Lead | BusinessLead): BusinessLead {
@@ -33,7 +39,8 @@ function toBusinessLead(lead: Lead | BusinessLead): BusinessLead {
     address: lead.address ?? "",
     phone: lead.phone,
     email: lead.email,
-    verifiedEmails: lead.verified_emails ?? [],
+    emails: lead.emails ?? lead.verified_emails ?? [],
+    verifiedEmails: lead.verified_emails ?? lead.emails ?? [],
     predictedEmails: lead.predicted_emails ?? [],
     emailSource:
       lead.email_source === "extracted"

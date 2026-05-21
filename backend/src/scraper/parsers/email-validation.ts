@@ -1,5 +1,4 @@
 import { extractDomainLoose } from "../utils/domain-utils";
-import { MAX_DISPLAY_EMAILS } from "../utils/constants";
 
 const IMAGE_EXTENSIONS = [
   ".png",
@@ -135,11 +134,11 @@ function matchesBusinessDomain(email: string, businessDomain: string): boolean {
   );
 }
 
-/** Pick up to MAX_DISPLAY_EMAILS contact emails using priority rules. */
+/** Sort all valid emails by priority (contact → domain match → other). No cap by default. */
 export function pickBestEmail(
   emails: string[],
   businessWebsite?: string | null,
-  max = MAX_DISPLAY_EMAILS
+  max = 100
 ): string[] {
   const valid = filterValidEmails(emails);
   if (valid.length === 0) return [];

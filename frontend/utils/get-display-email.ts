@@ -2,13 +2,14 @@ import type { PredictedEmail } from "@leadpilot/shared";
 import type { Lead } from "@/types/lead";
 
 export function getVerifiedEmails(
-  lead: Pick<Lead, "email" | "verified_emails" | "extracted_email">
+  lead: Pick<Lead, "email" | "verified_emails" | "extracted_email" | "emails">
 ): string[] {
+  if (lead.emails && lead.emails.length > 0) return lead.emails;
   if (lead.verified_emails?.length) return lead.verified_emails;
   if (lead.extracted_email?.trim()) {
     return lead.extracted_email.split(/,\s*/).map((e) => e.trim()).filter(Boolean);
   }
-  if (lead.email?.trim()) return [lead.email.trim()];
+  if (lead.email?.trim()) return lead.email.split(/,\s*/).map((e) => e.trim()).filter(Boolean);
   return [];
 }
 
@@ -18,11 +19,11 @@ export function getPredictedEmails(
   return lead.predicted_emails ?? [];
 }
 
-/** Verified first, then predicted — max 3, no labels in UI. */
+/** All verified emails, then predicted — no cap, no labels in UI. */
 export function getAllEmailsForDisplay(
   lead: Pick<
     Lead,
-    "email" | "extracted_email" | "verified_emails" | "predicted_emails"
+    "email" | "extracted_email" | "verified_emails" | "predicted_emails" | "emails"
   >
 ): string[] {
   const seen = new Set<string>();
@@ -36,21 +37,20 @@ export function getAllEmailsForDisplay(
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(addr);
-    if (out.length >= 3) break;
   }
 
   return out;
 }
 
 export function hasAnyEmail(
-  lead: Pick<Lead, "email" | "extracted_email" | "verified_emails" | "predicted_emails">
+  lead: Pick<Lead, "email" | "extracted_email" | "verified_emails" | "predicted_emails" | "emails">
 ): boolean {
   return getVerifiedEmails(lead).length > 0 || getPredictedEmails(lead).length > 0;
 }
 
 /** @deprecated Use getVerifiedEmails / getPredictedEmails */
 export function getDisplayEmail(
-  lead: Pick<Lead, "email" | "extracted_email" | "generated_email" | "verified_emails">
+  lead: Pick<Lead, "email" | "extracted_email" | "generated_email" | "verified_emails" | "emails">
 ): string | null {
   const verified = getVerifiedEmails(lead);
   return verified[0] ?? null;

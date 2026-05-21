@@ -7,6 +7,7 @@ export interface Lead {
   business_name: string;
   phone: string | null;
   email: string | null;
+  emails: string[];
   verified_emails: string[];
   predicted_emails: PredictedEmail[];
   extracted_email: string | null;
@@ -29,13 +30,17 @@ export function businessLeadToLead(lead: BusinessLead): Lead {
         ? lead.email.split(/,\s*/).map((e) => e.trim()).filter(Boolean)
         : [];
 
+  const allEmails =
+    lead.emails?.length > 0 ? lead.emails : verified;
+
   return {
     id: lead.id,
     search_id: lead.searchId,
     business_name: lead.name,
     phone: lead.phone,
-    email: verified.length > 0 ? verified.join(", ") : null,
-    verified_emails: verified,
+    email: allEmails.length > 0 ? allEmails.join(", ") : null,
+    emails: allEmails,
+    verified_emails: allEmails,
     predicted_emails: lead.predictedEmails ?? [],
     extracted_email: lead.emailSource === "website" ? verified.join(", ") || null : null,
     generated_email: null,

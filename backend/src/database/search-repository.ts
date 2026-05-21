@@ -120,6 +120,7 @@ function mapBusinessLead(row: DbBusinessLead): BusinessLead {
     address: row.address ?? "",
     phone: row.phone,
     email: verifiedEmails[0] ?? null,
+    emails: verifiedEmails,
     verifiedEmails,
     predictedEmails,
     emailSource,
