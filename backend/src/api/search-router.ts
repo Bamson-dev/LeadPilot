@@ -1,5 +1,4 @@
 import { Router, type Request, type Response } from "express";
-import { z } from "zod";
 import type { SearchResponse } from "@leadpilot/shared";
 import {
   copyLeadsToSearch,
@@ -7,23 +6,15 @@ import {
   getSearchJob,
   getSearchResults,
   markSearchComplete,
+  markSearchFailed,
 } from "../database/search-repository";
 import { getCachedResults } from "../services/cache-service";
-import { enqueueSearch, getQueuePosition, searchQueue } from "../queues/search-queue";
+import { searchQueue, getQueuePosition } from "../queues/search-queue";
 import { checkSearchLimit } from "../middleware/check-search-limit";
 import { trackSearch } from "../services/abuse-detection";
-import {
-  emitToStream,
-  onStreamEvent,
-  registerStream,
-  removeStream,
-} from "../services/stream-registry";
+import { registerStream, removeStream } from "../services/stream-registry";
+import { formatSearchMessage } from "../utils/search-messages";
 import { logger } from "../utils/logger";
-
-const searchBodySchema = z.object({
-  query: z.string().min(2).max(100),
-  location: z.string().min(2).max(100),
-});
 
 export const searchRouter = Router();
 
@@ -33,48 +24,70 @@ searchRouter.get("/queue/status", (_req: Request, res: Response) => {
 
 searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => {
   try {
-    const parsed = searchBodySchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: "query and location are required" });
+    const { query, location } = req.body as { query?: string; location?: string };
+
+    if (!query || !location) {
+      res.status(400).json({
+        error: "Both query and location are required",
+        example: { query: "restaurants", location: "Lagos, Nigeria" },
+      });
       return;
     }
 
-    const query = parsed.data.query.trim();
-    const location = parsed.data.location.trim();
+    const trimmedQuery = query.trim();
+    const trimmedLocation = location.trim();
 
-    trackSearch(req.licenseId!);
+    if (req.licenseId && req.licenseId !== "unknown") {
+      trackSearch(req.licenseId);
+    }
 
-    const cachedResults = await getCachedResults(query, location);
+    const cachedResults = await getCachedResults(trimmedQuery, trimmedLocation);
     if (cachedResults && cachedResults.length > 0) {
-      const searchJob = await createSearchJob(query, location);
+      const searchJob = await createSearchJob(trimmedQuery, trimmedLocation);
       await copyLeadsToSearch(searchJob.id, cachedResults);
       await markSearchComplete(searchJob.id, cachedResults.length);
 
-      const response: SearchResponse = {
+      res.status(201).json({
         searchId: searchJob.id,
         status: "completed",
         cached: true,
         totalFound: cachedResults.length,
-        searchesRemaining: req.searchesRemaining,
-      };
-      res.status(201).json(response);
+        searchesRemaining: req.searchesRemaining ?? null,
+        message: formatSearchMessage(trimmedQuery, trimmedLocation),
+      } satisfies SearchResponse);
       return;
     }
 
-    const searchJob = await createSearchJob(query, location);
+    const searchJob = await createSearchJob(trimmedQuery, trimmedLocation);
 
     res.status(201).json({
       searchId: searchJob.id,
       status: "queued",
-      searchesRemaining: req.searchesRemaining,
+      searchesRemaining: req.searchesRemaining ?? null,
+      message: formatSearchMessage(trimmedQuery, trimmedLocation),
     } satisfies SearchResponse);
 
-    enqueueSearch(searchJob.id, query, location);
+    setImmediate(() => {
+      searchQueue
+        .add(searchJob.id, trimmedQuery, trimmedLocation)
+        .catch((err) => {
+          logger.error("Queue error", {
+            searchId: searchJob.id,
+            error: err instanceof Error ? err.message : "unknown",
+          });
+          markSearchFailed(
+            searchJob.id,
+            err instanceof Error ? err.message : "Search failed"
+          ).catch(() => undefined);
+        });
+    });
   } catch (err) {
     logger.error("POST /search failed", {
       error: err instanceof Error ? err.message : "unknown",
     });
-    res.status(500).json({ error: "Failed to create search job" });
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Failed to create search job" });
+    }
   }
 });
 
@@ -124,63 +137,78 @@ searchRouter.get("/:id/stream", async (req: Request, res: Response) => {
       return;
     }
 
+    const origin = req.headers.origin;
+    const allowOrigin =
+      typeof origin === "string" && origin.length > 0 ? origin : "*";
+
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
       "X-Accel-Buffering": "no",
-      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Origin": allowOrigin,
+      "Access-Control-Allow-Credentials": "true",
     });
     res.flushHeaders();
 
     registerStream(searchId, res);
-    emitToStream(searchId, { type: "started", searchId });
+
+    res.write(
+      `data: ${JSON.stringify({
+        type: "started",
+        searchId,
+        message: formatSearchMessage(job.query, job.location),
+      })}\n\n`
+    );
 
     const heartbeat = setInterval(() => {
       if (!res.writableEnded) {
         res.write(": heartbeat\n\n");
+      } else {
+        clearInterval(heartbeat);
       }
     }, 5000);
 
-    const endStream = () => {
-      clearInterval(heartbeat);
-      removeStream(searchId);
-      if (!res.writableEnded) {
+    try {
+      const existingJob = await getSearchJob(searchId);
+      if (existingJob && existingJob.status === "completed") {
+        const { leads } = await getSearchResults(searchId, 1, 200);
+        for (const lead of leads) {
+          res.write(`data: ${JSON.stringify({ type: "lead", data: lead, lead })}\n\n`);
+        }
+        res.write(
+          `data: ${JSON.stringify({
+            type: "complete",
+            total: leads.length,
+            message: `Search complete. Found ${leads.length} businesses.`,
+          })}\n\n`
+        );
+        clearInterval(heartbeat);
+        removeStream(searchId);
         res.end();
+        return;
       }
-    };
-
-    const unsubscribe = onStreamEvent(searchId, (data) => {
-      const event = data as { type?: string };
-      if (event.type === "complete" || event.type === "error") {
-        endStream();
-      }
-    });
-
-    if (job.status === "completed") {
-      emitToStream(searchId, { type: "complete", total: job.totalFound });
-      endStream();
-      return;
-    }
-
-    if (job.status === "failed") {
-      emitToStream(searchId, { type: "error", message: job.error ?? "Search failed" });
-      endStream();
-      return;
+    } catch (err) {
+      logger.error("Error checking existing results", {
+        error: err instanceof Error ? err.message : "unknown",
+      });
     }
 
     const position = getQueuePosition(searchId);
     if (position != null) {
-      emitToStream(searchId, {
-        type: "phase",
-        phase: `Your search is queued (position ${position}). Results will appear shortly.`,
-      });
+      res.write(
+        `data: ${JSON.stringify({
+          type: "progress",
+          message: `${formatSearchMessage(job.query, job.location)} (queued position ${position})`,
+          processed: 0,
+        })}\n\n`
+      );
     }
 
     req.on("close", () => {
       clearInterval(heartbeat);
-      unsubscribe();
       removeStream(searchId);
+      logger.info("SSE client disconnected", { searchId });
     });
   } catch (err) {
     logger.error("GET /search/:id/stream failed", {

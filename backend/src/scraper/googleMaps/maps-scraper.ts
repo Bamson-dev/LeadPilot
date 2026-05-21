@@ -4,6 +4,7 @@ import { buildLeadFromPanel, waitForDetailPanel } from "../extractors/detail-pan
 import { gotoWithRetry } from "../parsers/page-navigation";
 import { dedupeKey, sanitizeLead } from "../utils/data-quality";
 import { logger } from "../../utils/logger";
+import { formatSearchMessage } from "../../utils/search-messages";
 import {
   DETAIL_PANEL_WAIT_MS,
   MAX_LEADS_PER_SEARCH,
@@ -51,11 +52,16 @@ async function dismissConsent(page: Page): Promise<void> {
   }
 }
 
-async function scrollSidebar(page: Page, onPhase?: (m: string) => void): Promise<void> {
+async function scrollSidebar(
+  page: Page,
+  query: string,
+  location: string,
+  onPhase?: (m: string) => void
+): Promise<void> {
   const feed = page.locator('div[role="feed"]').first();
   let prevCount = 0;
   let stableRounds = 0;
-  onPhase?.("Scanning businesses in your area…");
+  onPhase?.(formatSearchMessage(query, location));
 
   for (let i = 0; i < SIDEBAR_SCROLL_MAX_ROUNDS; i++) {
     try {
@@ -140,8 +146,7 @@ export async function scrapeGoogleMaps(
   try {
     await gotoWithRetry(searchPage, searchUrl, { timeout: 45000, retries: 2 });
     await dismissConsent(searchPage);
-    onPhase?.("Opening discovery feed…");
-    await scrollSidebar(searchPage, onPhase);
+    await scrollSidebar(searchPage, query, location, onPhase);
 
     const businessUrls = (await collectPlaceUrls(searchPage)).slice(0, MAX_LEADS_PER_SEARCH);
     if (businessUrls.length === 0) {
@@ -150,7 +155,7 @@ export async function scrapeGoogleMaps(
 
     const max = businessUrls.length;
     onProgress?.(0, max);
-    onPhase?.("Streaming prospects to your table…");
+    onPhase?.(`Found ${businessUrls.length} businesses. Extracting details...`);
 
     for (let i = 0; i < businessUrls.length; i += BATCH_SIZE) {
       const batch = businessUrls.slice(i, i + BATCH_SIZE);

@@ -231,7 +231,7 @@ const SearchPanel: React.FC<{
   });
   const phase =
     localFrame < 78
-      ? "Scanning businesses in your area…"
+      ? "Searching for restaurants in Lagos..."
       : localFrame < 88
         ? scenario.phaseFound
         : "Streaming prospects to your table…";

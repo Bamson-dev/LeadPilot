@@ -1,5 +1,4 @@
 import type { StreamEvent } from "@leadpilot/shared";
-import { getEnv } from "../config/env";
 import { markSearchFailed } from "../database/search-repository";
 import { logger } from "../utils/logger";
 import { runScraperJob } from "../services/scraper-service";

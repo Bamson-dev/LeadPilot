@@ -22,7 +22,8 @@ export interface SearchResponse {
   status: string;
   cached?: boolean;
   totalFound?: number;
-  searchesRemaining?: number;
+  searchesRemaining?: number | null;
+  message?: string;
 }
 
 export type StreamEventType =
@@ -37,6 +38,7 @@ export interface StreamEvent {
   type: StreamEventType;
   searchId?: string;
   lead?: BusinessLead;
+  data?: BusinessLead;
   count?: number;
   max?: number;
   processed?: number;

@@ -319,7 +319,7 @@
       : 0;
 
     let phaseMsg = null;
-    if (local > 2600 && local < 3400) phaseMsg = "Scanning businesses in your area…";
+    if (local > 2600 && local < 3400) phaseMsg = "Searching for restaurants in Lagos...";
     else if (local > 4000 && rowCount >= 3 && rowCount < LEADS.length)
       phaseMsg = "Matches appearing as we scan…";
     else if (local > 9000 && rowCount >= LEADS.length)

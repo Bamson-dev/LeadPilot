@@ -137,7 +137,7 @@ export const LeadPilotScreenDemo: React.FC = () => {
   const phase = !isDiscovering
     ? ""
     : rowCount === 0
-      ? "Scanning businesses in your area…"
+      ? "Searching for restaurants in Lagos..."
       : !locDone
         ? "Matches appearing as we scan…"
         : scenario.phaseFound;

@@ -116,16 +116,16 @@ export function DemoRecordingDashboard() {
   }, []);
 
   const beginDiscovering = useCallback(() => {
+    const s = DEMO_SCENARIOS[scenarioIndex]!;
     streamStartedAt.current = Date.now();
     rowIndexRef.current = 0;
     locationDoneRef.current = false;
     setPhase("discovering");
-    setPhaseMessage("Scanning businesses in your area…");
+    setPhaseMessage(`Searching for ${s.business} in ${s.location}...`);
     setDisplayCount(0);
     setProgress(2);
-    // Keep table from prior search cleared; rows append during location typing
     setLeads([]);
-  }, []);
+  }, [scenarioIndex]);
 
   // Phase 1: type business only
   useEffect(() => {

@@ -1,259 +1,296 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import type { BusinessLead } from "@leadpilot/shared";
+import { getResults, startSearch } from "@/services/api";
+import { getApiUrl } from "@/utils/env";
+import { formatSearchMessage } from "@/utils/search-messages";
+import { businessLeadToLead } from "@/types/lead";
 import type { Lead } from "@/types/lead";
-import {
-  checkHealth,
-  getResults,
-  getSearch,
-  startSearch,
-  streamResults,
-} from "@/services/api";
 
-const POLL_INTERVAL_MS = 8000;
-const LEAD_BATCH_MS = 300;
+export type { BusinessLead };
+
+interface SearchState {
+  status: "idle" | "starting" | "running" | "completed" | "error";
+  leads: BusinessLead[];
+  searchId: string | null;
+  message: string;
+  totalFound: number;
+  searchesRemaining: number | null;
+  error: string | null;
+}
 
 export function useSearch() {
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  const [showLimitMessage, setShowLimitMessage] = useState(false);
-  const [phaseMessage, setPhaseMessage] = useState<string | null>(null);
-  const [searchMeta, setSearchMeta] = useState({ business: "", location: "" });
-  const [totalFound, setTotalFound] = useState(0);
-  const [searchesRemaining, setSearchesRemaining] = useState<number | null>(null);
-  const cleanupRef = useRef<(() => void) | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [state, setState] = useState<SearchState>({
+    status: "idle",
+    leads: [],
+    searchId: null,
+    message: "",
+    totalFound: 0,
+    searchesRemaining: null,
+    error: null,
+  });
+
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const pendingLeadsRef = useRef<BusinessLead[]>([]);
+  const reconnectCountRef = useRef(0);
   const searchIdRef = useRef<string | null>(null);
-  const leadIdsRef = useRef<Set<string>>(new Set());
-  const pendingLeads = useRef<Lead[]>([]);
-
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  }, []);
-
-  const closeStream = useCallback(() => {
-    cleanupRef.current?.();
-    cleanupRef.current = null;
-    stopPolling();
-  }, [stopPolling]);
+  const queryRef = useRef("");
+  const locationRef = useRef("");
 
   useEffect(() => {
     const interval = setInterval(() => {
-      if (pendingLeads.current.length === 0) return;
-      const batch = pendingLeads.current.splice(0, pendingLeads.current.length);
-      setLeads((prev) => {
-        const existingIds = new Set(prev.map((l) => l.id));
-        const newLeads = batch.filter((l) => !existingIds.has(l.id));
-        if (newLeads.length === 0) return prev;
-        for (const lead of newLeads) {
-          leadIdsRef.current.add(lead.id);
-        }
-        return [...prev, ...newLeads];
+      if (pendingLeadsRef.current.length === 0) return;
+      const newLeads = [...pendingLeadsRef.current];
+      pendingLeadsRef.current = [];
+      setState((prev) => {
+        const existingIds = new Set(prev.leads.map((l) => l.id));
+        const unique = newLeads.filter((l) => !existingIds.has(l.id));
+        if (unique.length === 0) return prev;
+        const merged = [...prev.leads, ...unique];
+        return {
+          ...prev,
+          leads: merged,
+          totalFound: merged.length,
+        };
       });
-    }, LEAD_BATCH_MS);
+    }, 300);
     return () => clearInterval(interval);
   }, []);
 
-  const queueLead = useCallback((lead: Lead) => {
-    if (leadIdsRef.current.has(lead.id)) return;
-    pendingLeads.current.push(lead);
+  const connectToStream = useCallback((searchId: string) => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
+
+    const es = new EventSource(`${getApiUrl()}/search/${searchId}/stream`);
+    eventSourceRef.current = es;
+
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data) as {
+          type: string;
+          data?: BusinessLead;
+          lead?: BusinessLead;
+          message?: string;
+          processed?: number;
+          total?: number;
+        };
+
+        switch (data.type) {
+          case "started":
+            setState((prev) => ({
+              ...prev,
+              status: "running",
+              message: formatSearchMessage(queryRef.current, locationRef.current),
+            }));
+            reconnectCountRef.current = 0;
+            break;
+
+          case "lead": {
+            const lead = data.data ?? data.lead;
+            if (lead) pendingLeadsRef.current.push(lead);
+            break;
+          }
+
+          case "progress":
+            setState((prev) => ({
+              ...prev,
+              message:
+                data.message ||
+                `Found ${data.processed ?? prev.leads.length} businesses...`,
+            }));
+            break;
+
+          case "phase": {
+            const phase = (data as { phase?: string }).phase ?? data.message;
+            if (phase) {
+              setState((prev) => ({ ...prev, message: phase }));
+            }
+            break;
+          }
+
+          case "complete":
+            setState((prev) => ({
+              ...prev,
+              status: "completed",
+              message:
+                data.message ||
+                `Search complete. Found ${data.total ?? prev.leads.length} businesses.`,
+              totalFound: data.total ?? prev.leads.length,
+            }));
+            es.close();
+            break;
+
+          case "error":
+            setState((prev) => ({
+              ...prev,
+              status: "error",
+              error: data.message || "Search failed. Please try again.",
+            }));
+            es.close();
+            break;
+        }
+      } catch (err) {
+        console.error("Failed to parse SSE event", err);
+      }
+    };
+
+    es.onerror = () => {
+      es.close();
+      if (reconnectCountRef.current < 3) {
+        reconnectCountRef.current += 1;
+        setState((prev) => ({
+          ...prev,
+          message: `Reconnecting... (attempt ${reconnectCountRef.current} of 3)`,
+        }));
+        setTimeout(() => {
+          if (searchIdRef.current) {
+            connectToStream(searchIdRef.current);
+          }
+        }, 3000);
+      } else {
+        setState((prev) => ({
+          ...prev,
+          status: "error",
+          error: "Connection lost. Please try your search again.",
+        }));
+      }
+    };
   }, []);
 
-  const syncFromResults = useCallback(async (searchId: string) => {
-    try {
-      const { leads: fetched, total } = await getResults(searchId);
-      if (fetched.length > 0) {
-        for (const lead of fetched) {
-          queueLead(lead);
-        }
-        setTotalFound(total);
-        setProgress(Math.min(100, total > 0 ? (fetched.length / total) * 100 : 0));
+  const search = useCallback(
+    async (query: string, location: string) => {
+      if (!query.trim() || !location.trim()) return;
+
+      queryRef.current = query.trim();
+      locationRef.current = location.trim();
+      pendingLeadsRef.current = [];
+      reconnectCountRef.current = 0;
+
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
       }
-    } catch {
-      /* polling is best-effort */
-    }
-  }, [queueLead]);
 
-  const startPolling = useCallback(
-    (searchId: string) => {
-      stopPolling();
-      pollRef.current = setInterval(() => {
-        void syncFromResults(searchId);
-        void getSearch(searchId).then((job) => {
-          if (job.status === "completed") {
-            stopPolling();
-            void syncFromResults(searchId).then(() => {
-              setProgress(100);
-              setPhaseMessage(`Search complete — ${job.totalFound} businesses found.`);
-              setIsSearching(false);
-              closeStream();
-            });
-          } else if (job.status === "failed") {
-            stopPolling();
-            setError(job.error ?? "Search failed");
-            setIsSearching(false);
-            closeStream();
-          } else if (job.processed > 0) {
-            setPhaseMessage(`Found ${job.processed} businesses so far…`);
-          }
-        });
-      }, POLL_INTERVAL_MS);
-    },
-    [stopPolling, syncFromResults, closeStream]
-  );
-
-  useEffect(() => () => closeStream(), [closeStream]);
-
-  const openStream = useCallback(
-    (searchId: string) => {
-      searchIdRef.current = searchId;
-      startPolling(searchId);
-
-      cleanupRef.current = streamResults(searchId, {
-        onStarted: () => {
-          setPhaseMessage("Search started — scraping businesses…");
-        },
-        onPhase: setPhaseMessage,
-        onProgress: (count, max) => {
-          setProgress(Math.min(100, max && max > 0 ? (count / max) * 100 : Math.min(count, 99)));
-          if (count > 0) {
-            setPhaseMessage(`Found ${count} businesses so far…`);
-          }
-        },
-        onLead: queueLead,
-        onComplete: (total) => {
-          setTotalFound(total);
-          setProgress(100);
-          setPhaseMessage(`Search complete — ${total} businesses found.`);
-          stopPolling();
-          closeStream();
-          setTimeout(() => {
-            setIsSearching(false);
-            setPhaseMessage(null);
-          }, 2000);
-        },
-        onError: (message) => {
-          if (message.includes("Connection lost")) {
-            setPhaseMessage("Stream reconnecting — results still loading…");
-            return;
-          }
-          setError(message);
-          setIsSearching(false);
-          setPhaseMessage(null);
-          closeStream();
-        },
-        onReconnecting: (attempt) => {
-          setPhaseMessage(`Connection interrupted — reconnecting (${attempt}/3)…`);
-        },
+      setState({
+        status: "starting",
+        leads: [],
+        searchId: null,
+        message: `Starting search for ${query.trim()} in ${location.trim()}...`,
+        totalFound: 0,
+        searchesRemaining: null,
+        error: null,
       });
+
+      try {
+        const result = await startSearch(query.trim(), location.trim());
+        searchIdRef.current = result.searchId;
+
+        setState((prev) => ({
+          ...prev,
+          searchId: result.searchId,
+          searchesRemaining: result.searchesRemaining ?? null,
+          message: formatSearchMessage(query.trim(), location.trim()),
+        }));
+
+        if (result.cached && result.status === "completed") {
+          const { leads: cached } = await getResults(result.searchId);
+          const mapped = cached.map((l) => sseLeadToBusinessLead(l));
+          setState((prev) => ({
+            ...prev,
+            status: "completed",
+            leads: mapped,
+            totalFound: mapped.length,
+            message: `Search complete. Found ${mapped.length} businesses.`,
+          }));
+          return;
+        }
+
+        connectToStream(result.searchId);
+      } catch (err) {
+        setState((prev) => ({
+          ...prev,
+          status: "error",
+          error: err instanceof Error ? err.message : "Failed to start search. Please try again.",
+        }));
+      }
     },
-    [queueLead, closeStream, startPolling, stopPolling]
+    [connectToStream]
   );
 
-  const runSearch = async (businessType: string, location: string) => {
-    if (!businessType.trim() || !location.trim()) {
-      setError("Please enter both business type and location.");
-      return;
+  const reset = useCallback(() => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
     }
-
-    closeStream();
-    setError(null);
-    setShowLimitMessage(false);
-    setLeads([]);
-    setProgress(0);
-    setTotalFound(0);
-    setIsSearching(true);
-    leadIdsRef.current.clear();
-    pendingLeads.current = [];
-    setSearchMeta({ business: businessType.trim(), location: location.trim() });
-    setPhaseMessage("Connecting to backend…");
-
-    try {
-      const health = await checkHealth();
-      if (!health.ok) {
-        setError(health.message ?? "Backend is not reachable.");
-        setIsSearching(false);
-        setPhaseMessage(null);
-        return;
-      }
-
-      setPhaseMessage("Starting discovery…");
-      const response = await startSearch(businessType.trim(), location.trim());
-
-      if (response.searchesRemaining != null) {
-        setSearchesRemaining(response.searchesRemaining);
-      }
-
-      if (response.cached && response.status === "completed") {
-        setPhaseMessage("Loading cached results…");
-        const { leads: cachedLeads, total } = await getResults(response.searchId);
-        leadIdsRef.current.clear();
-        pendingLeads.current = [];
-        for (const lead of cachedLeads) {
-          leadIdsRef.current.add(lead.id);
-        }
-        setLeads(cachedLeads);
-        setTotalFound(total);
-        setProgress(100);
-        setPhaseMessage(`Loaded ${total} cached results instantly.`);
-        setTimeout(() => {
-          setIsSearching(false);
-          setPhaseMessage(null);
-        }, 2000);
-        return;
-      }
-
-      if (response.status === "queued") {
-        setPhaseMessage("Your search is queued — results will appear shortly…");
-      }
-
-      openStream(response.searchId);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to start search.";
-      if (
-        message.includes("limit reached") ||
-        message.includes("Monthly") ||
-        message.includes("search limit")
-      ) {
-        setShowLimitMessage(true);
-      }
-      setError(message);
-      setIsSearching(false);
-      setPhaseMessage(null);
-      closeStream();
-    }
-  };
-
-  const clearResults = () => {
-    closeStream();
-    setLeads([]);
-    setProgress(0);
-    setTotalFound(0);
-    setError(null);
-    setShowLimitMessage(false);
-    setIsSearching(false);
-    leadIdsRef.current.clear();
-    pendingLeads.current = [];
+    pendingLeadsRef.current = [];
     searchIdRef.current = null;
-  };
+    setState({
+      status: "idle",
+      leads: [],
+      searchId: null,
+      message: "",
+      totalFound: 0,
+      searchesRemaining: null,
+      error: null,
+    });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      eventSourceRef.current?.close();
+    };
+  }, []);
+
+  const tableLeads: Lead[] = state.leads.map((l) =>
+    businessLeadToLead({
+      ...l,
+      searchId: l.searchId ?? state.searchId ?? "",
+      createdAt: l.createdAt ?? new Date().toISOString(),
+    })
+  );
+
+  const isSearching = state.status === "starting" || state.status === "running";
 
   return {
-    leads,
+    ...state,
+    leads: tableLeads,
+    rawLeads: state.leads,
     isSearching,
-    progress,
-    error,
-    showLimitMessage,
-    phaseMessage,
-    searchMeta,
-    totalFound,
-    searchesRemaining,
-    runSearch,
-    clearResults,
-    closeStream,
+    phaseMessage: state.message,
+    progress: state.totalFound > 0 ? Math.min(99, state.totalFound) : isSearching ? 10 : 0,
+    searchMeta: { business: queryRef.current, location: locationRef.current },
+    runSearch: search,
+    clearResults: reset,
+    closeStream: reset,
+    showLimitMessage:
+      Boolean(state.error) &&
+      (state.error.includes("limit") ||
+        state.error.includes("Monthly") ||
+        state.error.includes("search limit")),
+  };
+}
+
+function sseLeadToBusinessLead(lead: Lead): BusinessLead {
+  return {
+    id: lead.id,
+    searchId: lead.search_id,
+    name: lead.business_name,
+    category: lead.category ?? "",
+    address: lead.address ?? "",
+    phone: lead.phone,
+    email: lead.email,
+    emailSource:
+      lead.email_source === "extracted"
+        ? "website"
+        : lead.email_source === "generated"
+          ? "generated"
+          : "none",
+    website: lead.website,
+    rating: lead.rating,
+    reviewCount: lead.reviews_count,
+    googleMapsUrl: lead.google_maps_url,
+    hasWebsite: Boolean(lead.website),
+    hasInstagram: false,
+    createdAt: lead.created_at,
   };
 }

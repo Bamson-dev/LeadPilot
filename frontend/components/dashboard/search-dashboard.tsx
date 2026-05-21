@@ -26,12 +26,18 @@ export function SearchDashboard() {
     phaseMessage,
     searchMeta,
     searchesRemaining,
+    status,
+    totalFound,
     runSearch,
     clearResults,
     closeStream,
   } = useSearch();
 
   const handleSearch = () => runSearch(businessType, location);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") handleSearch();
+  };
 
   const handleDownload = () => {
     exportCSV(
@@ -60,14 +66,23 @@ export function SearchDashboard() {
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           <div>
             <label className="mb-1.5 block text-xs font-medium text-[#6B6B80]">Business type</label>
-            <Input placeholder="e.g. restaurants, dentists, salons" value={businessType}
-              onChange={(e) => setBusinessType(e.target.value)} disabled={isSearching} />
+            <Input
+              placeholder="e.g. restaurants, dentists, gyms"
+              value={businessType}
+              onChange={(e) => setBusinessType(e.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={isSearching}
+            />
           </div>
           <div>
             <label className="mb-1.5 block text-xs font-medium text-[#6B6B80]">Location</label>
-            <Input placeholder="e.g. Lekki, Abuja, Lagos" value={location}
-              onChange={(e) => setLocation(e.target.value)} disabled={isSearching}
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()} />
+            <Input
+              placeholder="e.g. Lagos Nigeria, London UK, California USA"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={isSearching}
+            />
           </div>
         </div>
 
@@ -79,16 +94,24 @@ export function SearchDashboard() {
 
         <div className="mt-4 flex flex-wrap gap-3">
           <Button variant="glow" onClick={handleSearch} disabled={isSearching}>
-            {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-            Find Leads
+            {isSearching ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Search className="h-4 w-4" />
+            )}
+            Search
           </Button>
           {leads.length > 0 && (
             <>
               <Button variant="outline" onClick={() => setExportOpen(true)} disabled={isSearching}>
                 <Download className="h-4 w-4" /> Export CSV
               </Button>
-              <Button variant="ghost" onClick={handleNewSearch}><RotateCcw className="h-4 w-4" /> New Search</Button>
-              <Button variant="ghost" onClick={clearResults}><Trash2 className="h-4 w-4" /> Clear Results</Button>
+              <Button variant="ghost" onClick={handleNewSearch}>
+                <RotateCcw className="h-4 w-4" /> New Search
+              </Button>
+              <Button variant="ghost" onClick={clearResults}>
+                <Trash2 className="h-4 w-4" /> Clear Results
+              </Button>
             </>
           )}
         </div>
@@ -105,29 +128,51 @@ export function SearchDashboard() {
                 date shown above. Contact support to increase your limit.
               </p>
             )}
+            <Button variant="outline" size="sm" className="mt-3" onClick={clearResults}>
+              Try Again
+            </Button>
           </div>
+        )}
+
+        {status === "completed" && !error && (
+          <p className="mt-4 text-sm text-emerald-400">
+            Search complete. Found {totalFound} businesses.
+          </p>
         )}
       </div>
 
       {(isSearching || leads.length > 0) && (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-4"
+        >
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <LiveCounter count={leads.length} isSearching={isSearching} />
             {isSearching && (
-              <span className="flex items-center gap-2 text-xs text-[#A855F7] sm:max-w-[50%] sm:truncate">
+              <span className="flex items-center gap-2 text-xs text-[#A855F7] sm:max-w-[60%]">
                 <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
-                {phaseMessage ?? "Live discovery in progress…"}
+                {phaseMessage || `Found ${leads.length} businesses so far...`}
               </span>
             )}
           </div>
           {isSearching && <Progress value={progress} className="h-2" />}
+          {isSearching && leads.length > 0 && (
+            <p className="text-sm text-[#6B6B80]">
+              Found {leads.length} businesses so far...
+            </p>
+          )}
         </motion.div>
       )}
 
       <ResultsTable leads={leads} isLoading={isSearching && leads.length === 0} />
 
-      <ExportModal open={exportOpen} onOpenChange={setExportOpen}
-        count={Math.min(leads.length, MAX_EXPORT_ROWS)} onDownload={handleDownload} />
+      <ExportModal
+        open={exportOpen}
+        onOpenChange={setExportOpen}
+        count={Math.min(leads.length, MAX_EXPORT_ROWS)}
+        onDownload={handleDownload}
+      />
     </div>
   );
 }
