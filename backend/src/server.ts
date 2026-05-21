@@ -3,6 +3,8 @@ import cors from "cors";
 import type { Server } from "http";
 import { getEnv, loadEnv } from "./config/env";
 import { searchRouter } from "./api/search-router";
+import { adminRouter } from "./api/admin-router";
+import { webhookRouter } from "./api/webhook-router";
 import healthRouter from "./api/health-router";
 import { rateLimit } from "./middleware/rate-limit";
 import { getBrowserPool } from "./scraper/browser/browser-pool";
@@ -50,7 +52,9 @@ function registerRoutes(): void {
     next();
   });
 
+  app.use("/webhooks", webhookRouter);
   app.use(express.json({ limit: "1mb" }));
+  app.use("/admin", adminRouter);
   app.use("/search", rateLimit, searchRouter);
 
   app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
