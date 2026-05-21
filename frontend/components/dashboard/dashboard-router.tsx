@@ -8,14 +8,19 @@ import { hasStoredLicense } from "@/lib/license";
 
 /**
  * /dashboard?demo=recording → auto-play screen recording demo
- * /dashboard → real scraper (requires activated license)
+ * /dashboard → real scraper (requires activated license; gate is DashboardGate)
  */
-export function DashboardRouter() {
+export function DashboardRouter({ skipAccessCheck = false }: { skipAccessCheck?: boolean }) {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState(skipAccessCheck);
 
   useEffect(() => {
+    if (skipAccessCheck) {
+      setReady(true);
+      return;
+    }
+
     if (searchParams.get("demo") === "recording") {
       setReady(true);
       return;
@@ -28,12 +33,12 @@ export function DashboardRouter() {
     }
 
     setReady(true);
-  }, [router, searchParams]);
+  }, [router, searchParams, skipAccessCheck]);
 
   if (!ready) {
     return (
       <div className="glass rounded-2xl p-8 text-center text-zinc-400">
-        Checking access…
+        Loading…
       </div>
     );
   }
