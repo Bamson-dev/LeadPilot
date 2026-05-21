@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { getDisplayEmail } from "@/utils/get-display-email";
+import { EmailCell } from "@/components/dashboard/email-cell";
 import type { Lead } from "@/types/lead";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 
@@ -127,9 +127,7 @@ export function LeadsTable({ leads, isLoading }: LeadsTableProps) {
                 ))
               : null}
             <AnimatePresence initial={false}>
-              {paginated.map((lead) => {
-                const displayEmail = getDisplayEmail(lead);
-                return (
+              {paginated.map((lead) => (
                 <motion.tr
                   key={lead.id}
                   initial={{ opacity: 0, backgroundColor: "rgba(124,58,237,0.15)" }}
@@ -139,41 +137,8 @@ export function LeadsTable({ leads, isLoading }: LeadsTableProps) {
                 >
                   <td className="px-4 py-3 font-medium text-white">{lead.business_name}</td>
                   <td className="px-4 py-3 text-zinc-400">{lead.phone ?? "—"}</td>
-                  <td className="px-4 py-3 min-w-[200px] max-w-[260px] align-top">
-                    {displayEmail ? (
-                      <motion.div
-                        key={`${lead.id}-${displayEmail}`}
-                        initial={{ opacity: 0, x: -4 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.35 }}
-                        className="text-xs leading-relaxed break-words"
-                        title={displayEmail}
-                      >
-                        {displayEmail.split(", ").map((addr) => (
-                          <span
-                            key={addr}
-                            className={`block truncate ${
-                              lead.email_source === "generated"
-                                ? "text-amber-300/90"
-                                : "text-emerald-300"
-                            }`}
-                          >
-                            {addr}
-                          </span>
-                        ))}
-                        {lead.email_source === "generated" ? (
-                          <span className="mt-0.5 block text-[10px] uppercase tracking-wide text-amber-500/70">
-                            estimated contact
-                          </span>
-                        ) : lead.email_source === "extracted" ? (
-                          <span className="mt-0.5 block text-[10px] uppercase tracking-wide text-emerald-500/60">
-                            verified
-                          </span>
-                        ) : null}
-                      </motion.div>
-                    ) : (
-                      <span className="text-xs text-zinc-500">—</span>
-                    )}
+                  <td className="px-4 py-3 min-w-[220px] max-w-[280px] align-top">
+                    <EmailCell lead={lead} />
                   </td>
                   <td className="px-4 py-3">
                     {lead.website ? (
@@ -198,8 +163,7 @@ export function LeadsTable({ leads, isLoading }: LeadsTableProps) {
                   <td className="px-4 py-3 text-zinc-400">{lead.reviews_count ?? "—"}</td>
                   <td className="px-4 py-3 text-zinc-400">{lead.category ?? "—"}</td>
                 </motion.tr>
-              );
-              })}
+              ))}
             </AnimatePresence>
           </tbody>
         </table>

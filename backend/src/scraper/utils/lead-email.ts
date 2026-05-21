@@ -3,11 +3,9 @@ import {
   mergeEmails,
   parseEmailList,
 } from "../parsers/email-filter";
-import { formatGeneratedEmails } from "../parsers/email-generator";
 import {
   extractDomainLoose,
   isMessagingHost,
-  resolveGenerationDomain,
 } from "./domain-utils";
 
 export type EmailSource = "extracted" | "generated";
@@ -38,24 +36,6 @@ export function resolveLeadEmailFields(options: {
       generated_email: null,
       email_source: "extracted",
       email: extracted,
-    };
-  }
-
-  const generated =
-    options.website?.trim() && resolveGenerationDomain(options.website)
-      ? formatGeneratedEmails(
-          options.website,
-          options.category ?? null,
-          options.businessName ?? null
-        )
-      : null;
-
-  if (generated) {
-    return {
-      extracted_email: null,
-      generated_email: generated,
-      email_source: "generated",
-      email: generated,
     };
   }
 

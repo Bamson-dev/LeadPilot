@@ -1,5 +1,7 @@
 import type { BusinessLead } from "@leadpilot/shared";
 import { supabase } from "../database/client";
+import { predictionsFromDb } from "../utils/lead-mapper";
+import { parseEmailList } from "../scraper/parsers/email-filter";
 import { logger } from "../utils/logger";
 
 function normalize(value: string): string {
@@ -48,6 +50,18 @@ export async function getCachedResults(
 
   return rows.map((row) => {
     const source = (row.email_source as string | null) ?? "none";
+    const verifiedEmails = row.verified_email
+      ? parseEmailList(row.verified_email as string)
+      : source !== "predicted" && source !== "generated" && row.email
+        ? parseEmailList(row.email as string)
+        : [];
+    const predictedEmails = predictionsFromDb({
+      predicted_email: row.predicted_email as string | null,
+      predicted_email_secondary: row.predicted_email_secondary as string | null,
+      prediction_confidence: row.prediction_confidence as number | null,
+      prediction_confidence_secondary: row.prediction_confidence_secondary as number | null,
+    });
+
     return {
       id: row.id as string,
       searchId: row.search_id as string,
@@ -55,12 +69,14 @@ export async function getCachedResults(
       category: (row.category as string) ?? "",
       address: (row.address as string) ?? "",
       phone: row.phone as string | null,
-      email: row.email as string | null,
+      email: verifiedEmails[0] ?? null,
+      verifiedEmails,
+      predictedEmails,
       emailSource:
-        source === "extracted"
-          ? "website"
-          : source === "generated"
-            ? "generated"
+        source === "predicted" || source === "generated"
+          ? "predicted"
+          : source === "extracted" || source === "website"
+            ? "website"
             : "none",
       website: row.website as string | null,
       rating: row.rating as number | null,

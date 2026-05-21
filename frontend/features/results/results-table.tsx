@@ -4,7 +4,8 @@ import { useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
-import { getDisplayEmail } from "@/utils/get-display-email";
+import { EmailCell } from "@/components/dashboard/email-cell";
+import { hasAnyEmail } from "@/utils/get-display-email";
 import type { Lead } from "@/types/lead";
 
 type SortKey = keyof Pick<
@@ -30,8 +31,8 @@ export function ResultsTable({ leads, isLoading }: ResultsTableProps) {
     return leads.filter((lead) => {
       if (hasWebsite === true && !lead.website) return false;
       if (hasWebsite === false && lead.website) return false;
-      if (hasEmail === true && !getDisplayEmail(lead)) return false;
-      if (hasEmail === false && getDisplayEmail(lead)) return false;
+      if (hasEmail === true && !hasAnyEmail(lead)) return false;
+      if (hasEmail === false && hasAnyEmail(lead)) return false;
       if (minRating > 0 && (lead.rating ?? 0) < minRating) return false;
       return true;
     });
@@ -81,7 +82,6 @@ export function ResultsTable({ leads, isLoading }: ResultsTableProps) {
   }
 
   const renderRow = (lead: Lead) => {
-    const displayEmail = getDisplayEmail(lead);
     return (
       <motion.tr
         key={lead.id}
@@ -94,17 +94,8 @@ export function ResultsTable({ leads, isLoading }: ResultsTableProps) {
         <td className="px-4 py-3 text-[#6B6B80]">{lead.category ?? "—"}</td>
         <td className="px-4 py-3 text-[#6B6B80] max-w-[180px] truncate">{lead.address ?? "—"}</td>
         <td className="px-4 py-3 text-[#6B6B80]">{lead.phone ?? "—"}</td>
-        <td className="px-4 py-3">
-          {displayEmail ? (
-            <span className={lead.email_source === "generated" ? "text-amber-300" : "text-[#10B981]"}>
-              {displayEmail}
-              <span className="ml-1 text-[10px] uppercase">
-                {lead.email_source === "generated" ? "est." : "verified"}
-              </span>
-            </span>
-          ) : (
-            "—"
-          )}
+        <td className="px-4 py-3 min-w-[200px]">
+          <EmailCell lead={lead} />
         </td>
         <td className="px-4 py-3">
           {lead.website ? (

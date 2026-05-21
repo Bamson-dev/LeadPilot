@@ -1,3 +1,5 @@
+import type { PredictedEmail } from "./email";
+
 export interface BusinessLead {
   id: string;
   searchId: string;
@@ -5,8 +7,11 @@ export interface BusinessLead {
   category: string;
   address: string;
   phone: string | null;
+  /** Primary verified email only (never predicted). */
   email: string | null;
-  emailSource: "website" | "generated" | "none";
+  verifiedEmails: string[];
+  predictedEmails: PredictedEmail[];
+  emailSource: "website" | "predicted" | "none";
   website: string | null;
   rating: number | null;
   reviewCount: number | null;

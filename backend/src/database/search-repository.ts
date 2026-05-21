@@ -1,4 +1,9 @@
 import type { BusinessLead, SearchJob } from "@leadpilot/shared";
+import {
+  predictionsFromDb,
+  predictionStorageFields,
+} from "../utils/lead-mapper";
+import { parseEmailList } from "../scraper/parsers/email-filter";
 import { supabase } from "./client";
 
 interface DbSearchJob {
@@ -22,6 +27,11 @@ interface DbBusinessLead {
   phone: string | null;
   email: string | null;
   email_source: string | null;
+  verified_email?: string | null;
+  predicted_email?: string | null;
+  predicted_email_secondary?: string | null;
+  prediction_confidence?: number | null;
+  prediction_confidence_secondary?: number | null;
   website: string | null;
   rating: number | null;
   review_count: number | null;
@@ -29,6 +39,52 @@ interface DbBusinessLead {
   has_website: boolean;
   has_instagram: boolean;
   created_at: string;
+}
+
+function parseVerifiedEmails(row: DbBusinessLead): string[] {
+  if (row.verified_email?.trim()) {
+    return parseEmailList(row.verified_email);
+  }
+  const source = row.email_source ?? "none";
+  if (
+    row.email?.trim() &&
+    source !== "predicted" &&
+    source !== "generated"
+  ) {
+    return parseEmailList(row.email);
+  }
+  return [];
+}
+
+function dbEmailSource(lead: BusinessLead): string {
+  if (lead.emailSource === "website") return "extracted";
+  if (lead.emailSource === "predicted") return "predicted";
+  return "none";
+}
+
+function leadToDbInsert(lead: BusinessLead): Record<string, unknown> {
+  const emailFields = predictionStorageFields(lead);
+  return {
+    id: lead.id,
+    search_id: lead.searchId,
+    name: lead.name,
+    category: lead.category,
+    address: lead.address,
+    phone: lead.phone,
+    email: emailFields.verified_email,
+    email_source: dbEmailSource(lead),
+    verified_email: emailFields.verified_email,
+    predicted_email: emailFields.predicted_email,
+    predicted_email_secondary: emailFields.predicted_email_secondary,
+    prediction_confidence: emailFields.prediction_confidence,
+    prediction_confidence_secondary: emailFields.prediction_confidence_secondary,
+    website: lead.website,
+    rating: lead.rating,
+    review_count: lead.reviewCount,
+    google_maps_url: lead.googleMapsUrl,
+    has_website: lead.hasWebsite,
+    has_instagram: lead.hasInstagram,
+  };
 }
 
 function mapSearchJob(row: DbSearchJob): SearchJob {
@@ -47,6 +103,15 @@ function mapSearchJob(row: DbSearchJob): SearchJob {
 
 function mapBusinessLead(row: DbBusinessLead): BusinessLead {
   const source = row.email_source ?? "none";
+  const verifiedEmails = parseVerifiedEmails(row);
+  const predictedEmails = predictionsFromDb(row);
+  const emailSource =
+    source === "predicted" || source === "generated"
+      ? "predicted"
+      : source === "website" || source === "extracted"
+        ? "website"
+        : "none";
+
   return {
     id: row.id,
     searchId: row.search_id,
@@ -54,13 +119,10 @@ function mapBusinessLead(row: DbBusinessLead): BusinessLead {
     category: row.category ?? "",
     address: row.address ?? "",
     phone: row.phone,
-    email: row.email,
-    emailSource:
-      source === "website" || source === "generated" || source === "extracted"
-        ? source === "extracted"
-          ? "website"
-          : (source as "generated" | "website")
-        : "none",
+    email: verifiedEmails[0] ?? null,
+    verifiedEmails,
+    predictedEmails,
+    emailSource,
     website: row.website,
     rating: row.rating,
     reviewCount: row.review_count,
@@ -126,31 +188,9 @@ export async function getSearchJob(id: string): Promise<SearchJob | null> {
 }
 
 export async function insertBusinessLead(lead: BusinessLead): Promise<BusinessLead> {
-  const dbSource =
-    lead.emailSource === "website"
-      ? "extracted"
-      : lead.emailSource === "generated"
-        ? "generated"
-        : "none";
-
   const { data, error } = await supabase
     .from("business_leads")
-    .insert({
-      id: lead.id,
-      search_id: lead.searchId,
-      name: lead.name,
-      category: lead.category,
-      address: lead.address,
-      phone: lead.phone,
-      email: lead.email,
-      email_source: dbSource,
-      website: lead.website,
-      rating: lead.rating,
-      review_count: lead.reviewCount,
-      google_maps_url: lead.googleMapsUrl,
-      has_website: lead.hasWebsite,
-      has_instagram: lead.hasInstagram,
-    })
+    .insert(leadToDbInsert(lead))
     .select("*")
     .single();
 
@@ -160,51 +200,12 @@ export async function insertBusinessLead(lead: BusinessLead): Promise<BusinessLe
   return mapBusinessLead(data as DbBusinessLead);
 }
 
-export async function updateBusinessLeadEmail(lead: BusinessLead): Promise<void> {
-  const dbSource =
-    lead.emailSource === "website"
-      ? "extracted"
-      : lead.emailSource === "generated"
-        ? "generated"
-        : "none";
-
-  const { error } = await supabase
-    .from("business_leads")
-    .update({
-      email: lead.email,
-      email_source: dbSource,
-    })
-    .eq("id", lead.id);
-
-  if (error) throw new Error(error.message);
-}
-
 export async function insertBusinessLeads(leads: BusinessLead[]): Promise<void> {
   if (leads.length === 0) return;
   const batchSize = 50;
   for (let i = 0; i < leads.length; i += batchSize) {
     const batch = leads.slice(i, i + batchSize);
-    const rows = batch.map((lead) => ({
-      id: lead.id,
-      search_id: lead.searchId,
-      name: lead.name,
-      category: lead.category,
-      address: lead.address,
-      phone: lead.phone,
-      email: lead.email,
-      email_source:
-        lead.emailSource === "website"
-          ? "extracted"
-          : lead.emailSource === "generated"
-            ? "generated"
-            : "none",
-      website: lead.website,
-      rating: lead.rating,
-      review_count: lead.reviewCount,
-      google_maps_url: lead.googleMapsUrl,
-      has_website: lead.hasWebsite,
-      has_instagram: lead.hasInstagram,
-    }));
+    const rows = batch.map((lead) => leadToDbInsert(lead));
 
     const { error } = await supabase.from("business_leads").insert(rows);
     if (error) throw new Error(error.message);
@@ -255,50 +256,11 @@ export async function copyLeadsToSearch(
   leads: BusinessLead[]
 ): Promise<void> {
   const { randomUUID } = await import("crypto");
-  const copied = leads.map((lead) => ({
-    id: randomUUID(),
-    search_id: searchId,
-    name: lead.name,
-    category: lead.category,
-    address: lead.address,
-    phone: lead.phone,
-    email: lead.email,
-    email_source:
-      lead.emailSource === "website"
-        ? "extracted"
-        : lead.emailSource === "generated"
-          ? "generated"
-          : "none",
-    website: lead.website,
-    rating: lead.rating,
-    review_count: lead.reviewCount,
-    google_maps_url: lead.googleMapsUrl,
-    has_website: lead.hasWebsite,
-    has_instagram: lead.hasInstagram,
-  }));
-
   await insertBusinessLeads(
-    copied.map((row) => ({
-      id: row.id,
-      searchId: row.search_id,
-      name: row.name,
-      category: row.category ?? "",
-      address: row.address ?? "",
-      phone: row.phone,
-      email: row.email,
-      emailSource:
-        row.email_source === "extracted"
-          ? "website"
-          : row.email_source === "generated"
-            ? "generated"
-            : "none",
-      website: row.website,
-      rating: row.rating,
-      reviewCount: row.review_count,
-      googleMapsUrl: row.google_maps_url,
-      hasWebsite: row.has_website,
-      hasInstagram: row.has_instagram,
-      createdAt: new Date().toISOString(),
+    leads.map((lead) => ({
+      ...lead,
+      id: randomUUID(),
+      searchId,
     }))
   );
 }

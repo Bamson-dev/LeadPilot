@@ -1,4 +1,4 @@
-import type { BusinessLead } from "@leadpilot/shared";
+import type { BusinessLead, PredictedEmail } from "@leadpilot/shared";
 
 /** Dashboard-compatible lead shape */
 export interface Lead {
@@ -7,9 +7,11 @@ export interface Lead {
   business_name: string;
   phone: string | null;
   email: string | null;
+  verified_emails: string[];
+  predicted_emails: PredictedEmail[];
   extracted_email: string | null;
   generated_email: string | null;
-  email_source: "extracted" | "generated" | null;
+  email_source: "extracted" | "predicted" | null;
   website: string | null;
   address: string | null;
   rating: number | null;
@@ -20,19 +22,28 @@ export interface Lead {
 }
 
 export function businessLeadToLead(lead: BusinessLead): Lead {
+  const verified =
+    lead.verifiedEmails?.length > 0
+      ? lead.verifiedEmails
+      : lead.email
+        ? [lead.email]
+        : [];
+
   return {
     id: lead.id,
     search_id: lead.searchId,
     business_name: lead.name,
     phone: lead.phone,
-    email: lead.email,
-    extracted_email: lead.emailSource === "website" ? lead.email : null,
-    generated_email: lead.emailSource === "generated" ? lead.email : null,
+    email: verified[0] ?? null,
+    verified_emails: verified,
+    predicted_emails: lead.predictedEmails ?? [],
+    extracted_email: lead.emailSource === "website" ? verified.join(", ") || null : null,
+    generated_email: null,
     email_source:
       lead.emailSource === "website"
         ? "extracted"
-        : lead.emailSource === "generated"
-          ? "generated"
+        : lead.emailSource === "predicted"
+          ? "predicted"
           : null,
     website: lead.website,
     address: lead.address,

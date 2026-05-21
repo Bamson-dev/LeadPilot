@@ -421,11 +421,13 @@ function leadRowToBusinessLead(lead: Lead): BusinessLead {
     address: lead.address ?? "",
     phone: lead.phone,
     email: lead.email,
+    verifiedEmails: lead.verified_emails ?? [],
+    predictedEmails: lead.predicted_emails ?? [],
     emailSource:
       lead.email_source === "extracted"
         ? "website"
-        : lead.email_source === "generated"
-          ? "generated"
+        : lead.email_source === "predicted"
+          ? "predicted"
           : "none",
     website: lead.website,
     rating: lead.rating,

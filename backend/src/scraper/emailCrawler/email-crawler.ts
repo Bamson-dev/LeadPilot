@@ -1,11 +1,10 @@
 import { extractAllEmailsFromText } from "../parsers/email-filter";
-import { formatGeneratedEmails } from "../parsers/email-generator";
 import { resolveBusinessWebsite } from "../utils/website-utils";
 import { EMAIL_CRAWL_PATHS, EMAIL_FETCH_TIMEOUT_MS } from "../utils/constants";
 
 export interface EmailCrawlResult {
   email: string | null;
-  emailSource: "website" | "generated" | "none";
+  emailSource: "website" | "none";
 }
 
 async function fetchPageText(url: string): Promise<string> {
@@ -37,9 +36,7 @@ function extractFromHtml(html: string): string[] {
 }
 
 export async function crawlEmailForWebsite(
-  website: string | null | undefined,
-  category?: string | null,
-  businessName?: string | null
+  website: string | null | undefined
 ): Promise<EmailCrawlResult> {
   const baseUrl = resolveBusinessWebsite(website);
   if (!baseUrl) {
@@ -65,11 +62,6 @@ export async function crawlEmailForWebsite(
   if (found.size > 0) {
     const email = [...found].slice(0, 2).join(", ");
     return { email, emailSource: "website" };
-  }
-
-  const generated = formatGeneratedEmails(baseUrl, category, businessName);
-  if (generated) {
-    return { email: generated, emailSource: "generated" };
   }
 
   return { email: null, emailSource: "none" };
