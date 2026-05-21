@@ -25,7 +25,6 @@ export function SearchDashboard() {
     showLimitMessage,
     phaseMessage,
     searchMeta,
-    searchesRemaining,
     status,
     totalFound,
     runSearch,
@@ -85,12 +84,6 @@ export function SearchDashboard() {
             />
           </div>
         </div>
-
-        {searchesRemaining !== null && (
-          <p className="mt-4 text-sm text-[#6B6B80]">
-            {searchesRemaining} searches remaining this month
-          </p>
-        )}
 
         <div className="mt-4 flex flex-wrap gap-3">
           <Button variant="glow" onClick={handleSearch} disabled={isSearching}>
