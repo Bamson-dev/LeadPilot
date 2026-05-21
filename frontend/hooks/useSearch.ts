@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { BusinessLead } from "@leadpilot/shared";
-import { getResults, startSearch } from "@/services/api";
+import { getResults, getSearch, startSearch } from "@/services/api";
 import { getApiUrl } from "@/utils/env";
 import { formatSearchMessage } from "@/utils/search-messages";
 import { businessLeadToLead } from "@/types/lead";
@@ -19,6 +19,9 @@ interface SearchState {
   searchesRemaining: number | null;
   error: string | null;
 }
+
+const POLL_INTERVAL_MS = 5000;
+const SEARCH_TIMEOUT_MS = 4 * 60 * 1000;
 
 export function useSearch() {
   const [state, setState] = useState<SearchState>({
@@ -37,144 +40,225 @@ export function useSearch() {
   const searchIdRef = useRef<string | null>(null);
   const queryRef = useRef("");
   const locationRef = useRef("");
+  const completedRef = useRef(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
+  const stopTimeout = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  }, []);
+
+  const closeStream = useCallback(() => {
+    completedRef.current = true;
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+    stopPolling();
+    stopTimeout();
+  }, [stopPolling, stopTimeout]);
+
+  const mergeLeads = useCallback((incoming: BusinessLead[]) => {
+    if (incoming.length === 0) return;
+    setState((prev) => {
+      const existingIds = new Set(prev.leads.map((l) => l.id));
+      const unique = incoming.filter((l) => l.id && !existingIds.has(l.id));
+      if (unique.length === 0) return prev;
+      const merged = [...prev.leads, ...unique];
+      return {
+        ...prev,
+        leads: merged,
+        totalFound: merged.length,
+        status: prev.status === "starting" ? "running" : prev.status,
+      };
+    });
+  }, []);
+
+  const syncFromApi = useCallback(
+    async (searchId: string) => {
+      const { leads: fetched } = await getResults(searchId);
+      if (fetched.length === 0) return;
+      mergeLeads(fetched.map((l) => leadRowToBusinessLead(l)));
+    },
+    [mergeLeads]
+  );
+
+  const finishSearch = useCallback(
+    (total: number, message: string) => {
+      closeStream();
+      setState((prev) => ({
+        ...prev,
+        status: "completed",
+        totalFound: total || prev.leads.length,
+        message,
+      }));
+    },
+    [closeStream]
+  );
+
+  const startPolling = useCallback(
+    (searchId: string) => {
+      stopPolling();
+      pollRef.current = setInterval(() => {
+        if (completedRef.current) return;
+        void (async () => {
+          try {
+            const job = await getSearch(searchId);
+            await syncFromApi(searchId);
+
+            if (job.status === "completed") {
+              finishSearch(
+                job.totalFound,
+                `Search complete. Found ${job.totalFound} businesses.`
+              );
+            } else if (job.status === "failed") {
+              completedRef.current = true;
+              closeStream();
+              setState((prev) => ({
+                ...prev,
+                status: "error",
+                error: job.error ?? "Search failed. Please try again.",
+              }));
+            } else if (job.processed > 0) {
+              setState((prev) => ({
+                ...prev,
+                message: `Found ${job.processed} businesses so far...`,
+              }));
+            }
+          } catch {
+            /* polling is best-effort */
+          }
+        })();
+      }, POLL_INTERVAL_MS);
+    },
+    [stopPolling, syncFromApi, finishSearch, closeStream]
+  );
 
   useEffect(() => {
     const interval = setInterval(() => {
       if (pendingLeadsRef.current.length === 0) return;
-      const newLeads = [...pendingLeadsRef.current];
-      pendingLeadsRef.current = [];
-      setState((prev) => {
-        const existingIds = new Set(prev.leads.map((l) => l.id));
-        const unique = newLeads.filter((l) => !existingIds.has(l.id));
-        if (unique.length === 0) return prev;
-        const merged = [...prev.leads, ...unique];
-        return {
-          ...prev,
-          leads: merged,
-          totalFound: merged.length,
-        };
-      });
-    }, 300);
+      const batch = pendingLeadsRef.current.splice(0, pendingLeadsRef.current.length);
+      mergeLeads(batch);
+    }, 200);
     return () => clearInterval(interval);
-  }, []);
+  }, [mergeLeads]);
 
-  const connectToStream = useCallback((searchId: string) => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-    }
+  const connectToStream = useCallback(
+    (searchId: string) => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL?.trim()?.replace(/\/$/, "") || getApiUrl();
-    const streamUrl = `${apiUrl}/search/${searchId}/stream`;
-    console.log("Connecting to SSE stream:", streamUrl);
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL?.trim()?.replace(/\/$/, "") || getApiUrl();
+      if (!apiUrl) return;
 
-    const es = new EventSource(streamUrl);
-    eventSourceRef.current = es;
+      const streamUrl = `${apiUrl}/search/${searchId}/stream`;
+      const es = new EventSource(streamUrl);
+      eventSourceRef.current = es;
 
-    es.onopen = () => {
-      console.log("SSE connection opened");
-    };
+      es.onopen = () => {
+        reconnectCountRef.current = 0;
+      };
 
-    es.onmessage = (event) => {
-      console.log("SSE message received:", event.data);
-      try {
-        const data = JSON.parse(event.data) as {
-          type: string;
-          data?: BusinessLead;
-          lead?: BusinessLead;
-          message?: string;
-          processed?: number;
-          total?: number;
-        };
+      es.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data) as {
+            type: string;
+            data?: BusinessLead;
+            lead?: BusinessLead;
+            message?: string;
+            processed?: number;
+            total?: number;
+            phase?: string;
+          };
 
-        switch (data.type) {
-          case "started":
-            setState((prev) => ({
-              ...prev,
-              status: "running",
-              message: formatSearchMessage(queryRef.current, locationRef.current),
-            }));
-            reconnectCountRef.current = 0;
-            break;
+          switch (data.type) {
+            case "started":
+              setState((prev) => ({
+                ...prev,
+                status: "running",
+                message: formatSearchMessage(queryRef.current, locationRef.current),
+              }));
+              break;
 
-          case "lead": {
-            const lead = data.data ?? data.lead;
-            if (lead) pendingLeadsRef.current.push(lead);
-            break;
-          }
-
-          case "progress":
-            setState((prev) => ({
-              ...prev,
-              message:
-                data.message ||
-                `Found ${data.processed ?? prev.leads.length} businesses...`,
-            }));
-            break;
-
-          case "phase": {
-            const phase = (data as { phase?: string }).phase ?? data.message;
-            if (phase) {
-              setState((prev) => ({ ...prev, message: phase }));
+            case "lead": {
+              const lead = data.data ?? data.lead;
+              if (lead) pendingLeadsRef.current.push(lead);
+              break;
             }
-            break;
-          }
 
-          case "complete":
-            setState((prev) => ({
-              ...prev,
-              status: "completed",
-              message:
+            case "progress":
+              setState((prev) => ({
+                ...prev,
+                message:
+                  data.message ||
+                  `Found ${data.processed ?? prev.leads.length} businesses...`,
+              }));
+              break;
+
+            case "phase": {
+              const phase = data.phase ?? data.message;
+              if (phase) setState((prev) => ({ ...prev, message: phase }));
+              break;
+            }
+
+            case "complete":
+              finishSearch(
+                data.total ?? 0,
                 data.message ||
-                `Search complete. Found ${data.total ?? prev.leads.length} businesses.`,
-              totalFound: data.total ?? prev.leads.length,
-            }));
-            es.close();
-            break;
+                  `Search complete. Found ${data.total ?? 0} businesses.`
+              );
+              break;
 
-          case "error":
-            setState((prev) => ({
-              ...prev,
-              status: "error",
-              error: data.message || "Search failed. Please try again.",
-            }));
-            es.close();
-            break;
-        }
-      } catch (err) {
-        console.error("Failed to parse SSE event", err);
-      }
-    };
-
-    es.onerror = (err) => {
-      console.error("SSE connection error:", err);
-      es.close();
-      if (reconnectCountRef.current < 3) {
-        reconnectCountRef.current += 1;
-        setState((prev) => ({
-          ...prev,
-          message: `Reconnecting... (attempt ${reconnectCountRef.current} of 3)`,
-        }));
-        setTimeout(() => {
-          if (searchIdRef.current) {
-            connectToStream(searchIdRef.current);
+            case "error":
+              completedRef.current = true;
+              closeStream();
+              setState((prev) => ({
+                ...prev,
+                status: "error",
+                error: data.message || "Search failed. Please try again.",
+              }));
+              break;
           }
-        }, 3000);
-      } else {
-        setState((prev) => ({
-          ...prev,
-          status: "error",
-          error: "Connection lost. Please try your search again.",
-        }));
-      }
-    };
-  }, []);
+        } catch (err) {
+          console.error("Failed to parse SSE event", err);
+        }
+      };
+
+      es.onerror = () => {
+        if (completedRef.current) return;
+        es.close();
+        eventSourceRef.current = null;
+        if (reconnectCountRef.current < 3) {
+          reconnectCountRef.current += 1;
+          setState((prev) => ({
+            ...prev,
+            message: `Reconnecting... (attempt ${reconnectCountRef.current} of 3)`,
+          }));
+          setTimeout(() => {
+            if (searchIdRef.current && !completedRef.current) {
+              connectToStream(searchIdRef.current);
+            }
+          }, 3000);
+        }
+      };
+    },
+    [closeStream, finishSearch]
+  );
 
   const search = useCallback(
     async (query: string, location: string) => {
-      console.log("useSearch.search called:", { query, location });
-
       if (!query.trim() || !location.trim()) {
-        console.warn("Empty query or location");
         setState((prev) => ({
           ...prev,
           status: "error",
@@ -183,14 +267,13 @@ export function useSearch() {
         return;
       }
 
+      closeStream();
+      completedRef.current = false;
       queryRef.current = query.trim();
       locationRef.current = location.trim();
       pendingLeadsRef.current = [];
       reconnectCountRef.current = 0;
-
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
+      searchIdRef.current = null;
 
       setState({
         status: "starting",
@@ -203,10 +286,7 @@ export function useSearch() {
       });
 
       try {
-        console.log("Calling startSearch...");
         const result = await startSearch(query.trim(), location.trim());
-        console.log("startSearch result:", result);
-
         searchIdRef.current = result.searchId;
 
         setState((prev) => ({
@@ -214,24 +294,56 @@ export function useSearch() {
           searchId: result.searchId,
           searchesRemaining: result.searchesRemaining ?? null,
           message: formatSearchMessage(query.trim(), location.trim()),
+          status: "running",
         }));
 
         if (result.cached && result.status === "completed") {
           const { leads: cached } = await getResults(result.searchId);
-          const mapped = cached.map((l) => sseLeadToBusinessLead(l));
-          setState((prev) => ({
-            ...prev,
+          const mapped = cached.map((l) => leadRowToBusinessLead(l));
+          setState({
             status: "completed",
             leads: mapped,
-            totalFound: mapped.length,
+            searchId: result.searchId,
             message: `Search complete. Found ${mapped.length} businesses.`,
-          }));
+            totalFound: mapped.length,
+            searchesRemaining: result.searchesRemaining ?? null,
+            error: null,
+          });
           return;
         }
 
         connectToStream(result.searchId);
+        startPolling(result.searchId);
+
+        stopTimeout();
+        timeoutRef.current = setTimeout(() => {
+          if (completedRef.current) return;
+          void (async () => {
+            try {
+              await syncFromApi(result.searchId);
+              const { leads: saved } = await getResults(result.searchId);
+              if (saved.length > 0) {
+                finishSearch(
+                  saved.length,
+                  `Search timed out but ${saved.length} results were saved.`
+                );
+                return;
+              }
+            } catch {
+              /* fall through to error */
+            }
+            completedRef.current = true;
+            closeStream();
+            setState((prev) => ({
+              ...prev,
+              status: "error",
+              error:
+                "Search is taking too long. The scraper may be overloaded — try again in a few minutes.",
+            }));
+          })();
+        }, SEARCH_TIMEOUT_MS);
       } catch (err) {
-        console.error("Search error:", err);
+        closeStream();
         setState((prev) => ({
           ...prev,
           status: "error",
@@ -239,15 +351,13 @@ export function useSearch() {
         }));
       }
     },
-    [connectToStream]
+    [closeStream, connectToStream, startPolling, stopTimeout, syncFromApi, finishSearch]
   );
 
   const reset = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-    }
-    pendingLeadsRef.current = [];
+    closeStream();
     searchIdRef.current = null;
+    pendingLeadsRef.current = [];
     setState({
       status: "idle",
       leads: [],
@@ -257,13 +367,9 @@ export function useSearch() {
       searchesRemaining: null,
       error: null,
     });
-  }, []);
+  }, [closeStream]);
 
-  useEffect(() => {
-    return () => {
-      eventSourceRef.current?.close();
-    };
-  }, []);
+  useEffect(() => () => closeStream(), [closeStream]);
 
   const tableLeads: Lead[] = state.leads.map((l) =>
     businessLeadToLead({
@@ -281,7 +387,12 @@ export function useSearch() {
     rawLeads: state.leads,
     isSearching,
     phaseMessage: state.message,
-    progress: state.totalFound > 0 ? Math.min(99, state.totalFound) : isSearching ? 10 : 0,
+    progress:
+      state.totalFound > 0
+        ? Math.min(99, state.totalFound)
+        : isSearching
+          ? 15
+          : 0,
     searchMeta: { business: queryRef.current, location: locationRef.current },
     runSearch: search,
     clearResults: reset,
@@ -294,7 +405,7 @@ export function useSearch() {
   };
 }
 
-function sseLeadToBusinessLead(lead: Lead): BusinessLead {
+function leadRowToBusinessLead(lead: Lead): BusinessLead {
   return {
     id: lead.id,
     searchId: lead.search_id,

@@ -38,8 +38,14 @@ export class BrowserPool {
     return this.browsers.length > 0 && this.browsers.some((b) => b.isConnected());
   }
 
-  async acquire(): Promise<Browser> {
+  async acquire(timeoutMs = 90_000): Promise<Browser> {
+    const deadline = Date.now() + timeoutMs;
     while (this.available.length === 0) {
+      if (Date.now() >= deadline) {
+        throw new Error(
+          "Scraper is busy or still starting. Please wait a moment and try again."
+        );
+      }
       await new Promise((r) => setTimeout(r, 200));
     }
     const browser = this.available.pop();
@@ -47,6 +53,15 @@ export class BrowserPool {
       return this.launchBrowser();
     }
     return browser;
+  }
+
+  async waitUntilReady(timeoutMs = 60_000): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (this.isReady() && this.available.length > 0) return true;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    return this.isReady();
   }
 
   release(browser: Browser): void {

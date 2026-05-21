@@ -205,8 +205,32 @@ searchRouter.get("/:id/stream", async (req: Request, res: Response) => {
       );
     }
 
+    const statusPoll = setInterval(() => {
+      void (async () => {
+        try {
+          const current = await getSearchJob(searchId);
+          if (!current || res.writableEnded) return;
+          if (current.status === "failed") {
+            res.write(
+              `data: ${JSON.stringify({
+                type: "error",
+                message: current.error ?? "Search failed",
+              })}\n\n`
+            );
+            clearInterval(statusPoll);
+            clearInterval(heartbeat);
+            removeStream(searchId);
+            res.end();
+          }
+        } catch {
+          /* ignore poll errors */
+        }
+      })();
+    }, 8000);
+
     req.on("close", () => {
       clearInterval(heartbeat);
+      clearInterval(statusPoll);
       removeStream(searchId);
       logger.info("SSE client disconnected", { searchId });
     });

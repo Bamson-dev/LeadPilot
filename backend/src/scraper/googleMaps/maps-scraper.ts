@@ -155,7 +155,9 @@ export async function scrapeGoogleMaps(
 
     const max = businessUrls.length;
     onProgress?.(0, max);
-    onPhase?.(`Found ${businessUrls.length} businesses. Extracting details...`);
+    onPhase?.(
+      `Found ${businessUrls.length} businesses for ${query} in ${location}. Extracting details...`
+    );
 
     for (let i = 0; i < businessUrls.length; i += BATCH_SIZE) {
       const batch = businessUrls.slice(i, i + BATCH_SIZE);

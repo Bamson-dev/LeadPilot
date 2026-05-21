@@ -26,7 +26,19 @@ export async function runScraperJob(
   emit: ScrapeEmitter
 ): Promise<void> {
   const pool = getBrowserPool();
-  const browser = await pool.acquire();
+
+  if (!pool.isReady()) {
+    emit({
+      type: "phase",
+      phase: "Starting scraper — this may take up to a minute on first search...",
+    });
+    const ready = await pool.waitUntilReady(90_000);
+    if (!ready) {
+      throw new Error("Scraper is not ready yet. Please try again in one minute.");
+    }
+  }
+
+  const browser = await pool.acquire(90_000);
   let progress = 0;
   let progressMax = 100;
 
