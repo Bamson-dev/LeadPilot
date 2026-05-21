@@ -2,11 +2,15 @@ import type { Page } from "playwright";
 import type { RawLeadInput } from "../../types/scraper";
 import {
   cleanBusinessName,
-  extractPhoneNumber,
   isBlockedText,
   normalizeWebsite,
 } from "../utils/data-quality";
 import { formatEmailsForDisplay, mergeEmails } from "../parsers/email-filter";
+import { filterValidEmails } from "../parsers/email-validation";
+import {
+  isValidPhoneForLocation,
+  normalizePanelPhone,
+} from "../utils/phone-validation";
 
 export async function waitForDetailPanel(page: Page, timeoutMs = 8000): Promise<boolean> {
   try {
@@ -37,13 +41,14 @@ export async function waitForDetailPanel(page: Page, timeoutMs = 8000): Promise<
 export async function buildLeadFromPanel(
   page: Page,
   searchTerm: string,
-  placeUrl: string
+  placeUrl: string,
+  location: string
 ): Promise<RawLeadInput | null> {
-  const raw = (await page.evaluate((term) => {
+  const raw = (await page.evaluate(() => {
     const result: Record<string, unknown> = { google_maps_url: window.location.href };
-    const main = document.querySelector('[role="main"]') || document.body;
-    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-    const emailsFound: string[] = [];
+    const main = document.querySelector('[role="main"]');
+    if (!main) return result;
+
     const name = main.querySelector("h1")?.textContent?.trim();
     if (name) result.business_name = name;
 
@@ -54,6 +59,14 @@ export async function buildLeadFromPanel(
       if (telMatch) result.phone = decodeURIComponent(telMatch[1]);
     }
 
+    if (!result.phone) {
+      const telLink = main.querySelector('a[href^="tel:"]') as HTMLAnchorElement | null;
+      if (telLink?.href) {
+        result.phone = telLink.href.replace(/^tel:/i, "").split("?")[0]?.trim();
+      }
+    }
+
+    const emailsFound: string[] = [];
     main.querySelectorAll('a[href^="mailto:"]').forEach((a) => {
       const href = a.getAttribute("href") || "";
       const rawEmail = href.replace(/^mailto:/i, "").split("?")[0]?.trim();
@@ -102,24 +115,23 @@ export async function buildLeadFromPanel(
       result.reviews_count = parseInt(blockMatch[2].replace(/,/g, ""), 10);
     }
 
-    result.category = term;
-    return { ...result, emails: emailsFound };
-  }, searchTerm)) as Record<string, unknown> & { emails?: string[] };
+    result.emails = emailsFound;
+    return result;
+  })) as Record<string, unknown> & { emails?: string[] };
 
-  const panelEmails = mergeEmails(raw.emails ?? []);
+  const panelEmails = filterValidEmails(mergeEmails(raw.emails ?? []));
   const business_name = cleanBusinessName(
     typeof raw.business_name === "string" ? raw.business_name : null
   );
   if (!business_name) return null;
 
-  let phone = extractPhoneNumber(raw.phone as string | null);
-  if (!phone) {
-    const panelText = await page.locator('[role="main"]').first().innerText().catch(() => "");
-    phone = extractPhoneNumber(panelText);
+  let phone = normalizePanelPhone(raw.phone as string | null);
+  if (phone && !isValidPhoneForLocation(phone, location)) {
+    phone = null;
   }
 
-  const mapsEmail = formatEmailsForDisplay(panelEmails);
   const website = normalizeWebsite((raw.website as string) ?? null);
+  const mapsEmail = formatEmailsForDisplay(panelEmails, website);
 
   return {
     business_name,
@@ -135,7 +147,7 @@ export async function buildLeadFromPanel(
         : null,
     rating: (raw.rating as number) ?? null,
     reviews_count: (raw.reviews_count as number) ?? null,
-    category: (raw.category as string) ?? searchTerm,
+    category: searchTerm,
     google_maps_url: (raw.google_maps_url as string) ?? placeUrl,
   };
 }

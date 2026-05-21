@@ -1,8 +1,13 @@
 import type { RawLeadInput } from "../../types/scraper";
+import { isValidEmail } from "../parsers/email-validation";
 import {
   emailFieldsForLeadEmit,
   parseMapsEmailsFromLead,
 } from "./lead-email";
+import {
+  isValidPhoneForLocation,
+  normalizePanelPhone,
+} from "./phone-validation";
 import { resolveBusinessWebsite } from "./website-utils";
 
 const BLOCKED_STRINGS = [
@@ -14,11 +19,6 @@ const BLOCKED_BUSINESS_NAMES = new Set([
   "results", "search results", "places", "businesses", "sponsored",
 ]);
 
-const PHONE_PATTERNS = [
-  /\+234[\s-]?\d{3}[\s-]?\d{3}[\s-]?\d{4}/g,
-  /0[7-9][01]\d{8}/g,
-];
-
 export function isBlockedText(value: unknown): boolean {
   if (typeof value !== "string") return false;
   const lower = value.toLowerCase().trim();
@@ -26,16 +26,15 @@ export function isBlockedText(value: unknown): boolean {
   return BLOCKED_STRINGS.some((b) => lower === b || lower.includes(b));
 }
 
-export function extractPhoneNumber(raw: string | null | undefined): string | null {
-  if (!raw?.trim()) return null;
-  const text = raw.trim();
-  if (isBlockedText(text)) return null;
-  for (const pattern of PHONE_PATTERNS) {
-    pattern.lastIndex = 0;
-    const match = text.match(pattern);
-    if (match?.[0] && !isBlockedText(match[0])) return match[0].replace(/[\s-]/g, " ").trim();
-  }
-  return null;
+/** Panel-only phone — does not scan full page text. */
+export function extractPhoneNumber(
+  raw: string | null | undefined,
+  location?: string
+): string | null {
+  const phone = normalizePanelPhone(raw);
+  if (!phone || isBlockedText(phone)) return null;
+  if (location && !isValidPhoneForLocation(phone, location)) return null;
+  return phone;
 }
 
 export function normalizeWebsite(url: string | null | undefined): string | null {
@@ -51,19 +50,39 @@ export function cleanBusinessName(raw: string | null | undefined): string | null
   return name;
 }
 
-export function sanitizeLead(lead: RawLeadInput): RawLeadInput | null {
+export function sanitizeLead(
+  lead: RawLeadInput,
+  location = ""
+): RawLeadInput | null {
   const business_name = cleanBusinessName(lead.business_name);
   if (!business_name) return null;
-  const phone = extractPhoneNumber(lead.phone);
+  const phone = extractPhoneNumber(lead.phone, location);
   const website = normalizeWebsite(lead.website);
   const category = lead.category?.trim() || null;
   const mapsEmails = parseMapsEmailsFromLead(lead);
   const emailFields = emailFieldsForLeadEmit(mapsEmails, website, category, business_name);
+
+  const singleEmail = emailFields.email;
+  const validatedEmail =
+    singleEmail && isValidEmail(singleEmail) ? singleEmail : null;
+
   let address = lead.address?.trim() || null;
   if (address && isBlockedText(address)) address = null;
-  return { business_name, phone, ...emailFields, website, address,
-    rating: lead.rating, reviews_count: lead.reviews_count, category,
-    google_maps_url: lead.google_maps_url };
+
+  return {
+    business_name,
+    phone,
+    email: validatedEmail,
+    extracted_email: validatedEmail,
+    generated_email: null,
+    email_source: validatedEmail ? emailFields.email_source : null,
+    website,
+    address,
+    rating: lead.rating,
+    reviews_count: lead.reviews_count,
+    category,
+    google_maps_url: lead.google_maps_url,
+  };
 }
 
 export function dedupeKey(lead: RawLeadInput): string {

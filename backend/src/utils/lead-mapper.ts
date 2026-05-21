@@ -5,6 +5,10 @@ import { resolveEffectiveBusinessWebsite } from "../scraper/utils/effective-webs
 import { parseMapsEmailsFromLead } from "../scraper/utils/lead-email";
 import { mergeEmails, parseEmailList } from "../scraper/parsers/email-filter";
 import { generateEmailsFromWebsite } from "../scraper/parsers/email-generator";
+import {
+  isValidEmail,
+  pickBestEmail,
+} from "../scraper/parsers/email-validation";
 import { resolveGenerationDomain } from "../scraper/utils/domain-utils";
 import {
   formatPredictedEmailsForStorage,
@@ -60,7 +64,8 @@ export function rawLeadToBusinessLead(
   };
 
   if (mapsVerified.length > 0) {
-    return buildVerifiedLead(base, mapsVerified.slice(0, 2));
+    const best = pickBestEmail(mapsVerified, website);
+    return buildVerifiedLead(base, best ? [best] : mapsVerified);
   }
 
   return base;
@@ -85,9 +90,10 @@ export async function enrichLeadEmail(
       ? parseEmailList(crawl.email)
       : [];
 
-  const verified = mergeEmails(mapsVerified, websiteVerified).slice(0, 2);
-  if (verified.length > 0) {
-    return buildVerifiedLead(lead, verified);
+  const mergedVerified = mergeEmails(mapsVerified, websiteVerified);
+  const bestVerified = pickBestEmail(mergedVerified, effectiveWebsite ?? lead.website);
+  if (bestVerified) {
+    return buildVerifiedLead(lead, [bestVerified]);
   }
 
   if (!effectiveWebsite?.trim() && !lead.website?.trim()) {
@@ -106,11 +112,12 @@ export async function enrichLeadEmail(
     category: lead.category,
   });
 
-  if (predictions.length > 0) {
+  const validPredictions = predictions.filter((p) => isValidEmail(p.email)).slice(0, 1);
+  if (validPredictions.length > 0) {
     return {
       ...lead,
       verifiedEmails: [],
-      predictedEmails: predictions,
+      predictedEmails: validPredictions,
       email: null,
       emailSource: "predicted",
     };
@@ -122,16 +129,20 @@ export async function enrichLeadEmail(
       effectiveWebsite ?? lead.website,
       lead.category,
       lead.name
+    ).filter(isValidEmail);
+    const fallbackEmail = pickBestEmail(
+      fallbackAddresses,
+      effectiveWebsite ?? lead.website
     );
-    if (fallbackAddresses.length > 0) {
-      const predictedEmails: PredictedEmail[] = fallbackAddresses
-        .slice(0, 2)
-        .map((email) => ({
-          email,
+    if (fallbackEmail) {
+      const predictedEmails: PredictedEmail[] = [
+        {
+          email: fallbackEmail,
           confidence: 78,
           label: "medium" as const,
           source: "business_pattern" as const,
-        }));
+        },
+      ];
       return {
         ...lead,
         verifiedEmails: [],

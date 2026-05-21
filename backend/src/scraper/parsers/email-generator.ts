@@ -209,5 +209,5 @@ export function formatGeneratedEmails(
 ): string | null {
   if (!website?.trim()) return null;
   const emails = generateEmailsFromWebsite(website, category, businessName);
-  return formatEmailsForDisplay(emails, MAX_GENERATED_EMAILS);
+  return formatEmailsForDisplay(emails, website);
 }

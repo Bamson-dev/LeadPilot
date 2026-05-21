@@ -28,7 +28,10 @@ export function resolveLeadEmailFields(options: {
     options.mapsEmails ?? [],
     options.websiteEmails ?? []
   );
-  const extracted = formatEmailsForDisplay(extractedList);
+  const extracted = formatEmailsForDisplay(
+    extractedList,
+    options.website ?? null
+  );
 
   if (extracted) {
     return {

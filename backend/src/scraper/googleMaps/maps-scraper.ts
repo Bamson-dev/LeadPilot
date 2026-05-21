@@ -281,16 +281,18 @@ async function extractLeadsViaFeedClicks(
         continue;
       }
 
-      const lead = await buildLeadFromPanel(page, query, page.url());
+      const lead = await buildLeadFromPanel(page, query, page.url(), location);
       await backToResultsList(page);
 
       if (!lead) continue;
-      const key = dedupeKey(lead);
+      const sanitized = sanitizeLead(lead, location);
+      if (!sanitized) continue;
+      const key = dedupeKey(sanitized);
       if (seen.has(key)) continue;
       seen.add(key);
       count++;
       onProgress?.(count, max);
-      if (onLead) await onLead(lead);
+      if (onLead) await onLead(sanitized);
     } catch (err) {
       logger.warn("Feed article click failed", {
         index: i,
@@ -323,7 +325,8 @@ async function loadMapsSearchPage(page: Page, searchUrl: string): Promise<void> 
 async function extractBusinessDetails(
   context: BrowserContext,
   placeUrl: string,
-  searchTerm: string
+  searchTerm: string,
+  location: string
 ): Promise<RawLeadInput | null> {
   const page = await context.newPage();
   try {
@@ -331,8 +334,8 @@ async function extractBusinessDetails(
     await acceptGoogleConsent(page);
     await page.waitForTimeout(DETAIL_PANEL_WAIT_MS);
     if (!(await waitForDetailPanel(page, 6000))) return null;
-    const lead = await buildLeadFromPanel(page, searchTerm, placeUrl);
-    return lead ? sanitizeLead(lead) : null;
+    const lead = await buildLeadFromPanel(page, searchTerm, placeUrl, location);
+    return lead ? sanitizeLead(lead, location) : null;
   } catch (err) {
     logger.warn("Place scrape failed", {
       url: placeUrl.slice(0, 80),
@@ -468,7 +471,7 @@ export async function scrapeGoogleMaps(
       const results = await Promise.allSettled(
         batch.map((url) =>
           processWithTimeout(
-            extractBusinessDetails(context, url, query),
+            extractBusinessDetails(context, url, query, location),
             PLACE_TIMEOUT_MS,
             null
           )

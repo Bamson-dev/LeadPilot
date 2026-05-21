@@ -1,4 +1,5 @@
-import { extractAllEmailsFromText } from "../parsers/email-filter";
+import { extractAllEmailsFromText, mergeEmails } from "../parsers/email-filter";
+import { pickBestEmail } from "../parsers/email-validation";
 import { resolveEffectiveBusinessWebsite } from "../utils/effective-website";
 import { EMAIL_CRAWL_PATHS, EMAIL_FETCH_TIMEOUT_MS } from "../utils/constants";
 
@@ -52,15 +53,15 @@ export async function crawlEmailForWebsite(
     }
   }
 
-  const found = new Set<string>();
+  const found: string[] = [];
   for (const url of urls) {
     const html = await fetchPageText(url);
-    extractFromHtml(html).forEach((e) => found.add(e));
-    if (found.size > 0) break;
+    found.push(...extractFromHtml(html));
+    if (found.length > 0) break;
   }
 
-  if (found.size > 0) {
-    const email = [...found].slice(0, 2).join(", ");
+  const email = pickBestEmail(found, baseUrl);
+  if (email) {
     return { email, emailSource: "website" };
   }
 

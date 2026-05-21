@@ -4,14 +4,12 @@ import type {
   PredictedEmail,
   PredictionSource,
 } from "@leadpilot/shared";
+import { isValidEmail } from "../scraper/parsers/email-validation";
 import { resolveGenerationDomain } from "../scraper/utils/domain-utils";
 
 const MIN_CONFIDENCE = 70;
 const MAX_PREDICTIONS = 2;
 const MX_CACHE_TTL_MS = 10 * 60 * 1000;
-
-const EMAIL_REGEX =
-  /^[a-z0-9](?:[a-z0-9._%+-]{0,62}[a-z0-9])?@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i;
 
 const BLOCKED_LOCAL_PARTS = new Set([
   "noreply",
@@ -106,12 +104,11 @@ function normalizeDomain(domain: string): string | null {
 }
 
 export function isValidEmailFormat(email: string): boolean {
-  if (!email || email.length > 254) return false;
-  if (!EMAIL_REGEX.test(email)) return false;
-  const [local, domain] = email.toLowerCase().split("@");
-  if (!local || !domain || BLOCKED_LOCAL_PARTS.has(local)) return false;
-  if (DISPOSABLE_DOMAINS.has(domain)) return false;
-  if (/\d{3,}/.test(local) && !/^[a-z]+\.[a-z]+$/.test(local)) return false;
+  if (!isValidEmail(email)) return false;
+  const [local] = email.toLowerCase().split("@");
+  if (local && BLOCKED_LOCAL_PARTS.has(local)) return false;
+  const domain = email.toLowerCase().split("@")[1];
+  if (domain && DISPOSABLE_DOMAINS.has(domain)) return false;
   return true;
 }
 
