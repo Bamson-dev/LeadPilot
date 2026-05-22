@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { BusinessLead } from "@leadpilot/shared";
 import { getApiUrl } from "@/utils/env";
-import { Lock } from "lucide-react";
+import { useIsMobile } from "@/hooks/useIsMobile";
 
 const MAX_TRIAL_LEADS = 15;
 const PAYSTACK_URL = "https://paystack.shop/pay/Leadpilot";
@@ -63,11 +63,20 @@ function normalizeLead(raw: BusinessLead): TrialLead {
   };
 }
 
-function maskWebsite(url: string | null): string {
-  if (!url) return "—";
-  const display = url.replace(/^https?:\/\//, "").replace(/\/$/, "");
-  const visible = display.substring(0, 12);
-  return `${visible}███████`;
+function generatePlaceholderEmail(businessName: string): string {
+  const domain = businessName
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")
+    .trim()
+    .split(" ")
+    .slice(0, 2)
+    .join("");
+  return `info@${domain || "business"}.com`;
+}
+
+function truncateAddress(address: string, maxLen: number): string {
+  if (address.length <= maxLen) return address;
+  return `${address.slice(0, maxLen)}…`;
 }
 
 export default function FreeTrialPage() {
@@ -79,7 +88,16 @@ export default function FreeTrialPage() {
   const [trialCount, setTrialCount] = useState(0);
   const [message, setMessage] = useState("");
   const [showPaywall, setShowPaywall] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+  const isMobile = useIsMobile();
+
+  const progressMessages = [
+    `Connecting to Google Maps...`,
+    `Scanning for ${query} in ${location}...`,
+    `Found first businesses. Extracting details...`,
+    `Collecting phone numbers and addresses...`,
+    `Found {count} businesses. Still scanning...`,
+    `Almost done. Finalizing results...`,
+  ];
 
   useEffect(() => {
     const count = getTrialCount();
@@ -88,11 +106,20 @@ export default function FreeTrialPage() {
   }, []);
 
   useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768);
-    check();
-    window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
-  }, []);
+    if (status !== "searching") return;
+
+    let msgIndex = 0;
+    const interval = setInterval(() => {
+      if (leads.length > 0) {
+        setMessage(`Found ${leads.length} businesses so far...`);
+      } else {
+        msgIndex = Math.min(msgIndex + 1, 3);
+        setMessage(progressMessages[msgIndex]);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [status, leads.length, query, location]);
 
   const finishTrial = useCallback((foundTotal: number) => {
     setTotalFound((prev) => Math.max(prev, foundTotal, MAX_TRIAL_LEADS));
@@ -111,6 +138,7 @@ export default function FreeTrialPage() {
 
       const es = new EventSource(`${apiUrl}/search/${searchId}/stream`);
       const pendingLeads: TrialLead[] = [];
+      const seenKeys = new Set<string>();
       let leadCount = 0;
       let streamTotal = 0;
 
@@ -144,18 +172,28 @@ export default function FreeTrialPage() {
             total?: number;
             processed?: number;
             message?: string;
+            phase?: string;
           };
+
+          if (data.type === "phase" && data.phase) {
+            setMessage(data.phase);
+          }
 
           if (data.type === "lead") {
             const raw = data.data ?? data.lead;
             if (!raw) return;
+
+            const normalized = normalizeLead(raw);
+            const key = `${normalized.business_name.toLowerCase()}-${(normalized.phone ?? "").replace(/\s/g, "")}`;
+            if (seenKeys.has(key)) return;
+            seenKeys.add(key);
 
             if (leadCount >= MAX_TRIAL_LEADS) {
               stopStream(streamTotal);
               return;
             }
 
-            pendingLeads.push(normalizeLead(raw));
+            pendingLeads.push(normalized);
             leadCount++;
             setMessage(`Found ${leadCount} businesses so far...`);
 
@@ -168,7 +206,10 @@ export default function FreeTrialPage() {
             const count = data.processed ?? leadCount;
             streamTotal = Math.max(streamTotal, data.total ?? count, count);
             setTotalFound(streamTotal);
-            setMessage(`Found ${leadCount} businesses so far...`);
+            if (data.message) setMessage(data.message);
+            else if (leadCount > 0) {
+              setMessage(`Found ${leadCount} businesses so far...`);
+            }
           }
 
           if (data.type === "complete") {
@@ -211,7 +252,7 @@ export default function FreeTrialPage() {
     setLeads([]);
     setShowPaywall(false);
     setTotalFound(0);
-    setMessage(`Searching for ${query} in ${location}...`);
+    setMessage(`Connecting to Google Maps...`);
 
     try {
       const res = await fetch(`${apiUrl}/freetrial`, {
@@ -246,14 +287,23 @@ export default function FreeTrialPage() {
     }
   }
 
-  const paywallTotal =
-    totalFound > 200 ? "200+" : totalFound > 15 ? `${totalFound}+` : "200+";
+  const displayTotal =
+    totalFound > 200 ? "200+" : totalFound > 15 ? `${totalFound}` : "200+";
+  const paywallMore =
+    totalFound > 15
+      ? `${totalFound > 200 ? "200+" : totalFound}`
+      : "200+";
 
   return (
     <div
       className="min-h-screen text-[#F0EFFF]"
       style={{ background: "#06060A", paddingBottom: showPaywall ? 280 : 40 }}
     >
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+      `}</style>
+
       <header
         className="flex items-center justify-between px-4 sm:px-8 py-4 border-b"
         style={{ borderColor: "rgba(255,255,255,0.06)" }}
@@ -364,11 +414,97 @@ export default function FreeTrialPage() {
               type="button"
               onClick={() => void runTrialSearch()}
               disabled={status === "searching" || !query.trim() || !location.trim()}
-              className="w-full sm:w-auto font-bold px-8 py-3 rounded-lg disabled:opacity-50"
-              style={{ background: "#7C3AED", color: "white" }}
+              style={{
+                background: status === "searching" ? "#4C1D95" : "#7C3AED",
+                color: "white",
+                fontWeight: 800,
+                fontSize: 16,
+                padding: "16px 32px",
+                borderRadius: 12,
+                border: "none",
+                cursor: status === "searching" ? "not-allowed" : "pointer",
+                width: isMobile ? "100%" : "auto",
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                justifyContent: "center",
+                transition: "all 0.2s",
+                boxShadow:
+                  status === "searching" ? "none" : "0 0 40px rgba(124,58,237,0.4)",
+              }}
             >
-              {status === "searching" ? "Searching..." : "Search"}
+              {status === "searching" ? (
+                <>
+                  <span
+                    style={{
+                      width: 16,
+                      height: 16,
+                      border: "2px solid rgba(255,255,255,0.3)",
+                      borderTop: "2px solid white",
+                      borderRadius: "50%",
+                      display: "inline-block",
+                      animation: "spin 0.8s linear infinite",
+                    }}
+                  />
+                  Searching...
+                </>
+              ) : (
+                <>🔍 Search — Free Preview</>
+              )}
             </button>
+
+            {status === "idle" && leads.length === 0 && (
+              <div style={{ marginTop: 16 }}>
+                <p
+                  style={{
+                    fontSize: 11,
+                    color: "#555575",
+                    marginBottom: 10,
+                    textAlign: "center",
+                  }}
+                >
+                  Try one of these
+                </p>
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 8,
+                    justifyContent: "center",
+                  }}
+                >
+                  {[
+                    { q: "restaurants", l: "Lagos Nigeria" },
+                    { q: "dentists", l: "Abuja Nigeria" },
+                    { q: "salons", l: "London UK" },
+                    { q: "gyms", l: "Nairobi Kenya" },
+                    { q: "hotels", l: "Dubai UAE" },
+                  ].map((ex, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => {
+                        setQuery(ex.q);
+                        setLocation(ex.l);
+                      }}
+                      style={{
+                        background: "transparent",
+                        border: "1px solid rgba(124,58,237,0.25)",
+                        color: "#A78BFA",
+                        padding: "7px 14px",
+                        borderRadius: 100,
+                        fontSize: 12,
+                        cursor: "pointer",
+                        fontWeight: 500,
+                        fontFamily: "inherit",
+                      }}
+                    >
+                      {ex.q} in {ex.l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {trialCount === 1 && (
               <p className="text-xs text-[#555575] mt-2">1 of 2 free searches used.</p>
@@ -381,77 +517,209 @@ export default function FreeTrialPage() {
         )}
 
         {leads.length > 0 && (
-          <section className="mt-10 overflow-x-auto">
-            <table className="w-full min-w-[720px] text-sm border-collapse">
-              <thead>
-                <tr
-                  className="text-left text-xs uppercase tracking-wider"
-                  style={{ color: "#7878A0", borderBottom: "1px solid rgba(255,255,255,0.08)" }}
-                >
-                  <th className="py-3 pr-4">Business Name</th>
-                  <th className="py-3 pr-4">Address</th>
-                  <th className="py-3 pr-4">Phone</th>
-                  <th className="py-3 pr-4">Email</th>
-                  <th className="py-3 pr-4">Website</th>
-                  <th className="py-3">Rating</th>
-                </tr>
-              </thead>
-              <tbody>
-                {leads.map((lead, i) => (
-                  <tr
+          <section className="mt-10">
+            {isMobile ? (
+              <div>
+                {leads.map((lead) => (
+                  <div
                     key={lead.id}
-                    className="trial-row-fade"
                     style={{
+                      background: "#111118",
+                      border: "1px solid rgba(255,255,255,0.07)",
+                      borderRadius: 12,
+                      padding: 16,
+                      marginBottom: 8,
+                      animation: "fadeIn 0.3s ease",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontWeight: 700,
+                        fontSize: 15,
+                        color: "#F0EFFF",
+                        marginBottom: 8,
+                      }}
+                    >
+                      {lead.business_name}
+                    </div>
+                    {lead.address && (
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 8,
+                          marginBottom: 6,
+                          alignItems: "flex-start",
+                        }}
+                      >
+                        <span style={{ color: "#555575", fontSize: 12, flexShrink: 0 }}>
+                          Address
+                        </span>
+                        <span style={{ color: "#C0C0D8", fontSize: 12, lineHeight: 1.4 }}>
+                          {lead.address}
+                        </span>
+                      </div>
+                    )}
+                    {lead.phone && (
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 8,
+                          marginBottom: 6,
+                          alignItems: "center",
+                        }}
+                      >
+                        <span style={{ color: "#555575", fontSize: 12, flexShrink: 0 }}>
+                          Phone
+                        </span>
+                        <a
+                          href={`tel:${lead.phone}`}
+                          style={{
+                            color: "#F0EFFF",
+                            fontSize: 13,
+                            fontWeight: 600,
+                            textDecoration: "none",
+                          }}
+                        >
+                          {lead.phone}
+                        </a>
+                      </div>
+                    )}
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        alignItems: "center",
+                        marginBottom: 6,
+                      }}
+                    >
+                      <span style={{ color: "#555575", fontSize: 12, flexShrink: 0 }}>
+                        Email
+                      </span>
+                      <span
+                        style={{
+                          filter: "blur(5px)",
+                          userSelect: "none",
+                          fontSize: 12,
+                          color: "#C0C0D8",
+                          background: "rgba(124,58,237,0.08)",
+                          padding: "2px 8px",
+                          borderRadius: 4,
+                        }}
+                      >
+                        {generatePlaceholderEmail(lead.business_name)}
+                      </span>
+                      <span style={{ fontSize: 10, color: "#A78BFA", fontWeight: 600 }}>
+                        🔒 Unlock
+                      </span>
+                    </div>
+                    {lead.rating != null && (
+                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        <span style={{ color: "#FBBF24", fontSize: 13 }}>★</span>
+                        <span style={{ color: "#FBBF24", fontSize: 12, fontWeight: 700 }}>
+                          {lead.rating}
+                        </span>
+                        {lead.reviews_count != null && (
+                          <span style={{ color: "#555575", fontSize: 11 }}>
+                            ({lead.reviews_count.toLocaleString()} reviews)
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div
+                style={{
+                  background: "#0D0D16",
+                  border: "1px solid rgba(255,255,255,0.07)",
+                  borderRadius: 16,
+                  overflow: "hidden",
+                  marginTop: 24,
+                }}
+              >
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1.8fr 2fr 1.4fr 2fr 1fr",
+                    padding: "12px 16px",
+                    background: "#111118",
+                    borderBottom: "1px solid rgba(255,255,255,0.07)",
+                    fontSize: 10,
+                    fontWeight: 700,
+                    color: "#555575",
+                    letterSpacing: "0.1em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  <span>Business</span>
+                  <span>Address</span>
+                  <span>Phone</span>
+                  <span>Email</span>
+                  <span>Rating</span>
+                </div>
+                {leads.map((lead, i) => (
+                  <div
+                    key={lead.id}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1.8fr 2fr 1.4fr 2fr 1fr",
+                      padding: "14px 16px",
                       borderBottom: "1px solid rgba(255,255,255,0.04)",
+                      fontSize: 13,
+                      alignItems: "center",
+                      animation: "fadeIn 0.3s ease",
                       animationDelay: `${i * 40}ms`,
                     }}
                   >
-                    <td className="py-3 pr-4 font-semibold">{lead.business_name}</td>
-                    <td className="py-3 pr-4 text-[#7878A0] max-w-[160px] truncate">
-                      {lead.address || "—"}
-                    </td>
-                    <td className="py-3 pr-4">
+                    <span style={{ fontWeight: 700, color: "#F0EFFF" }}>
+                      {lead.business_name}
+                    </span>
+                    <span
+                      style={{ color: "#7878A0" }}
+                      title={lead.address || undefined}
+                    >
+                      {lead.address
+                        ? truncateAddress(lead.address, 35)
+                        : "—"}
+                    </span>
+                    <span>
                       {lead.phone ? (
-                        <a href={`tel:${lead.phone}`} className="text-[#F0EFFF] hover:underline">
+                        <a
+                          href={`tel:${lead.phone}`}
+                          style={{ color: "#F0EFFF", textDecoration: "none" }}
+                        >
                           {lead.phone}
                         </a>
                       ) : (
                         "—"
                       )}
-                    </td>
-                    <td className="py-3 pr-4">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="text-[#7878A0] select-none"
-                          style={{ filter: "blur(4px)" }}
-                        >
-                          ████████@██████.com
-                        </span>
-                        <Lock className="h-3.5 w-3.5 shrink-0 text-[#7C3AED]" />
-                        <span className="text-[10px] text-[#7C3AED] whitespace-nowrap">
-                          Unlock with full access
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-3 pr-4">
-                      {lead.website ? (
-                        <span
-                          className="text-[#7878A0] select-none"
-                          style={{ filter: "blur(3px)" }}
-                        >
-                          {maskWebsite(lead.website)}
-                        </span>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="py-3 text-amber-400">
+                    </span>
+                    <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span
+                        style={{
+                          filter: "blur(5px)",
+                          userSelect: "none",
+                          fontSize: 12,
+                          color: "#C0C0D8",
+                          background: "rgba(124,58,237,0.08)",
+                          padding: "2px 8px",
+                          borderRadius: 4,
+                        }}
+                      >
+                        {generatePlaceholderEmail(lead.business_name)}
+                      </span>
+                      <span style={{ fontSize: 10, color: "#A78BFA", fontWeight: 600 }}>
+                        🔒 Unlock
+                      </span>
+                    </span>
+                    <span style={{ color: "#FBBF24", fontWeight: 700 }}>
                       {lead.rating != null ? `★ ${lead.rating}` : "—"}
-                    </td>
-                  </tr>
+                    </span>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+              </div>
+            )}
           </section>
         )}
       </main>
@@ -485,17 +753,44 @@ export default function FreeTrialPage() {
               boxShadow: "0 0 80px rgba(124,58,237,0.2)",
             }}
           >
-            <p className="text-xs text-[#7878A0] mb-1">You are seeing 15 of</p>
             <p
-              className="text-3xl font-black mb-1"
-              style={{ color: "#F0EFFF", letterSpacing: -1 }}
+              style={{
+                fontSize: 32,
+                fontWeight: 900,
+                color: "#F0EFFF",
+                letterSpacing: -1.5,
+                marginBottom: 8,
+                lineHeight: 1,
+              }}
             >
-              {paywallTotal} businesses
+              {paywallMore} more businesses
             </p>
-            <p className="text-xs text-[#7878A0] mb-5 leading-relaxed">
-              found for <strong className="text-[#F0EFFF]">{query} in {location}</strong>.
-              <br />
-              Get full access to see all of them with complete contact details.
+            <p
+              style={{
+                fontSize: 14,
+                color: "#7878A0",
+                marginBottom: 6,
+                lineHeight: 1.6,
+              }}
+            >
+              You are seeing{" "}
+              <strong style={{ color: "#F0EFFF" }}>15 of {displayTotal}</strong> businesses
+              found for{" "}
+              <strong style={{ color: "#F0EFFF" }}>
+                {query} in {location}
+              </strong>
+              .
+            </p>
+            <p
+              style={{
+                fontSize: 13,
+                color: "#7878A0",
+                marginBottom: 20,
+                lineHeight: 1.6,
+              }}
+            >
+              Full access unlocks all results with complete emails, websites, and one-click CSV
+              export.
             </p>
             <a
               href={PAYSTACK_URL}
@@ -510,13 +805,15 @@ export default function FreeTrialPage() {
             >
               Get Full Access — ₦15,000 Lifetime
             </a>
-            <a href={SITE_URL} className="text-xs text-[#555575] hover:underline">
+            <p style={{ fontSize: 11, color: "#555575", marginTop: 10 }}>
+              ⚡ Instant access · One payment · No monthly fee
+            </p>
+            <a href={SITE_URL} className="text-xs text-[#555575] hover:underline block mt-2">
               Learn more about LeadPilot
             </a>
           </div>
         </div>
       )}
-
     </div>
   );
 }

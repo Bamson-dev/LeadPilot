@@ -29,9 +29,24 @@ const BATCH_SIZE = 10;
 export interface MapsScrapeOptions {
   query: string;
   location: string;
+  isTrial?: boolean;
   onPhase?: (message: string) => void;
   onProgress?: (count: number, max: number) => void;
   onLead?: (lead: RawLeadInput) => void | Promise<void>;
+}
+
+const TRIAL_URL_CAP = 30;
+
+function deduplicateByPlaceId(urls: string[]): string[] {
+  const seen = new Set<string>();
+  return urls.filter((url) => {
+    const match = url.match(/\/maps\/place\/([^/?]+)/);
+    if (!match) return true;
+    const placeSlug = match[1];
+    if (seen.has(placeSlug)) return false;
+    seen.add(placeSlug);
+    return true;
+  });
 }
 
 async function processWithTimeout<T>(
@@ -487,10 +502,12 @@ async function scrapeUrlsFromPage(
 async function getBusinessUrls(
   context: BrowserContext,
   query: string,
-  location: string
+  location: string,
+  isTrial = false
 ): Promise<string[]> {
   const allUrls = new Set<string>();
   const searchStrategies = buildSearchStrategyUrls(query, location);
+  const urlCap = isTrial ? TRIAL_URL_CAP : MAX_LEADS_PER_SEARCH;
 
   logger.info("Multi-strategy Maps search", {
     query,
@@ -515,13 +532,12 @@ async function getBusinessUrls(
   for (const result of results) {
     if (result.status === "fulfilled") {
       for (const url of result.value) {
-        const key = url.split("?")[0] ?? url;
-        allUrls.add(key);
+        allUrls.add(url);
       }
     }
   }
 
-  let merged = [...allUrls];
+  let merged = deduplicateByPlaceId([...allUrls]);
 
   if (merged.length < 20) {
     logger.warn("Parallel strategies returned low results — trying sequential fallback", {
@@ -533,13 +549,12 @@ async function getBusinessUrls(
     for (const strategyUrl of searchStrategies) {
       const urls = await scrapeUrlsFromPage(context, strategyUrl, query, location);
       for (const url of urls) {
-        const key = url.split("?")[0] ?? url;
-        allUrls.add(key);
+        allUrls.add(url);
       }
-      if (allUrls.size >= 100) break;
+      if (allUrls.size >= (isTrial ? TRIAL_URL_CAP : 100)) break;
     }
 
-    merged = [...allUrls];
+    merged = deduplicateByPlaceId([...allUrls]);
     logger.info("Sequential fallback complete", {
       query,
       location,
@@ -557,7 +572,93 @@ async function getBusinessUrls(
     strategiesSucceeded,
   });
 
-  return merged.slice(0, MAX_LEADS_PER_SEARCH);
+  return merged.slice(0, urlCap);
+}
+
+export async function extractBusinessBasicDetails(
+  context: BrowserContext,
+  placeUrl: string,
+  location: string
+): Promise<RawLeadInput | null> {
+  const page = await context.newPage();
+
+  try {
+    await page.goto(placeUrl, {
+      waitUntil: "domcontentloaded",
+      timeout: 8000,
+    });
+    await acceptGoogleConsent(page);
+    await page.waitForSelector("h1", { timeout: 4000 }).catch(() => undefined);
+    await page.waitForTimeout(800);
+
+    const details = await page.evaluate(() => {
+      const getText = (selector: string) =>
+        document.querySelector(selector)?.textContent?.trim() || null;
+
+      const name = getText("h1");
+
+      const phoneEl =
+        document.querySelector('[data-item-id*="phone"]') ||
+        document.querySelector('[aria-label*="Phone"]') ||
+        document.querySelector('a[href^="tel:"]');
+
+      const phone =
+        phoneEl?.getAttribute("aria-label")?.replace("Phone:", "").trim() ||
+        phoneEl?.getAttribute("href")?.replace("tel:", "").trim() ||
+        phoneEl?.textContent?.trim() ||
+        null;
+
+      const addressEl =
+        document.querySelector('[data-item-id="address"]') ||
+        document.querySelector('[aria-label*="Address"]');
+      const address =
+        addressEl?.getAttribute("aria-label")?.replace("Address:", "").trim() ||
+        addressEl?.textContent?.trim() ||
+        null;
+
+      const ratingText = document
+        .querySelector('[aria-label*="stars"]')
+        ?.getAttribute("aria-label");
+      const rating = ratingText ? parseFloat(ratingText) : null;
+
+      const reviewText = document
+        .querySelector('[aria-label*="reviews"]')
+        ?.getAttribute("aria-label");
+      const reviewCount = reviewText
+        ? parseInt(reviewText.replace(/[^0-9]/g, ""), 10)
+        : null;
+
+      const category =
+        document.querySelector(".DkEaL")?.textContent?.trim() ||
+        document.querySelector('[jsaction*="category"]')?.textContent?.trim() ||
+        null;
+
+      return { name, phone, address, rating, reviewCount, category };
+    });
+
+    if (!details.name) return null;
+
+    const lead: RawLeadInput = {
+      business_name: details.name,
+      phone: normalizePhoneForLocation(details.phone, location),
+      address: details.address,
+      rating: details.rating,
+      reviews_count: details.reviewCount,
+      category: details.category,
+      email: null,
+      extracted_email: null,
+      generated_email: null,
+      email_source: null,
+      website: null,
+      google_maps_url: placeUrl,
+    };
+
+    return sanitizeLead(lead, location);
+  } catch {
+    return null;
+  } finally {
+    await page.close().catch(() => undefined);
+  }
 }
 
 async function extractBusinessDetails(
@@ -621,7 +722,7 @@ export async function scrapeGoogleMaps(
   browser: Browser,
   options: MapsScrapeOptions
 ): Promise<number> {
-  const { query, location, onPhase, onProgress, onLead } = options;
+  const { query, location, onPhase, onProgress, onLead, isTrial } = options;
 
   const context = await browser.newContext({
     userAgent:
@@ -645,14 +746,16 @@ export async function scrapeGoogleMaps(
 
   try {
     onPhase?.(formatSearchMessage(query, location));
-    let businessUrls = await getBusinessUrls(context, query, location);
+    let businessUrls = await getBusinessUrls(context, query, location, isTrial);
 
     if (businessUrls.length === 0) {
       onPhase?.(formatSearchMessage(query, location));
       const fallbackUrl = `https://www.google.com/maps/search/${encodeURIComponent(`${query} in ${location}`)}`;
       await loadMapsSearchPage(searchPage, fallbackUrl);
       await scrollResults(searchPage, query, location, onPhase);
-      businessUrls = (await collectPlaceUrls(searchPage)).slice(0, MAX_LEADS_PER_SEARCH);
+      const collected = await collectPlaceUrls(searchPage);
+      const urlCap = isTrial ? TRIAL_URL_CAP : MAX_LEADS_PER_SEARCH;
+      businessUrls = deduplicateByPlaceId(collected).slice(0, urlCap);
     }
 
     if (businessUrls.length === 0) {
@@ -677,6 +780,7 @@ export async function scrapeGoogleMaps(
     }
 
     const max = businessUrls.length;
+    const placeTimeoutMs = isTrial ? 8000 : PLACE_TIMEOUT_MS;
     onProgress?.(0, max);
     onPhase?.(
       `Found ${businessUrls.length} businesses for ${query} in ${location}. Extracting details...`
@@ -687,15 +791,17 @@ export async function scrapeGoogleMaps(
       const results = await Promise.allSettled(
         batch.map((url, batchIndex) =>
           processWithTimeout(
-            extractBusinessDetails(
-              context,
-              url,
-              query,
-              location,
-              i + batchIndex + 1,
-              businessUrls.length
-            ),
-            PLACE_TIMEOUT_MS,
+            isTrial
+              ? extractBusinessBasicDetails(context, url, location)
+              : extractBusinessDetails(
+                  context,
+                  url,
+                  query,
+                  location,
+                  i + batchIndex + 1,
+                  businessUrls.length
+                ),
+            placeTimeoutMs,
             null
           )
         )

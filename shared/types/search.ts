@@ -7,6 +7,7 @@ export interface SearchJob {
   status: "pending" | "queued" | "running" | "completed" | "failed";
   totalFound: number;
   processed: number;
+  isTrial?: boolean;
   createdAt: string;
   updatedAt: string;
   error: string | null;

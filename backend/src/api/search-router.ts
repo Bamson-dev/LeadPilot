@@ -184,7 +184,9 @@ export async function handleFreeTrialSearch(
 
     const trimmedQuery = query.trim();
     const trimmedLocation = location.trim();
-    const searchJob = await createSearchJob(trimmedQuery, trimmedLocation);
+    const searchJob = await createSearchJob(trimmedQuery, trimmedLocation, {
+      isTrial: true,
+    });
 
     res.status(201).json({
       searchId: searchJob.id,

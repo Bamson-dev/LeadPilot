@@ -13,6 +13,7 @@ interface DbSearchJob {
   status: string;
   total_found: number;
   processed: number;
+  is_trial?: boolean | null;
   error: string | null;
   created_at: string;
   updated_at: string;
@@ -98,6 +99,7 @@ function mapSearchJob(row: DbSearchJob): SearchJob {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     error: row.error,
+    isTrial: Boolean(row.is_trial),
   };
 }
 
@@ -140,7 +142,8 @@ function normalizeSearchText(value: string): string {
 
 export async function createSearchJob(
   query: string,
-  location: string
+  location: string,
+  options?: { isTrial?: boolean }
 ): Promise<SearchJob> {
   const { data, error } = await supabase
     .from("search_jobs")
@@ -148,6 +151,7 @@ export async function createSearchJob(
       query: normalizeSearchText(query),
       location: normalizeSearchText(location),
       status: "pending",
+      is_trial: options?.isTrial ?? false,
     })
     .select("*")
     .single();

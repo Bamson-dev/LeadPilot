@@ -2,6 +2,7 @@ import type { BusinessLead, StreamEvent } from "@leadpilot/shared";
 import { getBrowserPool } from "../scraper/browser/browser-pool";
 import { scrapeGoogleMaps } from "../scraper/googleMaps/maps-scraper";
 import {
+  getSearchJob,
   insertBusinessLead,
   markSearchComplete,
   markSearchFailed,
@@ -24,6 +25,20 @@ export type ScrapeEmitter = (event: StreamEvent) => void;
 
 function emitLead(emit: ScrapeEmitter, lead: BusinessLead): void {
   emit({ type: "lead", lead, data: lead });
+}
+
+function deduplicateLeads(leads: BusinessLead[]): BusinessLead[] {
+  const seen = new Set<string>();
+  return leads.filter((lead) => {
+    const key = `${lead.name?.toLowerCase().trim()}-${lead.phone?.replace(/\s/g, "") || "nophone"}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function leadDedupeKey(lead: BusinessLead): string {
+  return `${lead.name?.toLowerCase().trim()}-${lead.phone?.replace(/\s/g, "") || "nophone"}`;
 }
 
 export async function runScraperJob(
@@ -73,6 +88,10 @@ export async function runScraperJob(
   const browser = await pool.acquire(90_000);
   let progress = 0;
   let progressMax = 100;
+  const jobRecord = await getSearchJob(searchId);
+  const isTrial = jobRecord?.isTrial ?? false;
+  const seenLeadKeys = new Set<string>();
+  const collectedLeads: BusinessLead[] = [];
 
   try {
     await updateSearchJob(searchId, { status: "running" });
@@ -91,8 +110,13 @@ export async function runScraperJob(
 
     const onBusinessFound = (raw: RawLeadInput) => {
       const basic = rawLeadToBusinessLead(raw, searchId);
+      const key = leadDedupeKey(basic);
+      if (seenLeadKeys.has(key)) return;
+      seenLeadKeys.add(key);
+
       progress++;
       leadsFoundSoFar = progress;
+      collectedLeads.push(basic);
       emitLead(emit, basic);
       emit({
         type: "progress",
@@ -108,6 +132,16 @@ export async function runScraperJob(
           error: err instanceof Error ? err.message : "unknown",
         });
       });
+
+      if (isTrial) {
+        if (progress % 3 === 0) {
+          void updateSearchJob(searchId, {
+            processed: progress,
+            totalFound: progress,
+          }).catch(() => undefined);
+        }
+        return;
+      }
 
       pendingEnrich++;
       void enrichLeadEmail(basic)
@@ -146,6 +180,7 @@ export async function runScraperJob(
     const total = await scrapeGoogleMaps(browser, {
       query,
       location,
+      isTrial,
       onPhase: (phase) => emit({ type: "phase", phase }),
       onProgress: (count, max) => {
         progressMax = max;
@@ -165,20 +200,25 @@ export async function runScraperJob(
     searchComplete = true;
     clearTimeout(runningEmailTimer);
 
-    const enrichDeadline = Date.now() + 120_000;
-    while (pendingEnrich > 0 && Date.now() < enrichDeadline) {
-      await new Promise((r) => setTimeout(r, 400));
+    if (!isTrial) {
+      const enrichDeadline = Date.now() + 120_000;
+      while (pendingEnrich > 0 && Date.now() < enrichDeadline) {
+        await new Promise((r) => setTimeout(r, 400));
+      }
     }
 
-    await updateSearchJob(searchId, { processed: progress, totalFound: total });
-    await markSearchComplete(searchId, total);
+    const uniqueCount = deduplicateLeads(collectedLeads).length;
+    const totalFound = uniqueCount > 0 ? uniqueCount : total;
 
-    const totalFound = total;
-    const withPhone = enrichedLeads.filter((l) => l.phone).length;
-    const withEmail = enrichedLeads.filter(
+    await updateSearchJob(searchId, { processed: totalFound, totalFound });
+    await markSearchComplete(searchId, totalFound);
+
+    const statsLeads = isTrial ? collectedLeads : enrichedLeads;
+    const withPhone = statsLeads.filter((l) => l.phone).length;
+    const withEmail = statsLeads.filter(
       (l) => (l.emails?.length ?? 0) > 0 || (l.verifiedEmails?.length ?? 0) > 0
     ).length;
-    const withWebsite = enrichedLeads.filter((l) => l.website).length;
+    const withWebsite = statsLeads.filter((l) => l.website).length;
 
     logger.info("Search completion stats", {
       searchId,
@@ -198,14 +238,14 @@ export async function runScraperJob(
         searchId,
         query,
         location,
-        totalFound: total,
+        totalFound,
       });
     }
 
     const licenseEmail = await resolveLicenseEmail();
     if (licenseEmail) {
-      if (total > 0) {
-        void sendSearchCompleteEmail(licenseEmail, query, location, total).catch(
+      if (totalFound > 0) {
+        void sendSearchCompleteEmail(licenseEmail, query, location, totalFound).catch(
           (err) =>
             logger.error("Failed to send complete email", {
               error: err instanceof Error ? err.message : "unknown",
@@ -222,8 +262,8 @@ export async function runScraperJob(
 
     emit({
       type: "complete",
-      total,
-      message: `Search complete. Found ${total} businesses in ${location}.`,
+      total: totalFound,
+      message: `Search complete. Found ${totalFound} businesses in ${location}.`,
     });
   } catch (err) {
     searchComplete = true;
