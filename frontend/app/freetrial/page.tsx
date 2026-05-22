@@ -137,7 +137,7 @@ export default function FreeTrialPage() {
 
   const progressMessages = [
     `Scanning for ${query} in ${location}...`,
-    `Found first businesses. Extracting details...`,
+    `Extracting business details...`,
     `Collecting phone numbers and addresses...`,
     `Almost done. Finalizing results...`,
   ];
@@ -153,16 +153,12 @@ export default function FreeTrialPage() {
 
     let msgIndex = 0;
     const interval = setInterval(() => {
-      if (leads.length > 0) {
-        setMessage(`Found ${leads.length} businesses so far...`);
-      } else {
-        msgIndex = Math.min(msgIndex + 1, progressMessages.length - 1);
-        setMessage(progressMessages[msgIndex]);
-      }
+      msgIndex = Math.min(msgIndex + 1, progressMessages.length - 1);
+      setMessage(progressMessages[msgIndex]);
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [status, leads.length, query, location]);
+  }, [status, query, location]);
 
   const connectToStream = useCallback((searchId: string) => {
     const apiUrl = getApiUrl();
@@ -193,6 +189,7 @@ export default function FreeTrialPage() {
       flushPending();
       setTotalFound(total);
       setStatus("complete");
+      setMessage("");
       if (showPaywallAfter) {
         setShowPaywall(true);
       }
@@ -221,10 +218,6 @@ export default function FreeTrialPage() {
           phase?: string;
         };
 
-        if (data.type === "phase" && data.phase) {
-          setMessage(data.phase);
-        }
-
         if (data.type === "lead") {
           const raw = data.data ?? data.lead;
           if (!raw) return;
@@ -241,7 +234,6 @@ export default function FreeTrialPage() {
 
           pendingLeads.push(normalized);
           leadCount++;
-          setMessage(`Found ${leadCount} businesses so far...`);
 
           if (leadCount >= MAX_TRIAL_LEADS) {
             setTimeout(() => {
@@ -253,10 +245,6 @@ export default function FreeTrialPage() {
         if (data.type === "progress") {
           const count = data.processed ?? leadCount;
           streamTotal = Math.max(streamTotal, count);
-          const shown = leadCount > 0 ? leadCount : count;
-          if (shown > 0) {
-            setMessage(`Found ${shown} businesses so far...`);
-          }
         }
 
         if (data.type === "complete") {

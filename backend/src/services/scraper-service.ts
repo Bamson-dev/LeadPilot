@@ -108,14 +108,16 @@ export async function runScraperJob(
     await updateSearchJob(searchId, { status: "running" });
 
     const startMessage = formatSearchMessage(query, location);
-    emit({ type: "phase", phase: startMessage });
-    emit({
-      type: "progress",
-      message: startMessage,
-      processed: 0,
-      count: 0,
-      max: 0,
-    });
+    if (!isTrial) {
+      emit({ type: "phase", phase: startMessage });
+      emit({
+        type: "progress",
+        message: startMessage,
+        processed: 0,
+        count: 0,
+        max: 0,
+      });
+    }
 
     let pendingEnrich = 0;
 
@@ -131,10 +133,14 @@ export async function runScraperJob(
       emitLead(emit, basic);
       emit({
         type: "progress",
-        message: `Found ${progress} businesses so far...`,
-        processed: progress,
-        count: progress,
-        max: progressMax,
+        ...(isTrial
+          ? { processed: progress, count: progress }
+          : {
+              message: `Found ${progress} businesses so far...`,
+              processed: progress,
+              count: progress,
+              max: progressMax,
+            }),
       });
 
       void insertBusinessLead(basic).catch((err) => {
@@ -192,18 +198,22 @@ export async function runScraperJob(
       query,
       location,
       isTrial,
-      onPhase: (phase) => emit({ type: "phase", phase }),
+      onPhase: (phase) => {
+        if (!isTrial) emit({ type: "phase", phase });
+      },
       onProgress: (count, max) => {
         progressMax = max;
-        emit({
-          type: "progress",
-          message: isTrial
-            ? `Found ${count} businesses so far...`
-            : `Found ${count} of ${max} businesses...`,
-          processed: count,
-          count,
-          max: isTrial ? undefined : max,
-        });
+        if (isTrial) {
+          emit({ type: "progress", processed: count, count });
+        } else {
+          emit({
+            type: "progress",
+            message: `Found ${count} of ${max} businesses...`,
+            processed: count,
+            count,
+            max,
+          });
+        }
       },
       onLead: (raw) => {
         onBusinessFound(raw);
