@@ -798,7 +798,9 @@ export async function scrapeGoogleMaps(
     const placeTimeoutMs = isTrial ? 8000 : PLACE_TIMEOUT_MS;
     onProgress?.(0, max);
     onPhase?.(
-      `Found ${businessUrls.length} businesses for ${query} in ${location}. Extracting details...`
+      isTrial
+        ? `Scanning ${query} in ${location}. Extracting preview details...`
+        : `Found ${businessUrls.length} businesses for ${query} in ${location}. Extracting details...`
     );
 
     for (let i = 0; i < businessUrls.length; i += batchSize) {

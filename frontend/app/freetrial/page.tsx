@@ -8,6 +8,7 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 const MAX_TRIAL_LEADS = 15;
 const PAYSTACK_URL = "https://paystack.shop/pay/Leadpilot";
 const SITE_URL = "https://www.leadpilot.live";
+const LEARN_MORE_URL = "https://pdigitalhq.com/lp/";
 
 type TrialStatus = "idle" | "searching" | "complete" | "limit";
 
@@ -251,11 +252,10 @@ export default function FreeTrialPage() {
 
         if (data.type === "progress") {
           const count = data.processed ?? leadCount;
-          streamTotal = Math.max(streamTotal, data.total ?? count, count);
-          setTotalFound(streamTotal);
-          if (data.message) setMessage(data.message);
-          else if (leadCount > 0) {
-            setMessage(`Found ${leadCount} businesses so far...`);
+          streamTotal = Math.max(streamTotal, count);
+          const shown = leadCount > 0 ? leadCount : count;
+          if (shown > 0) {
+            setMessage(`Found ${shown} businesses so far...`);
           }
         }
 
@@ -829,8 +829,9 @@ export default function FreeTrialPage() {
                 lineHeight: 1.6,
               }}
             >
-              Full access unlocks all results with complete emails, websites, and one-click CSV
-              export.
+              Full access unlocks {MARKETING_TOTAL} results for your search — complete
+              emails, phone numbers, websites, and one-click CSV export. This free preview
+              only scans a small sample, not every business in {location}.
             </p>
             <a
               href={PAYSTACK_URL}
@@ -848,7 +849,12 @@ export default function FreeTrialPage() {
             <p style={{ fontSize: 11, color: "#555575", marginTop: 10 }}>
               ⚡ Instant access · One payment · No monthly fee
             </p>
-            <a href={SITE_URL} className="text-xs text-[#555575] hover:underline block mt-2">
+            <a
+              href={LEARN_MORE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-[#555575] hover:underline block mt-2"
+            >
               Learn more about LeadPilot
             </a>
           </div>

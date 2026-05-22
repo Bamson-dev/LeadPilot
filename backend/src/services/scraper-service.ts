@@ -197,10 +197,12 @@ export async function runScraperJob(
         progressMax = max;
         emit({
           type: "progress",
-          message: `Found ${count} of ${max} businesses...`,
+          message: isTrial
+            ? `Found ${count} businesses so far...`
+            : `Found ${count} of ${max} businesses...`,
           processed: count,
           count,
-          max,
+          max: isTrial ? undefined : max,
         });
       },
       onLead: (raw) => {
