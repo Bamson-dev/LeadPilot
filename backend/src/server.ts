@@ -2,7 +2,7 @@ import express, { type Request, type Response, type NextFunction } from "express
 import cors from "cors";
 import type { Server } from "http";
 import { getEnv, loadEnv } from "./config/env";
-import { searchRouter } from "./api/search-router";
+import { searchRouter, handleFreeTrialSearch } from "./api/search-router";
 import { adminRouter } from "./api/admin-router";
 import { authRouter } from "./api/auth-router";
 import { webhookRouter } from "./api/webhook-router";
@@ -59,6 +59,7 @@ function registerRoutes(): void {
   app.use(express.json({ limit: "1mb" }));
   app.use("/auth", authRouter);
   app.use("/admin", adminRouter);
+  app.post("/freetrial", rateLimit, handleFreeTrialSearch);
   app.use("/search", rateLimit, searchRouter);
 
   app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {

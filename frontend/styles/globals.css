@@ -100,3 +100,33 @@ body {
 .status-pulse-dot {
   animation: statusPulse 2s infinite;
 }
+
+@keyframes trialRowFade {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.trial-row-fade {
+  animation: trialRowFade 0.35s ease forwards;
+}
+
+@keyframes paywallSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.paywall-slide-up {
+  animation: paywallSlideUp 0.4s ease;
+}

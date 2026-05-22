@@ -24,6 +24,12 @@ import { generateAreaSuggestions } from "../services/suggestion-service";
 
 export const searchRouter = Router();
 
+const freeTrialTracker = new Map<string, number>();
+
+setInterval(() => {
+  freeTrialTracker.clear();
+}, 60 * 60 * 1000);
+
 function getMemoryUsagePercent(): number {
   const total = os.totalmem();
   const free = os.freemem();
@@ -117,6 +123,91 @@ searchRouter.get("/history", async (req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to fetch history" });
   }
 });
+
+export async function handleFreeTrialSearch(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const { query, location, visitorId } = req.body as {
+      query?: string;
+      location?: string;
+      visitorId?: string;
+    };
+
+    if (!query || !location) {
+      res.status(400).json({
+        error: "Business type and location are required",
+      });
+      return;
+    }
+
+    if (!visitorId) {
+      res.status(400).json({
+        error: "Visitor ID required",
+      });
+      return;
+    }
+
+    const ip = req.ip || req.socket.remoteAddress || "unknown";
+    const limitKey = `${visitorId}:${ip}`;
+    const searchCount = freeTrialTracker.get(limitKey) || 0;
+
+    if (searchCount >= 2) {
+      res.status(429).json({
+        error: "Free trial limit reached",
+        code: "TRIAL_LIMIT",
+        message:
+          "You have used your 2 free previews. Get full access to continue.",
+      });
+      return;
+    }
+
+    freeTrialTracker.set(limitKey, searchCount + 1);
+
+    const memUsage = getMemoryUsagePercent();
+    if (memUsage > 85) {
+      res.status(503).json({
+        error: "Server is busy. Please try again in a moment.",
+      });
+      return;
+    }
+
+    const queueStatus = searchQueue.getStatus();
+    if (queueStatus.queued >= 10) {
+      res.status(503).json({
+        error: "Search queue is full. Please try again in a few minutes.",
+        code: "QUEUE_FULL",
+      });
+      return;
+    }
+
+    const trimmedQuery = query.trim();
+    const trimmedLocation = location.trim();
+    const searchJob = await createSearchJob(trimmedQuery, trimmedLocation);
+
+    res.status(201).json({
+      searchId: searchJob.id,
+      status: "queued",
+      isTrial: true,
+      maxResults: 15,
+      message: `Searching for ${trimmedQuery} in ${trimmedLocation}`,
+    });
+
+    setImmediate(() => {
+      enqueueSearch(searchJob.id, trimmedQuery, trimmedLocation);
+    });
+  } catch (err) {
+    logger.error("Free trial search failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Search failed. Please try again." });
+    }
+  }
+}
+
+searchRouter.post("/freetrial", handleFreeTrialSearch);
 
 searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => {
   try {
