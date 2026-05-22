@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import type { BusinessLead } from "@leadpilot/shared";
 import { getApiUrl } from "@/utils/env";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -72,6 +72,50 @@ function generatePlaceholderEmail(businessName: string): string {
     .slice(0, 2)
     .join("");
   return `info@${domain || "business"}.com`;
+}
+
+function generatePlaceholderPhone(location: string): string {
+  const loc = location.toLowerCase();
+  if (loc.includes("nigeria") || loc.includes("lagos") || loc.includes("abuja")) {
+    return "+234 803 456 7890";
+  }
+  if (loc.includes("uk") || loc.includes("london")) {
+    return "+44 20 7946 0958";
+  }
+  if (loc.includes("kenya") || loc.includes("nairobi")) {
+    return "+254 712 345 678";
+  }
+  if (loc.includes("uae") || loc.includes("dubai")) {
+    return "+971 4 123 4567";
+  }
+  return "+1 555 123 4567";
+}
+
+const LOCKED_FIELD_STYLE: CSSProperties = {
+  filter: "blur(5px)",
+  userSelect: "none",
+  fontSize: 12,
+  color: "#C0C0D8",
+  background: "rgba(124,58,237,0.08)",
+  padding: "2px 8px",
+  borderRadius: 4,
+};
+
+const MARKETING_TOTAL = "200+";
+
+function LockedContactValue({
+  value,
+  unlockLabel = "🔒 Unlock",
+}: {
+  value: string;
+  unlockLabel?: string;
+}) {
+  return (
+    <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <span style={LOCKED_FIELD_STYLE}>{value}</span>
+      <span style={{ fontSize: 10, color: "#A78BFA", fontWeight: 600 }}>{unlockLabel}</span>
+    </span>
+  );
 }
 
 function truncateAddress(address: string, maxLen: number): string {
@@ -304,13 +348,6 @@ export default function FreeTrialPage() {
       setStatus("idle");
     }
   }
-
-  const displayTotal =
-    totalFound > 200 ? "200+" : totalFound > 15 ? `${totalFound}` : "200+";
-  const paywallMore =
-    totalFound > 15
-      ? `${totalFound > 200 ? "200+" : totalFound}`
-      : "200+";
 
   return (
     <div
@@ -577,18 +614,19 @@ export default function FreeTrialPage() {
                         </span>
                       </div>
                     )}
-                    {lead.phone && (
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: 8,
-                          marginBottom: 6,
-                          alignItems: "center",
-                        }}
-                      >
-                        <span style={{ color: "#555575", fontSize: 12, flexShrink: 0 }}>
-                          Phone
-                        </span>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        marginBottom: 6,
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <span style={{ color: "#555575", fontSize: 12, flexShrink: 0 }}>
+                        Phone
+                      </span>
+                      {lead.phone ? (
                         <a
                           href={`tel:${lead.phone}`}
                           style={{
@@ -600,35 +638,27 @@ export default function FreeTrialPage() {
                         >
                           {lead.phone}
                         </a>
-                      </div>
-                    )}
+                      ) : (
+                        <LockedContactValue
+                          value={generatePlaceholderPhone(location)}
+                        />
+                      )}
+                    </div>
                     <div
                       style={{
                         display: "flex",
                         gap: 8,
                         alignItems: "center",
                         marginBottom: 6,
+                        flexWrap: "wrap",
                       }}
                     >
                       <span style={{ color: "#555575", fontSize: 12, flexShrink: 0 }}>
                         Email
                       </span>
-                      <span
-                        style={{
-                          filter: "blur(5px)",
-                          userSelect: "none",
-                          fontSize: 12,
-                          color: "#C0C0D8",
-                          background: "rgba(124,58,237,0.08)",
-                          padding: "2px 8px",
-                          borderRadius: 4,
-                        }}
-                      >
-                        {generatePlaceholderEmail(lead.business_name)}
-                      </span>
-                      <span style={{ fontSize: 10, color: "#A78BFA", fontWeight: 600 }}>
-                        🔒 Unlock
-                      </span>
+                      <LockedContactValue
+                        value={generatePlaceholderEmail(lead.business_name)}
+                      />
                     </div>
                     {lead.rating != null && (
                       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -710,26 +740,15 @@ export default function FreeTrialPage() {
                           {lead.phone}
                         </a>
                       ) : (
-                        "—"
+                        <LockedContactValue
+                          value={generatePlaceholderPhone(location)}
+                        />
                       )}
                     </span>
-                    <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span
-                        style={{
-                          filter: "blur(5px)",
-                          userSelect: "none",
-                          fontSize: 12,
-                          color: "#C0C0D8",
-                          background: "rgba(124,58,237,0.08)",
-                          padding: "2px 8px",
-                          borderRadius: 4,
-                        }}
-                      >
-                        {generatePlaceholderEmail(lead.business_name)}
-                      </span>
-                      <span style={{ fontSize: 10, color: "#A78BFA", fontWeight: 600 }}>
-                        🔒 Unlock
-                      </span>
+                    <span>
+                      <LockedContactValue
+                        value={generatePlaceholderEmail(lead.business_name)}
+                      />
                     </span>
                     <span style={{ color: "#FBBF24", fontWeight: 700 }}>
                       {lead.rating != null ? `★ ${lead.rating}` : "—"}
@@ -781,7 +800,7 @@ export default function FreeTrialPage() {
                 lineHeight: 1,
               }}
             >
-              {paywallMore} more businesses
+              {MARKETING_TOTAL} more businesses
             </p>
             <p
               style={{
@@ -792,7 +811,10 @@ export default function FreeTrialPage() {
               }}
             >
               You are seeing{" "}
-              <strong style={{ color: "#F0EFFF" }}>15 of {displayTotal}</strong> businesses
+              <strong style={{ color: "#F0EFFF" }}>
+                {MAX_TRIAL_LEADS} of {MARKETING_TOTAL}
+              </strong>{" "}
+              businesses
               found for{" "}
               <strong style={{ color: "#F0EFFF" }}>
                 {query} in {location}
