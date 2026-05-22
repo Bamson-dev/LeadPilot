@@ -24,7 +24,8 @@ import {
   SIDEBAR_STABLE_ROUNDS,
 } from "../utils/constants";
 
-const BATCH_SIZE = 10;
+const PAID_BATCH_SIZE = 10;
+const TRIAL_BATCH_SIZE = 5;
 
 export interface MapsScrapeOptions {
   query: string;
@@ -35,7 +36,8 @@ export interface MapsScrapeOptions {
   onLead?: (lead: RawLeadInput) => void | Promise<void>;
 }
 
-const TRIAL_URL_CAP = 30;
+const TRIAL_URL_CAP = 20;
+const TRIAL_STRATEGY_LIMIT = 2;
 
 function deduplicateByPlaceId(urls: string[]): string[] {
   const seen = new Set<string>();
@@ -506,52 +508,66 @@ async function getBusinessUrls(
   isTrial = false
 ): Promise<string[]> {
   const allUrls = new Set<string>();
-  const searchStrategies = buildSearchStrategyUrls(query, location);
+  const searchStrategies = buildSearchStrategyUrls(query, location, isTrial);
+  const finalStrategies = isTrial
+    ? searchStrategies.slice(0, TRIAL_STRATEGY_LIMIT)
+    : searchStrategies;
   const urlCap = isTrial ? TRIAL_URL_CAP : MAX_LEADS_PER_SEARCH;
 
   logger.info("Multi-strategy Maps search", {
     query,
     location,
-    strategies: searchStrategies.length,
+    strategies: finalStrategies.length,
+    isTrial: isTrial || false,
   });
 
-  const results = await Promise.allSettled(
-    searchStrategies.map((url) =>
-      Promise.race([
-        scrapeUrlsFromPage(context, url, query, location),
-        new Promise<string[]>((_, reject) =>
-          setTimeout(
-            () => reject(new Error("Strategy timeout after 60s")),
-            STRATEGY_TIMEOUT_MS
-          )
-        ),
-      ])
-    )
-  );
-
-  for (const result of results) {
-    if (result.status === "fulfilled") {
-      for (const url of result.value) {
+  if (isTrial) {
+    for (const strategyUrl of finalStrategies) {
+      const urls = await scrapeUrlsFromPage(context, strategyUrl, query, location);
+      for (const url of urls) {
         allUrls.add(url);
+      }
+      if (allUrls.size >= TRIAL_URL_CAP) break;
+    }
+  } else {
+    const results = await Promise.allSettled(
+      finalStrategies.map((url) =>
+        Promise.race([
+          scrapeUrlsFromPage(context, url, query, location),
+          new Promise<string[]>((_, reject) =>
+            setTimeout(
+              () => reject(new Error("Strategy timeout after 60s")),
+              STRATEGY_TIMEOUT_MS
+            )
+          ),
+        ])
+      )
+    );
+
+    for (const result of results) {
+      if (result.status === "fulfilled") {
+        for (const url of result.value) {
+          allUrls.add(url);
+        }
       }
     }
   }
 
   let merged = deduplicateByPlaceId([...allUrls]);
 
-  if (merged.length < 20) {
+  if (!isTrial && merged.length < 20) {
     logger.warn("Parallel strategies returned low results — trying sequential fallback", {
       query,
       location,
       count: merged.length,
     });
 
-    for (const strategyUrl of searchStrategies) {
+    for (const strategyUrl of finalStrategies) {
       const urls = await scrapeUrlsFromPage(context, strategyUrl, query, location);
       for (const url of urls) {
         allUrls.add(url);
       }
-      if (allUrls.size >= (isTrial ? TRIAL_URL_CAP : 100)) break;
+      if (allUrls.size >= 100) break;
     }
 
     merged = deduplicateByPlaceId([...allUrls]);
@@ -562,14 +578,12 @@ async function getBusinessUrls(
     });
   }
 
-  const strategiesSucceeded = results.filter((r) => r.status === "fulfilled").length;
-
   logger.info("URL collection complete — starting extraction", {
     query,
     location,
     urlsCollected: merged.length,
-    strategiesRun: searchStrategies.length,
-    strategiesSucceeded,
+    strategiesRun: finalStrategies.length,
+    isTrial: isTrial || false,
   });
 
   return merged.slice(0, urlCap);
@@ -780,14 +794,15 @@ export async function scrapeGoogleMaps(
     }
 
     const max = businessUrls.length;
+    const batchSize = isTrial ? TRIAL_BATCH_SIZE : PAID_BATCH_SIZE;
     const placeTimeoutMs = isTrial ? 8000 : PLACE_TIMEOUT_MS;
     onProgress?.(0, max);
     onPhase?.(
       `Found ${businessUrls.length} businesses for ${query} in ${location}. Extracting details...`
     );
 
-    for (let i = 0; i < businessUrls.length; i += BATCH_SIZE) {
-      const batch = businessUrls.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < businessUrls.length; i += batchSize) {
+      const batch = businessUrls.slice(i, i + batchSize);
       const results = await Promise.allSettled(
         batch.map((url, batchIndex) =>
           processWithTimeout(

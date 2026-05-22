@@ -91,11 +91,9 @@ export default function FreeTrialPage() {
   const isMobile = useIsMobile();
 
   const progressMessages = [
-    `Connecting to Google Maps...`,
     `Scanning for ${query} in ${location}...`,
     `Found first businesses. Extracting details...`,
     `Collecting phone numbers and addresses...`,
-    `Found {count} businesses. Still scanning...`,
     `Almost done. Finalizing results...`,
   ];
 
@@ -113,7 +111,7 @@ export default function FreeTrialPage() {
       if (leads.length > 0) {
         setMessage(`Found ${leads.length} businesses so far...`);
       } else {
-        msgIndex = Math.min(msgIndex + 1, 3);
+        msgIndex = Math.min(msgIndex + 1, progressMessages.length - 1);
         setMessage(progressMessages[msgIndex]);
       }
     }, 3000);
@@ -121,119 +119,139 @@ export default function FreeTrialPage() {
     return () => clearInterval(interval);
   }, [status, leads.length, query, location]);
 
-  const finishTrial = useCallback((foundTotal: number) => {
-    setTotalFound((prev) => Math.max(prev, foundTotal, MAX_TRIAL_LEADS));
-    setStatus("complete");
-    setShowPaywall(true);
-  }, []);
+  const connectToStream = useCallback((searchId: string) => {
+    const apiUrl = getApiUrl();
+    if (!apiUrl) {
+      setMessage("Search service is not configured.");
+      setStatus("idle");
+      return;
+    }
 
-  const connectToStream = useCallback(
-    (searchId: string) => {
-      const apiUrl = getApiUrl();
-      if (!apiUrl) {
-        setMessage("Search service is not configured.");
-        setStatus("idle");
-        return;
+    const es = new EventSource(`${apiUrl}/search/${searchId}/stream`);
+    const pendingLeads: TrialLead[] = [];
+    const seenKeys = new Set<string>();
+    let leadCount = 0;
+    let streamTotal = 0;
+
+    const flushPending = () => {
+      if (pendingLeads.length === 0) return;
+      const batch = [...pendingLeads];
+      pendingLeads.length = 0;
+      setLeads((prev) => [...prev, ...batch].slice(0, MAX_TRIAL_LEADS));
+    };
+
+    const flush = setInterval(flushPending, 300);
+
+    const finishSearch = (total: number, showPaywallAfter: boolean) => {
+      clearInterval(flush);
+      es.close();
+      flushPending();
+      setTotalFound(total);
+      setStatus("complete");
+      if (showPaywallAfter) {
+        setShowPaywall(true);
       }
+    };
 
-      const es = new EventSource(`${apiUrl}/search/${searchId}/stream`);
-      const pendingLeads: TrialLead[] = [];
-      const seenKeys = new Set<string>();
-      let leadCount = 0;
-      let streamTotal = 0;
+    const handleZeroResults = () => {
+      clearInterval(flush);
+      es.close();
+      flushPending();
+      setStatus("idle");
+      setShowPaywall(false);
+      setMessage(
+        "No results found. Try a broader search like restaurants in Lagos Nigeria or dentists in London UK."
+      );
+    };
 
-      const flush = setInterval(() => {
-        if (pendingLeads.length === 0) return;
-        const batch = [...pendingLeads];
-        pendingLeads.length = 0;
-        setLeads((prev) => {
-          const combined = [...prev, ...batch];
-          return combined.slice(0, MAX_TRIAL_LEADS);
-        });
-      }, 300);
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data) as {
+          type: string;
+          data?: BusinessLead;
+          lead?: BusinessLead;
+          total?: number;
+          processed?: number;
+          message?: string;
+          phase?: string;
+        };
 
-      const stopStream = (found?: number) => {
-        clearInterval(flush);
-        es.close();
-        if (pendingLeads.length > 0) {
-          setLeads((prev) =>
-            [...prev, ...pendingLeads].slice(0, MAX_TRIAL_LEADS)
-          );
+        if (data.type === "phase" && data.phase) {
+          setMessage(data.phase);
         }
-        finishTrial(found ?? Math.max(streamTotal, leadCount, 200));
-      };
 
-      es.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data) as {
-            type: string;
-            data?: BusinessLead;
-            lead?: BusinessLead;
-            total?: number;
-            processed?: number;
-            message?: string;
-            phase?: string;
-          };
+        if (data.type === "lead") {
+          const raw = data.data ?? data.lead;
+          if (!raw) return;
 
-          if (data.type === "phase" && data.phase) {
-            setMessage(data.phase);
+          const normalized = normalizeLead(raw);
+          const key = `${normalized.business_name.toLowerCase()}-${(normalized.phone ?? "").replace(/\s/g, "")}`;
+          if (seenKeys.has(key)) return;
+          seenKeys.add(key);
+
+          if (leadCount >= MAX_TRIAL_LEADS) {
+            finishSearch(streamTotal, leadCount >= 5);
+            return;
           }
 
-          if (data.type === "lead") {
-            const raw = data.data ?? data.lead;
-            if (!raw) return;
+          pendingLeads.push(normalized);
+          leadCount++;
+          setMessage(`Found ${leadCount} businesses so far...`);
 
-            const normalized = normalizeLead(raw);
-            const key = `${normalized.business_name.toLowerCase()}-${(normalized.phone ?? "").replace(/\s/g, "")}`;
-            if (seenKeys.has(key)) return;
-            seenKeys.add(key);
+          if (leadCount >= MAX_TRIAL_LEADS) {
+            setTimeout(() => {
+              finishSearch(streamTotal, leadCount >= 5);
+            }, 600);
+          }
+        }
 
-            if (leadCount >= MAX_TRIAL_LEADS) {
-              stopStream(streamTotal);
-              return;
-            }
-
-            pendingLeads.push(normalized);
-            leadCount++;
+        if (data.type === "progress") {
+          const count = data.processed ?? leadCount;
+          streamTotal = Math.max(streamTotal, data.total ?? count, count);
+          setTotalFound(streamTotal);
+          if (data.message) setMessage(data.message);
+          else if (leadCount > 0) {
             setMessage(`Found ${leadCount} businesses so far...`);
-
-            if (leadCount >= MAX_TRIAL_LEADS) {
-              setTimeout(() => stopStream(streamTotal), 600);
-            }
           }
-
-          if (data.type === "progress") {
-            const count = data.processed ?? leadCount;
-            streamTotal = Math.max(streamTotal, data.total ?? count, count);
-            setTotalFound(streamTotal);
-            if (data.message) setMessage(data.message);
-            else if (leadCount > 0) {
-              setMessage(`Found ${leadCount} businesses so far...`);
-            }
-          }
-
-          if (data.type === "complete") {
-            streamTotal = Math.max(streamTotal, data.total ?? leadCount);
-            stopStream(streamTotal);
-          }
-
-          if (data.type === "error") {
-            clearInterval(flush);
-            es.close();
-            setMessage(data.message || "Search did not complete. Please try again.");
-            setStatus("idle");
-          }
-        } catch {
-          /* ignore parse errors */
         }
-      };
 
-      es.onerror = () => {
-        stopStream(Math.max(streamTotal, leadCount, 200));
-      };
-    },
-    [finishTrial]
-  );
+        if (data.type === "complete") {
+          streamTotal = Math.max(streamTotal, data.total ?? leadCount);
+          if ((data.total ?? 0) === 0 && leadCount === 0) {
+            handleZeroResults();
+            return;
+          }
+          finishSearch(streamTotal, leadCount >= 5);
+        }
+
+        if (data.type === "error") {
+          clearInterval(flush);
+          es.close();
+          setMessage(data.message || "Search did not complete. Please try again.");
+          setStatus("idle");
+          setShowPaywall(false);
+        }
+      } catch {
+        /* ignore parse errors */
+      }
+    };
+
+    es.onerror = () => {
+      clearInterval(flush);
+      es.close();
+      flushPending();
+      if (leadCount >= 5) {
+        finishSearch(Math.max(streamTotal, leadCount), true);
+      } else if (leadCount === 0) {
+        setStatus("idle");
+        setMessage("Connection lost. Please try again.");
+        setShowPaywall(false);
+      } else {
+        setStatus("complete");
+        setShowPaywall(false);
+      }
+    };
+  }, []);
 
   async function runTrialSearch() {
     if (!query.trim() || !location.trim()) return;
@@ -252,7 +270,7 @@ export default function FreeTrialPage() {
     setLeads([]);
     setShowPaywall(false);
     setTotalFound(0);
-    setMessage(`Connecting to Google Maps...`);
+    setMessage(`Scanning for ${query.trim()} in ${location.trim()}...`);
 
     try {
       const res = await fetch(`${apiUrl}/freetrial`, {

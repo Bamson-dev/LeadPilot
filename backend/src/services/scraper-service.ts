@@ -46,12 +46,15 @@ export async function runScraperJob(
   query: string,
   location: string,
   emit: ScrapeEmitter,
-  options?: { licenseKey?: string; licenseEmail?: string }
+  options?: { licenseKey?: string; licenseEmail?: string; isTrial?: boolean }
 ): Promise<void> {
   const pool = getBrowserPool();
   let searchComplete = false;
   let leadsFoundSoFar = 0;
   let runningEmailSent = false;
+
+  const jobRecord = await getSearchJob(searchId);
+  const isTrial = options?.isTrial ?? jobRecord?.isTrial ?? false;
 
   const resolveLicenseEmail = async (): Promise<string | null> => {
     if (options?.licenseEmail) return options.licenseEmail;
@@ -60,7 +63,9 @@ export async function runScraperJob(
 
   const runningEmailTimer = setTimeout(() => {
     void (async () => {
-      if (searchComplete || leadsFoundSoFar >= 5 || runningEmailSent) return;
+      if (isTrial || searchComplete || leadsFoundSoFar >= 5 || runningEmailSent) {
+        return;
+      }
       runningEmailSent = true;
       const licenseEmail = await resolveLicenseEmail();
       if (licenseEmail) {
@@ -88,10 +93,16 @@ export async function runScraperJob(
   const browser = await pool.acquire(90_000);
   let progress = 0;
   let progressMax = 100;
-  const jobRecord = await getSearchJob(searchId);
-  const isTrial = jobRecord?.isTrial ?? false;
   const seenLeadKeys = new Set<string>();
   const collectedLeads: BusinessLead[] = [];
+
+  logger.info("Search started", {
+    searchId,
+    query,
+    location,
+    isTrial,
+    strategiesUsed: isTrial ? 2 : undefined,
+  });
 
   try {
     await updateSearchJob(searchId, { status: "running" });

@@ -1,5 +1,5 @@
 import type { StreamEvent } from "@leadpilot/shared";
-import { markSearchFailed } from "../database/search-repository";
+import { getSearchJob, markSearchFailed } from "../database/search-repository";
 import { logger } from "../utils/logger";
 import { runScraperJob } from "../services/scraper-service";
 import { clearStreamBuffer, emitToStream } from "../services/stream-registry";
@@ -65,10 +65,14 @@ class SearchQueue {
     };
 
     try {
+      const jobRecord = await getSearchJob(job.searchId);
+      const isTrial = jobRecord?.isTrial ?? false;
+
       await withTimeout(
         runScraperJob(job.searchId, job.query, job.location, emit, {
           licenseKey: job.licenseKey,
           licenseEmail: job.licenseEmail,
+          isTrial,
         }),
         SEARCH_JOB_TIMEOUT_MS,
         "Search timed out on the server. Try a broader location or a simpler business type."

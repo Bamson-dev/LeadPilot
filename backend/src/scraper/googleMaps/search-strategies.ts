@@ -88,9 +88,21 @@ function phrasesForQueryLocation(query: string, loc: string): string[] {
   return phrases;
 }
 
-export function buildSearchStrategyUrls(query: string, location: string): string[] {
+export function buildSearchStrategyUrls(
+  query: string,
+  location: string,
+  isTrial = false
+): string[] {
   const q = query.trim();
   const locTrimmed = location.trim();
+
+  if (isTrial) {
+    return [
+      `https://www.google.com/maps/search/${encodeURIComponent(`${q} in ${locTrimmed}`)}`,
+      `https://www.google.com/maps/search/${encodeURIComponent(`${locTrimmed} ${q}`)}`,
+    ];
+  }
+
   const locations = getLocationVariants(locTrimmed);
   const urls = new Set<string>();
 

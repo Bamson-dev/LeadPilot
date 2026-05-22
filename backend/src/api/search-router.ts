@@ -41,6 +41,7 @@ searchRouter.get("/queue/status", (_req: Request, res: Response) => {
 });
 
 searchRouter.get("/suggestions", async (req: Request, res: Response) => {
+  // DeepSeek area suggestions — paid dashboard only; trial searches never call this endpoint
   try {
     const { query, location, totalFound } = req.query as {
       query?: string;
