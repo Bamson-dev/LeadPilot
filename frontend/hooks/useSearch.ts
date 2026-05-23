@@ -26,6 +26,22 @@ interface SearchState {
 
 const POLL_INTERVAL_MS = 5000;
 const SEARCH_TIMEOUT_MS = 10 * 60 * 1000;
+const SEARCH_FAILED_MESSAGE =
+  "Search did not complete. Please try a broader location or business type.";
+const CONNECTION_LOST_MESSAGE =
+  "Connection lost. Please try your search again.";
+
+function mergePendingIntoLeads(
+  current: BusinessLead[],
+  pending: BusinessLead[]
+): BusinessLead[] {
+  if (pending.length === 0) return current;
+  const byId = new Map(current.map((l) => [l.id, l]));
+  for (const lead of pending) {
+    if (lead.id) byId.set(lead.id, lead);
+  }
+  return [...byId.values()];
+}
 
 export interface UseSearchOptions {
   onSearchComplete?: (
@@ -57,6 +73,7 @@ export function useSearch(options?: UseSearchOptions) {
   const eventSourceRef = useRef<EventSource | null>(null);
   const pendingLeadsRef = useRef<BusinessLead[]>([]);
   const reconnectCountRef = useRef(0);
+  const ssePollFallbackRef = useRef(false);
   const searchIdRef = useRef<string | null>(null);
   const queryRef = useRef("");
   const locationRef = useRef("");
@@ -192,12 +209,33 @@ export function useSearch(options?: UseSearchOptions) {
             status: "completed",
             totalFound,
             queuePosition: 0,
+            error: null,
             message: message ?? progressMessage(totalFound, "completed", 0),
           };
         });
       })();
     },
     [closeStream, progressMessage, syncFromApi]
+  );
+
+  const pollForResults = useCallback(
+    async (searchId: string) => {
+      if (completedRef.current) return;
+      try {
+        const { leads: fetched } = await getResults(searchId, 1, 250);
+        if (fetched.length > 0) {
+          const mapped = fetched.map((l) => leadRowToBusinessLead(l));
+          replaceLeads(mapped);
+          finishSearch(
+            fetched.length,
+            `Search complete. Found ${fetched.length} businesses.`
+          );
+        }
+      } catch {
+        /* silent fail */
+      }
+    },
+    [replaceLeads, finishSearch]
   );
 
   const startPolling = useCallback(
@@ -216,14 +254,33 @@ export function useSearch(options?: UseSearchOptions) {
                 progressMessage(job.totalFound, "completed", 0)
               );
             } else if (job.status === "failed") {
-              completedRef.current = true;
-              closeStream();
-              setState((prev) => ({
-                ...prev,
-                status: "error",
-                error: progressMessage(0, "failed", 0),
-                message: progressMessage(0, "failed", 0),
-              }));
+              setState((prev) => {
+                const pending = pendingLeadsRef.current.splice(0);
+                const merged = mergePendingIntoLeads(prev.leads, pending);
+                const count = Math.max(merged.length, job.totalFound ?? 0);
+                if (count > 0) {
+                  queueMicrotask(() =>
+                    finishSearch(
+                      count,
+                      `Search complete. Found ${count} businesses.`
+                    )
+                  );
+                  return {
+                    ...prev,
+                    leads: merged.length > 0 ? merged : prev.leads,
+                    totalFound: count,
+                    error: null,
+                  };
+                }
+                completedRef.current = true;
+                closeStream();
+                return {
+                  ...prev,
+                  status: "error",
+                  error: SEARCH_FAILED_MESSAGE,
+                  message: SEARCH_FAILED_MESSAGE,
+                };
+              });
             }
           } catch {
             /* polling is best-effort */
@@ -321,14 +378,32 @@ export function useSearch(options?: UseSearchOptions) {
               break;
 
             case "error":
-              completedRef.current = true;
-              closeStream();
-              setState((prev) => ({
-                ...prev,
-                status: "error",
-                error: data.message || progressMessage(0, "failed", 0),
-                message: progressMessage(0, "failed", 0),
-              }));
+              setState((prev) => {
+                const pending = pendingLeadsRef.current.splice(0);
+                const merged = mergePendingIntoLeads(prev.leads, pending);
+                if (merged.length > 0) {
+                  queueMicrotask(() =>
+                    finishSearch(
+                      merged.length,
+                      `Found ${merged.length} businesses.`
+                    )
+                  );
+                  return {
+                    ...prev,
+                    leads: merged,
+                    totalFound: merged.length,
+                    error: null,
+                  };
+                }
+                completedRef.current = true;
+                closeStream();
+                return {
+                  ...prev,
+                  status: "error",
+                  error: data.message || SEARCH_FAILED_MESSAGE,
+                  message: SEARCH_FAILED_MESSAGE,
+                };
+              });
               break;
           }
         } catch (err) {
@@ -340,6 +415,37 @@ export function useSearch(options?: UseSearchOptions) {
         if (completedRef.current) return;
         es.close();
         eventSourceRef.current = null;
+
+        let hadResults = false;
+        setState((prev) => {
+          const pending = pendingLeadsRef.current.splice(0);
+          const merged = mergePendingIntoLeads(prev.leads, pending);
+          if (merged.length > 0) {
+            hadResults = true;
+            queueMicrotask(() =>
+              finishSearch(
+                merged.length,
+                `Search complete. Found ${merged.length} businesses.`
+              )
+            );
+            return {
+              ...prev,
+              leads: merged,
+              totalFound: merged.length,
+              error: null,
+            };
+          }
+          return prev;
+        });
+
+        if (hadResults) return;
+
+        const searchId = searchIdRef.current;
+        if (searchId && !ssePollFallbackRef.current) {
+          ssePollFallbackRef.current = true;
+          void pollForResults(searchId);
+        }
+
         if (reconnectCountRef.current < 3) {
           reconnectCountRef.current += 1;
           setTimeout(() => {
@@ -347,10 +453,33 @@ export function useSearch(options?: UseSearchOptions) {
               connectToStream(searchIdRef.current);
             }
           }, 3000);
+          return;
         }
+
+        setState((prev) => {
+          const pending = pendingLeadsRef.current.splice(0);
+          const merged = mergePendingIntoLeads(prev.leads, pending);
+          if (merged.length > 0) {
+            queueMicrotask(() =>
+              finishSearch(
+                merged.length,
+                `Search complete. Found ${merged.length} businesses.`
+              )
+            );
+            return { ...prev, leads: merged, totalFound: merged.length, error: null };
+          }
+          completedRef.current = true;
+          closeStream();
+          return {
+            ...prev,
+            status: "error",
+            error: CONNECTION_LOST_MESSAGE,
+            message: CONNECTION_LOST_MESSAGE,
+          };
+        });
       };
     },
-    [closeStream, finishSearch, progressMessage]
+    [closeStream, finishSearch, progressMessage, pollForResults]
   );
 
   const search = useCallback(
@@ -376,6 +505,7 @@ export function useSearch(options?: UseSearchOptions) {
       locationRef.current = location.trim();
       pendingLeadsRef.current = [];
       reconnectCountRef.current = 0;
+      ssePollFallbackRef.current = false;
       searchIdRef.current = null;
 
       setState((prev) => ({
@@ -455,14 +585,27 @@ export function useSearch(options?: UseSearchOptions) {
             } catch {
               /* fall through */
             }
-            completedRef.current = true;
-            closeStream();
-            setState((prev) => ({
-              ...prev,
-              status: "error",
-              error: progressMessage(0, "failed", 0),
-              message: progressMessage(0, "failed", 0),
-            }));
+            setState((prev) => {
+              const pending = pendingLeadsRef.current.splice(0);
+              const merged = mergePendingIntoLeads(prev.leads, pending);
+              if (merged.length > 0) {
+                queueMicrotask(() =>
+                  finishSearch(
+                    merged.length,
+                    `Search timed out but ${merged.length} results were saved.`
+                  )
+                );
+                return { ...prev, leads: merged, totalFound: merged.length };
+              }
+              completedRef.current = true;
+              closeStream();
+              return {
+                ...prev,
+                status: "error",
+                error: SEARCH_FAILED_MESSAGE,
+                message: SEARCH_FAILED_MESSAGE,
+              };
+            });
           })();
         }, SEARCH_TIMEOUT_MS);
       } catch (err) {
