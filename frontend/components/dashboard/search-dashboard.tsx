@@ -299,6 +299,37 @@ export function SearchDashboard() {
               disabled={isSearching}
               className="w-full"
             />
+            {location.length > 0 &&
+              [
+                "china",
+                "usa",
+                "uk",
+                "india",
+                "australia",
+                "canada",
+                "france",
+                "germany",
+                "japan",
+                "brazil",
+                "russia",
+                "mexico",
+                "indonesia",
+                "nigeria",
+              ].some((country) => location.toLowerCase().trim() === country) && (
+                <p
+                  style={{
+                    fontSize: 11,
+                    color: "#FBBF24",
+                    marginTop: 4,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                >
+                  ⚠️ Tip: Use a specific city for better results. Try Beijing, Shanghai, or
+                  Guangzhou instead of China.
+                </p>
+              )}
           </div>
         </div>
 

@@ -22,11 +22,29 @@ const IMAGE_PATTERNS = [
   "icon-",
 ];
 
+const BLOCKED_DOMAINS = [
+  "sentry.io",
+  "sentry.wixpress.com",
+  "sentry-next.wixpress.com",
+  "bugsnag.com",
+  "rollbar.com",
+  "airbrake.io",
+  "honeybadger.io",
+  "raygun.io",
+  "loggly.com",
+  "papertrail.com",
+  "datadog.com",
+  "newrelic.com",
+  "example.com",
+  "example.org",
+  "test.com",
+  "wixpress.com",
+];
+
 const PLACEHOLDER_EMAILS = new Set([
   "your@email.com",
   "example@example.com",
   "email@email.com",
-  "info@example.com",
   "test@test.com",
   "user@user.com",
   "name@domain.com",
@@ -34,15 +52,13 @@ const PLACEHOLDER_EMAILS = new Set([
   "hello@example.com",
   "contact@example.com",
   "email@domain.com",
-  "yourname@email.com",
   "someone@example.com",
+  "yourname@email.com",
 ]);
 
 const GENERIC_DOMAINS = new Set([
-  "example.com",
   "domain.com",
   "email.com",
-  "test.com",
   "user.com",
   "name.com",
   "sample.com",
@@ -82,6 +98,14 @@ export function isValidEmail(email: string): boolean {
   if (!local || local.length < 2 || local.length > 64) return false;
   if (!domain || !domain.includes(".")) return false;
 
+  if (
+    BLOCKED_DOMAINS.some(
+      (blocked) => domain === blocked || domain.endsWith(`.${blocked}`)
+    )
+  ) {
+    return false;
+  }
+
   if (domain.startsWith("www.") || domain.split(".")[0] === "www") return false;
 
   if (IMAGE_EXTENSIONS.some((ext) => lower.endsWith(ext))) return false;
@@ -99,6 +123,8 @@ export function isValidEmail(email: string): boolean {
 
   if (!/^[a-zA-Z0-9._%+\-]+$/.test(local)) return false;
   if (local.includes("..") || domain.includes("..")) return false;
+
+  if (/^[a-f0-9]{20,}$/.test(local)) return false;
 
   return true;
 }
