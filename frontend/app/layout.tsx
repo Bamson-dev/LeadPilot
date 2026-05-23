@@ -1,3 +1,5 @@
+// staging environment v1
+
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "../styles/globals.css";
