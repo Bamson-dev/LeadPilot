@@ -6,8 +6,6 @@ import { getApiUrl } from "@/utils/env";
 
 function redirectSuspended(reason: string) {
   localStorage.setItem("lp_suspended_reason", reason);
-  localStorage.removeItem("leadpilot_email");
-  localStorage.removeItem("leadpilot_key");
   window.location.href = "/suspended";
 }
 
@@ -69,7 +67,7 @@ export default function DashboardPage() {
     }
 
     void checkAccountStatus();
-    const interval = setInterval(() => void checkAccountStatus(), 60_000);
+    const interval = setInterval(() => void checkAccountStatus(), 30_000);
     return () => clearInterval(interval);
   }, []);
 
