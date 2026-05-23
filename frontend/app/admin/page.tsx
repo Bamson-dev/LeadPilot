@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Bricolage_Grotesque } from "next/font/google";
 import { AccountLookup } from "@/components/admin/account-lookup";
+import { DirectMessaging } from "@/components/admin/direct-messaging";
 import {
   adminLogin,
   clearAdminToken,
@@ -200,8 +201,9 @@ export default function AdminPage() {
         ))}
       </div>
 
-      <div className="mt-8">
+      <div className="mx-auto mt-8 max-w-6xl">
         <AccountLookup onSessionExpired={handleLogout} />
+        <DirectMessaging onSessionExpired={handleLogout} />
       </div>
 
       <div className="mx-auto mt-8 max-w-6xl">

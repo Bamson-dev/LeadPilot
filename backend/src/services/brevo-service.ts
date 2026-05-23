@@ -240,3 +240,73 @@ export async function sendLimitReachedEmail(
     html,
   });
 }
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+export async function sendAdminMessage(
+  email: string,
+  subject: string,
+  message: string
+): Promise<void> {
+  const safeSubject = escapeHtml(subject);
+  const safeMessage = escapeHtml(message);
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body style="margin:0;padding:0;background:#F4F4F8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+      <div style="max-width:560px;margin:0 auto;padding:40px 20px;">
+
+        <div style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 2px 20px rgba(0,0,0,0.06);">
+
+          <div style="background:#7C3AED;padding:24px 32px;display:flex;align-items:center;gap:12px;">
+            <div style="width:34px;height:34px;background:rgba(255,255,255,0.2);border-radius:8px;display:inline-flex;align-items:center;justify-content:center;">
+              <span style="color:white;font-size:12px;font-weight:800;">LP</span>
+            </div>
+            <span style="font-size:18px;font-weight:800;color:white;letter-spacing:-0.5px;">LeadPilot</span>
+          </div>
+
+          <div style="padding:36px 32px;">
+            <h2 style="font-size:22px;font-weight:800;color:#111111;margin:0 0 20px;letter-spacing:-0.5px;line-height:1.2;">
+              ${safeSubject}
+            </h2>
+            <div style="font-size:15px;color:#444444;line-height:1.8;white-space:pre-wrap;border-left:3px solid #7C3AED;padding-left:16px;">
+              ${safeMessage}
+            </div>
+          </div>
+
+          <div style="background:#F8F8FB;border-top:1px solid #EEEEEE;padding:20px 32px;text-align:center;">
+            <p style="font-size:13px;color:#888888;margin:0 0 6px;font-weight:600;">
+              LeadPilot — Business Discovery Intelligence
+            </p>
+            <p style="font-size:12px;color:#AAAAAA;margin:0;">
+              Questions? 
+              <a href="https://wa.me/2349067285890" style="color:#7C3AED;text-decoration:none;font-weight:600;">WhatsApp 09067285890</a>
+              &nbsp;·&nbsp;
+              <a href="mailto:access@leadpilot.live" style="color:#7C3AED;text-decoration:none;font-weight:600;">access@leadpilot.live</a>
+            </p>
+          </div>
+
+        </div>
+
+      </div>
+    </body>
+    </html>
+  `;
+
+  await sendEmail({
+    to: email,
+    subject,
+    html,
+  });
+}

@@ -131,6 +131,25 @@ export async function startSearch(
     throw new Error(data.error || "Invalid license");
   }
 
+  if (res.status === 403) {
+    const data = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      code?: string;
+    };
+    if (data.code === "SUSPENDED" && typeof window !== "undefined") {
+      localStorage.setItem(
+        "lp_suspended_reason",
+        data.error ||
+          "Your account has been suspended. Contact support on WhatsApp 09067285890."
+      );
+      localStorage.removeItem("leadpilot_email");
+      localStorage.removeItem("leadpilot_key");
+      window.location.href = "/suspended";
+      return data as never;
+    }
+    throw new Error(data.error || "Request forbidden");
+  }
+
   if (res.status === 429) {
     const data = (await res.json().catch(() => ({}))) as { error?: string };
     console.error("Limit error:", data);

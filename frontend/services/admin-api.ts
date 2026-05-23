@@ -83,6 +83,7 @@ export interface AdminLicense {
   export_count?: number;
   is_suspended?: boolean;
   suspension_reason?: string | null;
+  max_devices?: number;
   last_reset_at?: string | null;
   created_at: string;
 }
@@ -165,4 +166,48 @@ export async function getAdminStats(): Promise<AdminStats> {
   if (res.status === 401) throw new Error("SESSION_EXPIRED");
   if (!res.ok) throw new Error("Failed to fetch stats");
   return res.json();
+}
+
+export async function resetDevices(email: string) {
+  const res = await fetch(`${getApiUrl()}/admin/reset-devices`, {
+    method: "POST",
+    headers: getAdminHeaders(),
+    body: JSON.stringify({ email }),
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to reset devices");
+  return res.json() as Promise<{ success: boolean; message?: string }>;
+}
+
+export async function updateDeviceLimit(email: string, maxDevices: number) {
+  const res = await fetch(`${getApiUrl()}/admin/update-device-limit`, {
+    method: "POST",
+    headers: getAdminHeaders(),
+    body: JSON.stringify({ email, maxDevices }),
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to update device limit");
+  return res.json() as Promise<{ success: boolean; message?: string }>;
+}
+
+export async function sendMessage(email: string, subject: string, message: string) {
+  const res = await fetch(`${getApiUrl()}/admin/send-message`, {
+    method: "POST",
+    headers: getAdminHeaders(),
+    body: JSON.stringify({ email, subject, message }),
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to send message");
+  return res.json() as Promise<{ success: boolean; message?: string }>;
+}
+
+export async function sendBroadcast(subject: string, message: string) {
+  const res = await fetch(`${getApiUrl()}/admin/broadcast`, {
+    method: "POST",
+    headers: getAdminHeaders(),
+    body: JSON.stringify({ subject, message }),
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to send broadcast");
+  return res.json() as Promise<{ success: boolean; message?: string; count?: number }>;
 }

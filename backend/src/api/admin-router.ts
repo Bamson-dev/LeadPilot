@@ -11,7 +11,7 @@ import {
   resetDevices,
 } from "../database/license-repository";
 import { supabase } from "../database/client";
-import { sendActivationEmail } from "../services/brevo-service";
+import { sendActivationEmail, sendAdminMessage } from "../services/brevo-service";
 import { logger } from "../utils/logger";
 
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
@@ -286,12 +286,138 @@ adminRouter.post("/reset-devices", requireAdminAuth, async (req: Request, res: R
     }
 
     await resetDevices(license.id as string);
-    res.json({ success: true, message: `Devices reset for ${email}` });
+    res.json({
+      success: true,
+      message: `Devices reset for ${email}. User can now log in from new devices.`,
+    });
   } catch (err) {
     logger.error("Reset devices failed", {
       error: err instanceof Error ? err.message : "unknown",
     });
     res.status(500).json({ error: "Failed to reset devices" });
+  }
+});
+
+adminRouter.post("/update-device-limit", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { email, maxDevices } = req.body as { email?: string; maxDevices?: number };
+
+    if (!email || maxDevices === undefined) {
+      res.status(400).json({ error: "Email and maxDevices required" });
+      return;
+    }
+
+    if (maxDevices < 1 || maxDevices > 10) {
+      res.status(400).json({ error: "Max devices must be between 1 and 10" });
+      return;
+    }
+
+    const license = await fetchLatestLicenseByEmail(email);
+    if (!license) {
+      res.status(404).json({ error: "License not found" });
+      return;
+    }
+
+    const { error } = await supabase
+      .from("license_keys")
+      .update({ max_devices: maxDevices })
+      .eq("id", license.id as string);
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      message: `Device limit updated to ${maxDevices} for ${email}`,
+    });
+  } catch (err) {
+    logger.error("Update device limit failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to update device limit" });
+  }
+});
+
+adminRouter.post("/send-message", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { email, subject, message } = req.body as {
+      email?: string;
+      subject?: string;
+      message?: string;
+    };
+
+    if (!email || !subject || !message) {
+      res.status(400).json({ error: "Email, subject and message required" });
+      return;
+    }
+
+    await sendAdminMessage(email, subject, message);
+
+    res.json({ success: true, message: `Message sent to ${email}` });
+  } catch (err) {
+    logger.error("Send message failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to send message" });
+  }
+});
+
+adminRouter.post("/broadcast", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { subject, message } = req.body as { subject?: string; message?: string };
+
+    if (!subject || !message) {
+      res.status(400).json({ error: "Subject and message required" });
+      return;
+    }
+
+    const { data: licenses, error } = await supabase
+      .from("license_keys")
+      .select("email")
+      .eq("activated", true)
+      .eq("is_suspended", false);
+
+    if (error) throw error;
+
+    if (!licenses || licenses.length === 0) {
+      res.status(404).json({ error: "No active users found" });
+      return;
+    }
+
+    const uniqueEmails = [
+      ...new Set(
+        licenses
+          .map((l) => (l.email as string)?.toLowerCase().trim())
+          .filter(Boolean)
+      ),
+    ];
+
+    res.json({
+      success: true,
+      message: `Broadcast queued for ${uniqueEmails.length} users`,
+      count: uniqueEmails.length,
+    });
+
+    setImmediate(() => {
+      void (async () => {
+        for (const userEmail of uniqueEmails) {
+          try {
+            await sendAdminMessage(userEmail, subject, message);
+            await new Promise((resolve) => setTimeout(resolve, 300));
+          } catch (err) {
+            logger.error("Failed to send broadcast to user", {
+              email: userEmail,
+              error: err instanceof Error ? err.message : "unknown",
+            });
+          }
+        }
+        logger.info("Broadcast complete", { count: uniqueEmails.length });
+      })();
+    });
+  } catch (err) {
+    logger.error("Broadcast failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to send broadcast" });
   }
 });
 
