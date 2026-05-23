@@ -168,6 +168,47 @@ export async function getAdminStats(): Promise<AdminStats> {
   return res.json();
 }
 
+export interface TrialStats {
+  totalTrials: number;
+  trialsToday: number;
+  trialsThisWeek: number;
+  trialsThisMonth: number;
+  licensesToday: number;
+  licensesThisWeek: number;
+  conversionRate: string;
+}
+
+export interface TrialActivity {
+  recentTrials: Array<{
+    id: string;
+    query: string;
+    location: string;
+    total_found: number;
+    status: string;
+    created_at: string;
+  }>;
+  topQueries: Array<{ query: string; count: number }>;
+  dailyActivity: Array<{ date: string; count: number }>;
+}
+
+export async function getTrialStats(): Promise<TrialStats> {
+  const res = await fetch(`${getApiUrl()}/admin/trial-stats`, {
+    headers: getAdminHeaders(),
+  });
+  if (res.status === 401) throw new Error("SESSION_EXPIRED");
+  if (!res.ok) throw new Error("Failed to fetch trial stats");
+  return res.json();
+}
+
+export async function getTrialActivity(): Promise<TrialActivity> {
+  const res = await fetch(`${getApiUrl()}/admin/trial-activity`, {
+    headers: getAdminHeaders(),
+  });
+  if (res.status === 401) throw new Error("SESSION_EXPIRED");
+  if (!res.ok) throw new Error("Failed to fetch trial activity");
+  return res.json();
+}
+
 export async function resetDevices(email: string) {
   const res = await fetch(`${getApiUrl()}/admin/reset-devices`, {
     method: "POST",

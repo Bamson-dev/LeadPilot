@@ -530,3 +530,145 @@ adminRouter.get("/stats", requireAdminAuth, async (_req: Request, res: Response)
     res.status(500).json({ error: "Failed to fetch stats" });
   }
 });
+
+adminRouter.get("/trial-stats", requireAdminAuth, async (_req: Request, res: Response) => {
+  try {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const weekStart = new Date();
+    weekStart.setDate(weekStart.getDate() - 7);
+
+    const monthStart = new Date();
+    monthStart.setDate(monthStart.getDate() - 30);
+
+    const [
+      totalTrialsResult,
+      trialsTodayResult,
+      trialsThisWeekResult,
+      trialsThisMonthResult,
+      licensesTodayResult,
+      licensesThisWeekResult,
+    ] = await Promise.all([
+      supabase
+        .from("search_jobs")
+        .select("*", { count: "exact", head: true })
+        .eq("is_trial", true),
+      supabase
+        .from("search_jobs")
+        .select("*", { count: "exact", head: true })
+        .eq("is_trial", true)
+        .gte("created_at", todayStart.toISOString()),
+      supabase
+        .from("search_jobs")
+        .select("*", { count: "exact", head: true })
+        .eq("is_trial", true)
+        .gte("created_at", weekStart.toISOString()),
+      supabase
+        .from("search_jobs")
+        .select("*", { count: "exact", head: true })
+        .eq("is_trial", true)
+        .gte("created_at", monthStart.toISOString()),
+      supabase
+        .from("license_keys")
+        .select("*", { count: "exact", head: true })
+        .gte("created_at", todayStart.toISOString()),
+      supabase
+        .from("license_keys")
+        .select("*", { count: "exact", head: true })
+        .gte("created_at", weekStart.toISOString()),
+    ]);
+
+    const trialsThisWeek = trialsThisWeekResult.count ?? 0;
+    const licensesThisWeek = licensesThisWeekResult.count ?? 0;
+    const conversionRate =
+      trialsThisWeek > 0 && licensesThisWeek > 0
+        ? ((licensesThisWeek / trialsThisWeek) * 100).toFixed(1)
+        : "0";
+
+    res.json({
+      totalTrials: totalTrialsResult.count ?? 0,
+      trialsToday: trialsTodayResult.count ?? 0,
+      trialsThisWeek,
+      trialsThisMonth: trialsThisMonthResult.count ?? 0,
+      licensesToday: licensesTodayResult.count ?? 0,
+      licensesThisWeek,
+      conversionRate,
+    });
+  } catch (err) {
+    logger.error("Trial stats failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to fetch trial stats" });
+  }
+});
+
+adminRouter.get("/trial-activity", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "50"), 10) || 50, 1), 100);
+    const offset = Math.max(parseInt(String(req.query.offset ?? "0"), 10) || 0, 0);
+
+    const monthAgo = new Date();
+    monthAgo.setDate(monthAgo.getDate() - 30);
+
+    const [{ data: recentTrials }, { data: allTrials }] = await Promise.all([
+      supabase
+        .from("search_jobs")
+        .select("id, query, location, total_found, status, created_at")
+        .eq("is_trial", true)
+        .order("created_at", { ascending: false })
+        .range(offset, offset + limit - 1),
+      supabase
+        .from("search_jobs")
+        .select("query, location, created_at")
+        .eq("is_trial", true)
+        .gte("created_at", monthAgo.toISOString()),
+    ]);
+
+    const queryCount: Record<string, number> = {};
+    allTrials?.forEach((t) => {
+      const query = (t.query as string | null)?.trim() ?? "";
+      const location = (t.location as string | null)?.trim() ?? "";
+      if (!query && !location) return;
+      const key = `${query.toLowerCase()} in ${location.toLowerCase()}`;
+      queryCount[key] = (queryCount[key] || 0) + 1;
+    });
+
+    const topQueries = Object.entries(queryCount)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 10)
+      .map(([query, count]) => ({ query, count }));
+
+    const dailyCounts: Record<string, number> = {};
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const key = date.toISOString().split("T")[0];
+      dailyCounts[key] = 0;
+    }
+
+    allTrials?.forEach((t) => {
+      if (!t.created_at) return;
+      const day = new Date(t.created_at as string).toISOString().split("T")[0];
+      if (dailyCounts[day] !== undefined) {
+        dailyCounts[day]++;
+      }
+    });
+
+    const dailyActivity = Object.entries(dailyCounts).map(([date, count]) => ({
+      date,
+      count,
+    }));
+
+    res.json({
+      recentTrials: recentTrials ?? [],
+      topQueries,
+      dailyActivity,
+    });
+  } catch (err) {
+    logger.error("Trial activity failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to fetch trial activity" });
+  }
+});
