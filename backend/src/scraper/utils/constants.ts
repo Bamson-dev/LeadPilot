@@ -7,7 +7,8 @@ export const MIN_CACHE_LEADS_TO_REUSE = parseInt(
   10
 );
 export const SCRAPE_CONCURRENCY = 5;
-export const PLACE_TIMEOUT_MS = 10000;
+export const PLACE_TIMEOUT_MS = 25000;
+export const PLACE_GOTO_TIMEOUT_MS = 20000;
 export const SIDEBAR_MIN_LISTINGS = 10;
 export const SIDEBAR_SCROLL_MAX_ROUNDS = 80;
 export const SIDEBAR_SCROLL_WAIT_MS = 550;

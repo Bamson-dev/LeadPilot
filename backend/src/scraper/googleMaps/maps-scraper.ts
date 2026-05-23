@@ -16,7 +16,7 @@ import { buildSearchStrategyUrls } from "./search-strategies";
 import {
   DETAIL_PANEL_WAIT_MS,
   MAX_LEADS_PER_SEARCH,
-  PLACE_PAGE_TIMEOUT_MS,
+  PLACE_GOTO_TIMEOUT_MS,
   PLACE_TIMEOUT_MS,
   SIDEBAR_SCROLL_MAX_ROUNDS,
   SIDEBAR_SCROLL_TIMEOUT_MS,
@@ -24,8 +24,8 @@ import {
   SIDEBAR_STABLE_ROUNDS,
 } from "../utils/constants";
 
-const PAID_BATCH_SIZE = 10;
-const TRIAL_BATCH_SIZE = 5;
+const BATCH_SIZE = 6;
+const EXTRACT_RACE_TIMEOUT_MS = 20000;
 
 export interface MapsScrapeOptions {
   query: string;
@@ -60,6 +60,18 @@ async function processWithTimeout<T>(
     setTimeout(() => resolve(fallback), timeoutMs)
   );
   return Promise.race([promise, timeout]);
+}
+
+async function extractWithRetry(
+  extractFn: () => Promise<RawLeadInput | null>,
+  timeoutMs: number
+): Promise<RawLeadInput | null> {
+  const result = await processWithTimeout(extractFn(), timeoutMs, null);
+  if (result !== null) return result;
+
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+
+  return processWithTimeout(extractFn(), timeoutMs, null);
 }
 
 function withMapsLocale(url: string): string {
@@ -599,10 +611,10 @@ export async function extractBusinessBasicDetails(
   try {
     await page.goto(placeUrl, {
       waitUntil: "domcontentloaded",
-      timeout: 8000,
+      timeout: PLACE_GOTO_TIMEOUT_MS,
     });
     await acceptGoogleConsent(page);
-    await page.waitForSelector("h1", { timeout: 4000 }).catch(() => undefined);
+    await page.waitForSelector("h1", { timeout: 6000 }).catch(() => undefined);
     await page.waitForTimeout(800);
 
     const details = await page.evaluate(() => {
@@ -689,7 +701,7 @@ async function extractBusinessDetails(
 
     await page.goto(placeUrl, {
       waitUntil: "domcontentloaded",
-      timeout: 12000,
+      timeout: PLACE_GOTO_TIMEOUT_MS,
     });
     await acceptGoogleConsent(page);
     await page.waitForSelector("h1", { timeout: 6000 }).catch(() => undefined);
@@ -794,8 +806,7 @@ export async function scrapeGoogleMaps(
     }
 
     const max = businessUrls.length;
-    const batchSize = isTrial ? TRIAL_BATCH_SIZE : PAID_BATCH_SIZE;
-    const placeTimeoutMs = isTrial ? 8000 : PLACE_TIMEOUT_MS;
+    const extractTimeoutMs = isTrial ? EXTRACT_RACE_TIMEOUT_MS : PLACE_TIMEOUT_MS;
     onProgress?.(0, max);
     onPhase?.(
       isTrial
@@ -803,23 +814,23 @@ export async function scrapeGoogleMaps(
         : `Found ${businessUrls.length} businesses for ${query} in ${location}. Extracting details...`
     );
 
-    for (let i = 0; i < businessUrls.length; i += batchSize) {
-      const batch = businessUrls.slice(i, i + batchSize);
+    for (let i = 0; i < businessUrls.length; i += BATCH_SIZE) {
+      const batch = businessUrls.slice(i, i + BATCH_SIZE);
       const results = await Promise.allSettled(
         batch.map((url, batchIndex) =>
-          processWithTimeout(
-            isTrial
-              ? extractBusinessBasicDetails(context, url, location)
-              : extractBusinessDetails(
-                  context,
-                  url,
-                  query,
-                  location,
-                  i + batchIndex + 1,
-                  businessUrls.length
-                ),
-            placeTimeoutMs,
-            null
+          extractWithRetry(
+            () =>
+              isTrial
+                ? extractBusinessBasicDetails(context, url, location)
+                : extractBusinessDetails(
+                    context,
+                    url,
+                    query,
+                    location,
+                    i + batchIndex + 1,
+                    businessUrls.length
+                  ),
+            extractTimeoutMs
           )
         )
       );
