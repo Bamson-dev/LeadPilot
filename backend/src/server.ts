@@ -16,13 +16,17 @@ export const app = express();
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
 
+const allowedOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(",").map((o) => o.trim())
+  : [
+      "https://www.leadpilot.live",
+      "https://leadpilot.live",
+      "http://localhost:3000",
+      "http://localhost:3001",
+    ];
+
 const corsOptions = {
-  origin: [
-    "https://www.leadpilot.live",
-    "https://leadpilot.live",
-    "http://localhost:3000",
-    "http://localhost:3001",
-  ],
+  origin: allowedOrigins,
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: [
