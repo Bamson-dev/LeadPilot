@@ -3,7 +3,10 @@ import type { RawLeadInput } from "../../types/scraper";
 import { buildLeadFromPanel, waitForDetailPanel } from "../extractors/detail-panel";
 import { gotoWithRetry } from "../parsers/page-navigation";
 import { dedupeKey, sanitizeLead } from "../utils/data-quality";
-import { extractPhoneNumber } from "./extract-phone";
+import {
+  extractPhoneNumber,
+  isValidInternationalPhone,
+} from "./extract-phone";
 import { normalizePhoneForLocation } from "../utils/phone-validation";
 import { logger } from "../../utils/logger";
 import { formatSearchMessage } from "../../utils/search-messages";
@@ -38,6 +41,37 @@ export interface MapsScrapeOptions {
 
 const TRIAL_URL_CAP = 20;
 const TRIAL_STRATEGY_LIMIT = 2;
+
+const IRRELEVANT_EXACT_NAMES = new Set([
+  "mosque",
+  "church",
+  "temple",
+  "masjid",
+  "cathedral",
+]);
+
+function isIrrelevantBusinessName(name: string): boolean {
+  const nameLower = name.toLowerCase().trim();
+  return IRRELEVANT_EXACT_NAMES.has(nameLower);
+}
+
+async function waitForBusinessContactPanel(page: Page): Promise<void> {
+  await page.waitForSelector("h1", { timeout: 6000 }).catch(() => undefined);
+  await page.waitForTimeout(2000);
+  await page
+    .waitForSelector('[data-item-id*="phone"], a[href^="tel:"]', {
+      timeout: 3000,
+    })
+    .catch(() => undefined);
+}
+
+function resolveExtractedPhone(
+  raw: string | null | undefined,
+  location: string
+): string | null {
+  if (!raw?.trim() || !isValidInternationalPhone(raw)) return null;
+  return normalizePhoneForLocation(raw, location);
+}
 
 function deduplicateByPlaceId(urls: string[]): string[] {
   const seen = new Set<string>();
@@ -614,25 +648,13 @@ export async function extractBusinessBasicDetails(
       timeout: PLACE_GOTO_TIMEOUT_MS,
     });
     await acceptGoogleConsent(page);
-    await page.waitForSelector("h1", { timeout: 6000 }).catch(() => undefined);
-    await page.waitForTimeout(800);
+    await waitForBusinessContactPanel(page);
 
     const details = await page.evaluate(() => {
       const getText = (selector: string) =>
         document.querySelector(selector)?.textContent?.trim() || null;
 
       const name = getText("h1");
-
-      const phoneEl =
-        document.querySelector('[data-item-id*="phone"]') ||
-        document.querySelector('[aria-label*="Phone"]') ||
-        document.querySelector('a[href^="tel:"]');
-
-      const phone =
-        phoneEl?.getAttribute("aria-label")?.replace("Phone:", "").trim() ||
-        phoneEl?.getAttribute("href")?.replace("tel:", "").trim() ||
-        phoneEl?.textContent?.trim() ||
-        null;
 
       const addressEl =
         document.querySelector('[data-item-id="address"]') ||
@@ -659,14 +681,21 @@ export async function extractBusinessBasicDetails(
         document.querySelector('[jsaction*="category"]')?.textContent?.trim() ||
         null;
 
-      return { name, phone, address, rating, reviewCount, category };
+      return { name, address, rating, reviewCount, category };
     });
 
     if (!details.name) return null;
 
+    if (isIrrelevantBusinessName(details.name)) {
+      logger.warn("Skipping irrelevant result", { name: details.name });
+      return null;
+    }
+
+    const phone = resolveExtractedPhone(await extractPhoneNumber(page), location);
+
     const lead: RawLeadInput = {
       business_name: details.name,
-      phone: normalizePhoneForLocation(details.phone, location),
+      phone,
       address: details.address,
       rating: details.rating,
       reviews_count: details.reviewCount,
@@ -704,8 +733,7 @@ async function extractBusinessDetails(
       timeout: PLACE_GOTO_TIMEOUT_MS,
     });
     await acceptGoogleConsent(page);
-    await page.waitForSelector("h1", { timeout: 6000 }).catch(() => undefined);
-    await page.waitForTimeout(1000);
+    await waitForBusinessContactPanel(page);
 
     if (!(await waitForDetailPanel(page, 6000))) {
       logger.warn("Business extraction returned null — skipping", { url: placeUrl });
@@ -713,20 +741,40 @@ async function extractBusinessDetails(
     }
 
     let lead = await buildLeadFromPanel(page, searchTerm, placeUrl, location);
-    if (lead && !lead.phone) {
-      const rawPhone = await extractPhoneNumber(page);
-      if (rawPhone) {
-        lead = { ...lead, phone: normalizePhoneForLocation(rawPhone, location) };
-      }
+
+    const panelPhone = lead?.phone
+      ? resolveExtractedPhone(lead.phone, location)
+      : null;
+    const scrapedPhone = resolveExtractedPhone(
+      await extractPhoneNumber(page),
+      location
+    );
+    const phone = panelPhone || scrapedPhone;
+
+    if (lead) {
+      lead = { ...lead, phone };
+    }
+
+    if (lead?.business_name && isIrrelevantBusinessName(lead.business_name)) {
+      logger.warn("Skipping irrelevant result", { name: lead.business_name });
+      return null;
     }
 
     const sanitized = lead ? sanitizeLead(lead, location) : null;
     if (sanitized) {
+      const emails =
+        sanitized.email || sanitized.extracted_email
+          ? [sanitized.email || sanitized.extracted_email].filter(Boolean)
+          : [];
       logger.info("Business extracted successfully", {
         name: sanitized.business_name,
         hasPhone: !!sanitized.phone,
-        hasEmail: !!(sanitized.email || sanitized.extracted_email),
+        phoneValue: sanitized.phone
+          ? `${sanitized.phone.substring(0, 10)}...`
+          : null,
+        hasEmail: emails.length > 0,
         hasWebsite: !!sanitized.website,
+        url: placeUrl.substring(0, 60),
       });
     } else {
       logger.warn("Business extraction returned null — skipping", { url: placeUrl });
