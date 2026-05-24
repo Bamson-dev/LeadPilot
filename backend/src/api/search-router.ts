@@ -331,8 +331,17 @@ searchRouter.get("/:id/results", async (req: Request, res: Response) => {
       250,
       Math.max(1, parseInt(String(req.query.limit ?? "250"), 10) || 250)
     );
+    const job = await getSearchJob(id);
     const { leads, total } = await getSearchResults(id, page, limit);
-    res.json({ leads, total, page, limit });
+    res.json({
+      searchId: id,
+      status: job?.status ?? "unknown",
+      leads,
+      total,
+      totalFound: job?.totalFound ?? total,
+      page,
+      limit,
+    });
   } catch (err) {
     logger.error("GET /search/:id/results failed", {
       error: err instanceof Error ? err.message : "unknown",

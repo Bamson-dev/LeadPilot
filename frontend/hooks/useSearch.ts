@@ -80,6 +80,7 @@ export function useSearch(options?: UseSearchOptions) {
   const completedRef = useRef(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const finalFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -95,6 +96,13 @@ export function useSearch(options?: UseSearchOptions) {
     }
   }, []);
 
+  const stopFinalFetchTimer = useCallback(() => {
+    if (finalFetchTimerRef.current) {
+      clearTimeout(finalFetchTimerRef.current);
+      finalFetchTimerRef.current = null;
+    }
+  }, []);
+
   const closeStream = useCallback(() => {
     completedRef.current = true;
     if (eventSourceRef.current) {
@@ -103,7 +111,8 @@ export function useSearch(options?: UseSearchOptions) {
     }
     stopPolling();
     stopTimeout();
-  }, [stopPolling, stopTimeout]);
+    stopFinalFetchTimer();
+  }, [stopPolling, stopTimeout, stopFinalFetchTimer]);
 
   const progressMessage = useCallback(
     (
@@ -183,39 +192,92 @@ export function useSearch(options?: UseSearchOptions) {
     [mergeLeads, replaceLeads]
   );
 
-  const finishSearch = useCallback(
-    (total: number, message?: string) => {
-      closeStream();
-      const searchId = searchIdRef.current;
-      void (async () => {
-        if (searchId) {
-          await new Promise((r) => setTimeout(r, 4000));
-          try {
-            await syncFromApi(searchId, true);
-          } catch {
-            /* keep streamed leads */
-          }
-        }
+  const fetchFinalResults = useCallback(
+    async (searchId: string) => {
+      const pending = pendingLeadsRef.current.splice(0);
+      if (pending.length > 0) {
+        mergeLeads(pending);
+      }
+
+      try {
+        const [{ leads: fetched, total }, job] = await Promise.all([
+          getResults(searchId, 1, 250),
+          getSearch(searchId).catch(() => null),
+        ]);
+
+        const mapped = fetched.map((l) => leadRowToBusinessLead(l));
+        const dbTotal = Math.max(job?.totalFound ?? 0, total, mapped.length);
+
         setState((prev) => {
-          const totalFound = total || prev.leads.length;
+          const leads = mapped.length > 0 ? mapped : prev.leads;
+          const totalFound = Math.max(dbTotal, leads.length);
           onCompleteRef.current?.(
-            prev.leads,
+            leads,
             queryRef.current,
             locationRef.current,
             totalFound
           );
           return {
             ...prev,
-            status: "completed",
+            leads,
             totalFound,
+            status: "completed",
             queuePosition: 0,
             error: null,
-            message: message ?? progressMessage(totalFound, "completed", 0),
+            message: `Search complete. Found ${totalFound} businesses.`,
           };
         });
-      })();
+      } catch {
+        /* silent fail — keep streamed leads */
+      }
     },
-    [closeStream, progressMessage, syncFromApi]
+    [mergeLeads]
+  );
+
+  const scheduleFinalResultsFetch = useCallback(
+    (searchId: string, delayMs = 3000) => {
+      stopFinalFetchTimer();
+      finalFetchTimerRef.current = setTimeout(() => {
+        finalFetchTimerRef.current = null;
+        void fetchFinalResults(searchId);
+      }, delayMs);
+    },
+    [fetchFinalResults, stopFinalFetchTimer]
+  );
+
+  const finishSearch = useCallback(
+    (total: number, message?: string) => {
+      completedRef.current = true;
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      stopPolling();
+      stopTimeout();
+
+      const pending = pendingLeadsRef.current.splice(0);
+      if (pending.length > 0) {
+        mergeLeads(pending);
+      }
+
+      const searchId = searchIdRef.current;
+      setState((prev) => {
+        const totalFound = total || prev.leads.length;
+        return {
+          ...prev,
+          status: "completed",
+          totalFound,
+          queuePosition: 0,
+          error: null,
+          message: message ?? progressMessage(totalFound, "completed", 0),
+        };
+      });
+
+      if (searchId) {
+        scheduleFinalResultsFetch(searchId, 3000);
+      }
+    },
+    [stopPolling, stopTimeout, mergeLeads, progressMessage, scheduleFinalResultsFetch]
   );
 
   const pollForResults = useCallback(
@@ -445,28 +507,31 @@ export function useSearch(options?: UseSearchOptions) {
         eventSourceRef.current = null;
 
         let hadResults = false;
+        const activeSearchId = searchIdRef.current;
         setState((prev) => {
           const pending = pendingLeadsRef.current.splice(0);
           const merged = mergePendingIntoLeads(prev.leads, pending);
           if (merged.length > 0) {
             hadResults = true;
-            queueMicrotask(() =>
-              finishSearch(
-                merged.length,
-                `Search complete. Found ${merged.length} businesses.`
-              )
-            );
             return {
               ...prev,
               leads: merged,
               totalFound: merged.length,
+              status: "completed",
               error: null,
+              message: `Search complete. Found ${merged.length} businesses.`,
             };
           }
           return prev;
         });
 
-        if (hadResults) return;
+        if (hadResults && activeSearchId) {
+          completedRef.current = true;
+          stopPolling();
+          stopTimeout();
+          scheduleFinalResultsFetch(activeSearchId, 3000);
+          return;
+        }
 
         const searchId = searchIdRef.current;
         if (searchId && !ssePollFallbackRef.current) {
@@ -488,13 +553,14 @@ export function useSearch(options?: UseSearchOptions) {
           const pending = pendingLeadsRef.current.splice(0);
           const merged = mergePendingIntoLeads(prev.leads, pending);
           if (merged.length > 0) {
-            queueMicrotask(() =>
-              finishSearch(
-                merged.length,
-                `Search complete. Found ${merged.length} businesses.`
-              )
-            );
-            return { ...prev, leads: merged, totalFound: merged.length, error: null };
+            return {
+              ...prev,
+              leads: merged,
+              totalFound: merged.length,
+              status: "completed",
+              error: null,
+              message: `Search complete. Found ${merged.length} businesses.`,
+            };
           }
           completedRef.current = true;
           closeStream();
@@ -505,9 +571,23 @@ export function useSearch(options?: UseSearchOptions) {
             message: CONNECTION_LOST_MESSAGE,
           };
         });
+
+        const reconnectSearchId = searchIdRef.current;
+        if (reconnectSearchId) {
+          scheduleFinalResultsFetch(reconnectSearchId, 3000);
+        }
       };
     },
-    [closeStream, finishSearch, progressMessage, pollForResults, mergeLeads]
+    [
+      closeStream,
+      finishSearch,
+      progressMessage,
+      pollForResults,
+      mergeLeads,
+      scheduleFinalResultsFetch,
+      stopPolling,
+      stopTimeout,
+    ]
   );
 
   const search = useCallback(
