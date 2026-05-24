@@ -78,8 +78,16 @@ export function rawLeadToBusinessLead(
   return base;
 }
 
+export function applyWebsiteEmailsToLead(
+  lead: BusinessLead,
+  emails: string[]
+): BusinessLead {
+  return buildVerifiedLead(lead, emails);
+}
+
 export async function enrichLeadEmail(
-  lead: BusinessLead
+  lead: BusinessLead,
+  options?: { skipWebsiteCrawl?: boolean }
 ): Promise<BusinessLead> {
   const mapsVerified =
     lead.verifiedEmails.length > 0
@@ -93,8 +101,11 @@ export async function enrichLeadEmail(
   const effectiveWebsite =
     (await resolveEffectiveBusinessWebsite(lead.website)) ?? lead.website;
 
-  const crawl = await crawlEmailForWebsite(effectiveWebsite);
-  const websiteVerified = crawl.emails.length > 0 ? crawl.emails : [];
+  let websiteVerified: string[] = [];
+  if (!options?.skipWebsiteCrawl) {
+    const crawl = await crawlEmailForWebsite(effectiveWebsite);
+    websiteVerified = crawl.emails.length > 0 ? crawl.emails : [];
+  }
 
   const mergedVerified = mergeEmails(mapsVerified, websiteVerified);
   const allVerified = pickBestEmail(mergedVerified, effectiveWebsite ?? lead.website, 100);

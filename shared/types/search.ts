@@ -34,7 +34,8 @@ export type StreamEventType =
   | "progress"
   | "complete"
   | "error"
-  | "phase";
+  | "phase"
+  | "email_update";
 
 export interface StreamEvent {
   type: StreamEventType;
@@ -47,4 +48,7 @@ export interface StreamEvent {
   total?: number;
   message?: string;
   phase?: string;
+  businessId?: string;
+  email?: string | null;
+  emails?: string[];
 }

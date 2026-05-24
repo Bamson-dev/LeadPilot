@@ -326,6 +326,9 @@ export function useSearch(options?: UseSearchOptions) {
             processed?: number;
             total?: number;
             phase?: string;
+            businessId?: string;
+            email?: string | null;
+            emails?: string[];
           };
 
           switch (data.type) {
@@ -340,6 +343,31 @@ export function useSearch(options?: UseSearchOptions) {
             case "lead": {
               const lead = data.data ?? data.lead;
               if (lead) pendingLeadsRef.current.push(lead);
+              break;
+            }
+
+            case "email_update": {
+              const lead = data.lead ?? data.data;
+              if (lead) {
+                mergeLeads([lead]);
+                break;
+              }
+              if (data.businessId) {
+                setState((prev) => {
+                  const byId = new Map(prev.leads.map((l) => [l.id, l]));
+                  const existing = byId.get(data.businessId!);
+                  if (!existing) return prev;
+                  const emails = data.emails ?? [];
+                  byId.set(data.businessId!, {
+                    ...existing,
+                    email: data.email ?? emails[0] ?? existing.email,
+                    emails: emails.length > 0 ? emails : existing.emails,
+                    verifiedEmails: emails.length > 0 ? emails : existing.verifiedEmails,
+                    emailSource: emails.length > 0 ? "website" : existing.emailSource,
+                  });
+                  return { ...prev, leads: [...byId.values()] };
+                });
+              }
               break;
             }
 
@@ -479,7 +507,7 @@ export function useSearch(options?: UseSearchOptions) {
         });
       };
     },
-    [closeStream, finishSearch, progressMessage, pollForResults]
+    [closeStream, finishSearch, progressMessage, pollForResults, mergeLeads]
   );
 
   const search = useCallback(

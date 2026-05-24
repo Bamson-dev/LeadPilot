@@ -205,6 +205,25 @@ export async function insertBusinessLead(lead: BusinessLead): Promise<BusinessLe
   return mapBusinessLead(data as DbBusinessLead);
 }
 
+export async function updateBusinessLeadEmails(
+  businessId: string,
+  emails: string[]
+): Promise<void> {
+  const verified = emails.filter(Boolean);
+  const primary = verified.length > 0 ? verified.join(", ") : null;
+
+  const { error } = await supabase
+    .from("business_leads")
+    .update({
+      email: primary,
+      verified_email: primary,
+      email_source: verified.length > 0 ? "extracted" : "none",
+    })
+    .eq("id", businessId);
+
+  if (error) throw new Error(error.message);
+}
+
 export async function insertBusinessLeads(leads: BusinessLead[]): Promise<void> {
   if (leads.length === 0) return;
   const batchSize = 50;

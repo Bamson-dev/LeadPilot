@@ -6,6 +6,7 @@ import {
   insertBusinessLead,
   markSearchComplete,
   markSearchFailed,
+  updateBusinessLeadEmails,
   updateSearchJob,
 } from "../database/search-repository";
 import { saveUserSearch } from "../database/user-search-repository";
@@ -17,7 +18,8 @@ import {
 } from "../services/brevo-service";
 import { formatScraperError } from "../scraper/utils/scraper-errors";
 import { logger } from "../utils/logger";
-import { enrichLeadEmail, rawLeadToBusinessLead } from "../utils/lead-mapper";
+import { enrichLeadEmail, applyWebsiteEmailsToLead, rawLeadToBusinessLead } from "../utils/lead-mapper";
+import { crawlEmailsFromWebsite } from "../scraper/emailCrawler/email-crawler";
 import { formatSearchMessage } from "../utils/search-messages";
 import type { RawLeadInput } from "../types/scraper";
 
@@ -25,6 +27,140 @@ export type ScrapeEmitter = (event: StreamEvent) => void;
 
 function emitLead(emit: ScrapeEmitter, lead: BusinessLead): void {
   emit({ type: "lead", lead, data: lead });
+}
+
+function emitEmailUpdate(
+  emit: ScrapeEmitter,
+  lead: BusinessLead,
+  emails: string[]
+): void {
+  emit({
+    type: "email_update",
+    businessId: lead.id,
+    email: emails[0] ?? null,
+    emails,
+    lead,
+    data: lead,
+  });
+}
+
+function hasVerifiedEmail(lead: BusinessLead): boolean {
+  return (
+    (lead.emails?.length ?? 0) > 0 ||
+    (lead.verifiedEmails?.length ?? 0) > 0 ||
+    Boolean(lead.email?.trim())
+  );
+}
+
+function runBackgroundEmailEnrichment(
+  basic: BusinessLead,
+  emit: ScrapeEmitter,
+  searchId: string,
+  enrichedLeads: BusinessLead[],
+  onComplete: () => void
+): void {
+  if (hasVerifiedEmail(basic)) {
+    enrichedLeads.push(basic);
+    onComplete();
+    return;
+  }
+
+  if (basic.website) {
+    crawlEmailsFromWebsite(basic.website)
+      .then(async (emails) => {
+        if (emails.length > 0) {
+          const enriched = applyWebsiteEmailsToLead(basic, emails);
+          enrichedLeads.push(enriched);
+          emitEmailUpdate(emit, enriched, emails);
+          await updateBusinessLeadEmails(enriched.id, emails).catch((err) => {
+            logger.warn("Failed to update crawled emails", {
+              searchId,
+              businessId: enriched.id,
+              error: err instanceof Error ? err.message : "unknown",
+            });
+          });
+          await insertBusinessLead(enriched).catch((err) => {
+            logger.warn("Failed to upsert enriched lead", {
+              searchId,
+              name: enriched.name,
+              error: err instanceof Error ? err.message : "unknown",
+            });
+          });
+          return;
+        }
+
+        const enriched = await enrichLeadEmail(basic, { skipWebsiteCrawl: true });
+        enrichedLeads.push(enriched);
+
+        const verifiedEmails =
+          enriched.emails?.length > 0
+            ? enriched.emails
+            : enriched.verifiedEmails?.length > 0
+              ? enriched.verifiedEmails
+              : enriched.predictedEmails.map((p) => p.email);
+
+        if (verifiedEmails.length > 0) {
+          emitEmailUpdate(emit, enriched, verifiedEmails);
+        }
+
+        await insertBusinessLead(enriched).catch((err) => {
+          logger.warn("Failed to upsert enriched lead", {
+            searchId,
+            name: enriched.name,
+            error: err instanceof Error ? err.message : "unknown",
+          });
+        });
+      })
+      .catch((err) => {
+        logger.warn("Email enrich failed", {
+          searchId,
+          name: basic.name,
+          error: err instanceof Error ? err.message : "unknown",
+        });
+      })
+      .finally(() => {
+        onComplete();
+      });
+    return;
+  }
+
+  enrichLeadEmail(basic, { skipWebsiteCrawl: true })
+    .then(async (enriched) => {
+      enrichedLeads.push(enriched);
+
+      const verifiedEmails =
+        enriched.emails?.length > 0
+          ? enriched.emails
+          : enriched.verifiedEmails?.length > 0
+            ? enriched.verifiedEmails
+            : enriched.predictedEmails.map((p) => p.email);
+
+      if (verifiedEmails.length > 0) {
+        emitEmailUpdate(emit, enriched, verifiedEmails);
+      }
+
+      await insertBusinessLead(enriched).catch((err) => {
+        logger.warn("Failed to upsert enriched lead", {
+          searchId,
+          name: enriched.name,
+          error: err instanceof Error ? err.message : "unknown",
+        });
+      });
+    })
+    .catch((err) => {
+      logger.warn("Email enrich failed", {
+        searchId,
+        name: basic.name,
+        error: err instanceof Error ? err.message : "unknown",
+      });
+    })
+    .finally(() => {
+      onComplete();
+    });
+}
+
+function leadDedupeKey(lead: BusinessLead): string {
+  return `${lead.name?.toLowerCase().trim()}-${lead.phone?.replace(/\s/g, "") || "nophone"}`;
 }
 
 function deduplicateLeads(leads: BusinessLead[]): BusinessLead[] {
@@ -35,10 +171,6 @@ function deduplicateLeads(leads: BusinessLead[]): BusinessLead[] {
     seen.add(key);
     return true;
   });
-}
-
-function leadDedupeKey(lead: BusinessLead): string {
-  return `${lead.name?.toLowerCase().trim()}-${lead.phone?.replace(/\s/g, "") || "nophone"}`;
 }
 
 export async function runScraperJob(
@@ -161,28 +293,15 @@ export async function runScraperJob(
       }
 
       pendingEnrich++;
-      void enrichLeadEmail(basic)
-        .then((enriched) => {
-          enrichedLeads.push(enriched);
-          emitLead(emit, enriched);
-          void insertBusinessLead(enriched).catch((err) => {
-            logger.warn("Failed to upsert enriched lead", {
-              searchId,
-              name: enriched.name,
-              error: err instanceof Error ? err.message : "unknown",
-            });
-          });
-        })
-        .catch((err) => {
-          logger.warn("Email enrich failed", {
-            searchId,
-            name: basic.name,
-            error: err instanceof Error ? err.message : "unknown",
-          });
-        })
-        .finally(() => {
+      runBackgroundEmailEnrichment(
+        basic,
+        emit,
+        searchId,
+        enrichedLeads,
+        () => {
           pendingEnrich--;
-        });
+        }
+      );
 
       if (progress % 3 === 0) {
         void updateSearchJob(searchId, {
