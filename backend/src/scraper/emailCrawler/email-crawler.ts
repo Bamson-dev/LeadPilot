@@ -86,7 +86,7 @@ export async function crawlEmailsFromWebsite(
       websiteUrl: websiteUrl.substring(0, 50),
       emailsFound: validEmails.size,
       pagesFetched: fetchCount,
-      emails: Array.from(validEmails).map((e) => e.substring(0, 20)),
+      emails: Array.from(validEmails),
     });
     return result;
   } catch (err) {
