@@ -12,7 +12,6 @@ import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { LeadStatusSelect } from "@/components/dashboard/lead-status-select";
 import { PipelineSummary } from "@/components/dashboard/pipeline-summary";
 import { useLeadStatuses } from "@/hooks/useLeadStatuses";
-import { hasAnyEmail } from "@/utils/get-display-email";
 import type { Lead } from "@/types/lead";
 
 type SortKey = keyof Pick<
@@ -39,9 +38,6 @@ export function ResultsTable({
   const [sortKey, setSortKey] = useState<SortKey>("business_name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [hasWebsite, setHasWebsite] = useState<boolean | null>(null);
-  const [emailFilter, setEmailFilter] = useState<
-    "all" | "yes" | "no" | "predicted" | "crawled"
-  >("all");
   const [minRating, setMinRating] = useState(0);
   const parentRef = useRef<HTMLDivElement>(null);
   const { leadStatuses, statusFilter, setStatusFilter, setLeadStatus } =
@@ -51,14 +47,6 @@ export function ResultsTable({
     return leads.filter((lead) => {
       if (hasWebsite === true && !lead.website) return false;
       if (hasWebsite === false && lead.website) return false;
-      if (emailFilter === "yes" && !hasAnyEmail(lead)) return false;
-      if (emailFilter === "no" && hasAnyEmail(lead)) return false;
-      if (emailFilter === "predicted" && lead.email_source !== "predicted") {
-        return false;
-      }
-      if (emailFilter === "crawled" && lead.email_source !== "extracted") {
-        return false;
-      }
       if (minRating > 0 && (lead.rating ?? 0) < minRating) return false;
       if (statusFilter !== "all") {
         const leadStatus = leadStatuses[lead.id] || "none";
@@ -66,7 +54,7 @@ export function ResultsTable({
       }
       return true;
     });
-  }, [leads, hasWebsite, emailFilter, minRating, statusFilter, leadStatuses]);
+  }, [leads, hasWebsite, minRating, statusFilter, leadStatuses]);
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
@@ -124,21 +112,6 @@ export function ResultsTable({
             <option value="all">All websites</option>
             <option value="yes">Has website</option>
             <option value="no">No website</option>
-          </select>
-          <select
-            value={emailFilter}
-            onChange={(e) =>
-              setEmailFilter(
-                e.target.value as "all" | "yes" | "no" | "predicted" | "crawled"
-              )
-            }
-            className="rounded-md border border-white/10 bg-[#16161E] px-2 py-1 text-xs text-[#F4F4FF]"
-          >
-            <option value="all">All emails</option>
-            <option value="yes">Has email</option>
-            <option value="no">No email</option>
-            <option value="predicted">Generated only</option>
-            <option value="crawled">Verified only</option>
           </select>
           <select
             value={statusFilter}
@@ -300,21 +273,6 @@ export function ResultsTable({
           <option value="all">All websites</option>
           <option value="yes">Has website</option>
           <option value="no">No website</option>
-        </select>
-        <select
-          value={emailFilter}
-          onChange={(e) =>
-            setEmailFilter(
-              e.target.value as "all" | "yes" | "no" | "predicted" | "crawled"
-            )
-          }
-          className="rounded-md border border-white/10 bg-[#16161E] px-2 py-1 text-xs text-[#F4F4FF]"
-        >
-          <option value="all">All emails</option>
-          <option value="yes">Has email</option>
-          <option value="no">No email</option>
-          <option value="predicted">Generated only</option>
-          <option value="crawled">Verified only</option>
         </select>
         <label className="flex items-center gap-2 text-xs text-[#6B6B80]">
           Min rating
