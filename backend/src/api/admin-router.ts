@@ -531,6 +531,96 @@ adminRouter.get("/stats", requireAdminAuth, async (_req: Request, res: Response)
   }
 });
 
+adminRouter.get("/overview", requireAdminAuth, async (_req: Request, res: Response) => {
+  try {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const weekStart = new Date();
+    weekStart.setDate(weekStart.getDate() - 7);
+
+    const [
+      totalUsersResult,
+      activeUsersResult,
+      suspendedUsersResult,
+      newUsersTodayResult,
+      newUsersThisWeekResult,
+      totalSearchesResult,
+      totalTrialSearchesResult,
+    ] = await Promise.all([
+      supabase
+        .from("license_keys")
+        .select("*", { count: "exact", head: true })
+        .eq("activated", true),
+      supabase
+        .from("license_keys")
+        .select("*", { count: "exact", head: true })
+        .eq("activated", true)
+        .eq("is_suspended", false),
+      supabase
+        .from("license_keys")
+        .select("*", { count: "exact", head: true })
+        .eq("is_suspended", true),
+      supabase
+        .from("license_keys")
+        .select("*", { count: "exact", head: true })
+        .eq("activated", true)
+        .gte("created_at", todayStart.toISOString()),
+      supabase
+        .from("license_keys")
+        .select("*", { count: "exact", head: true })
+        .eq("activated", true)
+        .gte("created_at", weekStart.toISOString()),
+      supabase
+        .from("search_jobs")
+        .select("*", { count: "exact", head: true })
+        .eq("is_trial", false),
+      supabase
+        .from("search_jobs")
+        .select("*", { count: "exact", head: true })
+        .eq("is_trial", true),
+    ]);
+
+    const totalUsers = totalUsersResult.count ?? 0;
+    const estimatedRevenue = totalUsers * 15000;
+
+    res.json({
+      totalUsers,
+      activeUsers: activeUsersResult.count ?? 0,
+      suspendedUsers: suspendedUsersResult.count ?? 0,
+      newUsersToday: newUsersTodayResult.count ?? 0,
+      newUsersThisWeek: newUsersThisWeekResult.count ?? 0,
+      totalSearches: totalSearchesResult.count ?? 0,
+      totalTrialSearches: totalTrialSearchesResult.count ?? 0,
+      estimatedRevenue,
+    });
+  } catch (err) {
+    logger.error("Admin overview failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to fetch overview" });
+  }
+});
+
+adminRouter.get("/recent-users", requireAdminAuth, async (_req: Request, res: Response) => {
+  try {
+    const { data: users, error } = await supabase
+      .from("license_keys")
+      .select("email, activated, is_suspended, created_at, searches_used, max_devices")
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    if (error) throw error;
+
+    res.json({ users: users ?? [] });
+  } catch (err) {
+    logger.error("Recent users failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to fetch recent users" });
+  }
+});
+
 adminRouter.get("/trial-stats", requireAdminAuth, async (_req: Request, res: Response) => {
   try {
     const todayStart = new Date();

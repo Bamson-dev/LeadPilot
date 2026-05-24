@@ -8,14 +8,16 @@ import {
   adminLogin,
   clearAdminToken,
   generateAccess,
-  getAdminStats,
   getAdminToken,
   getLicenses,
+  getOverview,
+  getRecentUsers,
   getTrialActivity,
   getTrialStats,
   setAdminToken,
   type AdminLicense,
-  type AdminStats,
+  type AdminOverview,
+  type RecentAdminUser,
   type TrialActivity,
   type TrialStats,
 } from "@/services/admin-api";
@@ -37,7 +39,9 @@ export default function AdminPage() {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginLoading, setLoginLoading] = useState(false);
 
-  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [overview, setOverview] = useState<AdminOverview | null>(null);
+  const [recentUsers, setRecentUsers] = useState<RecentAdminUser[]>([]);
+  const [prefillLookupEmail, setPrefillLookupEmail] = useState<string | null>(null);
   const [trialStats, setTrialStats] = useState<TrialStats | null>(null);
   const [trialActivity, setTrialActivity] = useState<TrialActivity | null>(null);
   const [trialSectionOpen, setTrialSectionOpen] = useState(true);
@@ -64,8 +68,7 @@ export default function AdminPage() {
   const refreshDashboard = useCallback(async () => {
     if (!getAdminToken()) return;
     try {
-      const [statsData, licenseData] = await Promise.all([getAdminStats(), getLicenses()]);
-      setStats(statsData);
+      const licenseData = await getLicenses();
       setLicenses(licenseData.licenses);
     } catch (err) {
       if (!handleSessionError(err)) {
@@ -76,10 +79,32 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!token) return;
+
+    async function loadAdminData() {
+      try {
+        const [overviewData, recentData] = await Promise.all([
+          getOverview(),
+          getRecentUsers(),
+        ]);
+        setOverview(overviewData);
+        setRecentUsers(recentData.users || []);
+      } catch (err) {
+        if (!handleSessionError(err)) {
+          /* silent fail */
+        }
+      }
+    }
+
+    void loadAdminData();
     void refreshDashboard();
-    const interval = setInterval(() => void refreshDashboard(), 30_000);
-    return () => clearInterval(interval);
-  }, [token, refreshDashboard]);
+
+    const overviewInterval = setInterval(() => void loadAdminData(), 60_000);
+    const licenseInterval = setInterval(() => void refreshDashboard(), 30_000);
+    return () => {
+      clearInterval(overviewInterval);
+      clearInterval(licenseInterval);
+    };
+  }, [token, refreshDashboard, handleSessionError]);
 
   useEffect(() => {
     if (!token) return;
@@ -123,7 +148,8 @@ export default function AdminPage() {
   const handleLogout = () => {
     clearAdminToken();
     setToken(null);
-    setStats(null);
+    setOverview(null);
+    setRecentUsers([]);
     setTrialStats(null);
     setTrialActivity(null);
     setLicenses([]);
@@ -219,19 +245,265 @@ export default function AdminPage() {
         </button>
       </header>
 
-      <div className="mx-auto mt-8 grid max-w-6xl gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[
-          { label: "Total Licenses", value: stats?.totalLicenses ?? "—" },
-          { label: "Activated Licenses", value: stats?.activatedLicenses ?? "—" },
-          { label: "Total Searches", value: stats?.totalSearches ?? "—" },
-          { label: "Licenses Today", value: stats?.licensesToday ?? "—" },
-        ].map((card) => (
-          <div key={card.label} className="glass rounded-xl p-5">
-            <p className="text-xs text-[#6B6B80]">{card.label}</p>
-            <p className="mt-2 text-2xl font-bold text-[#F4F4FF]">{card.value}</p>
+      {overview && (
+        <div className="mx-auto mt-8 max-w-6xl" style={{ marginBottom: 28 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 14,
+            }}
+          >
+            <h2
+              style={{
+                fontSize: 16,
+                fontWeight: 800,
+                color: "#F0EFFF",
+                margin: 0,
+                letterSpacing: -0.5,
+              }}
+            >
+              Overview
+            </h2>
+            <span style={{ fontSize: 11, color: "#555575" }}>
+              Updates every 60 seconds
+            </span>
           </div>
-        ))}
-      </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, 1fr)",
+              gap: 10,
+            }}
+          >
+            {[
+              {
+                label: "Total Users",
+                value: overview.totalUsers,
+                sub: `${overview.newUsersToday} new today`,
+                color: "#7C3AED",
+              },
+              {
+                label: "Active Users",
+                value: overview.activeUsers,
+                sub: `${overview.suspendedUsers} suspended`,
+                color: "#10B981",
+              },
+              {
+                label: "New This Week",
+                value: overview.newUsersThisWeek,
+                sub: "activated accounts",
+                color: "#0891B2",
+              },
+              {
+                label: "Est. Revenue",
+                value: `₦${overview.estimatedRevenue.toLocaleString()}`,
+                sub: "at ₦15,000 per user",
+                color: "#F59E0B",
+              },
+              {
+                label: "Paid Searches",
+                value: overview.totalSearches,
+                sub: "by paying users",
+                color: "#7C3AED",
+              },
+              {
+                label: "Trial Searches",
+                value: overview.totalTrialSearches,
+                sub: "free preview usage",
+                color: "#6B7280",
+              },
+            ].map((stat) => (
+              <div
+                key={stat.label}
+                style={{
+                  background: "#111118",
+                  border: "1px solid rgba(255,255,255,0.07)",
+                  borderRadius: 12,
+                  padding: "16px 14px",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 28,
+                    fontWeight: 900,
+                    color: stat.color,
+                    letterSpacing: -1,
+                    marginBottom: 4,
+                    fontFamily: "Inter, sans-serif",
+                    lineHeight: 1,
+                  }}
+                >
+                  {stat.value}
+                </div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: "#F0EFFF",
+                    marginBottom: 3,
+                  }}
+                >
+                  {stat.label}
+                </div>
+                <div style={{ fontSize: 10, color: "#555575" }}>{stat.sub}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {recentUsers.length > 0 && (
+        <div
+          className="mx-auto max-w-6xl"
+          style={{
+            background: "#111118",
+            border: "1px solid rgba(255,255,255,0.07)",
+            borderRadius: 14,
+            overflow: "hidden",
+            marginBottom: 24,
+          }}
+        >
+          <div
+            style={{
+              padding: "14px 16px",
+              borderBottom: "1px solid rgba(255,255,255,0.07)",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: "#F0EFFF", margin: 0 }}>
+              Recent Users
+            </h3>
+            <span style={{ fontSize: 11, color: "#555575" }}>Last 10 signups</span>
+          </div>
+
+          <div style={{ overflowX: "auto" }}>
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                fontSize: 12,
+              }}
+            >
+              <thead>
+                <tr style={{ background: "#0D0D16" }}>
+                  {["Email", "Status", "Searches", "Joined", "Action"].map((h) => (
+                    <th
+                      key={h}
+                      style={{
+                        padding: "10px 14px",
+                        textAlign: "left",
+                        fontWeight: 700,
+                        color: "#555575",
+                        fontSize: 10,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.06em",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {recentUsers.map((user) => (
+                  <tr
+                    key={user.email}
+                    style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}
+                  >
+                    <td
+                      style={{
+                        padding: "12px 14px",
+                        color: "#F0EFFF",
+                        fontWeight: 500,
+                        maxWidth: 180,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {user.email}
+                    </td>
+                    <td style={{ padding: "12px 14px" }}>
+                      <span
+                        style={{
+                          background: user.is_suspended
+                            ? "rgba(239,68,68,0.1)"
+                            : user.activated
+                              ? "rgba(16,185,129,0.1)"
+                              : "rgba(251,191,36,0.1)",
+                          color: user.is_suspended
+                            ? "#EF4444"
+                            : user.activated
+                              ? "#10B981"
+                              : "#FBBF24",
+                          padding: "3px 10px",
+                          borderRadius: 100,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {user.is_suspended
+                          ? "Suspended"
+                          : user.activated
+                            ? "Active"
+                            : "Pending"}
+                      </span>
+                    </td>
+                    <td style={{ padding: "12px 14px", color: "#7878A0" }}>
+                      {user.searches_used || 0}
+                    </td>
+                    <td
+                      style={{
+                        padding: "12px 14px",
+                        color: "#7878A0",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {new Date(user.created_at).toLocaleDateString("en-GB", {
+                        day: "numeric",
+                        month: "short",
+                        year: "2-digit",
+                      })}
+                    </td>
+                    <td style={{ padding: "12px 14px" }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPrefillLookupEmail(user.email);
+                          document
+                            .getElementById("account-lookup")
+                            ?.scrollIntoView({ behavior: "smooth" });
+                        }}
+                        style={{
+                          background: "rgba(124,58,237,0.1)",
+                          border: "1px solid rgba(124,58,237,0.2)",
+                          color: "#A78BFA",
+                          padding: "5px 12px",
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          fontFamily: "Inter, sans-serif",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        Manage
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {trialStats && (
         <div
@@ -658,7 +930,11 @@ export default function AdminPage() {
       )}
 
       <div className="mx-auto mt-8 max-w-6xl">
-        <AccountLookup onSessionExpired={handleLogout} />
+        <AccountLookup
+          onSessionExpired={handleLogout}
+          prefillEmail={prefillLookupEmail}
+          onPrefillConsumed={() => setPrefillLookupEmail(null)}
+        />
         <DirectMessaging onSessionExpired={handleLogout} />
       </div>
 

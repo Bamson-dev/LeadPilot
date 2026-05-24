@@ -48,9 +48,15 @@ function statusBadge(license: AdminLicense) {
 
 interface AccountLookupProps {
   onSessionExpired: () => void;
+  prefillEmail?: string | null;
+  onPrefillConsumed?: () => void;
 }
 
-export function AccountLookup({ onSessionExpired }: AccountLookupProps) {
+export function AccountLookup({
+  onSessionExpired,
+  prefillEmail,
+  onPrefillConsumed,
+}: AccountLookupProps) {
   const [searchEmail, setSearchEmail] = useState("");
   const [license, setLicense] = useState<AdminLicense | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -104,6 +110,28 @@ export function AccountLookup({ onSessionExpired }: AccountLookupProps) {
     setNewMaxDevices(result.licenses[0].max_devices ?? 2);
   };
 
+  useEffect(() => {
+    const email = prefillEmail?.trim();
+    if (!email) return;
+
+    setSearchEmail(email);
+    setSearching(true);
+    setNotFound(false);
+    setActionMsg(null);
+
+    void refreshLookup(email)
+      .catch((err) => {
+        if (!handleError(err)) {
+          setLicense(null);
+          setNotFound(true);
+        }
+      })
+      .finally(() => {
+        setSearching(false);
+        onPrefillConsumed?.();
+      });
+  }, [prefillEmail]);
+
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     const email = searchEmail.trim();
@@ -154,7 +182,7 @@ export function AccountLookup({ onSessionExpired }: AccountLookupProps) {
   const maxDevices = license?.max_devices ?? 2;
 
   return (
-    <section className="glass mx-auto max-w-6xl rounded-2xl p-6">
+    <section id="account-lookup" className="glass mx-auto max-w-6xl rounded-2xl p-6">
       <h2 className="text-lg font-semibold text-[#F4F4FF]">Account Lookup</h2>
       <p className="mt-1 text-sm text-[#6B6B80]">
         Search any buyer by email and manage their account from here.

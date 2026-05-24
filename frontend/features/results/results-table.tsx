@@ -9,6 +9,9 @@ import { EmailCell } from "@/components/dashboard/email-cell";
 import { MobileLeadCard } from "@/components/dashboard/mobile-lead-card";
 import { WebsiteLink } from "@/components/dashboard/website-link";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
+import { LeadStatusSelect } from "@/components/dashboard/lead-status-select";
+import { PipelineSummary } from "@/components/dashboard/pipeline-summary";
+import { useLeadStatuses } from "@/hooks/useLeadStatuses";
 import { hasAnyEmail } from "@/utils/get-display-email";
 import type { Lead } from "@/types/lead";
 
@@ -39,6 +42,8 @@ export function ResultsTable({
   const [hasEmail, setHasEmail] = useState<boolean | null>(null);
   const [minRating, setMinRating] = useState(0);
   const parentRef = useRef<HTMLDivElement>(null);
+  const { leadStatuses, statusFilter, setStatusFilter, setLeadStatus } =
+    useLeadStatuses();
 
   const filtered = useMemo(() => {
     return leads.filter((lead) => {
@@ -47,9 +52,13 @@ export function ResultsTable({
       if (hasEmail === true && !hasAnyEmail(lead)) return false;
       if (hasEmail === false && hasAnyEmail(lead)) return false;
       if (minRating > 0 && (lead.rating ?? 0) < minRating) return false;
+      if (statusFilter !== "all") {
+        const leadStatus = leadStatuses[lead.id] || "none";
+        if (leadStatus !== statusFilter) return false;
+      }
       return true;
     });
-  }, [leads, hasWebsite, hasEmail, minRating]);
+  }, [leads, hasWebsite, hasEmail, minRating, statusFilter, leadStatuses]);
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
@@ -90,6 +99,12 @@ export function ResultsTable({
   if (isMobile) {
     return (
       <div className="space-y-3">
+        <PipelineSummary
+          leads={leads}
+          leadStatuses={leadStatuses}
+          statusFilter={statusFilter}
+          onFilterChange={setStatusFilter}
+        />
         <div className="flex flex-wrap gap-2 px-1">
           <select
             value={hasWebsite === null ? "all" : hasWebsite ? "yes" : "no"}
@@ -113,6 +128,30 @@ export function ResultsTable({
             <option value="yes">Has email</option>
             <option value="no">No email</option>
           </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            style={{
+              background: "#111118",
+              border: "1px solid rgba(255,255,255,0.08)",
+              color: "#F0EFFF",
+              borderRadius: 8,
+              padding: "7px 12px",
+              fontSize: 12,
+              cursor: "pointer",
+              fontFamily: "Inter, sans-serif",
+              outline: "none",
+              appearance: "none",
+              WebkitAppearance: "none",
+            }}
+          >
+            <option value="all">All statuses</option>
+            <option value="none">Not contacted</option>
+            <option value="contacted">Contacted</option>
+            <option value="interested">Interested</option>
+            <option value="closed">Closed</option>
+            <option value="not_interested">Not interested</option>
+          </select>
         </div>
 
         {isLoading && leads.length === 0 ? (
@@ -135,6 +174,8 @@ export function ResultsTable({
                 lead={lead}
                 copiedId={copiedId}
                 onCopy={copyToClipboard}
+                status={leadStatuses[lead.id] || "none"}
+                onStatusChange={setLeadStatus}
               />
             ))}
           </div>
@@ -215,6 +256,13 @@ export function ResultsTable({
       <td className="px-4 py-3 text-amber-400 align-top">
         {lead.rating != null ? `★ ${lead.rating}` : "—"}
       </td>
+      <td style={{ padding: "12px 8px" }}>
+        <LeadStatusSelect
+          leadId={lead.id}
+          status={leadStatuses[lead.id] || "none"}
+          onChange={setLeadStatus}
+        />
+      </td>
       <td className="px-4 py-3 text-[#6B6B80] align-top">
         {lead.reviews_count ?? "—"}
       </td>
@@ -223,6 +271,12 @@ export function ResultsTable({
 
   return (
     <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0F0F14]">
+      <PipelineSummary
+        leads={leads}
+        leadStatuses={leadStatuses}
+        statusFilter={statusFilter}
+        onFilterChange={setStatusFilter}
+      />
       <div className="flex flex-col gap-2 border-b border-white/[0.08] px-4 py-3 sm:flex-row sm:flex-wrap sm:gap-3">
         <select
           value={hasWebsite === null ? "all" : hasWebsite ? "yes" : "no"}
@@ -258,6 +312,30 @@ export function ResultsTable({
             className="w-16 rounded-md border border-white/10 bg-[#16161E] px-2 py-1 text-[#F4F4FF]"
           />
         </label>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          style={{
+            background: "#111118",
+            border: "1px solid rgba(255,255,255,0.08)",
+            color: "#F0EFFF",
+            borderRadius: 8,
+            padding: "7px 12px",
+            fontSize: 12,
+            cursor: "pointer",
+            fontFamily: "Inter, sans-serif",
+            outline: "none",
+            appearance: "none",
+            WebkitAppearance: "none",
+          }}
+        >
+          <option value="all">All statuses</option>
+          <option value="none">Not contacted</option>
+          <option value="contacted">Contacted</option>
+          <option value="interested">Interested</option>
+          <option value="closed">Closed</option>
+          <option value="not_interested">Not interested</option>
+        </select>
       </div>
 
       <div ref={parentRef} className="max-h-[600px] overflow-auto">
@@ -272,6 +350,7 @@ export function ResultsTable({
                   ["email", "Email"],
                   ["website", "Website"],
                   ["rating", "Rating"],
+                  ["status", "Status"],
                   ["reviews_count", "Reviews"],
                 ] as const
               ).map(([key, label]) => (
@@ -307,7 +386,7 @@ export function ResultsTable({
             {isLoading && leads.length === 0
               ? Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i}>
-                    <td colSpan={7} className="px-4 py-3">
+                    <td colSpan={8} className="px-4 py-3">
                       <div className="skeleton h-4 rounded" />
                     </td>
                   </tr>

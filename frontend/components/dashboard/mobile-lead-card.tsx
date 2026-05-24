@@ -1,6 +1,7 @@
 "use client";
 
 import { CopyButton } from "@/components/dashboard/copy-button";
+import { LeadStatusSelect } from "@/components/dashboard/lead-status-select";
 import { WebsiteLink } from "@/components/dashboard/website-link";
 import { getAllEmailsForDisplay } from "@/utils/get-display-email";
 import type { Lead } from "@/types/lead";
@@ -9,9 +10,17 @@ interface MobileLeadCardProps {
   lead: Lead;
   copiedId: string | null;
   onCopy: (text: string, id: string) => void;
+  status?: string;
+  onStatusChange?: (leadId: string, status: string) => void;
 }
 
-export function MobileLeadCard({ lead, copiedId, onCopy }: MobileLeadCardProps) {
+export function MobileLeadCard({
+  lead,
+  copiedId,
+  onCopy,
+  status = "none",
+  onStatusChange,
+}: MobileLeadCardProps) {
   const emails = getAllEmailsForDisplay(lead);
 
   return (
@@ -155,6 +164,17 @@ export function MobileLeadCard({ lead, copiedId, onCopy }: MobileLeadCardProps) 
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <span style={{ color: "#6B6B80", fontSize: 12 }}>🌐</span>
           <WebsiteLink website={lead.website} maxLength={30} />
+        </div>
+      )}
+
+      {onStatusChange && (
+        <div style={{ marginTop: 10 }}>
+          <LeadStatusSelect
+            leadId={lead.id}
+            status={status}
+            onChange={onStatusChange}
+            fullWidth
+          />
         </div>
       )}
     </div>

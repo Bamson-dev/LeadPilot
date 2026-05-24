@@ -159,6 +159,44 @@ export interface AdminStats {
   licensesToday: number;
 }
 
+export interface AdminOverview {
+  totalUsers: number;
+  activeUsers: number;
+  suspendedUsers: number;
+  newUsersToday: number;
+  newUsersThisWeek: number;
+  totalSearches: number;
+  totalTrialSearches: number;
+  estimatedRevenue: number;
+}
+
+export interface RecentAdminUser {
+  email: string;
+  activated: boolean;
+  is_suspended: boolean;
+  created_at: string;
+  searches_used: number;
+  max_devices: number;
+}
+
+export async function getOverview(): Promise<AdminOverview> {
+  const res = await fetch(`${getApiUrl()}/admin/overview`, {
+    headers: getAdminHeaders(),
+  });
+  if (res.status === 401) throw new Error("SESSION_EXPIRED");
+  if (!res.ok) throw new Error("Failed to fetch overview");
+  return res.json();
+}
+
+export async function getRecentUsers(): Promise<{ users: RecentAdminUser[] }> {
+  const res = await fetch(`${getApiUrl()}/admin/recent-users`, {
+    headers: getAdminHeaders(),
+  });
+  if (res.status === 401) throw new Error("SESSION_EXPIRED");
+  if (!res.ok) throw new Error("Failed to fetch recent users");
+  return res.json();
+}
+
 export async function getAdminStats(): Promise<AdminStats> {
   const res = await fetch(`${getApiUrl()}/admin/stats`, {
     headers: getAdminHeaders(),

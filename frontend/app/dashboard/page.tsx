@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { DashboardGate } from "@/components/dashboard/dashboard-gate";
+import { OnboardingModal } from "@/components/dashboard/onboarding-modal";
 import { getApiUrl } from "@/utils/env";
 
 function redirectSuspended(reason: string) {
@@ -16,6 +17,23 @@ function clearLicenseAndRedirectActivate() {
 }
 
 export default function DashboardPage() {
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(0);
+
+  function completeOnboarding() {
+    setShowOnboarding(false);
+    setOnboardingStep(0);
+    localStorage.setItem("lp_onboarding_done", "true");
+  }
+
+  function nextOnboardingStep() {
+    if (onboardingStep < 3) {
+      setOnboardingStep((prev) => prev + 1);
+    } else {
+      completeOnboarding();
+    }
+  }
+
   useEffect(() => {
     const email = localStorage.getItem("leadpilot_email");
     const key = localStorage.getItem("leadpilot_key");
@@ -25,8 +43,18 @@ export default function DashboardPage() {
       return;
     }
 
+    let onboardingTimer: ReturnType<typeof setTimeout> | undefined;
+    const onboardingDone = localStorage.getItem("lp_onboarding_done");
+    if (!onboardingDone) {
+      onboardingTimer = setTimeout(() => setShowOnboarding(true), 1500);
+    }
+
     const apiUrl = getApiUrl();
-    if (!apiUrl) return;
+    if (!apiUrl) {
+      return () => {
+        if (onboardingTimer) clearTimeout(onboardingTimer);
+      };
+    }
 
     async function checkAccountStatus() {
       try {
@@ -68,8 +96,21 @@ export default function DashboardPage() {
 
     void checkAccountStatus();
     const interval = setInterval(() => void checkAccountStatus(), 30_000);
-    return () => clearInterval(interval);
+    return () => {
+      if (onboardingTimer) clearTimeout(onboardingTimer);
+      clearInterval(interval);
+    };
   }, []);
 
-  return <DashboardGate />;
+  return (
+    <>
+      <DashboardGate />
+      <OnboardingModal
+        open={showOnboarding}
+        step={onboardingStep}
+        onNext={nextOnboardingStep}
+        onSkip={completeOnboarding}
+      />
+    </>
+  );
 }
