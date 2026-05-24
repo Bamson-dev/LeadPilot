@@ -1,7 +1,14 @@
 import type { BusinessLead } from "@leadpilot/shared";
-import { getAllEmailsForDisplay } from "@/utils/get-display-email";
+import { getAllEmailsForDisplay, hasAnyEmail } from "@/utils/get-display-email";
 import type { Lead } from "@/types/lead";
 import { businessLeadToLead } from "@/types/lead";
+
+function leadEmailSource(lead: Lead | BusinessLead): string {
+  const asLead: Lead =
+    "email_source" in lead ? (lead as Lead) : businessLeadToLead(lead as BusinessLead);
+  if (asLead.email_source === "predicted") return "Generated";
+  return hasAnyEmail(asLead) ? "Website" : "";
+}
 
 function leadEmail(lead: Lead | BusinessLead): string {
   if ("verifiedEmails" in lead) {
@@ -69,6 +76,7 @@ export function exportToCSV(leads: (Lead | BusinessLead)[], filename: string): v
     "Rating",
     "Reviews",
     "LeadPilot URL",
+    "Email Source",
   ];
 
   const rows = leads.map((lead) => {
@@ -83,6 +91,7 @@ export function exportToCSV(leads: (Lead | BusinessLead)[], filename: string): v
       row.rating?.toString() || "",
       row.reviewCount?.toString() || "",
       row.googleMapsUrl || "",
+      leadEmailSource(lead),
     ]
       .map((field) => `"${String(field).replace(/"/g, '""')}"`)
       .join(",");
@@ -126,6 +135,7 @@ export function leadsToCsv(leads: Lead[]): string {
     "Rating",
     "Reviews",
     "LeadPilot URL",
+    "Email Source",
   ];
   const rows = leads.map((lead) => {
     const bl = businessLeadToLead(
@@ -141,6 +151,7 @@ export function leadsToCsv(leads: Lead[]): string {
       bl.rating != null ? String(bl.rating) : "",
       bl.reviews_count != null ? String(bl.reviews_count) : "",
       bl.google_maps_url ?? "",
+      leadEmailSource(bl),
     ]
       .map((f) => `"${String(f).replace(/"/g, '""')}"`)
       .join(",");

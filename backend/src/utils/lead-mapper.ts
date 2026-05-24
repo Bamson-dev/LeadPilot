@@ -85,6 +85,37 @@ export function applyWebsiteEmailsToLead(
   return buildVerifiedLead(lead, emails);
 }
 
+/** Apply simple domain-pattern predictions from the website email crawler. */
+export function applyPredictedEmailsToLead(
+  lead: BusinessLead,
+  emails: string[]
+): BusinessLead {
+  const display = pickBestEmail(
+    emails.filter(isValidEmail),
+    lead.website,
+    3
+  );
+  if (display.length === 0) {
+    return { ...lead, emailSource: "none" };
+  }
+
+  const predictedEmails: PredictedEmail[] = display.map((email) => ({
+    email,
+    confidence: 0,
+    label: "medium",
+    source: "business_pattern",
+  }));
+
+  return {
+    ...lead,
+    emails: display,
+    verifiedEmails: [],
+    predictedEmails,
+    email: display.join(", "),
+    emailSource: "predicted",
+  };
+}
+
 export async function enrichLeadEmail(
   lead: BusinessLead,
   options?: { skipWebsiteCrawl?: boolean }
@@ -104,7 +135,13 @@ export async function enrichLeadEmail(
   let websiteVerified: string[] = [];
   if (!options?.skipWebsiteCrawl) {
     const crawl = await crawlEmailForWebsite(effectiveWebsite);
-    websiteVerified = crawl.emails.length > 0 ? crawl.emails : [];
+    if (crawl.emails.length > 0) {
+      if (crawl.emailSource === "generated") {
+        return applyPredictedEmailsToLead(lead, crawl.emails);
+      }
+      return buildVerifiedLead(lead, crawl.emails);
+    }
+    websiteVerified = [];
   }
 
   const mergedVerified = mergeEmails(mapsVerified, websiteVerified);

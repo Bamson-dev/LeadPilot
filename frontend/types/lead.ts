@@ -32,6 +32,7 @@ export function businessLeadToLead(lead: BusinessLead): Lead {
 
   const allEmails =
     lead.emails?.length > 0 ? lead.emails : verified;
+  const isPredicted = lead.emailSource === "predicted";
 
   return {
     id: lead.id,
@@ -40,8 +41,15 @@ export function businessLeadToLead(lead: BusinessLead): Lead {
     phone: lead.phone,
     email: allEmails.length > 0 ? allEmails.join(", ") : null,
     emails: allEmails,
-    verified_emails: allEmails,
-    predicted_emails: lead.predictedEmails ?? [],
+    verified_emails: isPredicted ? [] : allEmails,
+    predicted_emails: isPredicted
+      ? allEmails.map((email) => ({
+          email,
+          confidence: 0,
+          label: "medium" as const,
+          source: "business_pattern" as const,
+        }))
+      : (lead.predictedEmails ?? []),
     extracted_email: lead.emailSource === "website" ? verified.join(", ") || null : null,
     generated_email: null,
     email_source:

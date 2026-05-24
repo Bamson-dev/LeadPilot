@@ -51,4 +51,5 @@ export interface StreamEvent {
   businessId?: string;
   email?: string | null;
   emails?: string[];
+  emailSource?: "website" | "predicted";
 }

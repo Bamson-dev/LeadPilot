@@ -8,7 +8,63 @@ export interface EmailCrawlResult {
   emailSource: "website" | "generated" | "none";
 }
 
+export interface WebsiteEmailCrawlResult {
+  emails: string[];
+  predicted: boolean;
+}
+
 const MAX_PAGE_FETCHES = 4;
+
+const SKIP_PREDICTION_DOMAINS = [
+  "facebook.com",
+  "instagram.com",
+  "twitter.com",
+  "linkedin.com",
+  "tiktok.com",
+  "youtube.com",
+  "wa.me",
+  "whatsapp.com",
+  "linktr.ee",
+  "wix.com",
+  "squarespace.com",
+  "weebly.com",
+  "wordpress.com",
+  "blogspot.com",
+  "medium.com",
+  "google.com",
+  "gmail.com",
+  "yahoo.com",
+  "hotmail.com",
+  "outlook.com",
+];
+
+/** Simple domain-pattern predictions when the website crawl finds no addresses. */
+export function generatePredictedEmails(websiteUrl: string): string[] {
+  if (!websiteUrl) return [];
+
+  try {
+    let url = websiteUrl.trim();
+    if (!url.startsWith("http")) url = `https://${url}`;
+
+    const urlObj = new URL(url);
+    let domain = urlObj.hostname;
+
+    if (domain.startsWith("www.")) {
+      domain = domain.slice(4);
+    }
+
+    if (SKIP_PREDICTION_DOMAINS.some((skip) => domain.includes(skip))) return [];
+
+    const parts = domain.split(".");
+    if (parts.length < 2) return [];
+
+    const predictions = [`info@${domain}`, `contact@${domain}`, `hello@${domain}`];
+
+    return predictions.filter((email) => isValidEmail(email));
+  } catch {
+    return [];
+  }
+}
 
 const EMAIL_REGEX = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,6}/g;
 const MAILTO_REGEX =
@@ -20,8 +76,8 @@ const FOOTER_REGEX = /<footer[^>]*>([\s\S]*?)<\/footer>/gi;
 /** Return verified emails found on the business website (up to 4 pages). */
 export async function crawlEmailsFromWebsite(
   websiteUrl: string | null | undefined
-): Promise<string[]> {
-  if (!websiteUrl) return [];
+): Promise<WebsiteEmailCrawlResult> {
+  if (!websiteUrl) return { emails: [], predicted: false };
 
   const validEmails = new Set<string>();
   const seenUrls = new Set<string>();
@@ -29,7 +85,7 @@ export async function crawlEmailsFromWebsite(
 
   try {
     const resolved = await resolveEffectiveBusinessWebsite(websiteUrl);
-    if (!resolved) return [];
+    if (!resolved) return { emails: [], predicted: false };
 
     let baseUrl = resolved.trim();
     if (!baseUrl.startsWith("http")) {
@@ -81,20 +137,34 @@ export async function crawlEmailsFromWebsite(
       await crawlUrl(pageUrl);
     }
 
+    const pagesFetched = fetchCount;
+
+    if (validEmails.size === 0) {
+      const predicted = generatePredictedEmails(websiteUrl);
+      if (predicted.length > 0) {
+        logger.info("No emails found — using predictions", {
+          websiteUrl: websiteUrl.substring(0, 50),
+          predicted,
+          pagesFetched,
+        });
+        return { emails: predicted, predicted: true };
+      }
+    }
+
     const result = prioritizeEmails(Array.from(validEmails));
     logger.info("Email crawl complete", {
       websiteUrl: websiteUrl.substring(0, 50),
       emailsFound: validEmails.size,
-      pagesFetched: fetchCount,
+      pagesFetched,
       emails: Array.from(validEmails),
     });
-    return result;
+    return { emails: result, predicted: false };
   } catch (err) {
     logger.error("Email crawl failed", {
       websiteUrl: websiteUrl.substring(0, 50),
       error: err instanceof Error ? err.message : "unknown",
     });
-    return [];
+    return { emails: [], predicted: false };
   }
 }
 
@@ -259,12 +329,12 @@ function prioritizeEmails(emails: string[]): string[] {
 export async function crawlEmailForWebsite(
   website: string | null | undefined
 ): Promise<EmailCrawlResult> {
-  const emails = await crawlEmailsFromWebsite(website);
+  const { emails, predicted } = await crawlEmailsFromWebsite(website);
   if (emails.length > 0) {
     return {
       emails,
       email: emails[0] ?? null,
-      emailSource: "website",
+      emailSource: predicted ? "generated" : "website",
     };
   }
   return { emails: [], email: null, emailSource: "none" };

@@ -391,6 +391,7 @@ export function useSearch(options?: UseSearchOptions) {
             businessId?: string;
             email?: string | null;
             emails?: string[];
+            emailSource?: "website" | "predicted";
           };
 
           switch (data.type) {
@@ -420,12 +421,28 @@ export function useSearch(options?: UseSearchOptions) {
                   const existing = byId.get(data.businessId!);
                   if (!existing) return prev;
                   const emails = data.emails ?? [];
+                  const emailSource =
+                    data.emailSource ??
+                    (emails.length > 0 ? "website" : existing.emailSource);
+                  const isPredicted = emailSource === "predicted";
                   byId.set(data.businessId!, {
                     ...existing,
                     email: data.email ?? emails[0] ?? existing.email,
                     emails: emails.length > 0 ? emails : existing.emails,
-                    verifiedEmails: emails.length > 0 ? emails : existing.verifiedEmails,
-                    emailSource: emails.length > 0 ? "website" : existing.emailSource,
+                    verifiedEmails:
+                      emails.length > 0 && !isPredicted
+                        ? emails
+                        : existing.verifiedEmails,
+                    predictedEmails:
+                      emails.length > 0 && isPredicted
+                        ? emails.map((email) => ({
+                            email,
+                            confidence: 0,
+                            label: "medium" as const,
+                            source: "business_pattern" as const,
+                          }))
+                        : existing.predictedEmails,
+                    emailSource,
                   });
                   return { ...prev, leads: [...byId.values()] };
                 });

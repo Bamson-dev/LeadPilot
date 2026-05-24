@@ -22,6 +22,7 @@ export function MobileLeadCard({
   onStatusChange,
 }: MobileLeadCardProps) {
   const emails = getAllEmailsForDisplay(lead);
+  const isPredicted = lead.email_source === "predicted";
 
   return (
     <div
@@ -135,6 +136,18 @@ export function MobileLeadCard({
               }}
             >
               <span style={{ color: "#6B6B80", fontSize: 12 }}>✉️</span>
+              {isPredicted && (
+                <div
+                  aria-hidden
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    background: "#3B82F6",
+                    flexShrink: 0,
+                  }}
+                />
+              )}
               <a
                 href={`mailto:${email}`}
                 style={{

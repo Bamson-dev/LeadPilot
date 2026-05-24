@@ -18,7 +18,12 @@ import {
 } from "../services/brevo-service";
 import { formatScraperError } from "../scraper/utils/scraper-errors";
 import { logger } from "../utils/logger";
-import { enrichLeadEmail, applyWebsiteEmailsToLead, rawLeadToBusinessLead } from "../utils/lead-mapper";
+import {
+  enrichLeadEmail,
+  applyWebsiteEmailsToLead,
+  applyPredictedEmailsToLead,
+  rawLeadToBusinessLead,
+} from "../utils/lead-mapper";
 import { crawlEmailsFromWebsite } from "../scraper/emailCrawler/email-crawler";
 import { formatSearchMessage } from "../utils/search-messages";
 import type { RawLeadInput } from "../types/scraper";
@@ -32,13 +37,21 @@ function emitLead(emit: ScrapeEmitter, lead: BusinessLead): void {
 function emitEmailUpdate(
   emit: ScrapeEmitter,
   lead: BusinessLead,
-  emails: string[]
+  emailSource: "website" | "predicted"
 ): void {
+  const emails =
+    lead.emails.length > 0
+      ? lead.emails
+      : emailSource === "predicted"
+        ? lead.predictedEmails.map((p) => p.email)
+        : lead.verifiedEmails;
+
   emit({
     type: "email_update",
     businessId: lead.id,
-    email: emails[0] ?? null,
+    email: lead.email,
     emails,
+    emailSource,
     lead,
     data: lead,
   });
@@ -67,12 +80,22 @@ function runBackgroundEmailEnrichment(
 
   if (basic.website) {
     crawlEmailsFromWebsite(basic.website)
-      .then(async (emails) => {
+      .then(async (crawlResult) => {
+        const { emails, predicted } = crawlResult;
+
         if (emails.length > 0) {
-          const enriched = applyWebsiteEmailsToLead(basic, emails);
+          const enriched = predicted
+            ? applyPredictedEmailsToLead(basic, emails)
+            : applyWebsiteEmailsToLead(basic, emails);
+          const source = predicted ? "predicted" : "website";
+
           enrichedLeads.push(enriched);
-          emitEmailUpdate(emit, enriched, emails);
-          await updateBusinessLeadEmails(enriched.id, emails).catch((err) => {
+          emitEmailUpdate(emit, enriched, source);
+          await updateBusinessLeadEmails(
+            enriched.id,
+            emails,
+            predicted ? "predicted" : "extracted"
+          ).catch((err) => {
             logger.warn("Failed to update crawled emails", {
               searchId,
               businessId: enriched.id,
@@ -86,30 +109,18 @@ function runBackgroundEmailEnrichment(
               error: err instanceof Error ? err.message : "unknown",
             });
           });
+
+          logger.info("Email enrichment complete", {
+            businessId: enriched.id,
+            businessName: enriched.name,
+            website: basic.website?.substring(0, 40),
+            emailsFound: emails.length,
+            source: predicted ? "predicted" : "crawled",
+          });
           return;
         }
 
-        const enriched = await enrichLeadEmail(basic, { skipWebsiteCrawl: true });
-        enrichedLeads.push(enriched);
-
-        const verifiedEmails =
-          enriched.emails?.length > 0
-            ? enriched.emails
-            : enriched.verifiedEmails?.length > 0
-              ? enriched.verifiedEmails
-              : enriched.predictedEmails.map((p) => p.email);
-
-        if (verifiedEmails.length > 0) {
-          emitEmailUpdate(emit, enriched, verifiedEmails);
-        }
-
-        await insertBusinessLead(enriched).catch((err) => {
-          logger.warn("Failed to upsert enriched lead", {
-            searchId,
-            name: enriched.name,
-            error: err instanceof Error ? err.message : "unknown",
-          });
-        });
+        enrichedLeads.push(basic);
       })
       .catch((err) => {
         logger.warn("Email enrich failed", {
@@ -136,7 +147,9 @@ function runBackgroundEmailEnrichment(
             : enriched.predictedEmails.map((p) => p.email);
 
       if (verifiedEmails.length > 0) {
-        emitEmailUpdate(emit, enriched, verifiedEmails);
+        const source =
+          enriched.emailSource === "predicted" ? "predicted" : "website";
+        emitEmailUpdate(emit, enriched, source);
       }
 
       await insertBusinessLead(enriched).catch((err) => {
@@ -146,6 +159,17 @@ function runBackgroundEmailEnrichment(
           error: err instanceof Error ? err.message : "unknown",
         });
       });
+
+      if (verifiedEmails.length > 0) {
+        logger.info("Email enrichment complete", {
+          businessId: enriched.id,
+          businessName: enriched.name,
+          website: basic.website?.substring(0, 40),
+          emailsFound: verifiedEmails.length,
+          source:
+            enriched.emailSource === "predicted" ? "predicted" : "crawled",
+        });
+      }
     })
     .catch((err) => {
       logger.warn("Email enrich failed", {
@@ -372,6 +396,23 @@ export async function runScraperJob(
         totalFound > 0 ? `${Math.round((withPhone / totalFound) * 100)}%` : "0%",
       emailRate:
         totalFound > 0 ? `${Math.round((withEmail / totalFound) * 100)}%` : "0%",
+    });
+
+    logger.info("Search completion stats with email breakdown", {
+      searchId,
+      totalFound,
+      withCrawledEmail: statsLeads.filter((l) => l.emailSource === "website")
+        .length,
+      withPredictedEmail: statsLeads.filter(
+        (l) => l.emailSource === "predicted"
+      ).length,
+      withNoEmail: statsLeads.filter(
+        (l) =>
+          !l.email?.trim() &&
+          (l.emails?.length ?? 0) === 0 &&
+          (l.verifiedEmails?.length ?? 0) === 0 &&
+          (l.predictedEmails?.length ?? 0) === 0
+      ).length,
     });
 
     if (options?.licenseKey) {
