@@ -26,6 +26,7 @@ import {
 } from "../utils/lead-mapper";
 import { crawlEmailsFromWebsite } from "../scraper/emailCrawler/email-crawler";
 import { formatSearchMessage } from "../utils/search-messages";
+import { generateAreaSuggestions } from "./suggestion-service";
 import type { RawLeadInput } from "../types/scraper";
 
 export type ScrapeEmitter = (event: StreamEvent) => void;
@@ -448,6 +449,16 @@ export async function runScraperJob(
       total: totalFound,
       message: `Search complete. Found ${totalFound} businesses in ${location}.`,
     });
+
+    if (!isTrial) {
+      void generateAreaSuggestions(query, location, totalFound)
+        .then((suggestions) => {
+          if (suggestions.length > 0) {
+            emit({ type: "suggestions", suggestions });
+          }
+        })
+        .catch(() => undefined);
+    }
   } catch (err) {
     searchComplete = true;
     clearTimeout(runningEmailTimer);

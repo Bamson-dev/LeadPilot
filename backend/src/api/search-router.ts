@@ -395,17 +395,29 @@ searchRouter.get("/:id/stream", async (req: Request, res: Response) => {
     try {
       const existingJob = await getSearchJob(searchId);
       if (existingJob && existingJob.status === "completed") {
-        const { leads } = await getSearchResults(searchId, 1, 200);
-        for (const lead of leads) {
+        const limit = 250;
+        let page = 1;
+        let allLeads: Awaited<ReturnType<typeof getSearchResults>>["leads"] = [];
+        let dbTotal = 0;
+        while (true) {
+          const batch = await getSearchResults(searchId, page, limit);
+          if (page === 1) dbTotal = batch.total;
+          allLeads = allLeads.concat(batch.leads);
+          if (batch.leads.length < limit || allLeads.length >= batch.total) break;
+          page += 1;
+        }
+        for (const lead of allLeads) {
           res.write(
             `data: ${JSON.stringify({ type: "lead", data: lead, lead })}\n\n`
           );
         }
+        const total =
+          existingJob.totalFound > 0 ? existingJob.totalFound : allLeads.length;
         res.write(
           `data: ${JSON.stringify({
             type: "complete",
-            total: leads.length,
-            message: `Search complete. Found ${leads.length} businesses in ${existingJob.location}.`,
+            total,
+            message: `Search complete. Found ${total} businesses in ${existingJob.location}.`,
           })}\n\n`
         );
         clearInterval(heartbeat);

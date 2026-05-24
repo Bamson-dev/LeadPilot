@@ -28,6 +28,12 @@ export interface SearchResponse {
   message?: string;
 }
 
+export interface AreaSuggestion {
+  query: string;
+  location: string;
+  label: string;
+}
+
 export type StreamEventType =
   | "started"
   | "lead"
@@ -35,7 +41,8 @@ export type StreamEventType =
   | "complete"
   | "error"
   | "phase"
-  | "email_update";
+  | "email_update"
+  | "suggestions";
 
 export interface StreamEvent {
   type: StreamEventType;
@@ -52,4 +59,5 @@ export interface StreamEvent {
   email?: string | null;
   emails?: string[];
   emailSource?: "website" | "predicted";
+  suggestions?: AreaSuggestion[] | string[];
 }

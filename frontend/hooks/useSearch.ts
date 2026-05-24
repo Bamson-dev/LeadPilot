@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { BusinessLead } from "@leadpilot/shared";
+import type { AreaSuggestion, BusinessLead } from "@leadpilot/shared";
 import { getResults, getSearch, startSearch } from "@/services/api";
 import { getApiUrl } from "@/utils/env";
 import {
@@ -43,6 +43,22 @@ function mergePendingIntoLeads(
   return [...byId.values()];
 }
 
+function normalizeSuggestions(
+  raw: Array<AreaSuggestion | string>,
+  fallbackQuery: string
+): AreaSuggestion[] {
+  return raw.map((item) => {
+    if (typeof item !== "string") return item;
+    const parts = item.split(" in ");
+    if (parts.length >= 2) {
+      const query = parts[0].trim();
+      const location = parts.slice(1).join(" in ").trim();
+      return { query, location, label: item };
+    }
+    return { query: fallbackQuery, location: item.trim(), label: item };
+  });
+}
+
 export interface UseSearchOptions {
   onSearchComplete?: (
     leads: BusinessLead[],
@@ -81,6 +97,7 @@ export function useSearch(options?: UseSearchOptions) {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const finalFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [suggestions, setSuggestions] = useState<AreaSuggestion[]>([]);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -195,43 +212,69 @@ export function useSearch(options?: UseSearchOptions) {
   const fetchFinalResults = useCallback(
     async (searchId: string) => {
       const pending = pendingLeadsRef.current.splice(0);
-      if (pending.length > 0) {
-        mergeLeads(pending);
-      }
 
       try {
-        const [{ leads: fetched, total }, job] = await Promise.all([
-          getResults(searchId, 1, 250),
-          getSearch(searchId).catch(() => null),
-        ]);
+        const limit = 250;
+        let page = 1;
+        let fetched: Lead[] = [];
+        let dbCount = 0;
 
+        while (true) {
+          const batch = await getResults(searchId, page, limit);
+          if (page === 1) dbCount = batch.total;
+          fetched = fetched.concat(batch.leads);
+          if (batch.leads.length < limit || fetched.length >= batch.total) break;
+          page += 1;
+        }
+
+        const job = await getSearch(searchId).catch(() => null);
         const mapped = fetched.map((l) => leadRowToBusinessLead(l));
-        const dbTotal = Math.max(job?.totalFound ?? 0, total, mapped.length);
+        const merged =
+          pending.length > 0
+            ? mergePendingIntoLeads(
+                mapped.length > 0 ? mapped : [],
+                pending
+              )
+            : mapped;
+
+        const totalFound = Math.max(
+          job?.totalFound ?? 0,
+          dbCount,
+          merged.length
+        );
+
+        if (merged.length > 0) {
+          replaceLeads(merged);
+        } else if (pending.length > 0) {
+          mergeLeads(pending);
+        }
 
         setState((prev) => {
-          const leads = mapped.length > 0 ? mapped : prev.leads;
-          const totalFound = Math.max(dbTotal, leads.length);
+          const leads = merged.length > 0 ? merged : prev.leads;
+          const count = Math.max(totalFound, leads.length);
           onCompleteRef.current?.(
             leads,
             queryRef.current,
             locationRef.current,
-            totalFound
+            count
           );
           return {
             ...prev,
             leads,
-            totalFound,
+            totalFound: count,
             status: "completed",
             queuePosition: 0,
             error: null,
-            message: `Search complete. Found ${totalFound} businesses.`,
+            message: `Search complete. Found ${count} businesses.`,
           };
         });
       } catch {
-        /* silent fail — keep streamed leads */
+        if (pending.length > 0) {
+          mergeLeads(pending);
+        }
       }
     },
-    [mergeLeads]
+    [mergeLeads, replaceLeads]
   );
 
   const scheduleFinalResultsFetch = useCallback(
@@ -256,15 +299,22 @@ export function useSearch(options?: UseSearchOptions) {
       stopTimeout();
 
       const pending = pendingLeadsRef.current.splice(0);
-      if (pending.length > 0) {
-        mergeLeads(pending);
-      }
-
       const searchId = searchIdRef.current;
+
       setState((prev) => {
-        const totalFound = total || prev.leads.length;
+        const merged = mergePendingIntoLeads(prev.leads, pending);
+        const totalFound = Math.max(total || 0, merged.length);
+        queueMicrotask(() => {
+          onCompleteRef.current?.(
+            merged,
+            queryRef.current,
+            locationRef.current,
+            totalFound
+          );
+        });
         return {
           ...prev,
+          leads: merged,
           status: "completed",
           totalFound,
           queuePosition: 0,
@@ -277,7 +327,7 @@ export function useSearch(options?: UseSearchOptions) {
         scheduleFinalResultsFetch(searchId, 3000);
       }
     },
-    [stopPolling, stopTimeout, mergeLeads, progressMessage, scheduleFinalResultsFetch]
+    [stopPolling, stopTimeout, progressMessage, scheduleFinalResultsFetch]
   );
 
   const pollForResults = useCallback(
@@ -392,6 +442,7 @@ export function useSearch(options?: UseSearchOptions) {
             email?: string | null;
             emails?: string[];
             emailSource?: "website" | "predicted";
+            suggestions?: Array<AreaSuggestion | string>;
           };
 
           switch (data.type) {
@@ -484,6 +535,16 @@ export function useSearch(options?: UseSearchOptions) {
               );
               break;
 
+            case "suggestions": {
+              const raw = data.suggestions ?? [];
+              if (raw.length > 0) {
+                setSuggestions(
+                  normalizeSuggestions(raw, queryRef.current)
+                );
+              }
+              break;
+            }
+
             case "error":
               setState((prev) => {
                 const pending = pendingLeadsRef.current.splice(0);
@@ -519,12 +580,18 @@ export function useSearch(options?: UseSearchOptions) {
       };
 
       es.onerror = () => {
-        if (completedRef.current) return;
         es.close();
         eventSourceRef.current = null;
 
-        let hadResults = false;
         const activeSearchId = searchIdRef.current;
+        if (completedRef.current) {
+          if (activeSearchId) {
+            scheduleFinalResultsFetch(activeSearchId, 3000);
+          }
+          return;
+        }
+
+        let hadResults = false;
         setState((prev) => {
           const pending = pendingLeadsRef.current.splice(0);
           const merged = mergePendingIntoLeads(prev.leads, pending);
@@ -626,6 +693,9 @@ export function useSearch(options?: UseSearchOptions) {
 
       closeStream();
       completedRef.current = false;
+      if (!accumulate) {
+        setSuggestions([]);
+      }
       queryRef.current = query.trim();
       locationRef.current = location.trim();
       pendingLeadsRef.current = [];
@@ -746,12 +816,30 @@ export function useSearch(options?: UseSearchOptions) {
     [closeStream, connectToStream, startPolling, stopTimeout, syncFromApi, finishSearch, progressMessage]
   );
 
+  const runSearchWithSuggestion = useCallback(
+    (suggestion: string | AreaSuggestion) => {
+      const label = typeof suggestion === "string" ? suggestion : suggestion.label;
+      const parts = label.split(" in ");
+      if (parts.length >= 2) {
+        const newQuery = parts[0].trim();
+        const newLocation = parts.slice(1).join(" in ").trim();
+        void search(newQuery, newLocation, { accumulate: true });
+        return;
+      }
+      if (typeof suggestion !== "string") {
+        void search(suggestion.query, suggestion.location, { accumulate: true });
+      }
+    },
+    [search]
+  );
+
   const reset = useCallback(() => {
     closeStream();
     searchIdRef.current = null;
     pendingLeadsRef.current = [];
     queryRef.current = "";
     locationRef.current = "";
+    setSuggestions([]);
     setState({
       status: "idle",
       leads: [],
@@ -768,6 +856,7 @@ export function useSearch(options?: UseSearchOptions) {
     closeStream();
     searchIdRef.current = null;
     pendingLeadsRef.current = [];
+    setSuggestions([]);
     setState((prev) => ({
       ...prev,
       status: "idle",
@@ -819,6 +908,10 @@ export function useSearch(options?: UseSearchOptions) {
     ),
     searchMeta: { business: queryRef.current, location: locationRef.current },
     runSearch: search,
+    runSearchWithSuggestion,
+    suggestions,
+    setSuggestions,
+    clearSuggestions: () => setSuggestions([]),
     clearResults,
     closeStream: closeStream,
     reset,
