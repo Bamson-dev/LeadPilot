@@ -1,47 +1,79 @@
 import type { Page } from "playwright";
 
+export function isValidInternationalPhone(phone: string): boolean {
+  if (!phone) return false;
+  const digits = phone.replace(/[\s\-().]/g, "").replace(/^\+/, "").replace(/\D/g, "");
+  if (digits.length < 7 || digits.length > 15) return false;
+  return true;
+}
+
 export async function extractPhoneNumber(page: Page): Promise<string | null> {
-  const phoneSelectors = [
-    'button[data-item-id*="phone"] [data-tooltip]',
-    '[data-item-id*="phone"]',
-    'button[aria-label*="Phone"]',
-    '[aria-label*="phone" i]',
-    'a[href^="tel:"]',
-    '[data-tooltip*="+"]',
-    'button[data-tooltip*="phone" i]',
-  ];
+  try {
+    const phoneFromAria = await page.evaluate(() => {
+      const selectors = [
+        '[data-item-id*="phone"]',
+        '[data-tooltip*="phone" i]',
+        'button[aria-label*="phone" i]',
+        'button[aria-label*="Phone" i]',
+        '[aria-label*="Call " i]',
+        '[data-item-id="phone:tel"]',
+      ];
 
-  for (const selector of phoneSelectors) {
-    try {
-      const element = await page.$(selector);
-      if (!element) continue;
-
-      const text =
-        (await element.getAttribute("aria-label")) ||
-        (await element.getAttribute("data-tooltip")) ||
-        (await element.textContent());
-
-      if (text) {
-        const cleaned = text.replace(/phone:/i, "").replace(/call:/i, "").trim();
-
-        if (/[\d+\-() ]{7,}/.test(cleaned) && cleaned.replace(/\D/g, "").length >= 7) {
-          return cleaned;
+      for (const selector of selectors) {
+        const el = document.querySelector(selector);
+        if (el) {
+          const label =
+            el.getAttribute("aria-label") ||
+            el.getAttribute("data-tooltip") ||
+            el.textContent;
+          if (label) {
+            const cleaned = label
+              .replace(/^(phone|call|tel|telephone)[\s:]+/i, "")
+              .trim();
+            if (/[\d+]/.test(cleaned) && cleaned.length >= 6) {
+              return cleaned;
+            }
+          }
         }
       }
-    } catch {
-      continue;
-    }
-  }
+      return null;
+    });
 
-  try {
-    const telLink = await page.$('a[href^="tel:"]');
-    if (telLink) {
-      const href = await telLink.getAttribute("href");
-      if (href) return href.replace(/^tel:/i, "").trim();
-    }
+    if (phoneFromAria) return phoneFromAria;
+
+    const phoneFromTel = await page.evaluate(() => {
+      const telLinks = Array.from(document.querySelectorAll('a[href^="tel:"]'));
+      for (const link of telLinks) {
+        const href = (link as HTMLAnchorElement).href;
+        const phone = href.replace("tel:", "").trim();
+        if (phone && phone.length >= 6) return phone;
+      }
+      return null;
+    });
+
+    if (phoneFromTel) return phoneFromTel;
+
+    const phoneFromText = await page.evaluate(() => {
+      const allElements = document.querySelectorAll("span, div, button, a");
+
+      for (const el of Array.from(allElements)) {
+        const text = el.textContent?.trim() || "";
+        if (!/^[\+\d(]/.test(text)) continue;
+        if (text.length < 7 || text.length > 25) continue;
+        const digits = text.replace(/\D/g, "");
+        if (digits.length >= 7 && digits.length <= 15) {
+          if (/[\+\-()\s]/.test(text) || digits.length >= 10) {
+            return text;
+          }
+        }
+      }
+      return null;
+    });
+
+    if (phoneFromText) return phoneFromText;
+
+    return null;
   } catch {
-    /* ignore */
+    return null;
   }
-
-  return null;
 }

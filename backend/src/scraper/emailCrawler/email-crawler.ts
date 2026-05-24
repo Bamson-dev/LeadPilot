@@ -1,7 +1,5 @@
-import { extractAllEmailsFromText } from "../parsers/email-filter";
-import { filterValidEmails, isValidEmail } from "../parsers/email-validation";
+import { isValidEmail } from "../parsers/email-validation";
 import { resolveEffectiveBusinessWebsite } from "../utils/effective-website";
-import { EMAIL_FETCH_TIMEOUT_MS } from "../utils/constants";
 import { logger } from "../../utils/logger";
 
 export interface EmailCrawlResult {
@@ -10,138 +8,333 @@ export interface EmailCrawlResult {
   emailSource: "website" | "generated" | "none";
 }
 
-const EMAIL_PRIORITY = [
-  "contact",
-  "info",
-  "hello",
-  "enquir",
-  "reserv",
-  "book",
-  "appoint",
+export interface WebsiteEmailCrawlResult {
+  emails: string[];
+  predicted: boolean;
+}
+
+const MAX_PAGE_FETCHES = 4;
+
+const SKIP_PREDICTION_DOMAINS = [
+  "facebook.com",
+  "instagram.com",
+  "twitter.com",
+  "linkedin.com",
+  "tiktok.com",
+  "youtube.com",
+  "wa.me",
+  "whatsapp.com",
+  "linktr.ee",
+  "wix.com",
+  "squarespace.com",
+  "weebly.com",
+  "wordpress.com",
+  "blogspot.com",
+  "medium.com",
+  "google.com",
+  "gmail.com",
+  "yahoo.com",
+  "hotmail.com",
+  "outlook.com",
 ];
 
-function sortEmailsByPriority(emails: string[]): string[] {
-  return [...emails].sort((a, b) => {
-    const aLower = a.toLowerCase();
-    const bLower = b.toLowerCase();
-    const aScore = EMAIL_PRIORITY.findIndex((p) => aLower.includes(p));
-    const bScore = EMAIL_PRIORITY.findIndex((p) => bLower.includes(p));
-    if (aScore === -1 && bScore === -1) return aLower.localeCompare(bLower);
-    if (aScore === -1) return 1;
-    if (bScore === -1) return -1;
-    return aScore - bScore;
-  });
-}
+/** Simple domain-pattern predictions when the website crawl finds no addresses. */
+export function generatePredictedEmails(websiteUrl: string): string[] {
+  if (!websiteUrl) return [];
 
-async function fetchPageText(url: string): Promise<string> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), EMAIL_FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; LeadPilot/1.0)" },
-      redirect: "follow",
-    });
-    if (!res.ok) return "";
-    return await res.text();
-  } catch {
-    return "";
-  } finally {
-    clearTimeout(timeout);
-  }
-}
+    let url = websiteUrl.trim();
+    if (!url.startsWith("http")) url = `https://${url}`;
 
-function extractFromHtml(html: string): string[] {
-  const emailRegex = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,6}/g;
-  const found = [...(html.match(emailRegex) ?? [])];
+    const urlObj = new URL(url);
+    let domain = urlObj.hostname;
 
-  const mailtoRegex = /mailto:([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,6})/gi;
-  let mailtoMatch: RegExpExecArray | null;
-  while ((mailtoMatch = mailtoRegex.exec(html)) !== null) {
-    if (mailtoMatch[1]) found.push(mailtoMatch[1]);
-  }
+    if (domain.startsWith("www.")) {
+      domain = domain.slice(4);
+    }
 
-  return extractAllEmailsFromText(found.join(" "));
-}
+    if (SKIP_PREDICTION_DOMAINS.some((skip) => domain.includes(skip))) return [];
 
-function generatedEmailsForDomain(websiteUrl: string): string[] {
-  try {
-    const domain = new URL(websiteUrl).hostname.replace(/^www\./i, "");
-    const generated = [`info@${domain}`, `contact@${domain}`, `hello@${domain}`].filter(
-      isValidEmail
-    );
-    return generated;
+    const parts = domain.split(".");
+    if (parts.length < 2) return [];
+
+    const predictions = [`info@${domain}`, `contact@${domain}`, `hello@${domain}`];
+
+    return predictions.filter((email) => isValidEmail(email));
   } catch {
     return [];
   }
 }
 
-/** Return every valid email found on the business website (no display cap). */
+const EMAIL_REGEX = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,6}/g;
+const MAILTO_REGEX =
+  /mailto:([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,6})/gi;
+const JSON_LD_REGEX =
+  /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi;
+const FOOTER_REGEX = /<footer[^>]*>([\s\S]*?)<\/footer>/gi;
+
+/** Return verified emails found on the business website (up to 4 pages). */
 export async function crawlEmailsFromWebsite(
   websiteUrl: string | null | undefined
-): Promise<string[]> {
-  logger.info("Starting email crawl", { websiteUrl: websiteUrl ?? null });
-
-  const baseUrl = await resolveEffectiveBusinessWebsite(websiteUrl);
-  if (!baseUrl) {
-    logger.info("Email crawl complete", {
-      websiteUrl: websiteUrl ?? null,
-      emailsFound: 0,
-      emails: [],
-    });
-    return [];
-  }
+): Promise<WebsiteEmailCrawlResult> {
+  if (!websiteUrl) return { emails: [], predicted: false };
 
   const validEmails = new Set<string>();
-  const base = baseUrl.replace(/\/$/, "");
-  const pagesToCheck = [
-    baseUrl,
-    `${base}/contact`,
-    `${base}/contact-us`,
-    `${base}/about`,
-    `${base}/about-us`,
-  ];
+  const seenUrls = new Set<string>();
+  let fetchCount = 0;
 
-  for (const pageUrl of pagesToCheck) {
+  try {
+    const resolved = await resolveEffectiveBusinessWebsite(websiteUrl);
+    if (!resolved) return { emails: [], predicted: false };
+
+    let baseUrl = resolved.trim();
+    if (!baseUrl.startsWith("http")) {
+      baseUrl = `https://${baseUrl}`;
+    }
+    baseUrl = baseUrl.replace(/\/$/, "");
+
+    const addEmails = (emails: string[]) => {
+      for (const email of emails) {
+        validEmails.add(email);
+      }
+    };
+
+    const hasGoodContactEmails = () =>
+      Array.from(validEmails).some(
+        (e) =>
+          e.includes("contact") || e.includes("info") || e.includes("hello")
+      ) && validEmails.size >= 2;
+
+    const crawlUrl = async (pageUrl: string, cachedHtml?: string): Promise<void> => {
+      if (fetchCount >= MAX_PAGE_FETCHES || seenUrls.has(pageUrl)) return;
+      seenUrls.add(pageUrl);
+      fetchCount++;
+
+      const emails = cachedHtml
+        ? parseEmailsFromHtml(cachedHtml, pageUrl)
+        : await extractEmailsFromPage(pageUrl);
+      addEmails(emails);
+    };
+
+    const homepageHtml = await fetchPageHtml(baseUrl);
+    await crawlUrl(baseUrl, homepageHtml ?? undefined);
+
+    const discoveredContact = homepageHtml
+      ? findContactPageUrlFromHtml(homepageHtml, baseUrl)
+      : await findContactPageUrl(baseUrl);
+
+    const pageQueue = [
+      discoveredContact,
+      `${baseUrl}/contact`,
+      `${baseUrl}/contact-us`,
+      `${baseUrl}/about`,
+      `${baseUrl}/about-us`,
+    ].filter((url): url is string => Boolean(url));
+
+    for (const pageUrl of pageQueue) {
+      if (fetchCount >= MAX_PAGE_FETCHES) break;
+      if (hasGoodContactEmails()) break;
+      await crawlUrl(pageUrl);
+    }
+
+    const pagesFetched = fetchCount;
+
+    if (validEmails.size === 0) {
+      const predicted = generatePredictedEmails(websiteUrl);
+      if (predicted.length > 0) {
+        logger.info("No emails found — using predictions", {
+          websiteUrl: websiteUrl.substring(0, 50),
+          predicted,
+          pagesFetched,
+        });
+        return { emails: predicted, predicted: true };
+      }
+    }
+
+    const result = prioritizeEmails(Array.from(validEmails));
+    logger.info("Email crawl complete", {
+      websiteUrl: websiteUrl.substring(0, 50),
+      emailsFound: validEmails.size,
+      pagesFetched,
+      emails: Array.from(validEmails),
+    });
+    return { emails: result, predicted: false };
+  } catch (err) {
+    logger.error("Email crawl failed", {
+      websiteUrl: websiteUrl.substring(0, 50),
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    return { emails: [], predicted: false };
+  }
+}
+
+async function fetchPageHtml(pageUrl: string): Promise<string | null> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+
+    const response = await fetch(pageUrl, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; LeadBot/1.0)",
+        Accept: "text/html,application/xhtml+xml",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+      redirect: "follow",
+    });
+
+    clearTimeout(timeout);
+
+    if (!response.ok) return null;
+    return await response.text();
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      logger.warn("Email page fetch timeout", {
+        pageUrl: pageUrl.substring(0, 50),
+      });
+    }
+    return null;
+  }
+}
+
+function parseEmailsFromHtml(html: string, pageUrl?: string): string[] {
+  const found: string[] = [];
+
+  let match: RegExpExecArray | null;
+  while ((match = MAILTO_REGEX.exec(html)) !== null) {
+    const email = match[1].toLowerCase().trim();
+    if (isValidEmail(email)) found.push(email);
+  }
+  MAILTO_REGEX.lastIndex = 0;
+
+  const allMatches = html.match(EMAIL_REGEX) || [];
+  for (const email of allMatches) {
+    const normalized = email.toLowerCase().trim();
+    if (isValidEmail(normalized)) {
+      found.push(normalized);
+    }
+  }
+
+  while ((match = JSON_LD_REGEX.exec(html)) !== null) {
     try {
-      const html = await fetchPageText(pageUrl);
-      if (!html) continue;
-      for (const email of extractFromHtml(html)) {
-        if (isValidEmail(email)) {
-          validEmails.add(email.toLowerCase().trim());
+      const jsonData = JSON.parse(match[1]);
+      const jsonStr = JSON.stringify(jsonData);
+      const schemaEmails = jsonStr.match(EMAIL_REGEX) || [];
+      for (const email of schemaEmails) {
+        const normalized = email.toLowerCase();
+        if (isValidEmail(normalized)) {
+          found.push(normalized);
         }
       }
     } catch {
       continue;
     }
   }
+  JSON_LD_REGEX.lastIndex = 0;
 
-  const emailArray = sortEmailsByPriority(filterValidEmails([...validEmails]));
+  while ((match = FOOTER_REGEX.exec(html)) !== null) {
+    const footerHtml = match[1];
+    const footerMailtos = footerHtml.match(MAILTO_REGEX) || [];
+    for (const raw of footerMailtos) {
+      const emailMatch = raw.match(
+        /mailto:([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,6})/i
+      );
+      if (emailMatch?.[1] && isValidEmail(emailMatch[1].toLowerCase())) {
+        found.push(emailMatch[1].toLowerCase());
+      }
+    }
+    const footerEmails = footerHtml.match(EMAIL_REGEX) || [];
+    for (const email of footerEmails) {
+      const normalized = email.toLowerCase().trim();
+      if (isValidEmail(normalized)) {
+        found.push(normalized);
+      }
+    }
+  }
+  FOOTER_REGEX.lastIndex = 0;
 
-  const result =
-    emailArray.length === 0 ? generatedEmailsForDomain(baseUrl) : emailArray;
+  const unique = [...new Set(found)];
+  if (unique.length > 0 && pageUrl) {
+    logger.info("Emails found on page", {
+      pageUrl: pageUrl.substring(0, 50),
+      count: unique.length,
+    });
+  }
 
-  logger.info("Email crawl complete", {
-    websiteUrl: baseUrl,
-    emailsFound: result.length,
-    emails: result,
+  return unique;
+}
+
+async function extractEmailsFromPage(pageUrl: string): Promise<string[]> {
+  const html = await fetchPageHtml(pageUrl);
+  if (!html) return [];
+  return parseEmailsFromHtml(html, pageUrl);
+}
+
+function resolveInternalUrl(baseUrl: string, contactPath: string): string {
+  if (contactPath.startsWith("http")) return contactPath;
+  if (contactPath.startsWith("//")) return `https:${contactPath}`;
+  if (contactPath.startsWith("/")) return `${baseUrl}${contactPath}`;
+  return `${baseUrl}/${contactPath}`;
+}
+
+function findContactPageUrlFromHtml(html: string, baseUrl: string): string | null {
+  const contactLinkRegex =
+    /href=["']([^"']*contact[^"']*|[^"']*get-in-touch[^"']*|[^"']*reach-us[^"']*|[^"']*enquir[^"']*)[^"']*["']/gi;
+  const match = contactLinkRegex.exec(html);
+  if (!match) return null;
+  return resolveInternalUrl(baseUrl, match[1]);
+}
+
+async function findContactPageUrl(baseUrl: string): Promise<string | null> {
+  try {
+    const html = await fetchPageHtml(baseUrl);
+    if (!html) return null;
+    return findContactPageUrlFromHtml(html, baseUrl);
+  } catch {
+    return null;
+  }
+}
+
+function prioritizeEmails(emails: string[]): string[] {
+  if (emails.length === 0) return [];
+
+  const filtered = emails.filter((email) => isValidEmail(email));
+  if (filtered.length === 0) return [];
+
+  const priority = [
+    "contact",
+    "info",
+    "hello",
+    "enquir",
+    "reserv",
+    "book",
+    "appoint",
+    "support",
+    "sales",
+    "admin",
+  ];
+
+  filtered.sort((a, b) => {
+    const aScore = priority.findIndex((p) => a.includes(p));
+    const bScore = priority.findIndex((p) => b.includes(p));
+    if (aScore === -1 && bScore === -1) return 0;
+    if (aScore === -1) return 1;
+    if (bScore === -1) return -1;
+    return aScore - bScore;
   });
 
-  return result;
+  return filtered.slice(0, 3);
 }
 
 export async function crawlEmailForWebsite(
   website: string | null | undefined
 ): Promise<EmailCrawlResult> {
-  const emails = await crawlEmailsFromWebsite(website);
+  const { emails, predicted } = await crawlEmailsFromWebsite(website);
   if (emails.length > 0) {
-    const generatedOnly = emails.every((e) =>
-      /^(info|contact|hello)@/.test(e.split("@")[0] ?? "")
-    );
     return {
       emails,
       email: emails[0] ?? null,
-      emailSource: generatedOnly ? "generated" : "website",
+      emailSource: predicted ? "generated" : "website",
     };
   }
   return { emails: [], email: null, emailSource: "none" };

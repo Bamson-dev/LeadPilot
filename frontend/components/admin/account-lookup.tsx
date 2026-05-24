@@ -5,9 +5,11 @@ import { Loader2 } from "lucide-react";
 import {
   lookupLicense,
   resendAccess,
+  resetDevices,
   resetSearches,
   suspendAccount,
   unsuspendAccount,
+  updateDeviceLimit,
   updateSearchLimit,
   type AdminLicense,
 } from "@/services/admin-api";
@@ -46,9 +48,15 @@ function statusBadge(license: AdminLicense) {
 
 interface AccountLookupProps {
   onSessionExpired: () => void;
+  prefillEmail?: string | null;
+  onPrefillConsumed?: () => void;
 }
 
-export function AccountLookup({ onSessionExpired }: AccountLookupProps) {
+export function AccountLookup({
+  onSessionExpired,
+  prefillEmail,
+  onPrefillConsumed,
+}: AccountLookupProps) {
   const [searchEmail, setSearchEmail] = useState("");
   const [license, setLicense] = useState<AdminLicense | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -64,6 +72,9 @@ export function AccountLookup({ onSessionExpired }: AccountLookupProps) {
   const [showSuspendForm, setShowSuspendForm] = useState(false);
   const [suspendReason, setSuspendReason] = useState("");
   const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmResetDevices, setConfirmResetDevices] = useState(false);
+  const [showDeviceLimitForm, setShowDeviceLimitForm] = useState(false);
+  const [newMaxDevices, setNewMaxDevices] = useState(2);
 
   const clearActionMsg = useCallback(() => {
     const t = setTimeout(() => setActionMsg(null), 4000);
@@ -96,7 +107,30 @@ export function AccountLookup({ onSessionExpired }: AccountLookupProps) {
     setLicense(result.licenses[0]);
     setNotFound(false);
     setNewLimit(result.licenses[0].monthly_search_limit ?? 100);
+    setNewMaxDevices(result.licenses[0].max_devices ?? 2);
   };
+
+  useEffect(() => {
+    const email = prefillEmail?.trim();
+    if (!email) return;
+
+    setSearchEmail(email);
+    setSearching(true);
+    setNotFound(false);
+    setActionMsg(null);
+
+    void refreshLookup(email)
+      .catch((err) => {
+        if (!handleError(err)) {
+          setLicense(null);
+          setNotFound(true);
+        }
+      })
+      .finally(() => {
+        setSearching(false);
+        onPrefillConsumed?.();
+      });
+  }, [prefillEmail]);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,6 +147,8 @@ export function AccountLookup({ onSessionExpired }: AccountLookupProps) {
     setShowLimitForm(false);
     setShowSuspendForm(false);
     setConfirmReset(false);
+    setConfirmResetDevices(false);
+    setShowDeviceLimitForm(false);
 
     try {
       await refreshLookup(email);
@@ -143,9 +179,10 @@ export function AccountLookup({ onSessionExpired }: AccountLookupProps) {
 
   const searchCount = license?.search_count ?? license?.searches_used ?? 0;
   const monthlyLimit = license?.monthly_search_limit ?? 100;
+  const maxDevices = license?.max_devices ?? 2;
 
   return (
-    <section className="glass mx-auto max-w-6xl rounded-2xl p-6">
+    <section id="account-lookup" className="glass mx-auto max-w-6xl rounded-2xl p-6">
       <h2 className="text-lg font-semibold text-[#F4F4FF]">Account Lookup</h2>
       <p className="mt-1 text-sm text-[#6B6B80]">
         Search any buyer by email and manage their account from here.
@@ -217,6 +254,10 @@ export function AccountLookup({ onSessionExpired }: AccountLookupProps) {
               </dd>
             </div>
             <div>
+              <dt className="text-[#6B6B80]">Max Devices Allowed</dt>
+              <dd className="font-semibold text-[#F4F4FF]">{maxDevices}</dd>
+            </div>
+            <div>
               <dt className="text-[#6B6B80]">Activated Date</dt>
               <dd className="text-[#F4F4FF]">{formatDate(license.activated_at)}</dd>
             </div>
@@ -264,6 +305,35 @@ export function AccountLookup({ onSessionExpired }: AccountLookupProps) {
               className="rounded-lg bg-blue-600/80 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600 disabled:opacity-50"
             >
               Reset Searches
+            </button>
+
+            <button
+              type="button"
+              disabled={actionLoading}
+              onClick={() => {
+                setConfirmResetDevices(true);
+                setShowDeviceLimitForm(false);
+                setShowLimitForm(false);
+                setShowSuspendForm(false);
+              }}
+              className="rounded-lg border border-white/20 px-4 py-2 text-sm text-[#A1A1B5] hover:bg-white/5 disabled:opacity-50"
+            >
+              Reset Devices
+            </button>
+
+            <button
+              type="button"
+              disabled={actionLoading}
+              onClick={() => {
+                setShowDeviceLimitForm((v) => !v);
+                setShowLimitForm(false);
+                setShowSuspendForm(false);
+                setConfirmResetDevices(false);
+                setNewMaxDevices(maxDevices);
+              }}
+              className="rounded-lg border border-[#7C3AED]/50 px-4 py-2 text-sm font-medium text-[#C4B5FD] hover:bg-[#7C3AED]/10 disabled:opacity-50"
+            >
+              Update Device Limit
             </button>
 
             {!license.is_suspended ? (
@@ -348,6 +418,65 @@ export function AccountLookup({ onSessionExpired }: AccountLookupProps) {
                 className="rounded-lg bg-red-600 px-4 py-1.5 text-sm text-white"
               >
                 Confirm Suspend
+              </button>
+            </div>
+          )}
+
+          {confirmResetDevices && (
+            <div className="mt-4 rounded-lg border border-white/15 bg-white/[0.02] p-3 text-sm text-[#A1A1B5]">
+              <p>
+                This clears both saved devices. The user will need to log in again from
+                their devices. Are you sure?
+              </p>
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  disabled={actionLoading}
+                  onClick={() =>
+                    runAction(
+                      () => resetDevices(license.email) as Promise<{ message?: string }>
+                    ).then(() => setConfirmResetDevices(false))
+                  }
+                  className="rounded-lg border border-white/20 px-3 py-1.5 text-[#F4F4FF]"
+                >
+                  Confirm
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmResetDevices(false)}
+                  className="rounded-lg border border-white/15 px-3 py-1.5"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {showDeviceLimitForm && (
+            <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-[#7C3AED]/30 bg-[#7C3AED]/5 p-3">
+              <label className="text-sm text-[#A1A1B5]">New device limit</label>
+              <input
+                type="number"
+                min={1}
+                max={10}
+                value={newMaxDevices}
+                onChange={(e) => setNewMaxDevices(Number(e.target.value))}
+                className="w-20 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[#F4F4FF]"
+              />
+              <button
+                type="button"
+                disabled={actionLoading}
+                onClick={() =>
+                  runAction(
+                    () =>
+                      updateDeviceLimit(license.email, newMaxDevices) as Promise<{
+                        message?: string;
+                      }>
+                  ).then(() => setShowDeviceLimitForm(false))
+                }
+                className="rounded-lg bg-[#7C3AED] px-4 py-1.5 text-sm text-white"
+              >
+                Save
               </button>
             </div>
           )}

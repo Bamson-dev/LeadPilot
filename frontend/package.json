@@ -2,6 +2,8 @@
   "name": "@leadpilot/frontend",
   "version": "0.1.0",
   "private": true,
+  "author": "Bamidele",
+  "description": "LeadPilot — Business Discovery Intelligence",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",

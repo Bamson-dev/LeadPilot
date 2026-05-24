@@ -5,6 +5,7 @@ import {
   getLicenseKeyByKey,
   registerDevice,
 } from "../database/license-repository";
+import { supabase } from "../database/client";
 import { logger } from "../utils/logger";
 
 export const authRouter = Router();
@@ -52,30 +53,70 @@ authRouter.post("/activate", async (req: Request, res: Response) => {
 
 authRouter.get("/status", async (req: Request, res: Response) => {
   try {
-    const email = String(req.query.email ?? "").toLowerCase().trim();
-    const key = String(req.query.key ?? "").trim().toUpperCase();
+    const licenseKey = (
+      (req.headers["x-license-key"] as string) ||
+      String(req.query.key ?? "")
+    )
+      .trim()
+      .toUpperCase();
+    const email = (
+      (req.headers["x-license-email"] as string) ||
+      String(req.query.email ?? "")
+    )
+      .toLowerCase()
+      .trim();
 
-    if (!email || !key) {
-      res.status(400).json({ error: "Email and key required" });
+    if (!licenseKey || !email) {
+      res.status(401).json({
+        valid: false,
+        reason: "No license key provided",
+        code: "NO_LICENSE",
+      });
       return;
     }
 
-    const license = await getLicenseKeyByKey(key);
-    if (!license || license.email !== email) {
-      res.status(401).json({ valid: false });
+    const { data: license, error } = await supabase
+      .from("license_keys")
+      .select("id, activated, is_suspended, suspension_reason, email, key")
+      .eq("key", licenseKey)
+      .eq("email", email)
+      .single();
+
+    if (error || !license) {
+      res.status(401).json({
+        valid: false,
+        reason: "Invalid license key",
+        code: "INVALID_LICENSE",
+      });
       return;
     }
 
-    res.json({
-      valid: true,
-      activated: license.activated,
-      email: license.email,
-    });
+    if (!license.activated) {
+      res.status(401).json({
+        valid: false,
+        reason: "Account not activated",
+        code: "NOT_ACTIVATED",
+      });
+      return;
+    }
+
+    if (license.is_suspended) {
+      res.status(403).json({
+        valid: false,
+        reason:
+          (license.suspension_reason as string) ||
+          "Your account has been suspended. Contact support on WhatsApp 09067285890.",
+        code: "SUSPENDED",
+      });
+      return;
+    }
+
+    res.json({ valid: true, licenseId: license.id });
   } catch (err) {
-    logger.error("License status check failed", {
+    logger.error("Auth status check failed", {
       error: err instanceof Error ? err.message : "unknown",
     });
-    res.status(500).json({ error: "Status check failed" });
+    res.status(500).json({ valid: false, reason: "Status check failed" });
   }
 });
 

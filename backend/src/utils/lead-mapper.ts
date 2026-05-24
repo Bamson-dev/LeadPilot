@@ -78,8 +78,47 @@ export function rawLeadToBusinessLead(
   return base;
 }
 
+export function applyWebsiteEmailsToLead(
+  lead: BusinessLead,
+  emails: string[]
+): BusinessLead {
+  return buildVerifiedLead(lead, emails);
+}
+
+/** Apply simple domain-pattern predictions from the website email crawler. */
+export function applyPredictedEmailsToLead(
+  lead: BusinessLead,
+  emails: string[]
+): BusinessLead {
+  const display = pickBestEmail(
+    emails.filter(isValidEmail),
+    lead.website,
+    3
+  );
+  if (display.length === 0) {
+    return { ...lead, emailSource: "none" };
+  }
+
+  const predictedEmails: PredictedEmail[] = display.map((email) => ({
+    email,
+    confidence: 0,
+    label: "medium",
+    source: "business_pattern",
+  }));
+
+  return {
+    ...lead,
+    emails: display,
+    verifiedEmails: [],
+    predictedEmails,
+    email: display.join(", "),
+    emailSource: "predicted",
+  };
+}
+
 export async function enrichLeadEmail(
-  lead: BusinessLead
+  lead: BusinessLead,
+  options?: { skipWebsiteCrawl?: boolean }
 ): Promise<BusinessLead> {
   const mapsVerified =
     lead.verifiedEmails.length > 0
@@ -93,8 +132,17 @@ export async function enrichLeadEmail(
   const effectiveWebsite =
     (await resolveEffectiveBusinessWebsite(lead.website)) ?? lead.website;
 
-  const crawl = await crawlEmailForWebsite(effectiveWebsite);
-  const websiteVerified = crawl.emails.length > 0 ? crawl.emails : [];
+  let websiteVerified: string[] = [];
+  if (!options?.skipWebsiteCrawl) {
+    const crawl = await crawlEmailForWebsite(effectiveWebsite);
+    if (crawl.emails.length > 0) {
+      if (crawl.emailSource === "generated") {
+        return applyPredictedEmailsToLead(lead, crawl.emails);
+      }
+      return buildVerifiedLead(lead, crawl.emails);
+    }
+    websiteVerified = [];
+  }
 
   const mergedVerified = mergeEmails(mapsVerified, websiteVerified);
   const allVerified = pickBestEmail(mergedVerified, effectiveWebsite ?? lead.website, 100);

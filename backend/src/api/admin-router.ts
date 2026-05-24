@@ -11,7 +11,7 @@ import {
   resetDevices,
 } from "../database/license-repository";
 import { supabase } from "../database/client";
-import { sendActivationEmail } from "../services/brevo-service";
+import { sendActivationEmail, sendAdminMessage } from "../services/brevo-service";
 import { logger } from "../utils/logger";
 
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
@@ -286,12 +286,138 @@ adminRouter.post("/reset-devices", requireAdminAuth, async (req: Request, res: R
     }
 
     await resetDevices(license.id as string);
-    res.json({ success: true, message: `Devices reset for ${email}` });
+    res.json({
+      success: true,
+      message: `Devices reset for ${email}. User can now log in from new devices.`,
+    });
   } catch (err) {
     logger.error("Reset devices failed", {
       error: err instanceof Error ? err.message : "unknown",
     });
     res.status(500).json({ error: "Failed to reset devices" });
+  }
+});
+
+adminRouter.post("/update-device-limit", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { email, maxDevices } = req.body as { email?: string; maxDevices?: number };
+
+    if (!email || maxDevices === undefined) {
+      res.status(400).json({ error: "Email and maxDevices required" });
+      return;
+    }
+
+    if (maxDevices < 1 || maxDevices > 10) {
+      res.status(400).json({ error: "Max devices must be between 1 and 10" });
+      return;
+    }
+
+    const license = await fetchLatestLicenseByEmail(email);
+    if (!license) {
+      res.status(404).json({ error: "License not found" });
+      return;
+    }
+
+    const { error } = await supabase
+      .from("license_keys")
+      .update({ max_devices: maxDevices })
+      .eq("id", license.id as string);
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      message: `Device limit updated to ${maxDevices} for ${email}`,
+    });
+  } catch (err) {
+    logger.error("Update device limit failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to update device limit" });
+  }
+});
+
+adminRouter.post("/send-message", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { email, subject, message } = req.body as {
+      email?: string;
+      subject?: string;
+      message?: string;
+    };
+
+    if (!email || !subject || !message) {
+      res.status(400).json({ error: "Email, subject and message required" });
+      return;
+    }
+
+    await sendAdminMessage(email, subject, message);
+
+    res.json({ success: true, message: `Message sent to ${email}` });
+  } catch (err) {
+    logger.error("Send message failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to send message" });
+  }
+});
+
+adminRouter.post("/broadcast", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { subject, message } = req.body as { subject?: string; message?: string };
+
+    if (!subject || !message) {
+      res.status(400).json({ error: "Subject and message required" });
+      return;
+    }
+
+    const { data: licenses, error } = await supabase
+      .from("license_keys")
+      .select("email")
+      .eq("activated", true)
+      .eq("is_suspended", false);
+
+    if (error) throw error;
+
+    if (!licenses || licenses.length === 0) {
+      res.status(404).json({ error: "No active users found" });
+      return;
+    }
+
+    const uniqueEmails = [
+      ...new Set(
+        licenses
+          .map((l) => (l.email as string)?.toLowerCase().trim())
+          .filter(Boolean)
+      ),
+    ];
+
+    res.json({
+      success: true,
+      message: `Broadcast queued for ${uniqueEmails.length} users`,
+      count: uniqueEmails.length,
+    });
+
+    setImmediate(() => {
+      void (async () => {
+        for (const userEmail of uniqueEmails) {
+          try {
+            await sendAdminMessage(userEmail, subject, message);
+            await new Promise((resolve) => setTimeout(resolve, 300));
+          } catch (err) {
+            logger.error("Failed to send broadcast to user", {
+              email: userEmail,
+              error: err instanceof Error ? err.message : "unknown",
+            });
+          }
+        }
+        logger.info("Broadcast complete", { count: uniqueEmails.length });
+      })();
+    });
+  } catch (err) {
+    logger.error("Broadcast failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to send broadcast" });
   }
 });
 
@@ -402,5 +528,237 @@ adminRouter.get("/stats", requireAdminAuth, async (_req: Request, res: Response)
       error: err instanceof Error ? err.message : "unknown",
     });
     res.status(500).json({ error: "Failed to fetch stats" });
+  }
+});
+
+adminRouter.get("/overview", requireAdminAuth, async (_req: Request, res: Response) => {
+  try {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const weekStart = new Date();
+    weekStart.setDate(weekStart.getDate() - 7);
+
+    const [
+      totalUsersResult,
+      activeUsersResult,
+      suspendedUsersResult,
+      newUsersTodayResult,
+      newUsersThisWeekResult,
+      totalSearchesResult,
+      totalTrialSearchesResult,
+    ] = await Promise.all([
+      supabase
+        .from("license_keys")
+        .select("*", { count: "exact", head: true })
+        .eq("activated", true),
+      supabase
+        .from("license_keys")
+        .select("*", { count: "exact", head: true })
+        .eq("activated", true)
+        .eq("is_suspended", false),
+      supabase
+        .from("license_keys")
+        .select("*", { count: "exact", head: true })
+        .eq("is_suspended", true),
+      supabase
+        .from("license_keys")
+        .select("*", { count: "exact", head: true })
+        .eq("activated", true)
+        .gte("created_at", todayStart.toISOString()),
+      supabase
+        .from("license_keys")
+        .select("*", { count: "exact", head: true })
+        .eq("activated", true)
+        .gte("created_at", weekStart.toISOString()),
+      supabase
+        .from("search_jobs")
+        .select("*", { count: "exact", head: true })
+        .eq("is_trial", false),
+      supabase
+        .from("search_jobs")
+        .select("*", { count: "exact", head: true })
+        .eq("is_trial", true),
+    ]);
+
+    const totalUsers = totalUsersResult.count ?? 0;
+    const estimatedRevenue = totalUsers * 15000;
+
+    res.json({
+      totalUsers,
+      activeUsers: activeUsersResult.count ?? 0,
+      suspendedUsers: suspendedUsersResult.count ?? 0,
+      newUsersToday: newUsersTodayResult.count ?? 0,
+      newUsersThisWeek: newUsersThisWeekResult.count ?? 0,
+      totalSearches: totalSearchesResult.count ?? 0,
+      totalTrialSearches: totalTrialSearchesResult.count ?? 0,
+      estimatedRevenue,
+    });
+  } catch (err) {
+    logger.error("Admin overview failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to fetch overview" });
+  }
+});
+
+adminRouter.get("/recent-users", requireAdminAuth, async (_req: Request, res: Response) => {
+  try {
+    const { data: users, error } = await supabase
+      .from("license_keys")
+      .select("email, activated, is_suspended, created_at, searches_used, max_devices")
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    if (error) throw error;
+
+    res.json({ users: users ?? [] });
+  } catch (err) {
+    logger.error("Recent users failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to fetch recent users" });
+  }
+});
+
+adminRouter.get("/trial-stats", requireAdminAuth, async (_req: Request, res: Response) => {
+  try {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const weekStart = new Date();
+    weekStart.setDate(weekStart.getDate() - 7);
+
+    const monthStart = new Date();
+    monthStart.setDate(monthStart.getDate() - 30);
+
+    const [
+      totalTrialsResult,
+      trialsTodayResult,
+      trialsThisWeekResult,
+      trialsThisMonthResult,
+      licensesTodayResult,
+      licensesThisWeekResult,
+    ] = await Promise.all([
+      supabase
+        .from("search_jobs")
+        .select("*", { count: "exact", head: true })
+        .eq("is_trial", true),
+      supabase
+        .from("search_jobs")
+        .select("*", { count: "exact", head: true })
+        .eq("is_trial", true)
+        .gte("created_at", todayStart.toISOString()),
+      supabase
+        .from("search_jobs")
+        .select("*", { count: "exact", head: true })
+        .eq("is_trial", true)
+        .gte("created_at", weekStart.toISOString()),
+      supabase
+        .from("search_jobs")
+        .select("*", { count: "exact", head: true })
+        .eq("is_trial", true)
+        .gte("created_at", monthStart.toISOString()),
+      supabase
+        .from("license_keys")
+        .select("*", { count: "exact", head: true })
+        .gte("created_at", todayStart.toISOString()),
+      supabase
+        .from("license_keys")
+        .select("*", { count: "exact", head: true })
+        .gte("created_at", weekStart.toISOString()),
+    ]);
+
+    const trialsThisWeek = trialsThisWeekResult.count ?? 0;
+    const licensesThisWeek = licensesThisWeekResult.count ?? 0;
+    const conversionRate =
+      trialsThisWeek > 0 && licensesThisWeek > 0
+        ? ((licensesThisWeek / trialsThisWeek) * 100).toFixed(1)
+        : "0";
+
+    res.json({
+      totalTrials: totalTrialsResult.count ?? 0,
+      trialsToday: trialsTodayResult.count ?? 0,
+      trialsThisWeek,
+      trialsThisMonth: trialsThisMonthResult.count ?? 0,
+      licensesToday: licensesTodayResult.count ?? 0,
+      licensesThisWeek,
+      conversionRate,
+    });
+  } catch (err) {
+    logger.error("Trial stats failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to fetch trial stats" });
+  }
+});
+
+adminRouter.get("/trial-activity", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "50"), 10) || 50, 1), 100);
+    const offset = Math.max(parseInt(String(req.query.offset ?? "0"), 10) || 0, 0);
+
+    const monthAgo = new Date();
+    monthAgo.setDate(monthAgo.getDate() - 30);
+
+    const [{ data: recentTrials }, { data: allTrials }] = await Promise.all([
+      supabase
+        .from("search_jobs")
+        .select("id, query, location, total_found, status, created_at")
+        .eq("is_trial", true)
+        .order("created_at", { ascending: false })
+        .range(offset, offset + limit - 1),
+      supabase
+        .from("search_jobs")
+        .select("query, location, created_at")
+        .eq("is_trial", true)
+        .gte("created_at", monthAgo.toISOString()),
+    ]);
+
+    const queryCount: Record<string, number> = {};
+    allTrials?.forEach((t) => {
+      const query = (t.query as string | null)?.trim() ?? "";
+      const location = (t.location as string | null)?.trim() ?? "";
+      if (!query && !location) return;
+      const key = `${query.toLowerCase()} in ${location.toLowerCase()}`;
+      queryCount[key] = (queryCount[key] || 0) + 1;
+    });
+
+    const topQueries = Object.entries(queryCount)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 10)
+      .map(([query, count]) => ({ query, count }));
+
+    const dailyCounts: Record<string, number> = {};
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const key = date.toISOString().split("T")[0];
+      dailyCounts[key] = 0;
+    }
+
+    allTrials?.forEach((t) => {
+      if (!t.created_at) return;
+      const day = new Date(t.created_at as string).toISOString().split("T")[0];
+      if (dailyCounts[day] !== undefined) {
+        dailyCounts[day]++;
+      }
+    });
+
+    const dailyActivity = Object.entries(dailyCounts).map(([date, count]) => ({
+      date,
+      count,
+    }));
+
+    res.json({
+      recentTrials: recentTrials ?? [],
+      topQueries,
+      dailyActivity,
+    });
+  } catch (err) {
+    logger.error("Trial activity failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to fetch trial activity" });
   }
 });

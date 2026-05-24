@@ -54,7 +54,35 @@ const PLACEHOLDER_EMAILS = new Set([
   "email@domain.com",
   "someone@example.com",
   "yourname@email.com",
+  "enteryour@addresshere.com",
+  "yourname@yourdomain.com",
+  "email@yourdomain.com",
+  "name@youremail.com",
+  "info@yourbusiness.com",
+  "contact@yourcompany.com",
+  "hello@yourcompany.com",
+  "info@yourwebsite.com",
+  "admin@yourwebsite.com",
+  "support@yourwebsite.com",
+  "noreply@yourwebsite.com",
+  "no-reply@yourwebsite.com",
+  "donotreply@yourwebsite.com",
 ]);
+
+const PLACEHOLDER_LOCAL_PATTERNS = [
+  "enteryour",
+  "yourname",
+  "yourdomain",
+  "yourcompany",
+  "youremail",
+  "yourbusiness",
+  "yourwebsite",
+  "addresshere",
+  "example",
+  "placeholder",
+  "domain.com",
+  "website.com",
+];
 
 const GENERIC_DOMAINS = new Set([
   "domain.com",
@@ -113,6 +141,10 @@ export function isValidEmail(email: string): boolean {
   if (/\d+x\d+/.test(local) || /\d+x-\d+/.test(local)) return false;
 
   if (PLACEHOLDER_EMAILS.has(lower)) return false;
+  if (PLACEHOLDER_LOCAL_PATTERNS.some((pattern) => local.includes(pattern))) {
+    return false;
+  }
+  if (/^your[a-z]+$/.test(local)) return false;
   if (GENERIC_DOMAINS.has(domain)) return false;
 
   const hasNoreplyWord = NOREPLY_LOCAL_PARTS.some((w) => local.includes(w));

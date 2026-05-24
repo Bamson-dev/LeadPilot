@@ -16,6 +16,7 @@ export function EmailCell({ lead, copiedId: copiedIdProp, onCopy: onCopyProp }: 
   const copiedId = copiedIdProp ?? internal.copiedId;
   const onCopy = onCopyProp ?? internal.copyToClipboard;
   const emails = getAllEmailsForDisplay(lead);
+  const isPredicted = lead.email_source === "predicted";
 
   if (emails.length === 0) {
     return <span className="text-zinc-500">—</span>;
@@ -29,6 +30,18 @@ export function EmailCell({ lead, copiedId: copiedIdProp, onCopy: onCopyProp }: 
           className="group flex items-center gap-1"
           style={{ marginBottom: i < emails.length - 1 ? 4 : 0 }}
         >
+          {isPredicted && (
+            <div
+              aria-hidden
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: "#3B82F6",
+                flexShrink: 0,
+              }}
+            />
+          )}
           <a
             href={`mailto:${addr}`}
             style={{

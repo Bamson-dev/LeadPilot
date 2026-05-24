@@ -2,6 +2,8 @@
   "name": "@leadpilot/backend",
   "version": "1.0.0",
   "private": true,
+  "author": "Bamidele",
+  "description": "LeadPilot — Business Discovery Intelligence",
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",

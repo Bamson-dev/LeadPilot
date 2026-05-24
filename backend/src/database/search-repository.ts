@@ -114,6 +114,32 @@ function mapBusinessLead(row: DbBusinessLead): BusinessLead {
         ? "website"
         : "none";
 
+  const predictedBlock =
+    emailSource === "predicted"
+      ? (() => {
+          const predictedAddresses =
+            predictedEmails.length > 0
+              ? predictedEmails.map((p) => p.email)
+              : row.email
+                ? parseEmailList(row.email)
+                : [];
+          return {
+            email:
+              predictedAddresses.length > 0
+                ? predictedAddresses.join(", ")
+                : null,
+            emails: predictedAddresses,
+            verifiedEmails: [] as string[],
+            predictedEmails,
+          };
+        })()
+      : {
+          email: verifiedEmails[0] ?? null,
+          emails: verifiedEmails,
+          verifiedEmails,
+          predictedEmails,
+        };
+
   return {
     id: row.id,
     searchId: row.search_id,
@@ -121,10 +147,10 @@ function mapBusinessLead(row: DbBusinessLead): BusinessLead {
     category: row.category ?? "",
     address: row.address ?? "",
     phone: row.phone,
-    email: verifiedEmails[0] ?? null,
-    emails: verifiedEmails,
-    verifiedEmails,
-    predictedEmails,
+    email: predictedBlock.email,
+    emails: predictedBlock.emails,
+    verifiedEmails: predictedBlock.verifiedEmails,
+    predictedEmails: predictedBlock.predictedEmails,
     emailSource,
     website: row.website,
     rating: row.rating,
@@ -203,6 +229,43 @@ export async function insertBusinessLead(lead: BusinessLead): Promise<BusinessLe
     throw new Error(error?.message ?? "Failed to upsert lead");
   }
   return mapBusinessLead(data as DbBusinessLead);
+}
+
+export async function updateBusinessLeadEmails(
+  businessId: string,
+  emails: string[],
+  source: "extracted" | "predicted" = "extracted"
+): Promise<void> {
+  const verified = emails.filter(Boolean);
+  const primary = verified.length > 0 ? verified.join(", ") : null;
+
+  const update =
+    source === "predicted"
+      ? {
+          email: primary,
+          verified_email: null,
+          predicted_email: verified[0] ?? null,
+          predicted_email_secondary: verified[1] ?? null,
+          prediction_confidence: null,
+          prediction_confidence_secondary: null,
+          email_source: "predicted",
+        }
+      : {
+          email: primary,
+          verified_email: primary,
+          predicted_email: null,
+          predicted_email_secondary: null,
+          prediction_confidence: null,
+          prediction_confidence_secondary: null,
+          email_source: verified.length > 0 ? "extracted" : "none",
+        };
+
+  const { error } = await supabase
+    .from("business_leads")
+    .update(update)
+    .eq("id", businessId);
+
+  if (error) throw new Error(error.message);
 }
 
 export async function insertBusinessLeads(leads: BusinessLead[]): Promise<void> {

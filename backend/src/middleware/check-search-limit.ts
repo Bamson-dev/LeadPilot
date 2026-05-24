@@ -48,7 +48,8 @@ export async function checkSearchLimit(
     if (license.is_suspended) {
       res.status(403).json({
         error:
-          license.suspension_reason || "Account suspended. Contact support.",
+          license.suspension_reason ||
+          "Account suspended. Contact support on WhatsApp 09067285890.",
         code: "SUSPENDED",
       });
       return;

@@ -83,6 +83,7 @@ export interface AdminLicense {
   export_count?: number;
   is_suspended?: boolean;
   suspension_reason?: string | null;
+  max_devices?: number;
   last_reset_at?: string | null;
   created_at: string;
 }
@@ -158,6 +159,44 @@ export interface AdminStats {
   licensesToday: number;
 }
 
+export interface AdminOverview {
+  totalUsers: number;
+  activeUsers: number;
+  suspendedUsers: number;
+  newUsersToday: number;
+  newUsersThisWeek: number;
+  totalSearches: number;
+  totalTrialSearches: number;
+  estimatedRevenue: number;
+}
+
+export interface RecentAdminUser {
+  email: string;
+  activated: boolean;
+  is_suspended: boolean;
+  created_at: string;
+  searches_used: number;
+  max_devices: number;
+}
+
+export async function getOverview(): Promise<AdminOverview> {
+  const res = await fetch(`${getApiUrl()}/admin/overview`, {
+    headers: getAdminHeaders(),
+  });
+  if (res.status === 401) throw new Error("SESSION_EXPIRED");
+  if (!res.ok) throw new Error("Failed to fetch overview");
+  return res.json();
+}
+
+export async function getRecentUsers(): Promise<{ users: RecentAdminUser[] }> {
+  const res = await fetch(`${getApiUrl()}/admin/recent-users`, {
+    headers: getAdminHeaders(),
+  });
+  if (res.status === 401) throw new Error("SESSION_EXPIRED");
+  if (!res.ok) throw new Error("Failed to fetch recent users");
+  return res.json();
+}
+
 export async function getAdminStats(): Promise<AdminStats> {
   const res = await fetch(`${getApiUrl()}/admin/stats`, {
     headers: getAdminHeaders(),
@@ -165,4 +204,89 @@ export async function getAdminStats(): Promise<AdminStats> {
   if (res.status === 401) throw new Error("SESSION_EXPIRED");
   if (!res.ok) throw new Error("Failed to fetch stats");
   return res.json();
+}
+
+export interface TrialStats {
+  totalTrials: number;
+  trialsToday: number;
+  trialsThisWeek: number;
+  trialsThisMonth: number;
+  licensesToday: number;
+  licensesThisWeek: number;
+  conversionRate: string;
+}
+
+export interface TrialActivity {
+  recentTrials: Array<{
+    id: string;
+    query: string;
+    location: string;
+    total_found: number;
+    status: string;
+    created_at: string;
+  }>;
+  topQueries: Array<{ query: string; count: number }>;
+  dailyActivity: Array<{ date: string; count: number }>;
+}
+
+export async function getTrialStats(): Promise<TrialStats> {
+  const res = await fetch(`${getApiUrl()}/admin/trial-stats`, {
+    headers: getAdminHeaders(),
+  });
+  if (res.status === 401) throw new Error("SESSION_EXPIRED");
+  if (!res.ok) throw new Error("Failed to fetch trial stats");
+  return res.json();
+}
+
+export async function getTrialActivity(): Promise<TrialActivity> {
+  const res = await fetch(`${getApiUrl()}/admin/trial-activity`, {
+    headers: getAdminHeaders(),
+  });
+  if (res.status === 401) throw new Error("SESSION_EXPIRED");
+  if (!res.ok) throw new Error("Failed to fetch trial activity");
+  return res.json();
+}
+
+export async function resetDevices(email: string) {
+  const res = await fetch(`${getApiUrl()}/admin/reset-devices`, {
+    method: "POST",
+    headers: getAdminHeaders(),
+    body: JSON.stringify({ email }),
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to reset devices");
+  return res.json() as Promise<{ success: boolean; message?: string }>;
+}
+
+export async function updateDeviceLimit(email: string, maxDevices: number) {
+  const res = await fetch(`${getApiUrl()}/admin/update-device-limit`, {
+    method: "POST",
+    headers: getAdminHeaders(),
+    body: JSON.stringify({ email, maxDevices }),
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to update device limit");
+  return res.json() as Promise<{ success: boolean; message?: string }>;
+}
+
+export async function sendMessage(email: string, subject: string, message: string) {
+  const res = await fetch(`${getApiUrl()}/admin/send-message`, {
+    method: "POST",
+    headers: getAdminHeaders(),
+    body: JSON.stringify({ email, subject, message }),
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to send message");
+  return res.json() as Promise<{ success: boolean; message?: string }>;
+}
+
+export async function sendBroadcast(subject: string, message: string) {
+  const res = await fetch(`${getApiUrl()}/admin/broadcast`, {
+    method: "POST",
+    headers: getAdminHeaders(),
+    body: JSON.stringify({ subject, message }),
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to send broadcast");
+  return res.json() as Promise<{ success: boolean; message?: string; count?: number }>;
 }

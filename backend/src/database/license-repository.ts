@@ -17,6 +17,7 @@ export interface LicenseKey {
   last_reset_at?: string | null;
   is_suspended?: boolean;
   suspension_reason?: string | null;
+  max_devices?: number;
   notes?: string | null;
   created_at: string;
 }
@@ -35,6 +36,7 @@ export function normalizeLicenseRow(row: Record<string, unknown>): LicenseKey {
       (row.exports_used as number | undefined) ??
       0,
     is_suspended: Boolean(row.is_suspended),
+    max_devices: (row.max_devices as number | undefined) ?? 2,
   };
 }
 

@@ -1,3 +1,6 @@
+// LeadPilot — Business Discovery Intelligence
+// Built by Bamidele
+
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "../styles/globals.css";
@@ -9,9 +12,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "LeadPilot — Find Businesses To Pitch In Seconds",
-  description:
-    "Discover targeted business leads instantly. Premium prospect intelligence for freelancers, agencies, marketers, and outreach teams.",
+  title: "LeadPilot",
+  description: "Business Discovery Intelligence by Bamidele",
 };
 
 export default function RootLayout({

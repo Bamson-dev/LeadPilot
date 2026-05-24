@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { Search, Download, RotateCcw, Trash2, Loader2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { BusinessLead } from "@leadpilot/shared";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -49,42 +49,21 @@ export function SearchDashboard() {
   const [savedBanner, setSavedBanner] = useState<string | null>(null);
   const [allLeads, setAllLeads] = useState<BusinessLead[]>([]);
   const [sessionSearchCount, setSessionSearchCount] = useState(0);
-  const [suggestions, setSuggestions] = useState<
-    Array<{ query: string; location: string; label: string }>
-  >([]);
   const [suggestionsMessage, setSuggestionsMessage] = useState("");
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [totalDiscovered, setTotalDiscovered] = useState(0);
 
-  const fetchSuggestions = useCallback(
-    async (query: string, loc: string, totalFound: number) => {
-      setLoadingSuggestions(true);
-      try {
-        const data = await getSearchSuggestions(query, loc, totalFound);
-        setSuggestions(data.suggestions || []);
-        setSuggestionsMessage(data.message || "");
-      } finally {
-        setLoadingSuggestions(false);
-      }
-    },
-    []
-  );
-
-  const onSearchComplete = useCallback(
-    (
-      newLeads: BusinessLead[],
-      query: string,
-      loc: string,
-      totalFound: number
-    ) => {
-      setAllLeads((prev) => dedupeLeads(prev, newLeads));
-      setSessionSearchCount((prev) => prev + 1);
-      void fetchSuggestions(query, loc, totalFound);
-    },
-    [fetchSuggestions]
-  );
+  const onSearchCompleteRef = useRef<
+    | ((
+        newLeads: BusinessLead[],
+        query: string,
+        loc: string,
+        totalFound: number
+      ) => void)
+    | null
+  >(null);
 
   const {
     leads,
@@ -99,10 +78,42 @@ export function SearchDashboard() {
     totalFound,
     searchesRemaining,
     runSearch,
+    runSearchWithSuggestion,
+    suggestions,
+    setSuggestions,
     clearResults,
     reset,
     loadSavedLeads,
-  } = useSearch({ onSearchComplete });
+  } = useSearch({
+    onSearchComplete: (...args) => onSearchCompleteRef.current?.(...args),
+  });
+
+  const fetchSuggestions = useCallback(
+    async (query: string, loc: string, totalFound: number) => {
+      setLoadingSuggestions(true);
+      try {
+        const data = await getSearchSuggestions(query, loc, totalFound);
+        if ((data.suggestions?.length ?? 0) > 0) {
+          setSuggestions(data.suggestions);
+        }
+        setSuggestionsMessage(data.message || "");
+      } finally {
+        setLoadingSuggestions(false);
+      }
+    },
+    [setSuggestions]
+  );
+
+  onSearchCompleteRef.current = (
+    newLeads: BusinessLead[],
+    query: string,
+    loc: string,
+    totalFound: number
+  ) => {
+    setAllLeads((prev) => dedupeLeads(prev, newLeads));
+    setSessionSearchCount((prev) => prev + 1);
+    void fetchSuggestions(query, loc, totalFound);
+  };
 
   useEffect(() => {
     if (status === "completed") {
@@ -111,6 +122,23 @@ export function SearchDashboard() {
       return () => clearTimeout(t);
     }
   }, [status]);
+
+  useEffect(() => {
+    if (status !== "completed" || suggestions.length > 0) return;
+    const q = searchMeta.business || businessType;
+    const loc = searchMeta.location || location;
+    if (!q.trim() || !loc.trim()) return;
+    void fetchSuggestions(q, loc, totalFound);
+  }, [
+    status,
+    suggestions.length,
+    searchMeta.business,
+    searchMeta.location,
+    businessType,
+    location,
+    totalFound,
+    fetchSuggestions,
+  ]);
 
   useEffect(() => {
     async function loadActivity() {
@@ -179,6 +207,17 @@ export function SearchDashboard() {
     void runSearch(areaQuery, areaLocation, { accumulate: true });
   };
 
+  const handleSuggestionClick = (s: {
+    query: string;
+    location: string;
+    label: string;
+  }) => {
+    setSavedBanner(null);
+    setBusinessType(s.query);
+    setLocation(s.location);
+    runSearchWithSuggestion(s);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") handleSearch();
   };
@@ -191,7 +230,6 @@ export function SearchDashboard() {
     reset();
     setAllLeads([]);
     setSessionSearchCount(0);
-    setSuggestions([]);
     setSuggestionsMessage("");
     setSavedBanner(null);
     setBusinessType("");
@@ -206,7 +244,6 @@ export function SearchDashboard() {
     clearResults();
     setAllLeads([]);
     setSessionSearchCount(0);
-    setSuggestions([]);
     setSuggestionsMessage("");
     setSavedBanner(null);
   };
@@ -216,7 +253,7 @@ export function SearchDashboard() {
       ? mergedSessionLeads.length
       : isSearching
         ? rawLeads.length
-        : tableLeads.length;
+        : Math.max(totalFound, tableLeads.length);
 
   const showWelcome =
     status === "idle" &&
@@ -647,7 +684,7 @@ export function SearchDashboard() {
               <button
                 key={`${s.location}-${i}`}
                 type="button"
-                onClick={() => handleAreaSearch(s.query, s.location)}
+                onClick={() => handleSuggestionClick(s)}
                 disabled={isSearching}
                 style={{
                   background: "transparent",
