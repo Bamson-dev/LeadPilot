@@ -69,7 +69,7 @@ export default function AdminPage() {
       setLicenses(licenseData.licenses);
     } catch (err) {
       if (!handleSessionError(err)) {
-        console.error(err);
+        /* ignore refresh errors */
       }
     }
   }, [handleSessionError]);
@@ -94,7 +94,7 @@ export default function AdminPage() {
         setTrialActivity(activityData);
       } catch (err) {
         if (!handleSessionError(err)) {
-          console.error("Failed to load trial data", err);
+          /* ignore trial stats refresh errors */
         }
       }
     }

@@ -1,6 +1,10 @@
 # LeadPilot
 
-LeadPilot is the **paying customer product** — a business discovery and prospecting platform. It runs as a monorepo with a Next.js frontend (Vercel), Express + Playwright backend (Contabo VPS), and Supabase database.
+Business Discovery Intelligence. Find business leads anywhere in the world in under 60 seconds.
+
+Built by Bamidele.
+
+LeadPilot runs as a monorepo with a Next.js frontend (Vercel), Express + Playwright backend (Contabo VPS), and Supabase database.
 
 > **Note:** The sales landing page is a standalone HTML file on WordPress/Elementor. It is **not** part of this repository.
 

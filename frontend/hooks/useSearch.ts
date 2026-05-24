@@ -434,8 +434,8 @@ export function useSearch(options?: UseSearchOptions) {
               });
               break;
           }
-        } catch (err) {
-          console.error("Failed to parse SSE event", err);
+        } catch {
+          /* ignore malformed SSE payloads */
         }
       };
 

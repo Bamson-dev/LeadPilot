@@ -91,14 +91,6 @@ export async function startSearch(
   const key =
     typeof window !== "undefined" ? localStorage.getItem("leadpilot_key") || "" : "";
 
-  console.log("Starting search:", {
-    query,
-    location,
-    apiUrl: apiUrl || "(missing)",
-    hasEmail: !!email,
-    hasKey: !!key,
-  });
-
   if (!apiUrl) {
     throw new Error(
       "API URL not configured. Check NEXT_PUBLIC_API_URL environment variable."
@@ -106,7 +98,6 @@ export async function startSearch(
   }
 
   const url = `${apiUrl}/search`;
-  console.log("POST", url);
 
   const res = await fetch(url, {
     method: "POST",
@@ -118,11 +109,8 @@ export async function startSearch(
     body: JSON.stringify({ query, location }),
   });
 
-  console.log("Search response status:", res.status);
-
   if (res.status === 401) {
     const data = (await res.json().catch(() => ({}))) as { error?: string };
-    console.error("Auth error:", data);
     if (typeof window !== "undefined") {
       localStorage.removeItem("leadpilot_email");
       localStorage.removeItem("leadpilot_key");
@@ -152,7 +140,6 @@ export async function startSearch(
 
   if (res.status === 429) {
     const data = (await res.json().catch(() => ({}))) as { error?: string };
-    console.error("Limit error:", data);
     throw new Error(data.error || "Monthly search limit reached");
   }
 
@@ -165,12 +152,10 @@ export async function startSearch(
     const data = (await res.json().catch(() => ({ error: "Unknown error" }))) as {
       error?: string;
     };
-    console.error("Search failed:", data);
     throw new Error(data.error || "Failed to start search");
   }
 
   const data = (await res.json()) as SearchResponse;
-  console.log("Search created:", data);
   return data;
 }
 
