@@ -305,8 +305,7 @@ export default function HomePage() {
           borderBottom: `1px solid ${colors.border}`,
         }}
       >
-        <a href="/" style={{ textDecoration: "none", color: "inherit" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div
               style={{
                 width: 34,
@@ -333,8 +332,7 @@ export default function HomePage() {
             >
               Lead<span style={{ color: "#A78BFA" }}>Pilot</span>
             </span>
-          </div>
-        </a>
+        </div>
 
         {!isMobile && (
           <div style={{ display: "flex", gap: 28, alignItems: "center" }}>

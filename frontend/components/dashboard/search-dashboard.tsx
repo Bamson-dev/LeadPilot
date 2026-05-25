@@ -200,13 +200,6 @@ export function SearchDashboard() {
     void runSearch(exampleQuery, exampleLocation);
   };
 
-  const handleAreaSearch = (areaQuery: string, areaLocation: string) => {
-    setSavedBanner(null);
-    setBusinessType(areaQuery);
-    setLocation(areaLocation);
-    void runSearch(areaQuery, areaLocation, { accumulate: true });
-  };
-
   const handleSuggestionClick = (s: {
     query: string;
     location: string;
