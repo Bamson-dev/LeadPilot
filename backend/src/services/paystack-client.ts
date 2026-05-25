@@ -89,6 +89,16 @@ export async function resolveBankAccount(params: {
   });
 }
 
+export async function verifyTransaction(reference: string): Promise<{
+  status: string;
+  amount: number;
+  customer: { email: string };
+  metadata: Record<string, unknown>;
+  reference: string;
+}> {
+  return paystackHttp("GET", `/transaction/verify/${encodeURIComponent(reference)}`);
+}
+
 export async function initiateTransfer(params: {
   amountKobo: number;
   recipient: string;

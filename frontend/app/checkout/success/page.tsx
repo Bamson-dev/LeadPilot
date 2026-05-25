@@ -1,12 +1,74 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { getApiUrl } from "@/utils/env";
 
 function CheckoutSuccessContent() {
   const searchParams = useSearchParams();
   const reference = searchParams.get("reference");
+  const [status, setStatus] = useState<"loading" | "ok" | "warn" | "error">("loading");
+  const [statusText, setStatusText] = useState(
+    "Confirming your payment and sending your license key…"
+  );
+
+  useEffect(() => {
+    if (!reference) {
+      setStatus("warn");
+      setStatusText(
+        "Payment received. If you do not get an email within 2 minutes, contact support on WhatsApp 09067285890."
+      );
+      return;
+    }
+
+    let cancelled = false;
+
+    async function verifyPayment() {
+      try {
+        const res = await fetch(`${getApiUrl()}/checkout/verify`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reference }),
+        });
+        const data = (await res.json()) as {
+          message?: string;
+          emailSent?: boolean;
+          error?: string;
+        };
+
+        if (cancelled) return;
+
+        if (res.ok) {
+          setStatus(data.emailSent ? "ok" : "warn");
+          setStatusText(
+            data.message ||
+              (data.emailSent
+                ? "Activation email sent. Check inbox and spam."
+                : "License created. Check spam or contact support for your key.")
+          );
+        } else {
+          setStatus("warn");
+          setStatusText(
+            data.error ||
+              "Payment is processing. Your license email may arrive shortly — also check spam."
+          );
+        }
+      } catch {
+        if (!cancelled) {
+          setStatus("warn");
+          setStatusText(
+            "Payment received. If no email arrives in 2 minutes, WhatsApp 09067285890 with your payment reference."
+          );
+        }
+      }
+    }
+
+    void verifyPayment();
+    return () => {
+      cancelled = true;
+    };
+  }, [reference]);
 
   return (
     <div
@@ -64,13 +126,17 @@ function CheckoutSuccessContent() {
         <p
           style={{
             fontSize: 15,
-            color: "#8888A8",
+            color: status === "error" ? "#EF4444" : status === "warn" ? "#FCD34D" : "#8888A8",
             lineHeight: 1.7,
             marginBottom: 28,
           }}
         >
-          Your activation email is on its way. Check your inbox for your license key. It
-          arrives within 60 seconds.
+          {statusText}
+        </p>
+
+        <p style={{ fontSize: 12, color: "#7878A0", marginBottom: 20, lineHeight: 1.6 }}>
+          Paystack sends a payment receipt. LeadPilot sends a separate email with your license
+          key from <strong style={{ color: "#A78BFA" }}>access@leadpilot.live</strong>.
         </p>
 
         {reference && (
