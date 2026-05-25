@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-const PAYSTACK_URL = "https://paystack.shop/pay/Leadpilot";
 const FONT = "Inter, sans-serif";
 
 const colors = {
@@ -244,6 +243,27 @@ export default function HomePage() {
     check();
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const refCode = urlParams.get("ref");
+
+    if (refCode) {
+      localStorage.setItem("lp_ref_code", refCode);
+      localStorage.setItem("lp_ref_captured_at", Date.now().toString());
+    }
+
+    const capturedAt = localStorage.getItem("lp_ref_captured_at");
+    if (capturedAt) {
+      const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+      if (Date.now() - parseInt(capturedAt, 10) > thirtyDays) {
+        localStorage.removeItem("lp_ref_code");
+        localStorage.removeItem("lp_ref_captured_at");
+      }
+    }
   }, []);
 
   const copyAccount = useCallback(() => {
@@ -610,9 +630,7 @@ export default function HomePage() {
           }}
         >
           <a
-            href={PAYSTACK_URL}
-            target="_blank"
-            rel="noopener noreferrer"
+            href="/checkout"
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -1399,9 +1417,7 @@ export default function HomePage() {
             </div>
 
             <a
-              href={PAYSTACK_URL}
-              target="_blank"
-              rel="noopener noreferrer"
+              href="/checkout"
               style={{
                 display: "block",
                 background: colors.purple,
@@ -1715,7 +1731,7 @@ export default function HomePage() {
             ))}
           </div>
           <a
-            href="/affiliate"
+            href="/dashboard"
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -1858,9 +1874,7 @@ export default function HomePage() {
           }}
         >
           <a
-            href={PAYSTACK_URL}
-            target="_blank"
-            rel="noopener noreferrer"
+            href="/checkout"
             style={{
               display: "inline-flex",
               alignItems: "center",

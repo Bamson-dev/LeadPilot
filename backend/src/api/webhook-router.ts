@@ -15,6 +15,8 @@ import {
   getLicenseByPaymentReference,
 } from "../database/license-repository";
 import { sendActivationEmail } from "../services/brevo-service";
+import { LIFETIME_PRICE_KOBO } from "../constants/pricing";
+import { createCommissionForReferral } from "../services/license-service";
 import { logger } from "../utils/logger";
 
 export const webhookRouter = Router();
@@ -51,6 +53,10 @@ webhookRouter.post(
           customer?: { email?: string };
           reference?: string;
           amount?: number;
+          metadata?: Record<string, unknown> & {
+            ref_code?: string;
+            custom_fields?: Array<{ variable_name?: string; value?: string }>;
+          };
         };
       };
 
@@ -73,7 +79,7 @@ webhookRouter.post(
               return;
             }
 
-            if (amount < config.LIFETIME_ACCESS_PRICE) {
+            if (amount < LIFETIME_PRICE_KOBO) {
               logger.warn("Payment amount too low", { amount, reference });
               return;
             }
@@ -96,6 +102,37 @@ webhookRouter.post(
               email,
               keyPrefix: license.key.slice(0, 12),
             });
+
+            const metadata = event.data?.metadata ?? {};
+            let refCode =
+              typeof metadata.ref_code === "string" ? metadata.ref_code : null;
+
+            if (!refCode && Array.isArray(metadata.custom_fields)) {
+              const field = metadata.custom_fields.find(
+                (f) => f.variable_name === "ref_code"
+              );
+              if (field?.value) refCode = String(field.value);
+            }
+
+            if (refCode?.trim()) {
+              try {
+                await createCommissionForReferral({
+                  refCode: refCode.trim(),
+                  referredEmail: email,
+                });
+                logger.info("Commission created from Paystack webhook", {
+                  refCode: refCode.trim(),
+                  referred: email,
+                });
+              } catch (commissionErr) {
+                logger.error("Commission creation failed", {
+                  error:
+                    commissionErr instanceof Error
+                      ? commissionErr.message
+                      : "unknown",
+                });
+              }
+            }
           } catch (err) {
             logger.error("Webhook processing failed", {
               error: err instanceof Error ? err.message : "unknown",

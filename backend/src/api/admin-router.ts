@@ -12,6 +12,7 @@ import {
 } from "../database/license-repository";
 import { supabase } from "../database/client";
 import { sendActivationEmail, sendAdminMessage } from "../services/brevo-service";
+import { initiateTransfer } from "../services/paystack-client";
 import { logger } from "../utils/logger";
 
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
@@ -690,6 +691,113 @@ adminRouter.get("/trial-stats", requireAdminAuth, async (_req: Request, res: Res
       error: err instanceof Error ? err.message : "unknown",
     });
     res.status(500).json({ error: "Failed to fetch trial stats" });
+  }
+});
+
+adminRouter.get("/payouts", requireAdminAuth, async (_req: Request, res: Response) => {
+  try {
+    const { data: payouts, error } = await supabase
+      .from("payout_requests")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    res.json({ payouts: payouts ?? [] });
+  } catch (err) {
+    logger.error("Failed to fetch payouts", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to fetch payouts" });
+  }
+});
+
+adminRouter.post("/payouts/:id/pay", requireAdminAuth, async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const { data: payout, error } = await supabase
+      .from("payout_requests")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (error || !payout) {
+      res.status(404).json({ error: "Payout request not found" });
+      return;
+    }
+
+    if (payout.status !== "pending") {
+      res.status(400).json({ error: "Payout already processed" });
+      return;
+    }
+
+    if (!payout.paystack_recipient_code) {
+      res.status(400).json({ error: "Missing Paystack recipient for this payout" });
+      return;
+    }
+
+    const transfer = await initiateTransfer({
+      amountKobo: (payout.amount_ngn as number) * 100,
+      recipient: payout.paystack_recipient_code as string,
+      reason: `LeadPilot affiliate commission — ${payout.referrer_email}`,
+      reference: `PAYOUT-${id}`,
+    });
+
+    const transferCode = transfer.transfer_code;
+
+    await supabase
+      .from("payout_requests")
+      .update({
+        status: "paid",
+        paystack_transfer_code: transferCode,
+        paystack_transfer_reference: `PAYOUT-${id}`,
+        paid_at: new Date().toISOString(),
+      })
+      .eq("id", id);
+
+    const { data: license } = await supabase
+      .from("license_keys")
+      .select("total_paid_ngn")
+      .eq("email", payout.referrer_email as string)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    await supabase
+      .from("license_keys")
+      .update({
+        total_paid_ngn:
+          ((license?.total_paid_ngn as number) || 0) + (payout.amount_ngn as number),
+      })
+      .eq("email", payout.referrer_email as string);
+
+    logger.info("Payout initiated successfully", {
+      payoutId: id,
+      referrer: payout.referrer_email,
+      amount: payout.amount_ngn,
+      transferCode,
+    });
+
+    res.json({
+      success: true,
+      message: `₦${(payout.amount_ngn as number).toLocaleString()} transfer initiated to ${payout.account_name}`,
+      transferCode,
+    });
+  } catch (err) {
+    logger.error("Payout failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+
+    await supabase
+      .from("payout_requests")
+      .update({
+        status: "failed",
+        failure_reason: err instanceof Error ? err.message : "Transfer failed",
+      })
+      .eq("id", id);
+
+    res.status(500).json({ error: "Payout failed. Check your Paystack balance." });
   }
 });
 

@@ -197,6 +197,40 @@ export async function getRecentUsers(): Promise<{ users: RecentAdminUser[] }> {
   return res.json();
 }
 
+export interface PayoutRequest {
+  id: string;
+  referrer_email: string;
+  amount_ngn: number;
+  bank_name: string;
+  account_number: string;
+  account_name: string;
+  status: string;
+  created_at: string;
+  failure_reason?: string | null;
+}
+
+export async function getPayouts(): Promise<{ payouts: PayoutRequest[] }> {
+  const res = await fetch(`${getApiUrl()}/admin/payouts`, {
+    headers: getAdminHeaders(),
+  });
+  if (res.status === 401) throw new Error("SESSION_EXPIRED");
+  if (!res.ok) throw new Error("Failed to fetch payouts");
+  return res.json();
+}
+
+export async function payPayout(payoutId: string) {
+  const res = await fetch(`${getApiUrl()}/admin/payouts/${payoutId}/pay`, {
+    method: "POST",
+    headers: getAdminHeaders(),
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error ?? "Payout failed");
+  }
+  return res.json() as Promise<{ success: boolean; message: string }>;
+}
+
 export async function getAdminStats(): Promise<AdminStats> {
   const res = await fetch(`${getApiUrl()}/admin/stats`, {
     headers: getAdminHeaders(),

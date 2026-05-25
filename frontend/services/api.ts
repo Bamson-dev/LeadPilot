@@ -8,7 +8,7 @@ export interface HealthStatus {
   message?: string;
 }
 
-function getLicenseHeaders(): HeadersInit {
+export function getLicenseHeaders(): HeadersInit {
   const email =
     typeof window !== "undefined" ? localStorage.getItem("leadpilot_email") || "" : "";
   const key =

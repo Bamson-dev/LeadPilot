@@ -11,12 +11,15 @@ import {
   getAdminToken,
   getLicenses,
   getOverview,
+  getPayouts,
   getRecentUsers,
   getTrialActivity,
   getTrialStats,
+  payPayout,
   setAdminToken,
   type AdminLicense,
   type AdminOverview,
+  type PayoutRequest,
   type RecentAdminUser,
   type TrialActivity,
   type TrialStats,
@@ -51,6 +54,9 @@ export default function AdminPage() {
     null
   );
   const [loading, setLoading] = useState(false);
+  const [payouts, setPayouts] = useState<PayoutRequest[]>([]);
+  const [payingOut, setPayingOut] = useState<string | null>(null);
+  const [payoutMsg, setPayoutMsg] = useState("");
 
   useEffect(() => {
     setToken(getAdminToken());
@@ -64,6 +70,38 @@ export default function AdminPage() {
     }
     return false;
   }, []);
+
+  const loadPayouts = useCallback(async () => {
+    if (!getAdminToken()) return;
+    try {
+      const data = await getPayouts();
+      setPayouts(data.payouts || []);
+    } catch (err) {
+      if (!handleSessionError(err)) {
+        /* silent */
+      }
+    }
+  }, [handleSessionError]);
+
+  const handlePayout = async (payoutId: string, email: string, amount: number) => {
+    const confirmed = window.confirm(
+      `Pay ₦${amount.toLocaleString()} to ${email}?\n\nThis will immediately transfer the money from your Paystack balance. This cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    setPayingOut(payoutId);
+    setPayoutMsg("");
+
+    try {
+      const data = await payPayout(payoutId);
+      setPayoutMsg(data.message);
+      await loadPayouts();
+    } catch (err) {
+      setPayoutMsg(err instanceof Error ? err.message : "Payout failed. Check your Paystack balance.");
+    } finally {
+      setPayingOut(null);
+    }
+  };
 
   const refreshDashboard = useCallback(async () => {
     if (!getAdminToken()) return;
@@ -88,6 +126,7 @@ export default function AdminPage() {
         ]);
         setOverview(overviewData);
         setRecentUsers(recentData.users || []);
+        await loadPayouts();
       } catch (err) {
         if (!handleSessionError(err)) {
           /* silent fail */
@@ -104,7 +143,7 @@ export default function AdminPage() {
       clearInterval(overviewInterval);
       clearInterval(licenseInterval);
     };
-  }, [token, refreshDashboard, handleSessionError]);
+  }, [token, refreshDashboard, handleSessionError, loadPayouts]);
 
   useEffect(() => {
     if (!token) return;
@@ -504,6 +543,221 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+
+      <div
+        className="mx-auto mt-8 max-w-6xl"
+        style={{
+          background: "#111118",
+          border: "1px solid rgba(255,255,255,0.07)",
+          borderRadius: 14,
+          overflow: "hidden",
+          marginBottom: 24,
+        }}
+      >
+        <div
+          style={{
+            padding: "14px 16px",
+            borderBottom: "1px solid rgba(255,255,255,0.07)",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: "#F2F1FF", margin: 0 }}>
+            Affiliate Payouts
+          </h3>
+          <span
+            style={{
+              background:
+                payouts.filter((p) => p.status === "pending").length > 0
+                  ? "rgba(251,191,36,0.15)"
+                  : "rgba(255,255,255,0.06)",
+              color:
+                payouts.filter((p) => p.status === "pending").length > 0
+                  ? "#FBBF24"
+                  : "#7878A0",
+              fontSize: 11,
+              fontWeight: 700,
+              padding: "3px 10px",
+              borderRadius: 100,
+            }}
+          >
+            {payouts.filter((p) => p.status === "pending").length} pending
+          </span>
+        </div>
+
+        {payoutMsg && (
+          <div
+            style={{
+              padding: "12px 16px",
+              background: "rgba(16,185,129,0.08)",
+              borderBottom: "1px solid rgba(16,185,129,0.15)",
+              fontSize: 13,
+              color: "#10B981",
+              fontWeight: 600,
+            }}
+          >
+            {payoutMsg}
+          </div>
+        )}
+
+        {payouts.length === 0 ? (
+          <div
+            style={{
+              padding: "32px 16px",
+              textAlign: "center",
+              fontSize: 13,
+              color: "#7878A0",
+            }}
+          >
+            No payout requests yet.
+          </div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: "#0D0D16" }}>
+                  {["Email", "Amount", "Bank", "Account", "Status", "Date", "Action"].map(
+                    (h) => (
+                      <th
+                        key={h}
+                        style={{
+                          padding: "10px 14px",
+                          textAlign: "left",
+                          fontWeight: 700,
+                          color: "#7878A0",
+                          fontSize: 10,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.06em",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {h}
+                      </th>
+                    )
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {payouts.map((payout) => (
+                  <tr
+                    key={payout.id}
+                    style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}
+                  >
+                    <td style={{ padding: "12px 14px", color: "#F2F1FF", fontWeight: 500 }}>
+                      {payout.referrer_email}
+                    </td>
+                    <td style={{ padding: "12px 14px", color: "#10B981", fontWeight: 700 }}>
+                      ₦{payout.amount_ngn.toLocaleString()}
+                    </td>
+                    <td style={{ padding: "12px 14px", color: "#8888A8" }}>
+                      {payout.bank_name}
+                    </td>
+                    <td style={{ padding: "12px 14px", color: "#8888A8" }}>
+                      {payout.account_number} — {payout.account_name}
+                    </td>
+                    <td style={{ padding: "12px 14px" }}>
+                      <span
+                        style={{
+                          background:
+                            payout.status === "paid"
+                              ? "rgba(16,185,129,0.1)"
+                              : payout.status === "failed"
+                                ? "rgba(239,68,68,0.1)"
+                                : "rgba(251,191,36,0.1)",
+                          color:
+                            payout.status === "paid"
+                              ? "#10B981"
+                              : payout.status === "failed"
+                                ? "#EF4444"
+                                : "#FBBF24",
+                          padding: "3px 10px",
+                          borderRadius: 100,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          textTransform: "capitalize",
+                        }}
+                      >
+                        {payout.status}
+                      </span>
+                    </td>
+                    <td
+                      style={{
+                        padding: "12px 14px",
+                        color: "#7878A0",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {new Date(payout.created_at).toLocaleDateString("en-GB", {
+                        day: "numeric",
+                        month: "short",
+                        year: "2-digit",
+                      })}
+                    </td>
+                    <td style={{ padding: "12px 14px" }}>
+                      {payout.status === "pending" && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void handlePayout(
+                              payout.id,
+                              payout.referrer_email,
+                              payout.amount_ngn
+                            )
+                          }
+                          disabled={payingOut === payout.id}
+                          style={{
+                            background:
+                              payingOut === payout.id
+                                ? "rgba(16,185,129,0.1)"
+                                : "#10B981",
+                            color: "white",
+                            border: "none",
+                            borderRadius: 6,
+                            padding: "6px 14px",
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: payingOut === payout.id ? "not-allowed" : "pointer",
+                            fontFamily: "Inter, sans-serif",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {payingOut === payout.id ? "Paying..." : "Pay Now"}
+                        </button>
+                      )}
+                      {payout.status === "failed" && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void handlePayout(
+                              payout.id,
+                              payout.referrer_email,
+                              payout.amount_ngn
+                            )
+                          }
+                          style={{
+                            background: "transparent",
+                            color: "#EF4444",
+                            border: "1px solid rgba(239,68,68,0.3)",
+                            borderRadius: 6,
+                            padding: "6px 14px",
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: "pointer",
+                            fontFamily: "Inter, sans-serif",
+                          }}
+                        >
+                          Retry
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {trialStats && (
         <div

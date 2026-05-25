@@ -5,6 +5,7 @@ import {
   getLicenseKeyByKey,
   registerDevice,
 } from "../database/license-repository";
+import { ensureRefCodeForEmail } from "../services/license-service";
 import { supabase } from "../database/client";
 import { logger } from "../utils/logger";
 
@@ -37,6 +38,8 @@ authRouter.post("/activate", async (req: Request, res: Response) => {
     if (!license.activated) {
       await activateLicense(license.id);
     }
+
+    await ensureRefCodeForEmail(normalizedEmail);
 
     res.json({
       success: true,
