@@ -3,6 +3,7 @@ declare global {
     interface Request {
       licenseId?: string;
       licenseKey?: string;
+      licenseEmail?: string;
       searchesRemaining?: number;
     }
   }

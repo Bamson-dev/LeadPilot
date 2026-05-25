@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { LiveCounter } from "@/components/dashboard/live-counter";
 import { SearchHistory } from "@/components/dashboard/search-history";
+import { AffiliateSection } from "@/components/dashboard/affiliate-section";
 import { WelcomeState } from "@/components/dashboard/welcome-state";
 import { ResultsTable } from "@/features/results/results-table";
 import { useSearch } from "@/hooks/useSearch";
@@ -198,13 +199,6 @@ export function SearchDashboard() {
     setBusinessType(exampleQuery);
     setLocation(exampleLocation);
     void runSearch(exampleQuery, exampleLocation);
-  };
-
-  const handleAreaSearch = (areaQuery: string, areaLocation: string) => {
-    setSavedBanner(null);
-    setBusinessType(areaQuery);
-    setLocation(areaLocation);
-    void runSearch(areaQuery, areaLocation, { accumulate: true });
   };
 
   const handleSuggestionClick = (s: {
@@ -571,6 +565,8 @@ export function SearchDashboard() {
           );
         }}
       />
+
+      <AffiliateSection />
 
       {showWelcome && <WelcomeState onExampleSearch={handleExampleSearch} />}
 

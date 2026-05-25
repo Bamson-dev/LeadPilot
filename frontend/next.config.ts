@@ -1,9 +1,12 @@
 import type { NextConfig } from "next";
 
-if (process.env.NODE_ENV === "production" && !process.env.NEXT_PUBLIC_API_URL?.trim()) {
-  throw new Error(
-    "NEXT_PUBLIC_API_URL is required for production builds. Set it in Vercel."
-  );
+const DEFAULT_PRODUCTION_API_URL = "https://backend.leadpilot.live";
+
+if (
+  process.env.NODE_ENV === "production" &&
+  !process.env.NEXT_PUBLIC_API_URL?.trim()
+) {
+  process.env.NEXT_PUBLIC_API_URL = DEFAULT_PRODUCTION_API_URL;
 }
 
 const nextConfig: NextConfig = {

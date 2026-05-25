@@ -1,5 +1,6 @@
 import { randomBytes } from "crypto";
 import { supabase } from "./client";
+import { generateUniqueRefCode } from "../services/license-service";
 
 export interface LicenseKey {
   id: string;
@@ -53,12 +54,14 @@ export async function createLicenseKey(params: {
 }): Promise<LicenseKey> {
   const email = params.email.toLowerCase().trim();
   const key = generateLicenseKeyValue().toUpperCase();
+  const refCode = await generateUniqueRefCode();
 
   const { data, error } = await supabase
     .from("license_keys")
     .insert({
       email,
       key,
+      ref_code: refCode,
       payment_channel: params.paymentChannel,
       payment_reference: params.paymentReference,
       activated: false,

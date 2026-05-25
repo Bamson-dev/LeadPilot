@@ -1,20 +1,14 @@
 // PAYSTACK DASHBOARD SETUP
 // Settings → API Keys & Webhooks
 // Webhook URL: https://backend.leadpilot.live/webhooks/paystack
-// Success Redirect: https://www.leadpilot.live/payment-success
-// The redirect happens on the frontend after payment
-// The webhook fires on the backend silently after payment
-// These are independent — both should be set
+// Success Redirect: https://www.leadpilot.live/checkout/success
+// Paystack sends its own receipt email; LeadPilot sends the license key via Brevo when this webhook runs.
 
 import { Router, type Request, type Response } from "express";
 import express from "express";
 import crypto from "crypto";
 import { config } from "../config/env";
-import {
-  createLicenseKey,
-  getLicenseByPaymentReference,
-} from "../database/license-repository";
-import { sendActivationEmail } from "../services/brevo-service";
+import { fulfillPaystackCharge } from "../services/payment-fulfillment";
 import { logger } from "../utils/logger";
 
 export const webhookRouter = Router();
@@ -40,7 +34,7 @@ webhookRouter.post(
         .digest("hex");
 
       if (!signature || signature !== expectedHash) {
-        logger.warn("Invalid Paystack webhook signature");
+        logger.warn("Invalid Paystack webhook signature — check sk_test/sk_live matches dashboard");
         res.status(200).send("ok");
         return;
       }
@@ -51,6 +45,7 @@ webhookRouter.post(
           customer?: { email?: string };
           reference?: string;
           amount?: number;
+          metadata?: Record<string, unknown>;
         };
       };
 
@@ -73,28 +68,11 @@ webhookRouter.post(
               return;
             }
 
-            if (amount < config.LIFETIME_ACCESS_PRICE) {
-              logger.warn("Payment amount too low", { amount, reference });
-              return;
-            }
-
-            const existing = await getLicenseByPaymentReference(reference);
-            if (existing) {
-              logger.info("Duplicate Paystack webhook ignored", { reference });
-              return;
-            }
-
-            const license = await createLicenseKey({
+            await fulfillPaystackCharge({
               email,
-              paymentReference: reference,
-              paymentChannel: "paystack",
-            });
-
-            await sendActivationEmail(email, license.key);
-
-            logger.info("License created from Paystack webhook", {
-              email,
-              keyPrefix: license.key.slice(0, 12),
+              reference,
+              amount,
+              metadata: event.data?.metadata,
             });
           } catch (err) {
             logger.error("Webhook processing failed", {

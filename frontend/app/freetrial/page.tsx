@@ -129,19 +129,11 @@ export default function FreeTrialPage() {
   const [location, setLocation] = useState("");
   const [status, setStatus] = useState<TrialStatus>("idle");
   const [leads, setLeads] = useState<TrialLead[]>([]);
-  const [totalFound, setTotalFound] = useState(0);
   const [trialCount, setTrialCount] = useState(0);
   const [message, setMessage] = useState("");
   const [showPaywall, setShowPaywall] = useState(false);
   const paywallSentinelRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
-
-  const progressMessages = [
-    `Scanning for ${query} in ${location}...`,
-    `Extracting business details...`,
-    `Collecting phone numbers and addresses...`,
-    `Almost done. Finalizing results...`,
-  ];
 
   useEffect(() => {
     const count = getTrialCount();
@@ -170,6 +162,13 @@ export default function FreeTrialPage() {
 
   useEffect(() => {
     if (status !== "searching") return;
+
+    const progressMessages = [
+      `Scanning for ${query} in ${location}...`,
+      `Extracting business details...`,
+      `Collecting phone numbers and addresses...`,
+      `Almost done. Finalizing results...`,
+    ];
 
     let msgIndex = 0;
     const interval = setInterval(() => {
@@ -207,7 +206,6 @@ export default function FreeTrialPage() {
       clearInterval(flush);
       es.close();
       flushPending();
-      setTotalFound(total);
       setStatus("complete");
       setMessage("");
     };
@@ -318,7 +316,6 @@ export default function FreeTrialPage() {
     setStatus("searching");
     setLeads([]);
     setShowPaywall(false);
-    setTotalFound(0);
     setMessage(`Scanning for ${query.trim()} in ${location.trim()}...`);
 
     try {

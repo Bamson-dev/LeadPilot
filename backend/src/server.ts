@@ -6,6 +6,8 @@ import { searchRouter, handleFreeTrialSearch } from "./api/search-router";
 import { adminRouter } from "./api/admin-router";
 import { authRouter } from "./api/auth-router";
 import { webhookRouter } from "./api/webhook-router";
+import affiliateRouter from "./api/affiliate-router";
+import checkoutRouter from "./api/checkout-router";
 import healthRouter from "./api/health-router";
 import { rateLimit } from "./middleware/rate-limit";
 import { getBrowserPool } from "./scraper/browser/browser-pool";
@@ -63,6 +65,8 @@ function registerRoutes(): void {
   app.use(express.json({ limit: "1mb" }));
   app.use("/auth", authRouter);
   app.use("/admin", adminRouter);
+  app.use("/affiliate", affiliateRouter);
+  app.use("/checkout", checkoutRouter);
   app.post("/freetrial", rateLimit, handleFreeTrialSearch);
   app.use("/search", rateLimit, searchRouter);
 
