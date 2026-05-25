@@ -159,35 +159,53 @@ const pricingFeatures = [
 const faqs = [
   {
     q: "Can I try it before paying?",
-    a: "Yes. Go to the free preview at /freetrial and run 2 real searches with no signup and no credit card. You will see real business names, phone numbers, and addresses before you decide.",
+    a: "Yes. Go to the free trial page. Run a real search with no signup needed. You get 2 free preview searches that return real business names, addresses, phone numbers, and ratings. Emails and full export are unlocked with full access.",
   },
   {
-    q: "Does this work outside Nigeria?",
-    a: "Yes. LeadPilot works in 195+ countries. Lagos, London, Dubai, Nairobi, New York, Accra, Johannesburg, and anywhere else you can search on Google Maps.",
+    q: "Does this work in every country?",
+    a: "Yes. LeadPilot covers 195 countries. Lagos, London, New York, Dubai, Nairobi, Toronto, Accra, Johannesburg, Sydney, Singapore. Any business type, any city, anywhere in the world. The more specific the city the more results you get.",
   },
   {
-    q: "What happens after I pay?",
-    a: "You receive your license key by email within 60 seconds. Enter it on the activate page with your email and you get instant lifetime access to the full dashboard.",
+    q: "What happens immediately after I pay?",
+    a: "Paystack payments get instant access automatically within 60 seconds. An activation email with your license key arrives immediately. Bank transfer users send payment proof to WhatsApp 09067285890 and receive access within minutes. You are searching the same day you pay.",
   },
   {
     q: "Is there really no monthly fee?",
-    a: "For lifetime access buyers, yes. One payment of $15 gives you permanent access. LeadPilot is moving to a monthly subscription soon. These lifetime slots are the last chance to pay once.",
+    a: "Right now there is no monthly fee. $15 once and LeadPilot is yours for life. But this is a limited lifetime deal. LeadPilot is moving to a subscription model very soon. These 20 slots are the last chance to pay once and own it forever. Once slots are gone new users pay monthly. Existing lifetime users are protected forever regardless of when the subscription launches.",
   },
   {
-    q: "How many businesses can I find?",
-    a: "Most searches return 60 to 200+ businesses depending on the city and niche. You can stack area searches to build lists of 500+ businesses.",
+    q: "How many businesses can I find per search?",
+    a: "Each search returns up to 200 businesses. After each search LeadPilot suggests specific areas within the city so you can run follow-up searches that stack on top of your existing results. Users regularly build lists of 500 plus businesses in a single session.",
   },
   {
     q: "Can I use this for WhatsApp outreach?",
-    a: "Absolutely. Every result includes direct phone numbers formatted for WhatsApp. Many users build a list and start messaging the same day.",
+    a: "Yes. Every result includes a direct phone number with a one-tap WhatsApp button built in. Click it and WhatsApp opens with the number pre-filled. Start outreach the same day you search.",
   },
   {
     q: "How does the affiliate programme work?",
-    a: "Earn $6 for every $15 sale you refer. Get your unique link from the dashboard after you activate. Share it anywhere. No cap on earnings.",
+    a: "Every LeadPilot user gets a unique referral link in their dashboard after activation. Share it anywhere. When someone buys through your link you earn 50% of the sale which is $7.50 per referral. Earnings are paid directly to your bank account with no cap on how much you can earn. You must be an active LeadPilot user to access your affiliate link.",
   },
   {
-    q: "Is this hard to use?",
-    a: "No. Type a business type and a city. Click search. Watch results appear live. Export to CSV. That is the entire workflow.",
+    q: "Is this difficult to use?",
+    a: "If you can use Google you can use LeadPilot. Two fields. Business type. City. One button. Results appear within 60 seconds. No setup required. No training. Nothing to install. You are finding contacts the moment you log in.",
+  },
+];
+
+const affiliateSteps = [
+  {
+    n: "1",
+    title: "Get your link",
+    body: "Sign up and get a unique referral link from your dashboard after activation.",
+  },
+  {
+    n: "2",
+    title: "Share it anywhere",
+    body: "WhatsApp, Twitter, Instagram, YouTube, anywhere your audience is.",
+  },
+  {
+    n: "3",
+    title: "Get paid",
+    body: "Earn $7.50 for every person who buys through your link. Paid to your bank.",
   },
 ];
 
@@ -236,7 +254,7 @@ export default function HomePage() {
   }, []);
 
   const padX = isMobile ? 20 : 24;
-  const sectionPad = isMobile ? "60px 20px" : "80px 24px";
+  const sectionPad = isMobile ? "72px 20px" : "80px 24px";
 
   const navLinks = [
     { href: "#how-it-works", label: "How it works" },
@@ -509,7 +527,7 @@ export default function HomePage() {
             fontSize: isMobile ? 44 : 82,
             fontWeight: 900,
             letterSpacing: -3,
-            lineHeight: 1.02,
+            lineHeight: isMobile ? 1.05 : 1.02,
             marginBottom: 24,
             color: colors.text,
             fontFamily: FONT,
@@ -620,16 +638,17 @@ export default function HomePage() {
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
-              background: "transparent",
-              color: "#A78BFA",
+              background: "rgba(167,139,250,0.08)",
+              color: "#C4B5FD",
               fontWeight: 700,
-              fontSize: 15,
-              padding: "15px 32px",
+              fontSize: isMobile ? 15 : 16,
+              padding: isMobile ? "15px 24px" : "15px 32px",
               borderRadius: 14,
               textDecoration: "none",
-              border: "1px solid rgba(167,139,250,0.3)",
+              border: "1.5px solid rgba(167,139,250,0.4)",
               width: isMobile ? "100%" : "auto",
               maxWidth: isMobile ? 400 : "none",
+              transition: "all 0.2s",
               fontFamily: FONT,
             }}
           >
@@ -637,7 +656,7 @@ export default function HomePage() {
           </a>
         </div>
 
-        <p style={{ fontSize: 12, color: colors.text3, fontFamily: FONT }}>
+        <p style={{ fontSize: 12, color: colors.text2, fontFamily: FONT }}>
           One payment today.{" "}
           <span style={{ color: colors.green, fontWeight: 600 }}>
             Lifetime access before the subscription launches.
@@ -680,7 +699,7 @@ export default function HomePage() {
               <div
                 style={{
                   fontSize: 12,
-                  color: colors.text3,
+                  color: "#7878A0",
                   marginTop: 3,
                   fontFamily: FONT,
                 }}
@@ -703,7 +722,7 @@ export default function HomePage() {
           style={{
             fontSize: 12,
             fontWeight: 700,
-            color: colors.text3,
+            color: "#A78BFA",
             textTransform: "uppercase",
             letterSpacing: "0.1em",
             marginBottom: 16,
@@ -761,7 +780,7 @@ export default function HomePage() {
             <span
               style={{
                 fontSize: 11,
-                color: colors.text3,
+                color: "#7878A0",
                 marginLeft: 4,
                 fontFamily: FONT,
               }}
@@ -839,7 +858,7 @@ export default function HomePage() {
           style={{
             fontSize: isMobile ? 28 : 42,
             fontWeight: 900,
-            letterSpacing: -1.5,
+            letterSpacing: isMobile ? -1 : -1.5,
             color: colors.text,
             marginBottom: 12,
             fontFamily: FONT,
@@ -921,7 +940,7 @@ export default function HomePage() {
         <p
           style={{
             fontSize: 12,
-            color: colors.text3,
+            color: colors.text2,
             marginTop: 12,
             fontFamily: FONT,
           }}
@@ -984,6 +1003,7 @@ export default function HomePage() {
                 fontSize: 20,
                 fontWeight: 800,
                 marginBottom: 10,
+                color: colors.text,
                 fontFamily: FONT,
               }}
             >
@@ -1070,6 +1090,7 @@ export default function HomePage() {
                   fontSize: 16,
                   fontWeight: 800,
                   marginBottom: 8,
+                  color: colors.text,
                   fontFamily: FONT,
                 }}
               >
@@ -1129,6 +1150,7 @@ export default function HomePage() {
                   fontSize: 14,
                   fontWeight: 800,
                   marginBottom: 4,
+                  color: colors.text,
                   fontFamily: FONT,
                 }}
               >
@@ -1233,6 +1255,7 @@ export default function HomePage() {
                     style={{
                       fontSize: 14,
                       fontWeight: 700,
+                      color: colors.text,
                       fontFamily: FONT,
                     }}
                   >
@@ -1241,7 +1264,7 @@ export default function HomePage() {
                   <div
                     style={{
                       fontSize: 12,
-                      color: colors.text3,
+                      color: "#7878A0",
                       fontFamily: FONT,
                     }}
                   >
@@ -1294,7 +1317,7 @@ export default function HomePage() {
           >
             LIFETIME ACCESS
           </div>
-          <div style={{ padding: isMobile ? 24 : 32 }}>
+          <div style={{ padding: isMobile ? "28px 18px" : "40px 32px" }}>
             <div
               style={{
                 background: "rgba(245,158,11,0.08)",
@@ -1318,7 +1341,7 @@ export default function HomePage() {
               <span
                 style={{
                   fontSize: 18,
-                  color: colors.text3,
+                  color: "#7878A0",
                   textDecoration: "line-through",
                   marginRight: 8,
                   fontFamily: FONT,
@@ -1328,7 +1351,7 @@ export default function HomePage() {
               </span>
               <span
                 style={{
-                  fontSize: 56,
+                  fontSize: isMobile ? 64 : 80,
                   fontWeight: 900,
                   color: colors.text,
                   letterSpacing: -2,
@@ -1340,7 +1363,7 @@ export default function HomePage() {
               <div
                 style={{
                   fontSize: 13,
-                  color: colors.text3,
+                  color: "#7878A0",
                   marginTop: 4,
                   fontFamily: FONT,
                 }}
@@ -1364,8 +1387,8 @@ export default function HomePage() {
                   style={{
                     display: "flex",
                     gap: 10,
-                    fontSize: 14,
-                    color: "#C0C0D8",
+                    fontSize: isMobile ? 13 : 14,
+                    color: "#8888A8",
                     fontFamily: FONT,
                   }}
                 >
@@ -1458,7 +1481,7 @@ export default function HomePage() {
                 <div>
                   <strong>Amount:</strong> ₦15,000
                 </div>
-                <div style={{ fontSize: 12, color: colors.text3, marginTop: 8 }}>
+                <div style={{ fontSize: 12, color: colors.text2, marginTop: 8 }}>
                   After payment send proof to WhatsApp{" "}
                   <a
                     href="https://wa.me/2349067285890"
@@ -1491,7 +1514,7 @@ export default function HomePage() {
             <p
               style={{
                 fontSize: 11,
-                color: colors.text3,
+                color: colors.text2,
                 marginTop: 16,
                 fontFamily: FONT,
               }}
@@ -1524,6 +1547,35 @@ export default function HomePage() {
         >
           <div
             style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 7,
+              background: "rgba(16,185,129,0.1)",
+              border: "1px solid rgba(16,185,129,0.25)",
+              padding: "7px 16px",
+              borderRadius: 100,
+              fontSize: 12,
+              fontWeight: 700,
+              color: colors.green,
+              marginBottom: 16,
+              fontFamily: FONT,
+            }}
+          >
+            🤝 Earn 50% Per Referral
+          </div>
+          <p
+            style={{
+              fontSize: 13,
+              color: "#A78BFA",
+              fontWeight: 600,
+              marginBottom: 12,
+              fontFamily: FONT,
+            }}
+          >
+            The most generous affiliate deal in lead generation.
+          </p>
+          <div
+            style={{
               fontSize: isMobile ? 56 : 72,
               fontWeight: 900,
               color: colors.green,
@@ -1532,7 +1584,7 @@ export default function HomePage() {
               fontFamily: FONT,
             }}
           >
-            40%
+            50%
           </div>
           <h2
             style={{
@@ -1542,20 +1594,34 @@ export default function HomePage() {
               fontFamily: FONT,
             }}
           >
-            Earn $6 for every person you refer
+            Earn $7.50 for every person you refer.
           </h2>
+          <p
+            style={{
+              fontSize: 14,
+              color: colors.text2,
+              lineHeight: 1.7,
+              marginBottom: 24,
+              textAlign: "left",
+              fontFamily: FONT,
+            }}
+          >
+            Share your unique referral link. When someone buys LeadPilot through your
+            link you earn 50% of every sale. That is $7.50 per referral paid directly
+            to your account. No cap on earnings.
+          </p>
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)",
-              gap: 12,
-              margin: "24px 0",
+              gridTemplateColumns: "repeat(3, 1fr)",
+              gap: 10,
+              marginBottom: 32,
             }}
           >
             {[
               { n: "$15", l: "Sale price" },
-              { n: "$6", l: "Your commission" },
-              { n: "∞", l: "No cap" },
+              { n: "$7.50", l: "Your commission" },
+              { n: "∞", l: "No earnings cap" },
             ].map((s) => (
               <div
                 key={s.l}
@@ -1563,14 +1629,15 @@ export default function HomePage() {
                   background: colors.bg3,
                   border: `1px solid ${colors.border}`,
                   borderRadius: 12,
-                  padding: 16,
+                  padding: isMobile ? 12 : 16,
                 }}
               >
                 <div
                   style={{
-                    fontSize: 24,
+                    fontSize: isMobile ? 20 : 28,
                     fontWeight: 900,
-                    color: colors.green,
+                    color: "#10B981",
+                    marginBottom: 4,
                     fontFamily: FONT,
                   }}
                 >
@@ -1578,9 +1645,8 @@ export default function HomePage() {
                 </div>
                 <div
                   style={{
-                    fontSize: 12,
-                    color: colors.text3,
-                    marginTop: 4,
+                    fontSize: isMobile ? 10 : 12,
+                    color: "#7878A0",
                     fontFamily: FONT,
                   }}
                 >
@@ -1589,28 +1655,64 @@ export default function HomePage() {
               </div>
             ))}
           </div>
-          <div
-            style={{
-              textAlign: "left",
-              fontSize: 14,
-              color: colors.text2,
-              lineHeight: 1.8,
-              marginBottom: 24,
-              fontFamily: FONT,
-            }}
-          >
-            <p style={{ margin: "0 0 8px" }}>
-              <strong style={{ color: colors.text }}>1.</strong> Get your link from
-              the dashboard after activation
-            </p>
-            <p style={{ margin: "0 0 8px" }}>
-              <strong style={{ color: colors.text }}>2.</strong> Share it anywhere —
-              WhatsApp, Twitter, YouTube, your blog
-            </p>
-            <p style={{ margin: 0 }}>
-              <strong style={{ color: colors.text }}>3.</strong> Get paid for every
-              sale through your link
-            </p>
+          <div style={{ textAlign: "left", marginBottom: 24 }}>
+            {affiliateSteps.map((step, i) => (
+              <div
+                key={i}
+                style={{
+                  display: "flex",
+                  gap: 14,
+                  alignItems: "flex-start",
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.07)",
+                  borderRadius: 12,
+                  padding: "16px",
+                  marginBottom: 10,
+                }}
+              >
+                <div
+                  style={{
+                    width: 32,
+                    height: 32,
+                    background: "rgba(16,185,129,0.12)",
+                    border: "1px solid rgba(16,185,129,0.25)",
+                    borderRadius: 8,
+                    display: "grid",
+                    placeItems: "center",
+                    fontSize: 13,
+                    fontWeight: 800,
+                    color: "#10B981",
+                    flexShrink: 0,
+                    fontFamily: FONT,
+                  }}
+                >
+                  {step.n}
+                </div>
+                <div>
+                  <div
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 700,
+                      color: "#F2F1FF",
+                      marginBottom: 4,
+                      fontFamily: FONT,
+                    }}
+                  >
+                    {step.title}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 13,
+                      color: "#8888A8",
+                      lineHeight: 1.6,
+                      fontFamily: FONT,
+                    }}
+                  >
+                    {step.body}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
           <a
             href="/affiliate"
@@ -1628,12 +1730,12 @@ export default function HomePage() {
               fontFamily: FONT,
             }}
           >
-            Join Affiliate Programme
+            Join and Start Earning →
           </a>
           <p
             style={{
               fontSize: 12,
-              color: colors.text3,
+              color: colors.text2,
               marginTop: 16,
               lineHeight: 1.6,
               fontFamily: FONT,
@@ -1688,7 +1790,7 @@ export default function HomePage() {
               }}
             >
               {faq.q}
-              <span style={{ color: colors.text3, fontSize: 18 }}>
+              <span style={{ color: "#7878A0", fontSize: 18 }}>
                 {openFaq === i ? "−" : "+"}
               </span>
             </button>
@@ -1784,16 +1886,17 @@ export default function HomePage() {
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
-              background: "transparent",
-              color: "#A78BFA",
+              background: "rgba(167,139,250,0.08)",
+              color: "#C4B5FD",
               fontWeight: 700,
-              fontSize: 15,
-              padding: "15px 32px",
+              fontSize: isMobile ? 15 : 16,
+              padding: isMobile ? "15px 24px" : "15px 32px",
               borderRadius: 14,
               textDecoration: "none",
-              border: "1px solid rgba(167,139,250,0.3)",
+              border: "1.5px solid rgba(167,139,250,0.4)",
               width: isMobile ? "100%" : "auto",
               maxWidth: isMobile ? 400 : "none",
+              transition: "all 0.2s",
               fontFamily: FONT,
             }}
           >
@@ -1845,7 +1948,7 @@ export default function HomePage() {
             <p
               style={{
                 fontSize: 13,
-                color: colors.text3,
+                color: "#8888A8",
                 lineHeight: 1.6,
                 fontFamily: FONT,
               }}
@@ -1860,7 +1963,7 @@ export default function HomePage() {
               style={{
                 fontSize: 11,
                 fontWeight: 700,
-                color: colors.text3,
+                color: "#7878A0",
                 textTransform: "uppercase",
                 letterSpacing: "0.08em",
                 fontFamily: FONT,
@@ -1873,7 +1976,7 @@ export default function HomePage() {
                 key={l.href}
                 href={l.href}
                 style={{
-                  color: colors.text2,
+                  color: "#8888A8",
                   textDecoration: "none",
                   fontSize: 14,
                   fontFamily: FONT,
@@ -1885,7 +1988,7 @@ export default function HomePage() {
             <a
               href="/freetrial"
               style={{
-                color: colors.text2,
+                color: "#8888A8",
                 textDecoration: "none",
                 fontSize: 14,
                 fontFamily: FONT,
@@ -1896,7 +1999,7 @@ export default function HomePage() {
             <a
               href="/activate"
               style={{
-                color: colors.text2,
+                color: "#8888A8",
                 textDecoration: "none",
                 fontSize: 14,
                 fontFamily: FONT,
@@ -1910,7 +2013,7 @@ export default function HomePage() {
               style={{
                 fontSize: 11,
                 fontWeight: 700,
-                color: colors.text3,
+                color: "#7878A0",
                 textTransform: "uppercase",
                 letterSpacing: "0.08em",
                 fontFamily: FONT,
@@ -1923,7 +2026,7 @@ export default function HomePage() {
               target="_blank"
               rel="noopener noreferrer"
               style={{
-                color: colors.text2,
+                color: "#8888A8",
                 textDecoration: "none",
                 fontSize: 14,
                 fontFamily: FONT,
@@ -1934,7 +2037,7 @@ export default function HomePage() {
             <a
               href="mailto:support@leadpilot.live"
               style={{
-                color: colors.text2,
+                color: "#8888A8",
                 textDecoration: "none",
                 fontSize: 14,
                 fontFamily: FONT,
@@ -1947,7 +2050,7 @@ export default function HomePage() {
               target="_blank"
               rel="noopener noreferrer"
               style={{
-                color: colors.text2,
+                color: "#8888A8",
                 textDecoration: "none",
                 fontSize: 14,
                 fontFamily: FONT,
@@ -1961,7 +2064,7 @@ export default function HomePage() {
           style={{
             textAlign: "center",
             fontSize: 12,
-            color: colors.text3,
+            color: "#6668A8",
             marginTop: 40,
             fontFamily: FONT,
           }}
