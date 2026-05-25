@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import type { BusinessLead } from "@leadpilot/shared";
 import { getApiUrl } from "@/utils/env";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -133,6 +133,7 @@ export default function FreeTrialPage() {
   const [trialCount, setTrialCount] = useState(0);
   const [message, setMessage] = useState("");
   const [showPaywall, setShowPaywall] = useState(false);
+  const paywallSentinelRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
 
   const progressMessages = [
@@ -147,6 +148,25 @@ export default function FreeTrialPage() {
     setTrialCount(count);
     if (count >= 2) setStatus("limit");
   }, []);
+
+  useEffect(() => {
+    if (status !== "complete" || leads.length === 0) return;
+
+    const sentinel = paywallSentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setShowPaywall(true);
+        }
+      },
+      { threshold: 0.25 }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [status, leads.length]);
 
   useEffect(() => {
     if (status !== "searching") return;
@@ -183,16 +203,13 @@ export default function FreeTrialPage() {
 
     const flush = setInterval(flushPending, 300);
 
-    const finishSearch = (total: number, showPaywallAfter: boolean) => {
+    const finishSearch = (total: number) => {
       clearInterval(flush);
       es.close();
       flushPending();
       setTotalFound(total);
       setStatus("complete");
       setMessage("");
-      if (showPaywallAfter) {
-        setShowPaywall(true);
-      }
     };
 
     const handleZeroResults = () => {
@@ -228,7 +245,7 @@ export default function FreeTrialPage() {
           seenKeys.add(key);
 
           if (leadCount >= MAX_TRIAL_LEADS) {
-            finishSearch(streamTotal, leadCount >= 5);
+            finishSearch(streamTotal);
             return;
           }
 
@@ -237,7 +254,7 @@ export default function FreeTrialPage() {
 
           if (leadCount >= MAX_TRIAL_LEADS) {
             setTimeout(() => {
-              finishSearch(streamTotal, leadCount >= 5);
+              finishSearch(streamTotal);
             }, 600);
           }
         }
@@ -253,7 +270,7 @@ export default function FreeTrialPage() {
             handleZeroResults();
             return;
           }
-          finishSearch(streamTotal, leadCount >= 5);
+          finishSearch(streamTotal);
         }
 
         if (data.type === "error") {
@@ -273,7 +290,7 @@ export default function FreeTrialPage() {
       es.close();
       flushPending();
       if (leadCount >= 5) {
-        finishSearch(Math.max(streamTotal, leadCount), true);
+        finishSearch(Math.max(streamTotal, leadCount));
       } else if (leadCount === 0) {
         setStatus("idle");
         setMessage("Connection lost. Please try again.");
@@ -561,6 +578,22 @@ export default function FreeTrialPage() {
 
         {leads.length > 0 && (
           <section className="mt-10">
+            {status === "complete" && (
+              <p
+                className="text-sm text-[#7878A0] mb-4 text-center"
+                style={{ lineHeight: 1.5 }}
+              >
+                Showing{" "}
+                <strong style={{ color: "#F0EFFF" }}>
+                  {leads.length} of {MARKETING_TOTAL}
+                </strong>{" "}
+                businesses found for{" "}
+                <strong style={{ color: "#F0EFFF" }}>
+                  {query} in {location}
+                </strong>
+                . Scroll down to preview every result.
+              </p>
+            )}
             {isMobile ? (
               <div>
                 {leads.map((lead) => (
@@ -744,6 +777,9 @@ export default function FreeTrialPage() {
                   </div>
                 ))}
               </div>
+            )}
+            {status === "complete" && (
+              <div ref={paywallSentinelRef} style={{ height: 1, marginTop: 48 }} />
             )}
           </section>
         )}
