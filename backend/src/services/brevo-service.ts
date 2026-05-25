@@ -1,4 +1,5 @@
 import { config } from "../config/env";
+import { MIN_PAYOUT_NGN } from "../constants/pricing";
 import { logger } from "../utils/logger";
 
 async function sendEmail(params: {
@@ -34,6 +35,118 @@ async function sendEmail(params: {
     });
     throw new Error("Failed to send email");
   }
+}
+
+export async function sendCommissionNotification(
+  referrerEmail: string,
+  _referredEmail: string,
+  commissionNgn: number,
+  commissionUsd: number,
+  totalEarnedNgn: number,
+  totalEarnedUsd: number,
+  pendingNgn: number
+): Promise<void> {
+  const dashboardUrl = `${config.FRONTEND_URL.replace(/\/$/, "")}/dashboard`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body style="margin:0;padding:0;background:#F4F4F8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+      <div style="max-width:560px;margin:0 auto;padding:40px 20px;">
+
+        <div style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 2px 20px rgba(0,0,0,0.06);">
+
+          <div style="background:#7C3AED;padding:24px 32px;">
+            <div style="display:flex;align-items:center;gap:12px;">
+              <div style="width:34px;height:34px;background:rgba(255,255,255,0.2);border-radius:8px;display:inline-flex;align-items:center;justify-content:center;">
+                <span style="color:white;font-size:12px;font-weight:800;">LP</span>
+              </div>
+              <span style="font-size:18px;font-weight:800;color:white;letter-spacing:-0.5px;">LeadPilot</span>
+            </div>
+          </div>
+
+          <div style="padding:36px 32px;text-align:center;">
+            <div style="font-size:48px;margin-bottom:16px;">🎉</div>
+
+            <h2 style="font-size:26px;font-weight:800;color:#111111;margin:0 0 8px;letter-spacing:-0.5px;">
+              You just earned $${commissionUsd.toFixed(2)}!
+            </h2>
+
+            <p style="font-size:15px;color:#666666;margin:0 0 28px;line-height:1.6;">
+              Someone just bought LeadPilot through your referral link.<br>
+              Your commission has been added to your balance.
+            </p>
+
+            <div style="background:#F8F8FB;border-radius:14px;padding:24px;margin-bottom:28px;">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                <div style="text-align:center;">
+                  <div style="font-size:28px;font-weight:900;color:#10B981;letter-spacing:-1px;">
+                    $${commissionUsd.toFixed(2)}
+                  </div>
+                  <div style="font-size:12px;color:#999999;margin-top:4px;">This commission</div>
+                  <div style="font-size:11px;color:#BBBBBB;">₦${commissionNgn.toLocaleString()}</div>
+                </div>
+                <div style="text-align:center;">
+                  <div style="font-size:28px;font-weight:900;color:#7C3AED;letter-spacing:-1px;">
+                    $${totalEarnedUsd.toFixed(2)}
+                  </div>
+                  <div style="font-size:12px;color:#999999;margin-top:4px;">Total earned</div>
+                  <div style="font-size:11px;color:#BBBBBB;">₦${totalEarnedNgn.toLocaleString()}</div>
+                </div>
+              </div>
+
+              ${
+                pendingNgn >= MIN_PAYOUT_NGN
+                  ? `
+              <div style="margin-top:20px;padding:14px;background:#ECFDF5;border-radius:10px;border:1px solid #A7F3D0;">
+                <p style="font-size:13px;color:#065F46;font-weight:600;margin:0;">
+                  ✓ You have ₦${pendingNgn.toLocaleString()} pending. You can request a payout from your dashboard.
+                </p>
+              </div>
+              `
+                  : `
+              <div style="margin-top:20px;padding:14px;background:#F5F3FF;border-radius:10px;border:1px solid #DDD6FE;">
+                <p style="font-size:13px;color:#5B21B6;font-weight:600;margin:0;">
+                  Keep sharing your link. One more referral and you can request your first payout.
+                </p>
+              </div>
+              `
+              }
+            </div>
+
+            <p style="font-size:15px;color:#444444;line-height:1.8;margin-bottom:28px;">
+              Every person who buys through your link earns you <strong>$7.50 (₦7,500)</strong>. The more you share the more you earn. There is no cap.
+            </p>
+
+            <a href="${dashboardUrl}"
+               style="display:inline-block;background:#7C3AED;color:white;font-weight:800;font-size:15px;padding:16px 32px;border-radius:10px;text-decoration:none;box-shadow:0 4px 20px rgba(124,58,237,0.3);">
+              View My Earnings →
+            </a>
+          </div>
+
+          <div style="background:#F8F8FB;border-top:1px solid #EEEEEE;padding:20px 32px;text-align:center;">
+            <p style="font-size:12px;color:#AAAAAA;margin:0;">
+              LeadPilot — Business Discovery Intelligence
+              <br>
+              Questions? <a href="https://wa.me/2349067285890" style="color:#7C3AED;text-decoration:none;">WhatsApp 09067285890</a>
+            </p>
+          </div>
+
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  await sendEmail({
+    to: referrerEmail,
+    subject: `You just earned $${commissionUsd.toFixed(2)} — LeadPilot commission`,
+    html,
+  });
 }
 
 export async function sendActivationEmail(email: string, licenseKey: string): Promise<void> {

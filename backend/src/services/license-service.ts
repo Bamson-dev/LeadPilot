@@ -8,6 +8,8 @@ import {
   SALE_PRICE_NGN,
   SALE_PRICE_USD,
 } from "../constants/pricing";
+import { sendCommissionNotification } from "./brevo-service";
+import { logger } from "../utils/logger";
 
 export function generateRefCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -145,11 +147,42 @@ export async function createCommissionForReferral(params: {
     status: "pending",
   });
 
+  const referrerEmail = referrer.email as string;
+
   await supabase
     .from("license_keys")
     .update({
       total_referrals: ((referrer.total_referrals as number) || 0) + 1,
       total_earned_ngn: ((referrer.total_earned_ngn as number) || 0) + COMMISSION_NGN,
     })
-    .eq("email", referrer.email);
+    .eq("email", referrerEmail);
+
+  try {
+    const { data: updatedLicense } = await supabase
+      .from("license_keys")
+      .select("total_earned_ngn, total_paid_ngn")
+      .eq("email", referrerEmail)
+      .maybeSingle();
+
+    const totalEarnedNgn = (updatedLicense?.total_earned_ngn as number) || COMMISSION_NGN;
+    const totalPaidNgn = (updatedLicense?.total_paid_ngn as number) || 0;
+    const pendingNgn = totalEarnedNgn - totalPaidNgn;
+
+    await sendCommissionNotification(
+      referrerEmail,
+      referredEmail,
+      COMMISSION_NGN,
+      COMMISSION_USD,
+      totalEarnedNgn,
+      totalEarnedNgn / NGN_PER_USD,
+      pendingNgn
+    );
+
+    logger.info("Commission notification sent", { referrerEmail });
+  } catch (err) {
+    logger.error("Failed to send commission notification", {
+      referrerEmail,
+      error: err instanceof Error ? err.message : "unknown",
+    });
+  }
 }
