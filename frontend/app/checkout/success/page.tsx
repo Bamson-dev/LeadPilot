@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
@@ -78,7 +79,7 @@ function CheckoutSuccessContent() {
           </p>
         )}
 
-        <a
+        <Link
           href="/activate"
           style={{
             display: "block",
@@ -94,9 +95,9 @@ function CheckoutSuccessContent() {
           }}
         >
           Activate My Account →
-        </a>
+        </Link>
 
-        <a
+        <Link
           href="/"
           style={{
             display: "block",
@@ -106,7 +107,7 @@ function CheckoutSuccessContent() {
           }}
         >
           Back to LeadPilot.live
-        </a>
+        </Link>
       </div>
     </div>
   );
