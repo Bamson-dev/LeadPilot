@@ -111,9 +111,11 @@ router.post("/verify", async (req: Request, res: Response) => {
       emailSent: result.emailSent,
       commissionCreated: result.commissionCreated,
       commissionSkippedReason: result.commissionSkippedReason,
-      message: result.emailSent
-        ? "Activation email sent. Check your inbox and spam folder."
-        : "License created. Email could not be sent — contact support or use Admin resend.",
+      message: result.alreadyFulfilled
+        ? "Your license is already active. Check your inbox for your activation email."
+        : result.emailSent
+          ? "Activation email sent. Check your inbox and spam folder."
+          : "License created. Email could not be sent — contact support or use Admin resend.",
     });
   } catch (err) {
     logger.error("Checkout verify failed", {

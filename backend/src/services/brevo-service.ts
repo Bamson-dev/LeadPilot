@@ -149,6 +149,179 @@ export async function sendCommissionNotification(
   });
 }
 
+export async function sendPayoutRequestedEmail(
+  email: string,
+  amountNgn: number,
+  amountUsd: number,
+  accountName: string,
+  bankName: string
+): Promise<void> {
+  const dashboardUrl = `${config.FRONTEND_URL.replace(/\/$/, "")}/dashboard`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body style="margin:0;padding:0;background:#F4F4F8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+      <div style="max-width:560px;margin:0 auto;padding:40px 20px;">
+        <div style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 2px 20px rgba(0,0,0,0.06);">
+
+          <div style="background:#7C3AED;padding:24px 32px;display:flex;align-items:center;gap:12px;">
+            <div style="width:34px;height:34px;background:rgba(255,255,255,0.2);border-radius:8px;display:inline-flex;align-items:center;justify-content:center;">
+              <span style="color:white;font-size:12px;font-weight:800;">LP</span>
+            </div>
+            <span style="font-size:18px;font-weight:800;color:white;">LeadPilot</span>
+          </div>
+
+          <div style="padding:36px 32px;text-align:center;">
+            <div style="font-size:48px;margin-bottom:16px;">🏦</div>
+
+            <h2 style="font-size:24px;font-weight:800;color:#111111;margin:0 0 10px;letter-spacing:-0.5px;">
+              Payout request received
+            </h2>
+
+            <p style="font-size:15px;color:#555555;margin:0 0 28px;line-height:1.7;">
+              We have received your payout request and it is being processed. Expect your money within 24 hours.
+            </p>
+
+            <div style="background:#F8F8FB;border-radius:14px;padding:24px;margin-bottom:28px;text-align:left;">
+              <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #EEEEEE;font-size:14px;">
+                <span style="color:#888888;">Amount</span>
+                <span style="font-weight:800;color:#111111;">₦${amountNgn.toLocaleString()} ($${amountUsd.toFixed(2)})</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #EEEEEE;font-size:14px;">
+                <span style="color:#888888;">Account name</span>
+                <span style="font-weight:700;color:#111111;">${accountName}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:10px 0;font-size:14px;">
+                <span style="color:#888888;">Bank</span>
+                <span style="font-weight:700;color:#111111;">${bankName}</span>
+              </div>
+            </div>
+
+            <p style="font-size:14px;color:#555555;line-height:1.75;margin-bottom:28px;">
+              Keep sharing your referral link while you wait. Every new referral adds to your next payout. There is no limit to how much you can earn.
+            </p>
+
+            <a href="${dashboardUrl}"
+               style="display:inline-block;background:#7C3AED;color:white;font-weight:800;font-size:15px;padding:16px 32px;border-radius:10px;text-decoration:none;">
+              View My Dashboard →
+            </a>
+          </div>
+
+          <div style="background:#F8F8FB;border-top:1px solid #EEEEEE;padding:20px 32px;text-align:center;">
+            <p style="font-size:12px;color:#AAAAAA;margin:0;">
+              Questions? <a href="https://wa.me/2349067285890" style="color:#7C3AED;text-decoration:none;">WhatsApp 09067285890</a>
+              &nbsp;·&nbsp;
+              <a href="mailto:access@leadpilot.live" style="color:#7C3AED;text-decoration:none;">access@leadpilot.live</a>
+            </p>
+          </div>
+
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  await sendEmail({
+    to: email,
+    subject: "Your payout request is being processed — LeadPilot",
+    html,
+  });
+}
+
+export async function sendPayoutPaidEmail(
+  email: string,
+  amountNgn: number,
+  amountUsd: number,
+  accountName: string,
+  bankName: string,
+  accountNumber: string
+): Promise<void> {
+  const dashboardUrl = `${config.FRONTEND_URL.replace(/\/$/, "")}/dashboard`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body style="margin:0;padding:0;background:#F4F4F8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+      <div style="max-width:560px;margin:0 auto;padding:40px 20px;">
+        <div style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 2px 20px rgba(0,0,0,0.06);">
+
+          <div style="background:#10B981;padding:24px 32px;display:flex;align-items:center;gap:12px;">
+            <div style="width:34px;height:34px;background:rgba(255,255,255,0.2);border-radius:8px;display:inline-flex;align-items:center;justify-content:center;">
+              <span style="color:white;font-size:12px;font-weight:800;">LP</span>
+            </div>
+            <span style="font-size:18px;font-weight:800;color:white;">LeadPilot</span>
+          </div>
+
+          <div style="padding:36px 32px;text-align:center;">
+            <div style="font-size:48px;margin-bottom:16px;">💸</div>
+
+            <h2 style="font-size:24px;font-weight:800;color:#111111;margin:0 0 10px;letter-spacing:-0.5px;">
+              Your money is on the way
+            </h2>
+
+            <p style="font-size:15px;color:#555555;margin:0 0 28px;line-height:1.7;">
+              Your payout has been processed and the transfer has been initiated to your bank account. Check your account within a few hours.
+            </p>
+
+            <div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:14px;padding:24px;margin-bottom:28px;text-align:left;">
+              <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #D1FAE5;font-size:14px;">
+                <span style="color:#065F46;font-weight:600;">Amount paid</span>
+                <span style="font-weight:900;color:#065F46;font-size:18px;">₦${amountNgn.toLocaleString()}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #D1FAE5;font-size:14px;">
+                <span style="color:#6B7280;">Account name</span>
+                <span style="font-weight:700;color:#111111;">${accountName}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #D1FAE5;font-size:14px;">
+                <span style="color:#6B7280;">Bank</span>
+                <span style="font-weight:700;color:#111111;">${bankName}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:10px 0;font-size:14px;">
+                <span style="color:#6B7280;">Account number</span>
+                <span style="font-weight:700;color:#111111;">${accountNumber}</span>
+              </div>
+            </div>
+
+            <p style="font-size:14px;color:#555555;line-height:1.75;margin-bottom:28px;">
+              Thank you for promoting LeadPilot. Keep sharing your referral link and you can request your next payout anytime your balance reaches ₦7,500. There is no limit on how much you can earn.
+            </p>
+
+            <a href="${dashboardUrl}"
+               style="display:inline-block;background:#10B981;color:white;font-weight:800;font-size:15px;padding:16px 32px;border-radius:10px;text-decoration:none;">
+              View My Dashboard →
+            </a>
+          </div>
+
+          <div style="background:#F8F8FB;border-top:1px solid #EEEEEE;padding:20px 32px;text-align:center;">
+            <p style="font-size:12px;color:#AAAAAA;margin:0;">
+              Questions? <a href="https://wa.me/2349067285890" style="color:#10B981;text-decoration:none;">WhatsApp 09067285890</a>
+              &nbsp;·&nbsp;
+              <a href="mailto:access@leadpilot.live" style="color:#10B981;text-decoration:none;">access@leadpilot.live</a>
+            </p>
+          </div>
+
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  await sendEmail({
+    to: email,
+    subject: `Your ₦${amountNgn.toLocaleString()} payout has been sent — LeadPilot`,
+    html,
+  });
+}
+
 export async function sendActivationEmail(email: string, licenseKey: string): Promise<void> {
   const activateUrl = `${config.FRONTEND_URL}/activate?key=${encodeURIComponent(licenseKey)}`;
 

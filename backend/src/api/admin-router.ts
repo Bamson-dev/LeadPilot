@@ -11,8 +11,11 @@ import {
   resetDevices,
 } from "../database/license-repository";
 import { supabase } from "../database/client";
-import { sendActivationEmail, sendAdminMessage } from "../services/brevo-service";
-import { initiateTransfer } from "../services/paystack-client";
+import {
+  sendActivationEmail,
+  sendAdminMessage,
+  sendPayoutPaidEmail,
+} from "../services/brevo-service";
 import { logger } from "../utils/logger";
 
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
@@ -712,10 +715,30 @@ adminRouter.get("/payouts", requireAdminAuth, async (_req: Request, res: Respons
   }
 });
 
-adminRouter.post("/payouts/:id/pay", requireAdminAuth, async (req: Request, res: Response) => {
-  const { id } = req.params;
-
+adminRouter.post("/payouts/:id/processing", requireAdminAuth, async (req: Request, res: Response) => {
   try {
+    const { id } = req.params;
+
+    const { error } = await supabase
+      .from("payout_requests")
+      .update({ status: "processing" })
+      .eq("id", id);
+
+    if (error) throw error;
+
+    res.json({ success: true, message: "Payout marked as processing" });
+  } catch (err) {
+    logger.error("Failed to mark payout as processing", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to update payout status" });
+  }
+});
+
+adminRouter.post("/payouts/:id/pay", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
     const { data: payout, error } = await supabase
       .from("payout_requests")
       .select("*")
@@ -727,31 +750,15 @@ adminRouter.post("/payouts/:id/pay", requireAdminAuth, async (req: Request, res:
       return;
     }
 
-    if (payout.status !== "pending") {
-      res.status(400).json({ error: "Payout already processed" });
+    if (payout.status === "paid") {
+      res.status(400).json({ error: "Payout already marked as paid" });
       return;
     }
-
-    if (!payout.paystack_recipient_code) {
-      res.status(400).json({ error: "Missing Paystack recipient for this payout" });
-      return;
-    }
-
-    const transfer = await initiateTransfer({
-      amountKobo: (payout.amount_ngn as number) * 100,
-      recipient: payout.paystack_recipient_code as string,
-      reason: `LeadPilot affiliate commission — ${payout.referrer_email}`,
-      reference: `PAYOUT-${id}`,
-    });
-
-    const transferCode = transfer.transfer_code;
 
     await supabase
       .from("payout_requests")
       .update({
         status: "paid",
-        paystack_transfer_code: transferCode,
-        paystack_transfer_reference: `PAYOUT-${id}`,
         paid_at: new Date().toISOString(),
       })
       .eq("id", id);
@@ -772,32 +779,39 @@ adminRouter.post("/payouts/:id/pay", requireAdminAuth, async (req: Request, res:
       })
       .eq("email", payout.referrer_email as string);
 
-    logger.info("Payout initiated successfully", {
+    try {
+      await sendPayoutPaidEmail(
+        payout.referrer_email as string,
+        payout.amount_ngn as number,
+        payout.amount_usd as number,
+        payout.account_name as string,
+        payout.bank_name as string,
+        payout.account_number as string
+      );
+      logger.info("Payout confirmation email sent", {
+        email: payout.referrer_email,
+      });
+    } catch (err) {
+      logger.error("Failed to send payout confirmation email", {
+        error: err instanceof Error ? err.message : "unknown",
+      });
+    }
+
+    logger.info("Payout marked as paid", {
       payoutId: id,
       referrer: payout.referrer_email,
       amount: payout.amount_ngn,
-      transferCode,
     });
 
     res.json({
       success: true,
-      message: `₦${(payout.amount_ngn as number).toLocaleString()} transfer initiated to ${payout.account_name}`,
-      transferCode,
+      message: `Payout of ₦${(payout.amount_ngn as number).toLocaleString()} marked as paid for ${payout.referrer_email}. Remember to complete the bank transfer manually.`,
     });
   } catch (err) {
-    logger.error("Payout failed", {
+    logger.error("Failed to process payout", {
       error: err instanceof Error ? err.message : "unknown",
     });
-
-    await supabase
-      .from("payout_requests")
-      .update({
-        status: "failed",
-        failure_reason: err instanceof Error ? err.message : "Transfer failed",
-      })
-      .eq("id", id);
-
-    res.status(500).json({ error: "Payout failed. Check your Paystack balance." });
+    res.status(500).json({ error: "Failed to process payout" });
   }
 });
 

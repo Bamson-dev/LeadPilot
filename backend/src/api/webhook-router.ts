@@ -8,6 +8,7 @@ import { Router, type Request, type Response } from "express";
 import express from "express";
 import crypto from "crypto";
 import { config } from "../config/env";
+import { getLicenseByPaymentReference } from "../database/license-repository";
 import { fulfillPaystackCharge } from "../services/payment-fulfillment";
 import { logger } from "../utils/logger";
 
@@ -54,23 +55,39 @@ webhookRouter.post(
         return;
       }
 
+      const reference = event.data?.reference;
+      if (reference) {
+        const existing = await getLicenseByPaymentReference(reference);
+        if (existing) {
+          logger.info("Webhook already processed — skipping duplicate", { reference });
+          res.status(200).json({ received: true });
+          return;
+        }
+      }
+
       res.status(200).send("ok");
 
       setImmediate(() => {
         void (async () => {
           try {
             const email = event.data?.customer?.email;
-            const reference = event.data?.reference;
+            const ref = event.data?.reference;
             const amount = event.data?.amount ?? 0;
 
-            if (!email || !reference) {
+            if (!email || !ref) {
               logger.error("Missing email or reference in Paystack webhook", { event });
+              return;
+            }
+
+            const duplicate = await getLicenseByPaymentReference(ref);
+            if (duplicate) {
+              logger.info("Webhook duplicate skipped in async handler", { reference: ref });
               return;
             }
 
             await fulfillPaystackCharge({
               email,
-              reference,
+              reference: ref,
               amount,
               metadata: event.data?.metadata,
             });

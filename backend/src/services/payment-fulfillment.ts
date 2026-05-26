@@ -53,37 +53,13 @@ export async function fulfillPaystackCharge(params: {
 
   const existing = await getLicenseByPaymentReference(reference);
   if (existing) {
-    let emailSent = false;
-    try {
-      await sendActivationEmail(email, existing.key);
-      emailSent = true;
-    } catch (err) {
-      logger.warn("Activation email resend skipped for existing payment", {
-        reference,
-        error: err instanceof Error ? err.message : "unknown",
-      });
-    }
-
-    const refCode = extractRefCodeFromMetadata(params.metadata);
-    let commissionCreated = false;
-    let commissionSkippedReason: string | undefined = "already_fulfilled";
-
-    if (refCode) {
-      try {
-        await createCommissionForReferral({ refCode, referredEmail: email });
-        commissionCreated = true;
-        commissionSkippedReason = undefined;
-      } catch (err) {
-        commissionSkippedReason = err instanceof Error ? err.message : "commission_failed";
-      }
-    }
-
+    logger.info("Payment already fulfilled — skipping duplicate", { reference, email });
     return {
       alreadyFulfilled: true,
       licenseKey: existing.key,
-      emailSent,
-      commissionCreated,
-      commissionSkippedReason,
+      emailSent: false,
+      commissionCreated: false,
+      commissionSkippedReason: "already_fulfilled",
     };
   }
 

@@ -218,6 +218,16 @@ export async function getPayouts(): Promise<{ payouts: PayoutRequest[] }> {
   return res.json();
 }
 
+export async function markPayoutProcessing(payoutId: string) {
+  const res = await fetch(`${getApiUrl()}/admin/payouts/${payoutId}/processing`, {
+    method: "POST",
+    headers: getAdminHeaders(),
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to update payout status");
+  return res.json() as Promise<{ success: boolean; message: string }>;
+}
+
 export async function payPayout(payoutId: string) {
   const res = await fetch(`${getApiUrl()}/admin/payouts/${payoutId}/pay`, {
     method: "POST",
