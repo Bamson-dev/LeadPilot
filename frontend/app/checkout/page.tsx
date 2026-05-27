@@ -1,21 +1,40 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import Script from "next/script";
-import { useState } from "react";
-import { LIFETIME_PRICE_KOBO } from "@/constants/pricing";
+import { useFlutterwave, closePaymentModal } from "flutterwave-react-v3";
+import { detectCountry } from "@/lib/geolocation";
+import { LIFETIME_PRICE_KOBO, SALE_PRICE_USD } from "@/constants/pricing";
 import { getApiUrl } from "@/utils/env";
+
+const PAYSTACK_PUBLIC_KEY = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY ?? "";
+const FLW_PUBLIC_KEY = process.env.NEXT_PUBLIC_FLUTTERWAVE_PUBLIC_KEY ?? "";
 
 export default function CheckoutPage() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [country, setCountry] = useState<string | null>(null);
+  const [detecting, setDetecting] = useState(true);
+  const [flwTxRef, setFlwTxRef] = useState<string | null>(null);
+  const [openFlw, setOpenFlw] = useState(false);
+
+  const isNigeria = country === "NG";
+  const isNigeriaGateway = isNigeria;
+
+  useEffect(() => {
+    detectCountry().then((code) => {
+      setCountry(code);
+      setDetecting(false);
+    });
+  }, []);
 
   function getRefCode(): string | null {
     if (typeof window === "undefined") return null;
     return localStorage.getItem("lp_ref_code");
   }
 
-  async function handleCheckout() {
+  async function handlePaystack() {
     if (!email || !email.includes("@")) {
       setError("Please enter a valid email address");
       return;
@@ -27,6 +46,9 @@ export default function CheckoutPage() {
     try {
       const refCode = getRefCode();
       const apiUrl = getApiUrl();
+      if (!apiUrl) {
+        throw new Error("Payment is not configured");
+      }
 
       const res = await fetch(`${apiUrl}/checkout/initialize`, {
         method: "POST",
@@ -44,20 +66,20 @@ export default function CheckoutPage() {
         accessCode: string;
       };
 
-      const paystackKey = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY;
-      if (!paystackKey) {
+      if (!PAYSTACK_PUBLIC_KEY) {
         throw new Error("Payment is not configured");
       }
 
-      const PaystackPop = (window as { PaystackPop?: { setup: (opts: object) => { openIframe: () => void } } })
-        .PaystackPop;
+      const PaystackPop = (
+        window as { PaystackPop?: { setup: (opts: object) => { openIframe: () => void } } }
+      ).PaystackPop;
 
       if (!PaystackPop) {
         throw new Error("Paystack is still loading. Please try again.");
       }
 
       const handler = PaystackPop.setup({
-        key: paystackKey,
+        key: PAYSTACK_PUBLIC_KEY,
         email,
         amount: LIFETIME_PRICE_KOBO,
         currency: "NGN",
@@ -66,12 +88,11 @@ export default function CheckoutPage() {
         metadata: {
           ref_code: refCode || "",
           product: "LeadPilot Lifetime",
+          gateway: "paystack",
         },
-        onClose: () => {
-          setLoading(false);
-        },
+        onClose: () => setLoading(false),
         callback: (response: { reference: string }) => {
-          window.location.href = `/checkout/success?reference=${encodeURIComponent(response.reference)}`;
+          window.location.href = `/checkout/success?reference=${encodeURIComponent(response.reference)}&gateway=paystack`;
         },
       });
 
@@ -82,63 +103,169 @@ export default function CheckoutPage() {
     }
   }
 
+  const flwConfig = useMemo(
+    () => ({
+      public_key: FLW_PUBLIC_KEY,
+      tx_ref:
+        flwTxRef ||
+        `LP-FLW-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+      amount: SALE_PRICE_USD,
+      currency: "USD",
+      payment_options: "card",
+      customer: {
+        email: email.trim() || "checkout@leadpilot.live",
+        name: (email.split("@")[0] || "Customer").slice(0, 50),
+        phone_number: "",
+      },
+      customizations: {
+        title: "LeadPilot Lifetime Access",
+        description: "One payment. Find clients forever.",
+        logo:
+          typeof window !== "undefined"
+            ? `${window.location.origin}/logo.png`
+            : "https://www.leadpilot.live/logo.png",
+      },
+      meta: {
+        ref_code: getRefCode() || "",
+        product: "LeadPilot Lifetime",
+        gateway: "flutterwave",
+      },
+    }),
+    [flwTxRef, email]
+  );
+
+  const handleFlutterwave = useFlutterwave(flwConfig);
+
+  useEffect(() => {
+    if (!openFlw || !flwTxRef || !email.includes("@")) return;
+
+    handleFlutterwave({
+      callback: (response) => {
+        closePaymentModal();
+        setOpenFlw(false);
+        setLoading(false);
+        if (response.status === "successful") {
+          const ref = response.tx_ref || flwTxRef;
+          window.location.href = `/checkout/success?reference=${encodeURIComponent(ref)}&gateway=flutterwave`;
+        } else {
+          setError("Payment was not completed. Please try again.");
+        }
+      },
+      onClose: () => {
+        setOpenFlw(false);
+        setLoading(false);
+      },
+    });
+  }, [openFlw, flwTxRef, email, handleFlutterwave]);
+
+  function handleFlutterwavePay() {
+    if (!email || !email.includes("@")) {
+      setError("Please enter a valid email address");
+      return;
+    }
+
+    if (!FLW_PUBLIC_KEY) {
+      setError("Payment is not configured");
+      return;
+    }
+
+    setError("");
+    setLoading(true);
+    const ref = `LP-FLW-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    setFlwTxRef(ref);
+    setOpenFlw(true);
+  }
+
+  function handlePay() {
+    if (isNigeriaGateway) {
+      void handlePaystack();
+    } else {
+      handleFlutterwavePay();
+    }
+  }
+
   return (
-    <>
-      <Script src="https://js.paystack.co/v1/inline.js" strategy="afterInteractive" />
+    <div
+      style={{
+        background: "#050508",
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+        fontFamily: "Inter, sans-serif",
+      }}
+    >
+      <Script src="https://js.paystack.co/v1/inline.js" strategy="beforeInteractive" />
 
       <div
         style={{
-          background: "#050508",
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: 20,
-          fontFamily: "Inter, sans-serif",
+          background: "#111118",
+          border: `1px solid ${isNigeriaGateway ? "rgba(16,185,129,0.25)" : "rgba(124,58,237,0.25)"}`,
+          borderRadius: 20,
+          padding: "0",
+          maxWidth: 440,
+          width: "100%",
+          boxShadow: `0 0 80px ${isNigeriaGateway ? "rgba(16,185,129,0.08)" : "rgba(124,58,237,0.08)"}`,
+          overflow: "hidden",
         }}
       >
         <div
           style={{
-            background: "#111118",
-            border: "1px solid rgba(124,58,237,0.3)",
-            borderRadius: 20,
-            padding: "40px 32px",
-            maxWidth: 440,
-            width: "100%",
-            boxShadow: "0 0 80px rgba(124,58,237,0.12)",
+            padding: "16px 24px",
+            borderBottom: "1px solid rgba(255,255,255,0.06)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            background: "rgba(255,255,255,0.02)",
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              marginBottom: 28,
-            }}
-          >
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div
               style={{
-                width: 34,
-                height: 34,
+                width: 32,
+                height: 32,
                 background: "#7C3AED",
-                borderRadius: 9,
+                borderRadius: 8,
                 display: "grid",
                 placeItems: "center",
-                fontSize: 12,
-                fontWeight: 800,
+                fontSize: 11,
+                fontWeight: 900,
                 color: "white",
               }}
             >
               LP
             </div>
-            <span style={{ fontSize: 18, fontWeight: 800, color: "#F2F1FF" }}>
+            <span style={{ fontSize: 16, fontWeight: 800, color: "#F2F1FF" }}>
               Lead<span style={{ color: "#A78BFA" }}>Pilot</span>
             </span>
           </div>
 
+          {!detecting && (
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                padding: "4px 10px",
+                borderRadius: 100,
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                background: isNigeriaGateway
+                  ? "rgba(16,185,129,0.1)"
+                  : "rgba(255,130,0,0.1)",
+                color: isNigeriaGateway ? "#10B981" : "#FF8200",
+                border: `1px solid ${isNigeriaGateway ? "rgba(16,185,129,0.25)" : "rgba(255,130,0,0.25)"}`,
+              }}
+            >
+              {isNigeriaGateway ? "Paystack" : "Flutterwave"}
+            </span>
+          )}
+        </div>
+
+        <div style={{ padding: "28px 24px" }}>
           <h1
             style={{
-              fontSize: 24,
+              fontSize: 22,
               fontWeight: 900,
               color: "#F2F1FF",
               letterSpacing: -0.5,
@@ -150,60 +277,150 @@ export default function CheckoutPage() {
 
           <p
             style={{
-              fontSize: 14,
+              fontSize: 13,
               color: "#8888A8",
-              marginBottom: 28,
+              marginBottom: 20,
               lineHeight: 1.6,
             }}
           >
-            One payment of <strong style={{ color: "#F2F1FF" }}>$15 (₦15,000)</strong>. No
-            monthly fee. No renewal. Ever.
+            One payment of{" "}
+            <strong style={{ color: "#F2F1FF" }}>
+              {isNigeriaGateway ? "₦15,000" : "$15 USD"}
+            </strong>
+            . No monthly fee. No renewal. Ever.
           </p>
+
+          {!detecting && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                background: "rgba(255,255,255,0.03)",
+                border: "1px solid rgba(255,255,255,0.07)",
+                borderRadius: 8,
+                padding: "9px 14px",
+                marginBottom: 18,
+                fontSize: 12,
+                color: "#8888A8",
+              }}
+            >
+              <span
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: "50%",
+                  background: isNigeriaGateway ? "#10B981" : "#A78BFA",
+                  display: "inline-block",
+                  flexShrink: 0,
+                }}
+              />
+              {isNigeriaGateway
+                ? "Nigeria detected · Secure checkout via Paystack"
+                : "International checkout · Secure payment via Flutterwave"}
+            </div>
+          )}
+
+          {detecting && (
+            <div
+              style={{
+                height: 36,
+                background: "rgba(255,255,255,0.03)",
+                borderRadius: 8,
+                marginBottom: 18,
+                animation: "pulse 1.5s ease-in-out infinite",
+              }}
+            />
+          )}
 
           <div
             style={{
-              background: "rgba(124,58,237,0.06)",
-              border: "1px solid rgba(124,58,237,0.2)",
+              background: "rgba(124,58,237,0.05)",
+              border: "1px solid rgba(124,58,237,0.12)",
               borderRadius: 12,
-              padding: "14px 16px",
+              padding: "12px 16px",
               marginBottom: 20,
             }}
           >
             {[
               "Up to 200 businesses per search",
-              "Phone numbers, emails, addresses",
-              "195+ countries covered",
+              "Phone numbers + WhatsApp outreach",
+              "Email discovery from websites",
               "CSV export — unlimited",
+              "195 countries covered",
               "All future updates included",
-            ].map((f, i) => (
+            ].map((f, i, arr) => (
               <div
                 key={f}
                 style={{
                   display: "flex",
                   alignItems: "center",
                   gap: 10,
-                  padding: "6px 0",
+                  padding: "7px 0",
                   fontSize: 13,
                   color: "#C0C0D8",
                   borderBottom:
-                    i < 4 ? "1px solid rgba(255,255,255,0.05)" : "none",
+                    i < arr.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
                 }}
               >
-                <span style={{ color: "#10B981", fontWeight: 700 }}>✓</span>
+                <span style={{ color: "#10B981", fontWeight: 800, fontSize: 12 }}>✓</span>
                 {f}
               </div>
             ))}
           </div>
 
+          <div
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              gap: 10,
+              marginBottom: 20,
+            }}
+          >
+            <span
+              style={{
+                fontSize: 14,
+                color: "#555570",
+                textDecoration: "line-through",
+              }}
+            >
+              {isNigeriaGateway ? "₦30,000" : "$30"}
+            </span>
+            <span
+              style={{
+                fontSize: 36,
+                fontWeight: 900,
+                color: "#F2F1FF",
+                letterSpacing: -1,
+                fontFamily: "Inter, sans-serif",
+              }}
+            >
+              {isNigeriaGateway ? "₦15,000" : "$15"}
+            </span>
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: "#10B981",
+                background: "rgba(16,185,129,0.08)",
+                padding: "3px 10px",
+                borderRadius: 100,
+                border: "1px solid rgba(16,185,129,0.2)",
+              }}
+            >
+              Lifetime
+            </span>
+          </div>
+
           <label
             style={{
               display: "block",
-              fontSize: 12,
-              fontWeight: 600,
+              fontSize: 11,
+              fontWeight: 700,
               color: "#8888A8",
-              marginBottom: 8,
               textTransform: "uppercase",
-              letterSpacing: "0.06em",
+              letterSpacing: "0.08em",
+              marginBottom: 8,
             }}
           >
             Your email address
@@ -214,14 +431,16 @@ export default function CheckoutPage() {
             placeholder="you@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && void handleCheckout()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void handlePay();
+            }}
             style={{
               width: "100%",
-              padding: "14px 16px",
+              padding: "13px 16px",
               background: "#0A0A10",
               border: "1px solid rgba(255,255,255,0.1)",
               borderRadius: 10,
-              fontSize: 15,
+              fontSize: 14,
               color: "#F2F1FF",
               fontFamily: "Inter, sans-serif",
               outline: "none",
@@ -236,39 +455,56 @@ export default function CheckoutPage() {
 
           <button
             type="button"
-            onClick={() => void handleCheckout()}
-            disabled={loading}
+            onClick={() => void handlePay()}
+            disabled={loading || detecting}
             style={{
               width: "100%",
-              background: loading ? "#4C1D95" : "#7C3AED",
+              background: detecting
+                ? "#1A1A24"
+                : isNigeriaGateway
+                  ? "#10B981"
+                  : "#FF8200",
               color: "white",
               border: "none",
               borderRadius: 12,
               padding: "16px",
               fontSize: 15,
               fontWeight: 800,
-              cursor: loading ? "not-allowed" : "pointer",
+              cursor: loading || detecting ? "not-allowed" : "pointer",
               fontFamily: "Inter, sans-serif",
-              boxShadow: "0 0 40px rgba(124,58,237,0.35)",
+              boxShadow: detecting
+                ? "none"
+                : isNigeriaGateway
+                  ? "0 0 40px rgba(16,185,129,0.3)"
+                  : "0 0 40px rgba(255,130,0,0.25)",
               marginBottom: 14,
-              transition: "background 0.2s",
+              transition: "all 0.2s",
+              opacity: loading ? 0.7 : 1,
             }}
           >
-            {loading ? "Opening payment..." : "Pay $15 (₦15,000) — Get Access Now"}
+            {detecting
+              ? "Loading..."
+              : loading
+                ? "Opening payment..."
+                : isNigeriaGateway
+                  ? "🔒 Pay ₦15,000 — Get Access Now"
+                  : "🔒 Pay $15 — Get Access Now"}
           </button>
 
           <p
             style={{
-              fontSize: 12,
-              color: "#7878A0",
+              fontSize: 11,
+              color: "#444460",
               textAlign: "center",
               lineHeight: 1.6,
             }}
           >
-            🔒 Secure payment via Paystack · Instant access after payment
+            {isNigeriaGateway
+              ? "🔒 Secured by Paystack · Instant access after payment"
+              : "🔒 Secured by Flutterwave · Instant access after payment"}
           </p>
         </div>
       </div>
-    </>
+    </div>
   );
 }

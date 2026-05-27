@@ -1,7 +1,8 @@
 import { Router, type Request, type Response } from "express";
 import { config } from "../config/env";
 import { LIFETIME_PRICE_KOBO } from "../constants/pricing";
-import { fulfillPaystackCharge } from "../services/payment-fulfillment";
+import { verifyFlutterwaveTransaction } from "../services/flutterwave-client";
+import { fulfillFlutterwaveCharge, fulfillPaystackCharge } from "../services/payment-fulfillment";
 import { getPaystack, paystackAsync, verifyTransaction } from "../services/paystack-client";
 import { logger } from "../utils/logger";
 
@@ -71,39 +72,71 @@ router.post("/initialize", async (req: Request, res: Response) => {
 /** Backup when Paystack webhook is delayed or misconfigured — called from /checkout/success */
 router.post("/verify", async (req: Request, res: Response) => {
   try {
-    const { reference } = req.body as { reference?: string };
+    const { reference, gateway } = req.body as {
+      reference?: string;
+      gateway?: string;
+    };
 
     if (!reference?.trim()) {
       res.status(400).json({ error: "Payment reference is required" });
       return;
     }
 
-    if (!config.PAYSTACK_SECRET_KEY) {
-      res.status(503).json({ error: "Payment is not configured" });
-      return;
-    }
+    const ref = reference.trim();
+    const isFlutterwave = gateway === "flutterwave";
 
-    const tx = await verifyTransaction(reference.trim());
+    let result;
 
-    if (tx.status !== "success") {
-      res.status(400).json({
-        error: "Payment not completed yet. Wait a moment and refresh this page.",
+    if (isFlutterwave) {
+      if (!config.FLUTTERWAVE_SECRET_KEY) {
+        res.status(503).json({ error: "Payment is not configured" });
+        return;
+      }
+
+      const tx = await verifyFlutterwaveTransaction(ref);
+
+      if (tx.status !== "successful") {
+        res.status(400).json({
+          error: "Payment not completed yet. Wait a moment and refresh this page.",
+        });
+        return;
+      }
+
+      result = await fulfillFlutterwaveCharge({
+        email: tx.customer.email,
+        reference: tx.tx_ref || ref,
+        amount: tx.amount,
+        currency: tx.currency,
+        metadata: tx.metadata,
       });
-      return;
-    }
+    } else {
+      if (!config.PAYSTACK_SECRET_KEY) {
+        res.status(503).json({ error: "Payment is not configured" });
+        return;
+      }
 
-    const email = tx.customer?.email;
-    if (!email) {
-      res.status(400).json({ error: "No customer email on this payment" });
-      return;
-    }
+      const tx = await verifyTransaction(ref);
 
-    const result = await fulfillPaystackCharge({
-      email,
-      reference: tx.reference || reference.trim(),
-      amount: tx.amount,
-      metadata: tx.metadata,
-    });
+      if (tx.status !== "success") {
+        res.status(400).json({
+          error: "Payment not completed yet. Wait a moment and refresh this page.",
+        });
+        return;
+      }
+
+      const email = tx.customer?.email;
+      if (!email) {
+        res.status(400).json({ error: "No customer email on this payment" });
+        return;
+      }
+
+      result = await fulfillPaystackCharge({
+        email,
+        reference: tx.reference || ref,
+        amount: tx.amount,
+        metadata: tx.metadata,
+      });
+    }
 
     res.json({
       success: true,

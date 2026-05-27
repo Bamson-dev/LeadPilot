@@ -2,10 +2,15 @@ import {
   createLicenseKey,
   getLicenseByPaymentReference,
 } from "../database/license-repository";
-import { LIFETIME_PRICE_KOBO } from "../constants/pricing";
+import {
+  LIFETIME_PRICE_KOBO,
+  SALE_PRICE_USD,
+} from "../constants/pricing";
 import { createCommissionForReferral } from "./license-service";
 import { sendActivationEmail } from "./brevo-service";
 import { logger } from "../utils/logger";
+
+export type PaymentGateway = "paystack" | "flutterwave";
 
 export function extractRefCodeFromMetadata(
   metadata: Record<string, unknown> | undefined
@@ -37,60 +42,36 @@ export interface FulfillPaymentResult {
   commissionSkippedReason?: string;
 }
 
-/** Idempotent: create license, send activation email, record affiliate commission. */
-export async function fulfillPaystackCharge(params: {
+/** Shared idempotent fulfillment for Paystack and Flutterwave. */
+export async function fulfillLifetimePurchase(params: {
   email: string;
   reference: string;
-  amount: number;
+  paymentChannel: PaymentGateway;
   metadata?: Record<string, unknown>;
 }): Promise<FulfillPaymentResult> {
   const email = params.email.toLowerCase().trim();
   const reference = params.reference.trim();
 
-  if (params.amount < LIFETIME_PRICE_KOBO) {
-    throw new Error(`Payment amount too low: ${params.amount} kobo`);
-  }
-
   const existing = await getLicenseByPaymentReference(reference);
   if (existing) {
-    let emailSent = false;
-    try {
-      await sendActivationEmail(email, existing.key);
-      emailSent = true;
-    } catch (err) {
-      logger.warn("Activation email resend skipped for existing payment", {
-        reference,
-        error: err instanceof Error ? err.message : "unknown",
-      });
-    }
-
-    const refCode = extractRefCodeFromMetadata(params.metadata);
-    let commissionCreated = false;
-    let commissionSkippedReason: string | undefined = "already_fulfilled";
-
-    if (refCode) {
-      try {
-        await createCommissionForReferral({ refCode, referredEmail: email });
-        commissionCreated = true;
-        commissionSkippedReason = undefined;
-      } catch (err) {
-        commissionSkippedReason = err instanceof Error ? err.message : "commission_failed";
-      }
-    }
-
+    logger.info("Payment already fulfilled — skipping duplicate", {
+      reference,
+      email,
+      gateway: params.paymentChannel,
+    });
     return {
       alreadyFulfilled: true,
       licenseKey: existing.key,
-      emailSent,
-      commissionCreated,
-      commissionSkippedReason,
+      emailSent: false,
+      commissionCreated: false,
+      commissionSkippedReason: "already_fulfilled",
     };
   }
 
   const license = await createLicenseKey({
     email,
     paymentReference: reference,
-    paymentChannel: "paystack",
+    paymentChannel: params.paymentChannel,
   });
 
   let emailSent = false;
@@ -101,6 +82,7 @@ export async function fulfillPaystackCharge(params: {
     logger.error("Activation email failed after license created", {
       email,
       reference,
+      gateway: params.paymentChannel,
       keyPrefix: license.key.slice(0, 12),
       error: err instanceof Error ? err.message : "unknown",
     });
@@ -116,7 +98,11 @@ export async function fulfillPaystackCharge(params: {
     try {
       await createCommissionForReferral({ refCode, referredEmail: email });
       commissionCreated = true;
-      logger.info("Commission recorded for referral", { refCode, referred: email });
+      logger.info("Commission recorded for referral", {
+        refCode,
+        referred: email,
+        gateway: params.paymentChannel,
+      });
     } catch (err) {
       commissionSkippedReason = err instanceof Error ? err.message : "commission_failed";
       logger.error("Commission creation failed", {
@@ -127,9 +113,10 @@ export async function fulfillPaystackCharge(params: {
     }
   }
 
-  logger.info("Paystack payment fulfilled", {
+  logger.info("Lifetime purchase fulfilled", {
     email,
     reference,
+    gateway: params.paymentChannel,
     emailSent,
     commissionCreated,
     commissionSkippedReason,
@@ -142,4 +129,47 @@ export async function fulfillPaystackCharge(params: {
     commissionCreated,
     commissionSkippedReason,
   };
+}
+
+/** Idempotent Paystack fulfillment (NGN, kobo). */
+export async function fulfillPaystackCharge(params: {
+  email: string;
+  reference: string;
+  amount: number;
+  metadata?: Record<string, unknown>;
+}): Promise<FulfillPaymentResult> {
+  if (params.amount < LIFETIME_PRICE_KOBO) {
+    throw new Error(`Payment amount too low: ${params.amount} kobo`);
+  }
+
+  return fulfillLifetimePurchase({
+    email: params.email,
+    reference: params.reference,
+    paymentChannel: "paystack",
+    metadata: params.metadata,
+  });
+}
+
+/** Idempotent Flutterwave fulfillment (USD). */
+export async function fulfillFlutterwaveCharge(params: {
+  email: string;
+  reference: string;
+  amount: number;
+  currency: string;
+  metadata?: Record<string, unknown>;
+}): Promise<FulfillPaymentResult> {
+  const currency = params.currency.toUpperCase();
+  if (currency !== "USD") {
+    throw new Error(`Unexpected Flutterwave currency: ${currency}`);
+  }
+  if (params.amount < SALE_PRICE_USD) {
+    throw new Error(`Payment amount too low: ${params.amount} USD`);
+  }
+
+  return fulfillLifetimePurchase({
+    email: params.email,
+    reference: params.reference,
+    paymentChannel: "flutterwave",
+    metadata: params.metadata,
+  });
 }
