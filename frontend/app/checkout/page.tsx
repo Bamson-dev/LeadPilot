@@ -10,17 +10,19 @@ import { getApiUrl } from "@/utils/env";
 const PAYSTACK_PUBLIC_KEY = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY ?? "";
 const FLW_PUBLIC_KEY = process.env.NEXT_PUBLIC_FLUTTERWAVE_PUBLIC_KEY ?? "";
 
+function generateFlwTxRef(): string {
+  return `LP-FLW-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+}
+
 export default function CheckoutPage() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [country, setCountry] = useState<string | null>(null);
   const [detecting, setDetecting] = useState(true);
-  const [flwTxRef, setFlwTxRef] = useState<string | null>(null);
-  const [openFlw, setOpenFlw] = useState(false);
+  const [flwTxRef, setFlwTxRef] = useState(generateFlwTxRef);
 
-  const isNigeria = country === "NG";
-  const isNigeriaGateway = isNigeria;
+  const isNigeriaGateway = country === "NG";
 
   useEffect(() => {
     detectCountry().then((code) => {
@@ -33,6 +35,38 @@ export default function CheckoutPage() {
     if (typeof window === "undefined") return null;
     return localStorage.getItem("lp_ref_code");
   }
+
+  const frontendUrl =
+    process.env.NEXT_PUBLIC_FRONTEND_URL?.replace(/\/$/, "") ||
+    "https://www.leadpilot.live";
+
+  const flwConfig = useMemo(
+    () => ({
+      public_key: FLW_PUBLIC_KEY,
+      tx_ref: flwTxRef,
+      amount: SALE_PRICE_USD,
+      currency: "USD",
+      payment_options: "card",
+      customer: {
+        email: email || "customer@leadpilot.live",
+        name: email ? email.split("@")[0] : "Customer",
+        phone_number: "",
+      },
+      customizations: {
+        title: "LeadPilot Lifetime Access",
+        description: "One payment. Find clients forever.",
+        logo: `${frontendUrl}/logo.png`,
+      },
+      meta: {
+        ref_code: getRefCode() || "",
+        product: "LeadPilot Lifetime",
+        gateway: "flutterwave",
+      },
+    }),
+    [email, flwTxRef, frontendUrl]
+  );
+
+  const handleFlutterwave = useFlutterwave(flwConfig);
 
   async function handlePaystack() {
     if (!email || !email.includes("@")) {
@@ -71,7 +105,11 @@ export default function CheckoutPage() {
       }
 
       const PaystackPop = (
-        window as { PaystackPop?: { setup: (opts: object) => { openIframe: () => void } } }
+        window as {
+          PaystackPop?: {
+            setup: (opts: object) => { openIframe: () => void };
+          };
+        }
       ).PaystackPop;
 
       if (!PaystackPop) {
@@ -98,65 +136,12 @@ export default function CheckoutPage() {
 
       handler.openIframe();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+      setError(
+        err instanceof Error ? err.message : "Something went wrong. Please try again."
+      );
       setLoading(false);
     }
   }
-
-  const flwConfig = useMemo(
-    () => ({
-      public_key: FLW_PUBLIC_KEY,
-      tx_ref:
-        flwTxRef ||
-        `LP-FLW-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
-      amount: SALE_PRICE_USD,
-      currency: "USD",
-      payment_options: "card",
-      customer: {
-        email: email.trim() || "checkout@leadpilot.live",
-        name: (email.split("@")[0] || "Customer").slice(0, 50),
-        phone_number: "",
-      },
-      customizations: {
-        title: "LeadPilot Lifetime Access",
-        description: "One payment. Find clients forever.",
-        logo:
-          typeof window !== "undefined"
-            ? `${window.location.origin}/logo.png`
-            : "https://www.leadpilot.live/logo.png",
-      },
-      meta: {
-        ref_code: getRefCode() || "",
-        product: "LeadPilot Lifetime",
-        gateway: "flutterwave",
-      },
-    }),
-    [flwTxRef, email]
-  );
-
-  const handleFlutterwave = useFlutterwave(flwConfig);
-
-  useEffect(() => {
-    if (!openFlw || !flwTxRef || !email.includes("@")) return;
-
-    handleFlutterwave({
-      callback: (response) => {
-        closePaymentModal();
-        setOpenFlw(false);
-        setLoading(false);
-        if (response.status === "successful") {
-          const ref = response.tx_ref || flwTxRef;
-          window.location.href = `/checkout/success?reference=${encodeURIComponent(ref)}&gateway=flutterwave`;
-        } else {
-          setError("Payment was not completed. Please try again.");
-        }
-      },
-      onClose: () => {
-        setOpenFlw(false);
-        setLoading(false);
-      },
-    });
-  }, [openFlw, flwTxRef, email, handleFlutterwave]);
 
   function handleFlutterwavePay() {
     if (!email || !email.includes("@")) {
@@ -171,9 +156,29 @@ export default function CheckoutPage() {
 
     setError("");
     setLoading(true);
-    const ref = `LP-FLW-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-    setFlwTxRef(ref);
-    setOpenFlw(true);
+
+    const txRef = flwTxRef;
+
+    handleFlutterwave({
+      callback: (response) => {
+        closePaymentModal();
+        if (response.status === "successful") {
+          const ref =
+            (response as { tx_ref?: string }).tx_ref ||
+            response.transaction_id ||
+            txRef;
+          window.location.href = `/checkout/success?reference=${encodeURIComponent(String(ref))}&gateway=flutterwave`;
+        } else {
+          setError("Payment was not completed. Please try again.");
+          setLoading(false);
+          setFlwTxRef(generateFlwTxRef());
+        }
+      },
+      onClose: () => {
+        setLoading(false);
+        setFlwTxRef(generateFlwTxRef());
+      },
+    });
   }
 
   function handlePay() {
@@ -203,7 +208,7 @@ export default function CheckoutPage() {
           background: "#111118",
           border: `1px solid ${isNigeriaGateway ? "rgba(16,185,129,0.25)" : "rgba(124,58,237,0.25)"}`,
           borderRadius: 20,
-          padding: "0",
+          padding: 0,
           maxWidth: 440,
           width: "100%",
           boxShadow: `0 0 80px ${isNigeriaGateway ? "rgba(16,185,129,0.08)" : "rgba(124,58,237,0.08)"}`,
@@ -285,7 +290,11 @@ export default function CheckoutPage() {
           >
             One payment of{" "}
             <strong style={{ color: "#F2F1FF" }}>
-              {isNigeriaGateway ? "₦15,000" : "$15 USD"}
+              {detecting
+                ? "…"
+                : isNigeriaGateway
+                  ? "₦15,000"
+                  : "$15 USD"}
             </strong>
             . No monthly fee. No renewal. Ever.
           </p>
@@ -328,7 +337,6 @@ export default function CheckoutPage() {
                 background: "rgba(255,255,255,0.03)",
                 borderRadius: 8,
                 marginBottom: 18,
-                animation: "pulse 1.5s ease-in-out infinite",
               }}
             />
           )}
@@ -392,10 +400,9 @@ export default function CheckoutPage() {
                 fontWeight: 900,
                 color: "#F2F1FF",
                 letterSpacing: -1,
-                fontFamily: "Inter, sans-serif",
               }}
             >
-              {isNigeriaGateway ? "₦15,000" : "$15"}
+              {detecting ? "…" : isNigeriaGateway ? "₦15,000" : "$15"}
             </span>
             <span
               style={{
@@ -431,9 +438,7 @@ export default function CheckoutPage() {
             placeholder="you@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void handlePay();
-            }}
+            onKeyDown={(e) => e.key === "Enter" && handlePay()}
             style={{
               width: "100%",
               padding: "13px 16px",
@@ -455,7 +460,7 @@ export default function CheckoutPage() {
 
           <button
             type="button"
-            onClick={() => void handlePay()}
+            onClick={handlePay}
             disabled={loading || detecting}
             style={{
               width: "100%",
@@ -478,7 +483,6 @@ export default function CheckoutPage() {
                   ? "0 0 40px rgba(16,185,129,0.3)"
                   : "0 0 40px rgba(255,130,0,0.25)",
               marginBottom: 14,
-              transition: "all 0.2s",
               opacity: loading ? 0.7 : 1,
             }}
           >

@@ -1,11 +1,6 @@
 // PAYSTACK DASHBOARD SETUP
 // Settings → API Keys & Webhooks
 // Webhook URL: https://backend.leadpilot.live/webhooks/paystack
-//
-// FLUTTERWAVE DASHBOARD SETUP
-// Settings → Webhooks
-// Webhook URL: https://backend.leadpilot.live/webhooks/flutterwave
-// Set secret hash → FLUTTERWAVE_SECRET_HASH in Coolify
 // Success Redirect: https://www.leadpilot.live/checkout/success
 // Paystack sends its own receipt email; LeadPilot sends the license key via Brevo when this webhook runs.
 
@@ -13,91 +8,14 @@ import { Router, type Request, type Response } from "express";
 import express from "express";
 import crypto from "crypto";
 import { config } from "../config/env";
+import { getLicenseByPaymentReference } from "../database/license-repository";
 import {
-  extractRefCodeFromMetadata,
   fulfillFlutterwaveCharge,
   fulfillPaystackCharge,
 } from "../services/payment-fulfillment";
 import { logger } from "../utils/logger";
 
 export const webhookRouter = Router();
-
-webhookRouter.post(
-  "/flutterwave",
-  express.json(),
-  async (req: Request, res: Response) => {
-    try {
-      const secretHash = config.FLUTTERWAVE_SECRET_HASH;
-      const signature = req.headers["verif-hash"] as string | undefined;
-
-      if (secretHash && signature !== secretHash) {
-        logger.warn("Flutterwave webhook signature mismatch");
-        res.status(401).json({ error: "Invalid signature" });
-        return;
-      }
-
-      const event = req.body as {
-        event?: string;
-        data?: {
-          status?: string;
-          tx_ref?: string;
-          flw_ref?: string;
-          amount?: number;
-          currency?: string;
-          customer?: { email?: string };
-          meta?: Record<string, unknown>;
-        };
-      };
-
-      if (event.event !== "charge.completed" || event.data?.status !== "successful") {
-        res.status(200).json({ received: true });
-        return;
-      }
-
-      res.status(200).json({ received: true });
-
-      setImmediate(() => {
-        void (async () => {
-          try {
-            const email = event.data?.customer?.email;
-            const reference = event.data?.tx_ref;
-            const amount = event.data?.amount ?? 0;
-            const currency = event.data?.currency ?? "USD";
-            const meta = event.data?.meta;
-
-            if (!email || !reference) {
-              logger.error("Missing email or tx_ref in Flutterwave webhook", { event });
-              return;
-            }
-
-            const metadata: Record<string, unknown> = { ...(meta ?? {}) };
-            const refCode = extractRefCodeFromMetadata(metadata);
-            if (refCode) {
-              metadata.ref_code = refCode;
-            }
-
-            await fulfillFlutterwaveCharge({
-              email,
-              reference,
-              amount,
-              currency,
-              metadata,
-            });
-          } catch (err) {
-            logger.error("Flutterwave webhook processing failed", {
-              error: err instanceof Error ? err.message : "unknown",
-            });
-          }
-        })();
-      });
-    } catch (err) {
-      logger.error("Flutterwave webhook handler error", {
-        error: err instanceof Error ? err.message : "unknown",
-      });
-      res.status(500).json({ error: "Webhook processing failed" });
-    }
-  }
-);
 
 webhookRouter.post(
   "/paystack",
@@ -140,23 +58,39 @@ webhookRouter.post(
         return;
       }
 
+      const reference = event.data?.reference;
+      if (reference) {
+        const existing = await getLicenseByPaymentReference(reference);
+        if (existing) {
+          logger.info("Webhook already processed — skipping duplicate", { reference });
+          res.status(200).json({ received: true });
+          return;
+        }
+      }
+
       res.status(200).send("ok");
 
       setImmediate(() => {
         void (async () => {
           try {
             const email = event.data?.customer?.email;
-            const reference = event.data?.reference;
+            const ref = event.data?.reference;
             const amount = event.data?.amount ?? 0;
 
-            if (!email || !reference) {
+            if (!email || !ref) {
               logger.error("Missing email or reference in Paystack webhook", { event });
+              return;
+            }
+
+            const duplicate = await getLicenseByPaymentReference(ref);
+            if (duplicate) {
+              logger.info("Webhook duplicate skipped in async handler", { reference: ref });
               return;
             }
 
             await fulfillPaystackCharge({
               email,
-              reference,
+              reference: ref,
               amount,
               metadata: event.data?.metadata,
             });
@@ -172,6 +106,105 @@ webhookRouter.post(
         error: err instanceof Error ? err.message : "unknown",
       });
       res.status(200).send("ok");
+    }
+  }
+);
+
+webhookRouter.post(
+  "/flutterwave",
+  express.json(),
+  async (req: Request, res: Response) => {
+    try {
+      const secretHash = config.FLUTTERWAVE_SECRET_HASH;
+      const signature = req.headers["verif-hash"] as string | undefined;
+
+      if (secretHash && signature !== secretHash) {
+        logger.warn("Flutterwave webhook signature mismatch");
+        res.status(401).json({ error: "Invalid signature" });
+        return;
+      }
+
+      const event = req.body as {
+        event?: string;
+        data?: {
+          status?: string;
+          customer?: { email?: string };
+          tx_ref?: string;
+          amount?: number;
+          currency?: string;
+          meta?: Record<string, unknown> | string;
+        };
+      };
+
+      if (event.event !== "charge.completed" || event.data?.status !== "successful") {
+        res.status(200).json({ received: true });
+        return;
+      }
+
+      const data = event.data;
+      const email = data?.customer?.email;
+      const reference = data?.tx_ref;
+      const amount = data?.amount ?? 0;
+      const currency = data?.currency ?? "USD";
+
+      if (!email || !reference) {
+        logger.error("Flutterwave webhook missing email or tx_ref", { event });
+        res.status(200).json({ received: true });
+        return;
+      }
+
+      const existing = await getLicenseByPaymentReference(reference);
+      if (existing) {
+        logger.info("Flutterwave webhook already processed — skipping duplicate", {
+          reference,
+        });
+        res.status(200).json({ received: true });
+        return;
+      }
+
+      res.status(200).json({ received: true });
+
+      setImmediate(() => {
+        void (async () => {
+          try {
+            const duplicate = await getLicenseByPaymentReference(reference);
+            if (duplicate) {
+              logger.info("Flutterwave webhook duplicate skipped in async handler", {
+                reference,
+              });
+              return;
+            }
+
+            let meta: Record<string, unknown> | undefined;
+            if (typeof data?.meta === "string") {
+              try {
+                meta = JSON.parse(data.meta) as Record<string, unknown>;
+              } catch {
+                meta = undefined;
+              }
+            } else if (data?.meta && typeof data.meta === "object") {
+              meta = data.meta;
+            }
+
+            await fulfillFlutterwaveCharge({
+              email,
+              reference,
+              amount,
+              currency,
+              metadata: meta,
+            });
+          } catch (err) {
+            logger.error("Flutterwave webhook processing failed", {
+              error: err instanceof Error ? err.message : "unknown",
+            });
+          }
+        })();
+      });
+    } catch (err) {
+      logger.error("Flutterwave webhook handler error", {
+        error: err instanceof Error ? err.message : "unknown",
+      });
+      res.status(500).json({ error: "Webhook processing failed" });
     }
   }
 );
