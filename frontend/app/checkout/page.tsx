@@ -4,10 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import Script from "next/script";
 import { useFlutterwave, closePaymentModal } from "flutterwave-react-v3";
 import { detectCountry } from "@/lib/geolocation";
-import { LIFETIME_PRICE_KOBO, SALE_PRICE_USD } from "@/constants/pricing";
-import { getApiUrl } from "@/utils/env";
+import { SALE_PRICE_USD } from "@/constants/pricing";
 
-const PAYSTACK_PUBLIC_KEY = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY ?? "";
 const FLW_PUBLIC_KEY = process.env.NEXT_PUBLIC_FLUTTERWAVE_PUBLIC_KEY ?? "";
 
 function generateFlwTxRef(): string {
@@ -23,6 +21,7 @@ export default function CheckoutPage() {
   const [flwTxRef, setFlwTxRef] = useState(generateFlwTxRef);
 
   const isNigeriaGateway = country === "NG";
+  const isNigeria = isNigeriaGateway;
 
   useEffect(() => {
     detectCountry().then((code) => {
@@ -79,66 +78,17 @@ export default function CheckoutPage() {
 
     try {
       const refCode = getRefCode();
-      const apiUrl = getApiUrl();
-      if (!apiUrl) {
-        throw new Error("Payment is not configured");
-      }
-
-      const res = await fetch(`${apiUrl}/checkout/initialize`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/checkout/initialize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, refCode }),
       });
 
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? "Failed to initialize payment");
-      }
-
-      const data = (await res.json()) as {
-        reference: string;
-        accessCode: string;
-      };
-
-      if (!PAYSTACK_PUBLIC_KEY) {
-        throw new Error("Payment is not configured");
-      }
-
-      const PaystackPop = (
-        window as {
-          PaystackPop?: {
-            setup: (opts: object) => { openIframe: () => void };
-          };
-        }
-      ).PaystackPop;
-
-      if (!PaystackPop) {
-        throw new Error("Paystack is still loading. Please try again.");
-      }
-
-      const handler = PaystackPop.setup({
-        key: PAYSTACK_PUBLIC_KEY,
-        email,
-        amount: LIFETIME_PRICE_KOBO,
-        currency: "NGN",
-        ref: data.reference,
-        access_code: data.accessCode,
-        metadata: {
-          ref_code: refCode || "",
-          product: "LeadPilot Lifetime",
-          gateway: "paystack",
-        },
-        onClose: () => setLoading(false),
-        callback: (response: { reference: string }) => {
-          window.location.href = `/checkout/success?reference=${encodeURIComponent(response.reference)}&gateway=paystack`;
-        },
-      });
-
-      handler.openIframe();
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Something went wrong. Please try again."
-      );
+      if (!res.ok) throw new Error("Failed to initialize payment");
+      const data = (await res.json()) as { authorizationUrl?: string; authorization_url?: string };
+      window.location.href = data.authorizationUrl || data.authorization_url || "";
+    } catch {
+      setError("Something went wrong. Please try again.");
       setLoading(false);
     }
   }
@@ -201,7 +151,9 @@ export default function CheckoutPage() {
         fontFamily: "Inter, sans-serif",
       }}
     >
-      <Script src="https://js.paystack.co/v1/inline.js" strategy="beforeInteractive" />
+      {isNigeria && (
+        <Script src="https://js.paystack.co/v1/inline.js" strategy="beforeInteractive" />
+      )}
 
       <div
         style={{
