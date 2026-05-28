@@ -1,21 +1,37 @@
 "use client";
 
 import Script from "next/script";
-import { useState } from "react";
-import { LIFETIME_PRICE_KOBO } from "@/constants/pricing";
-import { getApiUrl } from "@/utils/env";
+import { useEffect, useState } from "react";
 
 export default function CheckoutPage() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [isNigeria, setIsNigeria] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const detectCountry = async () => {
+      try {
+        const res = await fetch("https://ipapi.co/json/", { cache: "no-store" });
+        const data = (await res.json()) as { country_code?: string };
+        if (!cancelled) setIsNigeria(data.country_code === "NG");
+      } catch {
+        if (!cancelled) setIsNigeria(false);
+      }
+    };
+    void detectCountry();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function getRefCode(): string | null {
     if (typeof window === "undefined") return null;
     return localStorage.getItem("lp_ref_code");
   }
 
-  async function handleCheckout() {
+  async function handlePaystack() {
     if (!email || !email.includes("@")) {
       setError("Please enter a valid email address");
       return;
@@ -26,65 +42,26 @@ export default function CheckoutPage() {
 
     try {
       const refCode = getRefCode();
-      const apiUrl = getApiUrl();
-
-      const res = await fetch(`${apiUrl}/checkout/initialize`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/checkout/initialize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, refCode }),
       });
 
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? "Failed to initialize payment");
-      }
-
-      const data = (await res.json()) as {
-        reference: string;
-        accessCode: string;
-      };
-
-      const paystackKey = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY;
-      if (!paystackKey) {
-        throw new Error("Payment is not configured");
-      }
-
-      const PaystackPop = (window as { PaystackPop?: { setup: (opts: object) => { openIframe: () => void } } })
-        .PaystackPop;
-
-      if (!PaystackPop) {
-        throw new Error("Paystack is still loading. Please try again.");
-      }
-
-      const handler = PaystackPop.setup({
-        key: paystackKey,
-        email,
-        amount: LIFETIME_PRICE_KOBO,
-        currency: "NGN",
-        ref: data.reference,
-        access_code: data.accessCode,
-        metadata: {
-          ref_code: refCode || "",
-          product: "LeadPilot Lifetime",
-        },
-        onClose: () => {
-          setLoading(false);
-        },
-        callback: (response: { reference: string }) => {
-          window.location.href = `/checkout/success?reference=${encodeURIComponent(response.reference)}`;
-        },
-      });
-
-      handler.openIframe();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+      if (!res.ok) throw new Error("Failed to initialize payment");
+      const data = (await res.json()) as { authorizationUrl?: string; authorization_url?: string };
+      window.location.href = data.authorizationUrl || data.authorization_url || "";
+    } catch {
+      setError("Something went wrong. Please try again.");
       setLoading(false);
     }
   }
 
   return (
     <>
-      <Script src="https://js.paystack.co/v1/inline.js" strategy="afterInteractive" />
+      {isNigeria && (
+        <Script src="https://js.paystack.co/v1/inline.js" strategy="beforeInteractive" />
+      )}
 
       <div
         style={{
@@ -215,7 +192,7 @@ export default function CheckoutPage() {
             placeholder="you@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && void handleCheckout()}
+            onKeyDown={(e) => e.key === "Enter" && void handlePaystack()}
             style={{
               width: "100%",
               padding: "14px 16px",
@@ -237,7 +214,7 @@ export default function CheckoutPage() {
 
           <button
             type="button"
-            onClick={() => void handleCheckout()}
+            onClick={() => void handlePaystack()}
             disabled={loading}
             style={{
               width: "100%",
