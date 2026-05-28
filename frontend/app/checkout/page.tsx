@@ -170,12 +170,13 @@ export default function CheckoutPage() {
             }}
           >
             {[
-              "Up to 200 businesses per search",
-              "Phone numbers, emails, addresses",
-              "195+ countries covered",
-              "CSV export — unlimited",
-              "All future updates included",
-            ].map((f, i) => (
+              "1,000+ business contacts per search",
+              "Direct phone numbers and WhatsApp numbers included",
+              "Real contact emails pulled fresh from their website every search",
+              "Unlimited CSV export — download and own your leads forever",
+              "195 countries covered — any city, any niche, worldwide",
+              "Lifetime updates included — every new feature ships to you free",
+            ].map((f, i, arr) => (
               <div
                 key={f}
                 style={{
@@ -186,7 +187,7 @@ export default function CheckoutPage() {
                   fontSize: 13,
                   color: "#C0C0D8",
                   borderBottom:
-                    i < 4 ? "1px solid rgba(255,255,255,0.05)" : "none",
+                    i < arr.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
                 }}
               >
                 <span style={{ color: "#10B981", fontWeight: 700 }}>✓</span>
