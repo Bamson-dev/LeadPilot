@@ -1,5 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "cd .. && npm install",
-  "buildCommand": "cd .. && npm run build --workspace=@leadpilot/shared && npm run build --workspace=@leadpilot/frontend"
+  "installCommand": "if [ -f package.json ] && [ -d frontend ]; then npm install; else cd .. && npm install; fi",
+  "buildCommand": "if [ -f package.json ] && [ -d frontend ]; then npm run build --workspace=@leadpilot/shared && npm run build --workspace=@leadpilot/frontend; else cd .. && npm run build --workspace=@leadpilot/shared && npm run build --workspace=@leadpilot/frontend; fi"
 }
