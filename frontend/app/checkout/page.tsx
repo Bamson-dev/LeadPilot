@@ -246,25 +246,6 @@ export default function CheckoutPage() {
             </span>
           </div>
 
-          {!detecting && (
-            <span
-              style={{
-                fontSize: 10,
-                fontWeight: 700,
-                padding: "4px 10px",
-                borderRadius: 100,
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                background: isNigeriaGateway
-                  ? "rgba(16,185,129,0.1)"
-                  : "rgba(255,130,0,0.1)",
-                color: isNigeriaGateway ? "#10B981" : "#FF8200",
-                border: `1px solid ${isNigeriaGateway ? "rgba(16,185,129,0.25)" : "rgba(255,130,0,0.25)"}`,
-              }}
-            >
-              {isNigeriaGateway ? "Paystack" : "Flutterwave"}
-            </span>
-          )}
         </div>
 
         <div style={{ padding: "28px 24px" }}>
@@ -299,48 +280,6 @@ export default function CheckoutPage() {
             . No monthly fee. No renewal. Ever.
           </p>
 
-          {!detecting && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                background: "rgba(255,255,255,0.03)",
-                border: "1px solid rgba(255,255,255,0.07)",
-                borderRadius: 8,
-                padding: "9px 14px",
-                marginBottom: 18,
-                fontSize: 12,
-                color: "#8888A8",
-              }}
-            >
-              <span
-                style={{
-                  width: 7,
-                  height: 7,
-                  borderRadius: "50%",
-                  background: isNigeriaGateway ? "#10B981" : "#A78BFA",
-                  display: "inline-block",
-                  flexShrink: 0,
-                }}
-              />
-              {isNigeriaGateway
-                ? "Nigeria detected · Secure checkout via Paystack"
-                : "International checkout · Secure payment via Flutterwave"}
-            </div>
-          )}
-
-          {detecting && (
-            <div
-              style={{
-                height: 36,
-                background: "rgba(255,255,255,0.03)",
-                borderRadius: 8,
-                marginBottom: 18,
-              }}
-            />
-          )}
-
           <div
             style={{
               background: "rgba(124,58,237,0.05)",
@@ -351,12 +290,12 @@ export default function CheckoutPage() {
             }}
           >
             {[
-              "Up to 200 businesses per search",
-              "Phone numbers + WhatsApp outreach",
-              "Email discovery from websites",
-              "CSV export — unlimited",
-              "195 countries covered",
-              "All future updates included",
+              "1,000+ business contacts per search",
+              "Direct phone numbers and WhatsApp numbers included",
+              "Real contact emails pulled fresh from their website every search",
+              "Unlimited CSV export — download and own your leads forever",
+              "195 countries covered — any city, any niche, worldwide",
+              "Lifetime updates included — every new feature ships to you free",
             ].map((f, i, arr) => (
               <div
                 key={f}
