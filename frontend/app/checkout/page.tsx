@@ -2,6 +2,7 @@
 
 import Script from "next/script";
 import { useEffect, useState } from "react";
+import { closePaymentModal, useFlutterwave } from "flutterwave-react-v3";
 
 async function detectCountry(): Promise<string> {
   try {
@@ -37,6 +38,33 @@ export default function CheckoutPage() {
     return localStorage.getItem("lp_ref_code");
   }
 
+  function getFlwConfig() {
+    return {
+      public_key: process.env.NEXT_PUBLIC_FLUTTERWAVE_PUBLIC_KEY ?? "",
+      tx_ref: `LP-FLW-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+      amount: 15,
+      currency: "USD",
+      payment_options: "card",
+      customer: {
+        email: email,
+        name: email.split("@")[0] || "Customer",
+        phone_number: "",
+      },
+      customizations: {
+        title: "LeadPilot Lifetime Access",
+        description: "One payment. Find clients forever.",
+        logo: "https://www.leadpilot.live/logo.png",
+      },
+      meta: {
+        ref_code: getRefCode() || "",
+        product: "LeadPilot Lifetime",
+        gateway: "flutterwave",
+      },
+    };
+  }
+
+  const handleFlutterwave = useFlutterwave(getFlwConfig());
+
   async function handlePaystack() {
     if (!email || !email.includes("@")) {
       setError("Please enter a valid email address");
@@ -60,6 +88,37 @@ export default function CheckoutPage() {
     } catch {
       setError("Something went wrong. Please try again.");
       setLoading(false);
+    }
+  }
+
+  function handleFlutterwavePay() {
+    if (!email || !email.includes("@")) {
+      setError("Please enter a valid email address");
+      return;
+    }
+
+    setError("");
+    setLoading(true);
+
+    handleFlutterwave({
+      callback: (response) => {
+        closePaymentModal();
+        if (response.status === "successful") {
+          window.location.href = `/checkout/success?reference=${response.transaction_id}&gateway=flutterwave`;
+        } else {
+          setError("Payment was not completed. Please try again.");
+          setLoading(false);
+        }
+      },
+      onClose: () => setLoading(false),
+    });
+  }
+
+  function handlePay() {
+    if (isNigeria) {
+      void handlePaystack();
+    } else {
+      handleFlutterwavePay();
     }
   }
 
@@ -139,8 +198,11 @@ export default function CheckoutPage() {
               lineHeight: 1.6,
             }}
           >
-            One payment of <strong style={{ color: "#F2F1FF" }}>$15 (₦15,000)</strong>. No
-            monthly fee. No renewal. Ever.
+            One payment of{" "}
+            <strong style={{ color: "#F2F1FF" }}>
+              {isNigeria ? "₦15,000" : "$15"}
+            </strong>
+            . No monthly fee. No renewal. Ever.
           </p>
 
           <div
@@ -198,7 +260,7 @@ export default function CheckoutPage() {
             placeholder="you@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && void handlePaystack()}
+            onKeyDown={(e) => e.key === "Enter" && handlePay()}
             style={{
               width: "100%",
               padding: "14px 16px",
@@ -220,7 +282,7 @@ export default function CheckoutPage() {
 
           <button
             type="button"
-            onClick={() => void handlePaystack()}
+            onClick={isNigeria ? handlePaystack : handleFlutterwavePay}
             disabled={loading || detecting || !gatewayReady}
             style={{
               width: "100%",
@@ -260,7 +322,7 @@ export default function CheckoutPage() {
               lineHeight: 1.6,
             }}
           >
-            🔒 Secure payment via Paystack · Instant access after payment
+            🔒 Secure payment · Instant access after payment
           </p>
         </div>
       </div>
