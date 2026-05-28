@@ -3,27 +3,33 @@
 import Script from "next/script";
 import { useEffect, useState } from "react";
 
+async function detectCountry(): Promise<string> {
+  try {
+    const res = await fetch("https://ipapi.co/json/", {
+      cache: "no-store",
+    });
+    const data = (await res.json()) as { country_code?: string };
+    return data.country_code || "UNKNOWN";
+  } catch {
+    return "UNKNOWN";
+  }
+}
+
 export default function CheckoutPage() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [isNigeria, setIsNigeria] = useState(false);
+  const [country, setCountry] = useState<string | null>(null);
+  const [detecting, setDetecting] = useState(true);
+  const [gatewayReady, setGatewayReady] = useState(false);
+  const isNigeria = gatewayReady ? country === "NG" : true;
 
   useEffect(() => {
-    let cancelled = false;
-    const detectCountry = async () => {
-      try {
-        const res = await fetch("https://ipapi.co/json/", { cache: "no-store" });
-        const data = (await res.json()) as { country_code?: string };
-        if (!cancelled) setIsNigeria(data.country_code === "NG");
-      } catch {
-        if (!cancelled) setIsNigeria(false);
-      }
-    };
-    void detectCountry();
-    return () => {
-      cancelled = true;
-    };
+    detectCountry().then((code) => {
+      setCountry(code);
+      setDetecting(false);
+      setGatewayReady(true);
+    });
   }, []);
 
   function getRefCode(): string | null {
@@ -59,8 +65,8 @@ export default function CheckoutPage() {
 
   return (
     <>
-      {isNigeria && (
-        <Script src="https://js.paystack.co/v1/inline.js" strategy="beforeInteractive" />
+      {gatewayReady && isNigeria && (
+        <Script src="https://js.paystack.co/v1/inline.js" strategy="afterInteractive" />
       )}
 
       <div
@@ -215,24 +221,35 @@ export default function CheckoutPage() {
           <button
             type="button"
             onClick={() => void handlePaystack()}
-            disabled={loading}
+            disabled={loading || detecting || !gatewayReady}
             style={{
               width: "100%",
-              background: loading ? "#4C1D95" : "#7C3AED",
+              background: !gatewayReady || detecting ? "#1A1A24" : isNigeria ? "#10B981" : "#FF8200",
               color: "white",
               border: "none",
               borderRadius: 12,
               padding: "16px",
               fontSize: 15,
               fontWeight: 800,
-              cursor: loading ? "not-allowed" : "pointer",
+              cursor: loading || detecting || !gatewayReady ? "not-allowed" : "pointer",
               fontFamily: "Inter, sans-serif",
-              boxShadow: "0 0 40px rgba(124,58,237,0.35)",
+              boxShadow: !gatewayReady || detecting
+                ? "none"
+                : isNigeria
+                  ? "0 0 40px rgba(16,185,129,0.3)"
+                  : "0 0 40px rgba(255,130,0,0.25)",
               marginBottom: 14,
-              transition: "background 0.2s",
+              transition: "all 0.2s",
+              opacity: loading ? 0.7 : 1,
             }}
           >
-            {loading ? "Opening payment..." : "Pay $15 (₦15,000) — Get Access Now"}
+            {!gatewayReady || detecting
+              ? "Loading..."
+              : loading
+                ? "Opening payment..."
+                : isNigeria
+                  ? "🔒 Pay ₦15,000 — Get Access Now"
+                  : "🔒 Pay $15 — Get Access Now"}
           </button>
 
           <p
