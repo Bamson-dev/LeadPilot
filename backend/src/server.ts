@@ -21,6 +21,7 @@ app.disable("x-powered-by");
 const alwaysAllowedOrigins = [
   "https://www.leadthur.com",
   "https://leadthur.com",
+  "https://staging.leadthur.com",
   "https://www.leadpilot.live",
   "https://leadpilot.live",
   "http://localhost:3000",
