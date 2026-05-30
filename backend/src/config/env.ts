@@ -16,6 +16,8 @@ const envSchema = z
     JWT_SECRET: z.string().min(32),
     LIFETIME_ACCESS_PRICE: z.coerce.number().int().positive().default(1_500_000),
     PAYSTACK_SECRET_KEY: z.string().optional(),
+    FLUTTERWAVE_SECRET_KEY: z.string().optional(),
+    FLUTTERWAVE_SECRET_HASH: z.string().optional(),
     BREVO_API_KEY: z.string().optional(),
     BREVO_SENDER_EMAIL: z.string().email().optional(),
     DEEPSEEK_API_KEY: z.string().optional(),
@@ -81,6 +83,12 @@ export const config = {
   },
   get PAYSTACK_SECRET_KEY() {
     return getEnv().PAYSTACK_SECRET_KEY ?? "";
+  },
+  get FLUTTERWAVE_SECRET_KEY() {
+    return getEnv().FLUTTERWAVE_SECRET_KEY ?? "";
+  },
+  get FLUTTERWAVE_SECRET_HASH() {
+    return getEnv().FLUTTERWAVE_SECRET_HASH ?? "";
   },
   get BREVO_API_KEY() {
     return getEnv().BREVO_API_KEY ?? "";

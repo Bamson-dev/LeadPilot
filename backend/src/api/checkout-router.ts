@@ -1,7 +1,14 @@
 import { Router, type Request, type Response } from "express";
 import { config } from "../config/env";
 import { LIFETIME_PRICE_KOBO } from "../constants/pricing";
-import { fulfillPaystackCharge } from "../services/payment-fulfillment";
+import {
+  fulfillFlutterwaveCharge,
+  fulfillPaystackCharge,
+} from "../services/payment-fulfillment";
+import {
+  verifyFlutterwaveByTransactionId,
+  verifyFlutterwaveByTxRef,
+} from "../services/flutterwave-client";
 import { getPaystack, paystackAsync, verifyTransaction } from "../services/paystack-client";
 import { logger } from "../utils/logger";
 
@@ -32,6 +39,7 @@ router.post("/initialize", async (req: Request, res: Response) => {
     if (refCode?.trim()) {
       metadata.ref_code = refCode.trim();
     }
+    metadata.gateway = "paystack";
 
     const paystack = getPaystack();
     const response = await paystackAsync<{ data: { authorization_url: string; access_code: string } }>(
@@ -68,13 +76,76 @@ router.post("/initialize", async (req: Request, res: Response) => {
   }
 });
 
-/** Backup when Paystack webhook is delayed or misconfigured — called from /checkout/success */
+function fulfillmentMessage(result: {
+  alreadyFulfilled: boolean;
+  emailSent: boolean;
+}): string {
+  if (result.alreadyFulfilled) {
+    return "Your license is already active. Check your inbox for your activation email.";
+  }
+  if (result.emailSent) {
+    return "Activation email sent. Check your inbox and spam folder.";
+  }
+  return "License created. Email could not be sent — contact support or use Admin resend.";
+}
+
+/** Backup when webhook is delayed — called from /checkout/success */
 router.post("/verify", async (req: Request, res: Response) => {
   try {
-    const { reference } = req.body as { reference?: string };
+    const { reference, gateway } = req.body as {
+      reference?: string;
+      gateway?: string;
+    };
 
     if (!reference?.trim()) {
       res.status(400).json({ error: "Payment reference is required" });
+      return;
+    }
+
+    const ref = reference.trim();
+    const isFlutterwave = gateway === "flutterwave";
+
+    if (isFlutterwave) {
+      if (!config.FLUTTERWAVE_SECRET_KEY) {
+        res.status(503).json({ error: "Flutterwave is not configured" });
+        return;
+      }
+
+      let tx;
+      try {
+        tx = await verifyFlutterwaveByTransactionId(ref);
+      } catch {
+        tx = await verifyFlutterwaveByTxRef(ref);
+      }
+
+      const email = tx.customer?.email;
+      if (!email) {
+        res.status(400).json({ error: "No customer email on this payment" });
+        return;
+      }
+
+      const meta =
+        typeof tx.meta === "object" && tx.meta !== null
+          ? (tx.meta as Record<string, unknown>)
+          : undefined;
+
+      const result = await fulfillFlutterwaveCharge({
+        email,
+        reference: tx.tx_ref,
+        amount: tx.amount,
+        currency: tx.currency,
+        metadata: meta ? { ref_code: meta.ref_code, meta } : undefined,
+      });
+
+      res.json({
+        success: true,
+        gateway: "flutterwave",
+        alreadyFulfilled: result.alreadyFulfilled,
+        emailSent: result.emailSent,
+        commissionCreated: result.commissionCreated,
+        commissionSkippedReason: result.commissionSkippedReason,
+        message: fulfillmentMessage(result),
+      });
       return;
     }
 
@@ -83,7 +154,7 @@ router.post("/verify", async (req: Request, res: Response) => {
       return;
     }
 
-    const tx = await verifyTransaction(reference.trim());
+    const tx = await verifyTransaction(ref);
 
     if (tx.status !== "success") {
       res.status(400).json({
@@ -100,22 +171,19 @@ router.post("/verify", async (req: Request, res: Response) => {
 
     const result = await fulfillPaystackCharge({
       email,
-      reference: tx.reference || reference.trim(),
+      reference: tx.reference || ref,
       amount: tx.amount,
       metadata: tx.metadata,
     });
 
     res.json({
       success: true,
+      gateway: "paystack",
       alreadyFulfilled: result.alreadyFulfilled,
       emailSent: result.emailSent,
       commissionCreated: result.commissionCreated,
       commissionSkippedReason: result.commissionSkippedReason,
-      message: result.alreadyFulfilled
-        ? "Your license is already active. Check your inbox for your activation email."
-        : result.emailSent
-          ? "Activation email sent. Check your inbox and spam folder."
-          : "License created. Email could not be sent — contact support or use Admin resend.",
+      message: fulfillmentMessage(result),
     });
   } catch (err) {
     logger.error("Checkout verify failed", {

@@ -8,7 +8,7 @@ export interface LicenseKey {
   key: string;
   activated: boolean;
   activated_at: string | null;
-  payment_channel: "paystack" | "bank_transfer";
+  payment_channel: "paystack" | "bank_transfer" | "flutterwave";
   payment_reference: string | null;
   searches_used: number;
   exports_used: number;
@@ -49,7 +49,7 @@ function generateLicenseKeyValue(): string {
 
 export async function createLicenseKey(params: {
   email: string;
-  paymentChannel: "paystack" | "bank_transfer";
+  paymentChannel: "paystack" | "bank_transfer" | "flutterwave";
   paymentReference: string;
 }): Promise<LicenseKey> {
   const email = params.email.toLowerCase().trim();

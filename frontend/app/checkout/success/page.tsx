@@ -8,6 +8,8 @@ import { getApiUrl } from "@/utils/env";
 function CheckoutSuccessContent() {
   const searchParams = useSearchParams();
   const reference = searchParams.get("reference");
+  const gateway = searchParams.get("gateway");
+  const isFlutterwave = gateway === "flutterwave";
   const [status, setStatus] = useState<"loading" | "ok" | "warn" | "error">("loading");
   const [statusText, setStatusText] = useState(
     "Confirming your payment and sending your license key…"
@@ -29,7 +31,10 @@ function CheckoutSuccessContent() {
         const res = await fetch(`${getApiUrl()}/checkout/verify`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reference }),
+          body: JSON.stringify({
+            reference,
+            gateway: gateway || "paystack",
+          }),
         });
         const data = (await res.json()) as {
           message?: string;
@@ -68,7 +73,7 @@ function CheckoutSuccessContent() {
     return () => {
       cancelled = true;
     };
-  }, [reference]);
+  }, [reference, gateway]);
 
   return (
     <div
@@ -135,8 +140,10 @@ function CheckoutSuccessContent() {
         </p>
 
         <p style={{ fontSize: 12, color: "#7878A0", marginBottom: 20, lineHeight: 1.6 }}>
-          Paystack sends a payment receipt. LeadPilot sends a separate email with your license
-          key from <strong style={{ color: "#A78BFA" }}>access@leadpilot.live</strong>.
+          {isFlutterwave
+            ? "Flutterwave sends a payment receipt. LeadPilot sends a separate email with your license key from "
+            : "Paystack sends a payment receipt. LeadPilot sends a separate email with your license key from "}
+          <strong style={{ color: "#A78BFA" }}>access@leadpilot.live</strong>.
         </p>
 
         {reference && (

@@ -36,6 +36,7 @@ const corsOptions = {
     "Authorization",
     "X-Admin-Secret",
     "x-paystack-signature",
+    "verif-hash",
     "x-license-key",
     "x-license-email",
   ],
