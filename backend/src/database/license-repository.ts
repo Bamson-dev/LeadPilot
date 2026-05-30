@@ -295,23 +295,25 @@ export async function registerDevice(
   licenseId: string,
   deviceSignature: string
 ): Promise<{ allowed: boolean; reason?: string }> {
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from("license_keys")
-    .select("device_one, device_two")
+    .select("device_one, device_two, device_three, device_four")
     .eq("id", licenseId)
     .single();
 
-  if (error || !data) {
-    return { allowed: false, reason: "License not found" };
-  }
+  if (!data) return { allowed: false, reason: "License not found" };
 
+  // Already registered on one of the slots
   if (
     data.device_one === deviceSignature ||
-    data.device_two === deviceSignature
+    data.device_two === deviceSignature ||
+    data.device_three === deviceSignature ||
+    data.device_four === deviceSignature
   ) {
     return { allowed: true };
   }
 
+  // Fill first available slot
   if (!data.device_one) {
     await supabase
       .from("license_keys")
@@ -328,18 +330,38 @@ export async function registerDevice(
     return { allowed: true };
   }
 
+  if (!data.device_three) {
+    await supabase
+      .from("license_keys")
+      .update({ device_three: deviceSignature })
+      .eq("id", licenseId);
+    return { allowed: true };
+  }
+
+  if (!data.device_four) {
+    await supabase
+      .from("license_keys")
+      .update({ device_four: deviceSignature })
+      .eq("id", licenseId);
+    return { allowed: true };
+  }
+
+  // All 4 slots filled and device not recognized
   return {
     allowed: false,
     reason:
-      "Maximum devices reached. Contact support on WhatsApp 09067285890 to add a new device.",
+      "Maximum devices reached. Contact support on WhatsApp 09067285890 to reset your devices.",
   };
 }
 
 export async function resetDevices(licenseId: string): Promise<void> {
-  const { error } = await supabase
+  await supabase
     .from("license_keys")
-    .update({ device_one: null, device_two: null })
+    .update({
+      device_one: null,
+      device_two: null,
+      device_three: null,
+      device_four: null,
+    })
     .eq("id", licenseId);
-
-  if (error) throw new Error(error.message);
 }

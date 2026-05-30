@@ -442,7 +442,7 @@ export default function AdminPage() {
             >
               <thead>
                 <tr style={{ background: "#0D0D16" }}>
-                  {["Email", "Status", "Searches", "Joined", "Action"].map((h) => (
+                  {["Email", "Status", "Searches", "Joined", "Action", "Devices"].map((h) => (
                     <th
                       key={h}
                       style={{
@@ -547,6 +547,21 @@ export default function AdminPage() {
                       >
                         Manage
                       </button>
+                    </td>
+                    <td
+                      style={{
+                        padding: "12px 14px",
+                        color:
+                          user.devices_used === 4
+                            ? "#EF4444"
+                            : (user.devices_used ?? 0) >= 2
+                              ? "#FBBF24"
+                              : "#10B981",
+                        fontWeight: 700,
+                        fontSize: 13,
+                      }}
+                    >
+                      {user.devices_used ?? 0} / 4
                     </td>
                   </tr>
                 ))}

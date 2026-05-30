@@ -8,7 +8,6 @@ import {
   listRecentLicenses,
   lookupLicensesByEmail,
   truncateLicenseKey,
-  resetDevices,
 } from "../database/license-repository";
 import { supabase } from "../database/client";
 import {
@@ -278,21 +277,38 @@ adminRouter.post("/reset-searches", requireAdminAuth, async (req: Request, res: 
 adminRouter.post("/reset-devices", requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const { email } = req.body as { email?: string };
+
     if (!email) {
       res.status(400).json({ error: "Email required" });
       return;
     }
 
-    const license = await fetchLatestLicenseByEmail(email);
-    if (!license) {
-      res.status(404).json({ error: "License not found" });
-      return;
+    const { data: license, error } = await supabase
+      .from("license_keys")
+      .select("id, email")
+      .eq("email", email.toLowerCase().trim())
+      .eq("activated", true)
+      .single();
+
+    if (error || !license) {
+      return res.status(404).json({ error: `No activated license found for ${email}` });
     }
 
-    await resetDevices(license.id as string);
+    await supabase
+      .from("license_keys")
+      .update({
+        device_one: null,
+        device_two: null,
+        device_three: null,
+        device_four: null,
+      })
+      .eq("id", license.id);
+
+    logger.info("Devices reset by admin", { email });
+
     res.json({
       success: true,
-      message: `Devices reset for ${email}. User can now log in from new devices.`,
+      message: `All devices reset for ${email}. User can now log in from up to 4 new devices.`,
     });
   } catch (err) {
     logger.error("Reset devices failed", {
@@ -610,13 +626,25 @@ adminRouter.get("/recent-users", requireAdminAuth, async (_req: Request, res: Re
   try {
     const { data: users, error } = await supabase
       .from("license_keys")
-      .select("email, activated, is_suspended, created_at, searches_used, max_devices")
+      .select(
+        "email, activated, is_suspended, created_at, searches_used, max_devices, device_one, device_two, device_three, device_four"
+      )
       .order("created_at", { ascending: false })
       .limit(10);
 
     if (error) throw error;
 
-    res.json({ users: users ?? [] });
+    const usersWithDeviceCount = (users ?? []).map((user) => ({
+      ...user,
+      devices_used: [
+        user.device_one,
+        user.device_two,
+        user.device_three,
+        user.device_four,
+      ].filter(Boolean).length,
+    }));
+
+    res.json({ users: usersWithDeviceCount });
   } catch (err) {
     logger.error("Recent users failed", {
       error: err instanceof Error ? err.message : "unknown",

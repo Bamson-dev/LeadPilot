@@ -177,6 +177,7 @@ export interface RecentAdminUser {
   created_at: string;
   searches_used: number;
   max_devices: number;
+  devices_used?: number;
 }
 
 export async function getOverview(): Promise<AdminOverview> {
@@ -298,7 +299,10 @@ export async function resetDevices(email: string) {
     body: JSON.stringify({ email }),
   });
   await handleAdminResponse(res);
-  if (!res.ok) throw new Error("Failed to reset devices");
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error ?? "Failed to reset devices");
+  }
   return res.json() as Promise<{ success: boolean; message?: string }>;
 }
 
