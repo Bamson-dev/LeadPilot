@@ -1,119 +1,208 @@
 import { config } from "../config/env";
 import { logger } from "../utils/logger";
 
+function getFrontendUrl(): string {
+  return config.FRONTEND_URL.replace(/\/$/, "");
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function emailH1(text: string): string {
+  return `<h1 style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:26px;font-weight:800;color:#1A1A2E;letter-spacing:-0.5px;margin:0 0 12px 0;line-height:1.2;">${text}</h1>`;
+}
+
+function emailP(text: string, style = ""): string {
+  return `<p style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:15px;color:#444444;line-height:1.75;margin:0 0 16px 0;${style}">${text}</p>`;
+}
+
+function emailDivider(): string {
+  return `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0;"><tr><td style="height:1px;background-color:#EEEEEE;font-size:0;line-height:0;">&nbsp;</td></tr></table>`;
+}
+
+function emailButton(text: string, url: string, color = "#7C3AED"): string {
+  return `<table cellpadding="0" cellspacing="0" border="0" align="center" style="margin:28px auto;">
+    <tr>
+      <td style="background-color:${color};border-radius:10px;text-align:center;">
+        <a href="${url}" style="display:inline-block;padding:14px 36px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:15px;font-weight:700;color:white;text-decoration:none;">${text} &rarr;</a>
+      </td>
+    </tr>
+  </table>`;
+}
+
+function emailInfoBox(
+  rows: { label: string; value: string; valueStyle?: string }[],
+  bgColor = "#F8F8FB",
+  borderColor = "#EEEEEE"
+): string {
+  const rowsHtml = rows
+    .map(
+      (row, i) => `
+    <tr>
+      <td style="padding:10px 0;border-bottom:${i < rows.length - 1 ? `1px solid ${borderColor}` : "none"};">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:14px;color:#888888;">${row.label}</td>
+            <td align="right" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:14px;font-weight:700;color:#1A1A2E;${row.valueStyle || ""}">${row.value}</td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  `
+    )
+    .join("");
+
+  return `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${bgColor};border-radius:12px;padding:8px 20px;margin:20px 0;">
+    ${rowsHtml}
+  </table>`;
+}
+
+function emailHighlightBox(
+  text: string,
+  type: "success" | "purple" | "warning" = "purple"
+): string {
+  const styles = {
+    success: { bg: "#ECFDF5", border: "#A7F3D0", color: "#065F46" },
+    purple: { bg: "#F5F3FF", border: "#DDD6FE", color: "#5B21B6" },
+    warning: { bg: "#FFFBEB", border: "#FDE68A", color: "#92400E" },
+  };
+  const s = styles[type];
+  return `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+    <tr>
+      <td style="background-color:${s.bg};border:1px solid ${s.border};border-radius:12px;padding:16px 20px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:13px;font-weight:600;color:${s.color};line-height:1.6;">${text}</td>
+    </tr>
+  </table>`;
+}
+
+function emailStatGrid(
+  stats: { value: string; label: string; sub?: string; color?: string }[]
+): string {
+  const width = Math.floor(100 / stats.length);
+  const cols = stats
+    .map(
+      (s) => `
+    <td width="${width}%" style="padding:4px;" valign="top">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#F8F8FB;border-radius:10px;">
+        <tr>
+          <td align="center" style="padding:16px 8px;">
+            <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:28px;font-weight:900;color:${s.color || "#7C3AED"};letter-spacing:-1px;line-height:1;">${s.value}</div>
+            ${s.sub ? `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:10px;color:#BBBBBB;margin-top:3px;">${s.sub}</div>` : ""}
+            <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:11px;color:#888888;margin-top:4px;">${s.label}</div>
+          </td>
+        </tr>
+      </table>
+    </td>
+  `
+    )
+    .join("");
+
+  return `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;"><tr>${cols}</tr></table>`;
+}
+
 function buildEmailTemplate({
   title,
   preheader,
   body,
+  accentColor = "#7C3AED",
 }: {
   title: string;
   preheader: string;
   body: string;
+  accentColor?: string;
 }): string {
-  const frontendUrl = config.FRONTEND_URL.replace(/\/$/, "");
+  const frontendUrl = getFrontendUrl();
 
-  return `
-<!DOCTYPE html>
-<html lang="en">
+  return `<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="format-detection" content="telephone=no">
   <title>${title}</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background-color: #F4F4F8; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; -webkit-font-smoothing: antialiased; }
-    .wrapper { width: 100%; background-color: #F4F4F8; padding: 40px 20px; }
-    .container { max-width: 580px; margin: 0 auto; }
-    .header { background-color: #7C3AED; border-radius: 16px 16px 0 0; padding: 28px 36px; display: flex; align-items: center; }
-    .header-icon { width: 44px; height: 44px; background: rgba(255,255,255,0.15); border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; margin-right: 14px; flex-shrink: 0; }
-    .header-brand { display: inline-block; }
-    .header-wordmark { font-size: 22px; font-weight: 700; color: white; line-height: 1; }
-    .header-wordmark span { color: #C4B5FD; }
-    .header-tagline { font-size: 9px; color: rgba(255,255,255,0.55); letter-spacing: 2.5px; text-transform: uppercase; margin-top: 4px; }
-    .body { background-color: #FFFFFF; padding: 40px 36px; }
-    .footer { background-color: #F0F0F6; border-radius: 0 0 16px 16px; padding: 24px 36px; text-align: center; border-top: 1px solid #E5E5EE; }
-    .footer-brand { font-size: 13px; font-weight: 700; color: #1A1A2E; margin-bottom: 6px; }
-    .footer-brand span { color: #7C3AED; }
-    .footer-links { font-size: 12px; color: #888888; margin-bottom: 6px; }
-    .footer-links a { color: #7C3AED; text-decoration: none; }
-    .footer-links a:hover { text-decoration: underline; }
-    .footer-copy { font-size: 11px; color: #BBBBBB; margin-top: 8px; }
-    .btn { display: inline-block; padding: 14px 32px; border-radius: 10px; font-size: 15px; font-weight: 700; text-decoration: none; text-align: center; }
-    .btn-primary { background-color: #7C3AED; color: white; }
-    .btn-success { background-color: #10B981; color: white; }
-    .info-box { background-color: #F8F8FB; border-radius: 12px; padding: 24px; margin: 24px 0; }
-    .info-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #EEEEEE; font-size: 14px; }
-    .info-row:last-child { border-bottom: none; }
-    .info-label { color: #888888; }
-    .info-value { font-weight: 700; color: #1A1A2E; }
-    .highlight-box { border-radius: 12px; padding: 16px 20px; margin: 20px 0; font-size: 13px; font-weight: 600; line-height: 1.6; }
-    .highlight-success { background-color: #ECFDF5; border: 1px solid #A7F3D0; color: #065F46; }
-    .highlight-purple { background-color: #F5F3FF; border: 1px solid #DDD6FE; color: #5B21B6; }
-    .highlight-warning { background-color: #FFFBEB; border: 1px solid #FDE68A; color: #92400E; }
-    h1 { font-size: 26px; font-weight: 800; color: #1A1A2E; letter-spacing: -0.5px; margin-bottom: 10px; line-height: 1.2; }
-    h2 { font-size: 20px; font-weight: 700; color: #1A1A2E; margin-bottom: 8px; }
-    p { font-size: 15px; color: #444444; line-height: 1.75; margin-bottom: 16px; }
-    p:last-child { margin-bottom: 0; }
-    .divider { height: 1px; background-color: #EEEEEE; margin: 28px 0; }
-    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0; }
-    .stat-card { background: #F8F8FB; border-radius: 10px; padding: 16px; text-align: center; }
-    .stat-value { font-size: 28px; font-weight: 900; color: #7C3AED; letter-spacing: -1px; line-height: 1; margin-bottom: 4px; }
-    .stat-label { font-size: 11px; color: #888888; }
-    .stat-sub { font-size: 10px; color: #BBBBBB; margin-top: 2px; }
-    @media (max-width: 480px) {
-      .body { padding: 28px 20px; }
-      .header { padding: 20px 24px; }
-      .footer { padding: 20px 24px; }
-      h1 { font-size: 22px; }
-      .stat-grid { grid-template-columns: 1fr 1fr; }
-    }
-  </style>
+  <!--[if mso]>
+  <noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript>
+  <![endif]-->
 </head>
-<body>
-  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${preheader}</div>
+<body style="margin:0;padding:0;background-color:#F4F4F8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
 
-  <div class="wrapper">
-    <div class="container">
+  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;color:#F4F4F8;line-height:1px;">${preheader}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</div>
 
-      <div class="header">
-        <div class="header-icon">
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="14" cy="14" r="11" stroke="rgba(255,255,255,0.25)" stroke-width="1.5" fill="none"/>
-            <circle cx="14" cy="14" r="7" stroke="rgba(255,255,255,0.4)" stroke-width="1.5" fill="none"/>
-            <circle cx="14" cy="14" r="3.5" stroke="rgba(255,255,255,0.6)" stroke-width="1.5" fill="none"/>
-            <circle cx="14" cy="14" r="1.5" fill="white"/>
-            <line x1="14" y1="14" x2="21" y2="7" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-            <circle cx="21" cy="7" r="2" fill="#C4B5FD"/>
-          </svg>
-        </div>
-        <div class="header-brand">
-          <div class="header-wordmark">Lead<span>Thur</span></div>
-          <div class="header-tagline">Business Discovery</div>
-        </div>
-      </div>
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#F4F4F8;">
+    <tr>
+      <td align="center" style="padding:40px 20px;">
 
-      <div class="body">
-        ${body}
-      </div>
+        <table width="580" cellpadding="0" cellspacing="0" border="0" style="max-width:580px;width:100%;">
 
-      <div class="footer">
-        <div class="footer-brand">Lead<span>Thur</span></div>
-        <div class="footer-links">
-          <a href="https://wa.me/2349067285890">WhatsApp 09067285890</a>
-          &nbsp;&middot;&nbsp;
-          <a href="mailto:access@leadthur.com">access@leadthur.com</a>
-          &nbsp;&middot;&nbsp;
-          <a href="${frontendUrl}">leadthur.com</a>
-        </div>
-        <div class="footer-copy">&copy; ${new Date().getFullYear()} LeadThur. Business Discovery Intelligence.</div>
-      </div>
+          <tr>
+            <td style="background-color:${accentColor};border-radius:16px 16px 0 0;padding:28px 36px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td width="52" valign="middle">
+                    <table cellpadding="0" cellspacing="0" border="0" width="48" style="width:48px;background:rgba(255,255,255,0.15);border-radius:10px;">
+                      <tr>
+                        <td align="center" valign="middle" width="48" height="48" style="width:48px;height:48px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:18px;font-weight:800;color:white;letter-spacing:-0.5px;text-align:center;">
+                          LT
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                  <td width="16"></td>
+                  <td valign="middle">
+                    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:22px;font-weight:700;color:white;line-height:1;">
+                      Lead<span style="color:#C4B5FD;">Thur</span>
+                    </div>
+                    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:9px;color:rgba(255,255,255,0.55);letter-spacing:2.5px;text-transform:uppercase;margin-top:4px;">
+                      Business Discovery
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
 
-    </div>
-  </div>
+          <tr>
+            <td style="background-color:#ffffff;padding:40px 36px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:15px;color:#444444;line-height:1.75;">
+                    ${body}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="background-color:#F0F0F6;border-radius:0 0 16px 16px;padding:24px 36px;border-top:1px solid #E5E5EE;text-align:center;">
+              <p style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:13px;font-weight:700;color:#1A1A2E;margin:0 0 8px 0;">
+                Lead<span style="color:${accentColor};">Thur</span>
+              </p>
+              <p style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:12px;color:#888888;margin:0 0 6px 0;">
+                <a href="https://wa.me/2349067285890" style="color:${accentColor};text-decoration:none;">WhatsApp 09067285890</a>
+                &nbsp;&middot;&nbsp;
+                <a href="mailto:access@leadthur.com" style="color:${accentColor};text-decoration:none;">access@leadthur.com</a>
+                &nbsp;&middot;&nbsp;
+                <a href="${frontendUrl}" style="color:${accentColor};text-decoration:none;">leadthur.com</a>
+              </p>
+              <p style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:11px;color:#BBBBBB;margin:0;">
+                &copy; ${new Date().getFullYear()} LeadThur. Business Discovery Intelligence.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+
 </body>
-</html>
-  `;
+</html>`;
 }
 
 async function sendEmail(params: {
@@ -152,41 +241,27 @@ async function sendEmail(params: {
 }
 
 export async function sendActivationEmail(email: string, licenseKey: string): Promise<void> {
-  const frontendUrl = config.FRONTEND_URL.replace(/\/$/, "");
-
-  const body = `
-    <h1>Your account is ready.</h1>
-    <p>Welcome to LeadThur. Your lifetime access is activated. You can now find business contacts in any city in the world in under 60 seconds.</p>
-
-    <div class="info-box">
-      <div class="info-row">
-        <span class="info-label">Email</span>
-        <span class="info-value">${email}</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">License key</span>
-        <span class="info-value" style="font-family:monospace;font-size:13px;">${licenseKey}</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Access</span>
-        <span class="info-value" style="color:#10B981;">Lifetime &mdash; no expiry</span>
-      </div>
-    </div>
-
-    <p>Enter your license key on the activation page to log in. Keep it somewhere safe.</p>
-
-    <div style="text-align:center;margin:28px 0;">
-      <a href="${frontendUrl}/activate" class="btn btn-primary">
-        Activate My Account &rarr;
-      </a>
-    </div>
-
-    <div class="divider"></div>
-
-    <p style="font-size:13px;color:#888888;">
-      Questions? Reply to this email or reach us on WhatsApp <strong style="color:#1A1A2E;">09067285890</strong>. We respond within minutes.
-    </p>
-  `;
+  const body = [
+    emailH1("Your account is ready."),
+    emailP(
+      "Welcome to LeadThur. Your lifetime access is activated. You can now find business contacts in any city in the world in under 60 seconds."
+    ),
+    emailInfoBox([
+      { label: "Email", value: escapeHtml(email) },
+      {
+        label: "License key",
+        value: `<span style="font-family:monospace;font-size:13px;">${escapeHtml(licenseKey)}</span>`,
+      },
+      { label: "Access", value: "Lifetime &mdash; no expiry", valueStyle: "color:#10B981;" },
+    ]),
+    emailP("Enter your license key on the activation page to log in. Keep it somewhere safe."),
+    emailButton("Activate My Account", `${getFrontendUrl()}/activate`),
+    emailDivider(),
+    emailP(
+      "Questions? Reply to this email or reach us on WhatsApp <strong>09067285890</strong>. We respond within minutes.",
+      "font-size:13px;color:#888888;"
+    ),
+  ].join("");
 
   const html = buildEmailTemplate({
     title: "Your LeadThur account is ready",
@@ -210,50 +285,42 @@ export async function sendCommissionNotification(
   totalEarnedUsd: number,
   pendingNgn: number
 ): Promise<void> {
-  const frontendUrl = config.FRONTEND_URL.replace(/\/$/, "");
-
-  const body = `
-    <div style="text-align:center;margin-bottom:24px;">
-      <div style="font-size:44px;margin-bottom:12px;">&#127881;</div>
-      <h1>You just earned $${commissionUsd.toFixed(2)}</h1>
-      <p>Someone bought LeadThur through your referral link. Your commission has been added to your balance.</p>
-    </div>
-
-    <div class="stat-grid">
-      <div class="stat-card">
-        <div class="stat-value" style="color:#10B981;">$${commissionUsd.toFixed(2)}</div>
-        <div class="stat-label">This commission</div>
-        <div class="stat-sub">&#8358;${commissionNgn.toLocaleString()}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value">$${totalEarnedUsd.toFixed(2)}</div>
-        <div class="stat-label">Total earned</div>
-        <div class="stat-sub">&#8358;${totalEarnedNgn.toLocaleString()}</div>
-      </div>
-    </div>
-
-    ${
-      pendingNgn >= 7500
-        ? `
-    <div class="highlight-box highlight-success">
-      &#10003; You have &#8358;${pendingNgn.toLocaleString()} pending. You can request a payout from your dashboard now.
-    </div>
-    `
-        : `
-    <div class="highlight-box highlight-purple">
-      Keep sharing your link. One more referral and you can request your first payout.
-    </div>
-    `
-    }
-
-    <p>Every person who buys through your link earns you <strong>$7.50 (&#8358;7,500)</strong>. No cap on how much you can earn.</p>
-
-    <div style="text-align:center;margin:28px 0;">
-      <a href="${frontendUrl}/dashboard" class="btn btn-primary">
-        View My Earnings &rarr;
-      </a>
-    </div>
-  `;
+  const body = [
+    `<table width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" style="padding:8px 0 20px;">`,
+    `<div style="font-size:44px;margin-bottom:12px;">&#127881;</div>`,
+    emailH1(`You just earned $${commissionUsd.toFixed(2)}`),
+    emailP(
+      "Someone bought LeadThur through your referral link. Your commission has been added to your balance."
+    ),
+    `</td></tr></table>`,
+    emailStatGrid([
+      {
+        value: `$${commissionUsd.toFixed(2)}`,
+        label: "This commission",
+        sub: `&#8358;${commissionNgn.toLocaleString()}`,
+        color: "#10B981",
+      },
+      {
+        value: `$${totalEarnedUsd.toFixed(2)}`,
+        label: "Total earned",
+        sub: `&#8358;${totalEarnedNgn.toLocaleString()}`,
+        color: "#7C3AED",
+      },
+    ]),
+    pendingNgn >= 7500
+      ? emailHighlightBox(
+          `&#10003; You have &#8358;${pendingNgn.toLocaleString()} pending. You can request a payout from your dashboard now.`,
+          "success"
+        )
+      : emailHighlightBox(
+          "Keep sharing your link. One more referral and you can request your first payout.",
+          "purple"
+        ),
+    emailP(
+      "Every person who buys through your link earns you <strong>$7.50 (&#8358;7,500)</strong>. No cap on how much you can earn."
+    ),
+    emailButton("View My Earnings", `${getFrontendUrl()}/dashboard`),
+  ].join("");
 
   const html = buildEmailTemplate({
     title: `You just earned $${commissionUsd.toFixed(2)} — LeadThur`,
@@ -275,42 +342,28 @@ export async function sendPayoutRequestedEmail(
   accountName: string,
   bankName: string
 ): Promise<void> {
-  const frontendUrl = config.FRONTEND_URL.replace(/\/$/, "");
-
-  const body = `
-    <div style="text-align:center;margin-bottom:24px;">
-      <div style="font-size:44px;margin-bottom:12px;">&#127968;</div>
-      <h1>Payout request received</h1>
-      <p>We have received your payout request and it is being processed. Expect your money within 24 hours.</p>
-    </div>
-
-    <div class="info-box">
-      <div class="info-row">
-        <span class="info-label">Amount</span>
-        <span class="info-value">&#8358;${amountNgn.toLocaleString()} <span style="color:#888;font-weight:400;font-size:13px;">($${amountUsd.toFixed(2)})</span></span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Account name</span>
-        <span class="info-value">${accountName}</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Bank</span>
-        <span class="info-value">${bankName}</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Status</span>
-        <span class="info-value" style="color:#FBBF24;">Processing</span>
-      </div>
-    </div>
-
-    <p>Keep sharing your referral link while you wait. Every new referral adds to your next payout. There is no limit to how much you can earn.</p>
-
-    <div style="text-align:center;margin:28px 0;">
-      <a href="${frontendUrl}/dashboard" class="btn btn-primary">
-        View My Dashboard &rarr;
-      </a>
-    </div>
-  `;
+  const body = [
+    `<table width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" style="padding:8px 0 20px;">`,
+    `<div style="font-size:44px;margin-bottom:12px;">&#127968;</div>`,
+    emailH1("Payout request received"),
+    emailP(
+      "We have received your payout request and it is being processed. Expect your money within 24 hours."
+    ),
+    `</td></tr></table>`,
+    emailInfoBox([
+      {
+        label: "Amount",
+        value: `&#8358;${amountNgn.toLocaleString()} <span style="color:#888888;font-weight:400;font-size:13px;">($${amountUsd.toFixed(2)})</span>`,
+      },
+      { label: "Account name", value: escapeHtml(accountName) },
+      { label: "Bank", value: escapeHtml(bankName) },
+      { label: "Status", value: "Processing", valueStyle: "color:#FBBF24;" },
+    ]),
+    emailP(
+      "Keep sharing your referral link while you wait. Every new referral adds to your next payout."
+    ),
+    emailButton("View My Dashboard", `${getFrontendUrl()}/dashboard`),
+  ].join("");
 
   const html = buildEmailTemplate({
     title: "Payout request received — LeadThur",
@@ -333,46 +386,40 @@ export async function sendPayoutPaidEmail(
   bankName: string,
   accountNumber: string
 ): Promise<void> {
-  const frontendUrl = config.FRONTEND_URL.replace(/\/$/, "");
-
-  const body = `
-    <div style="text-align:center;margin-bottom:24px;">
-      <div style="font-size:44px;margin-bottom:12px;">&#128184;</div>
-      <h1>Your money is on the way</h1>
-      <p>Your payout has been processed and the transfer has been initiated to your bank account. Check your account within a few hours.</p>
-    </div>
-
-    <div class="info-box" style="background:#ECFDF5;border:1px solid #A7F3D0;">
-      <div class="info-row" style="border-color:#D1FAE5;">
-        <span class="info-label" style="color:#065F46;">Amount paid</span>
-        <span class="info-value" style="color:#065F46;font-size:20px;">&#8358;${amountNgn.toLocaleString()}</span>
-      </div>
-      <div class="info-row" style="border-color:#D1FAE5;">
-        <span class="info-label">Account name</span>
-        <span class="info-value">${accountName}</span>
-      </div>
-      <div class="info-row" style="border-color:#D1FAE5;">
-        <span class="info-label">Bank</span>
-        <span class="info-value">${bankName}</span>
-      </div>
-      <div class="info-row" style="border-color:transparent;">
-        <span class="info-label">Account number</span>
-        <span class="info-value" style="font-family:monospace;">${accountNumber}</span>
-      </div>
-    </div>
-
-    <p>Thank you for promoting LeadThur. Keep sharing your referral link and you can request your next payout anytime your balance reaches &#8358;7,500. There is no limit on how much you can earn.</p>
-
-    <div style="text-align:center;margin:28px 0;">
-      <a href="${frontendUrl}/dashboard" class="btn btn-success">
-        View My Dashboard &rarr;
-      </a>
-    </div>
-  `;
+  const body = [
+    `<table width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" style="padding:8px 0 20px;">`,
+    `<div style="font-size:44px;margin-bottom:12px;">&#128184;</div>`,
+    emailH1("Your money is on the way"),
+    emailP(
+      "Your payout has been processed and the transfer has been initiated to your bank account. Check your account within a few hours."
+    ),
+    `</td></tr></table>`,
+    emailInfoBox(
+      [
+        {
+          label: "Amount paid",
+          value: `&#8358;${amountNgn.toLocaleString()}`,
+          valueStyle: "color:#10B981;font-size:18px;",
+        },
+        { label: "Account name", value: escapeHtml(accountName) },
+        { label: "Bank", value: escapeHtml(bankName) },
+        {
+          label: "Account number",
+          value: `<span style="font-family:monospace;">${escapeHtml(accountNumber)}</span>`,
+        },
+      ],
+      "#ECFDF5",
+      "#D1FAE5"
+    ),
+    emailP(
+      "Thank you for promoting LeadThur. Keep sharing your referral link and you can request your next payout anytime your balance reaches &#8358;7,500."
+    ),
+    emailButton("View My Dashboard", `${getFrontendUrl()}/dashboard`, "#10B981"),
+  ].join("");
 
   const html = buildEmailTemplate({
     title: `Your ₦${amountNgn.toLocaleString()} payout has been sent — LeadThur`,
-    preheader: `Your payout of ₦${amountNgn.toLocaleString()} to ${bankName} has been sent.`,
+    preheader: `Your payout of ₦${amountNgn.toLocaleString()} to ${escapeHtml(bankName)} has been sent.`,
     body,
   });
 
@@ -384,52 +431,37 @@ export async function sendPayoutPaidEmail(
 }
 
 export async function sendDomainChangeEmail(email: string): Promise<void> {
-  const frontendUrl = config.FRONTEND_URL.replace(/\/$/, "");
-
-  const body = `
-    <h1>We have a new name and a new home.</h1>
-
-    <p>Quick update from us. LeadPilot has moved to a new domain and a new name. Everything works exactly the same. Nothing has changed about your account or access.</p>
-
-    <div class="info-box">
-      <div class="info-row">
-        <span class="info-label">Old name</span>
-        <span class="info-value" style="text-decoration:line-through;color:#888;">LeadPilot</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">New name</span>
-        <span class="info-value" style="color:#7C3AED;">LeadThur</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Old address</span>
-        <span class="info-value" style="text-decoration:line-through;color:#888;">leadpilot.live</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">New address</span>
-        <span class="info-value" style="color:#7C3AED;">leadthur.com</span>
-      </div>
-    </div>
-
-    <div class="highlight-box highlight-purple">
-      Why the change? We discovered LeadPilot is already a registered brand name belonging to another company. Rather than risk any legal issues, we made the switch early and cleanly.
-    </div>
-
-    <p>Your dashboard is now at <a href="${frontendUrl}/dashboard" style="color:#7C3AED;font-weight:600;">leadthur.com/dashboard</a> and your login page is at <a href="${frontendUrl}/activate" style="color:#7C3AED;font-weight:600;">leadthur.com/activate</a>.</p>
-
-    <p>If you visit the old address it will automatically redirect you to the new one, so your bookmarks will still work.</p>
-
-    <div style="text-align:center;margin:28px 0;">
-      <a href="${frontendUrl}/dashboard" class="btn btn-primary">
-        Go to My Dashboard &rarr;
-      </a>
-    </div>
-
-    <div class="divider"></div>
-
-    <p style="font-size:13px;color:#888888;">
-      Questions? Reach us on WhatsApp <strong style="color:#1A1A2E;">09067285890</strong> and we will sort you out immediately.
-    </p>
-  `;
+  const body = [
+    emailH1("We have a new name and a new home."),
+    emailP(
+      "Quick update from us. LeadPilot has moved to a new domain and a new name. Everything works exactly the same. Nothing has changed about your account or access."
+    ),
+    emailInfoBox([
+      {
+        label: "Old name",
+        value: '<span style="text-decoration:line-through;color:#888888;">LeadPilot</span>',
+      },
+      { label: "New name", value: "LeadThur", valueStyle: "color:#7C3AED;" },
+      {
+        label: "Old address",
+        value: '<span style="text-decoration:line-through;color:#888888;">leadpilot.live</span>',
+      },
+      { label: "New address", value: "leadthur.com", valueStyle: "color:#7C3AED;" },
+    ]),
+    emailHighlightBox(
+      "Why the change? We discovered LeadPilot is already a registered brand name belonging to another company. Rather than risk any legal issues, we made the switch early and cleanly.",
+      "purple"
+    ),
+    emailP(
+      "Your dashboard and login page are now at <strong>leadthur.com</strong>. If you visit the old address it will automatically redirect you to the new one, so your bookmarks will still work."
+    ),
+    emailButton("Go to My Dashboard", `${getFrontendUrl()}/dashboard`),
+    emailDivider(),
+    emailP(
+      "Questions? Reach us on WhatsApp <strong>09067285890</strong> and we will sort you out immediately.",
+      "font-size:13px;color:#888888;"
+    ),
+  ].join("");
 
   const html = buildEmailTemplate({
     title: "LeadThur — We have a new name and a new home",
@@ -442,6 +474,48 @@ export async function sendDomainChangeEmail(email: string): Promise<void> {
     subject: "We have a new name and a new home",
     html,
   });
+}
+
+export async function sendDirectMessageEmail(
+  to: string,
+  subject: string,
+  messageBody: string
+): Promise<void> {
+  const paragraphs = messageBody
+    .split("\n\n")
+    .map((para) => para.trim())
+    .filter(Boolean)
+    .map((para) => escapeHtml(para).replace(/\n/g, "<br>"));
+
+  const body = [
+    ...paragraphs.map((para) => emailP(para)),
+    emailDivider(),
+    emailP(
+      "This message was sent from the LeadThur team. If you have questions reach us on WhatsApp <strong>09067285890</strong>.",
+      "font-size:13px;color:#888888;"
+    ),
+  ].join("");
+
+  const html = buildEmailTemplate({
+    title: subject,
+    preheader: messageBody.substring(0, 100),
+    body,
+  });
+
+  await sendEmail({
+    to,
+    subject,
+    html,
+  });
+}
+
+/** @deprecated Use sendDirectMessageEmail */
+export async function sendAdminMessage(
+  email: string,
+  subject: string,
+  message: string
+): Promise<void> {
+  await sendDirectMessageEmail(email, subject, message);
 }
 
 export async function sendSearchCompleteEmail(
@@ -629,39 +703,3 @@ export async function sendLimitReachedEmail(
   });
 }
 
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-export async function sendAdminMessage(
-  email: string,
-  subject: string,
-  message: string
-): Promise<void> {
-  const safeSubject = escapeHtml(subject);
-  const safeMessage = escapeHtml(message);
-  const preheader = message.replace(/\s+/g, " ").trim().slice(0, 120);
-
-  const body = `
-    <h1>${safeSubject}</h1>
-    <div style="font-size:15px;color:#444444;line-height:1.8;white-space:pre-wrap;border-left:3px solid #7C3AED;padding-left:16px;margin-top:8px;">
-      ${safeMessage}
-    </div>
-  `;
-
-  const html = buildEmailTemplate({
-    title: safeSubject,
-    preheader: preheader || safeSubject,
-    body,
-  });
-
-  await sendEmail({
-    to: email,
-    subject,
-    html,
-  });
-}

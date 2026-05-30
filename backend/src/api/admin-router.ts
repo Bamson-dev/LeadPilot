@@ -13,7 +13,7 @@ import {
 import { supabase } from "../database/client";
 import {
   sendActivationEmail,
-  sendAdminMessage,
+  sendDirectMessageEmail,
   sendPayoutPaidEmail,
 } from "../services/brevo-service";
 import { logger } from "../utils/logger";
@@ -343,22 +343,66 @@ adminRouter.post("/update-device-limit", requireAdminAuth, async (req: Request, 
 
 adminRouter.post("/send-message", requireAdminAuth, async (req: Request, res: Response) => {
   try {
-    const { email, subject, message } = req.body as {
-      email?: string;
+    const { mode, recipient, subject, body } = req.body as {
+      mode?: string;
+      recipient?: string;
       subject?: string;
-      message?: string;
+      body?: string;
     };
 
-    if (!email || !subject || !message) {
-      res.status(400).json({ error: "Email, subject and message required" });
+    if (!subject || !body) {
+      res.status(400).json({ error: "Subject and body are required" });
       return;
     }
 
-    await sendAdminMessage(email, subject, message);
+    if (mode === "broadcast") {
+      const { data: users, error } = await supabase
+        .from("license_keys")
+        .select("email")
+        .eq("activated", true);
 
-    res.json({ success: true, message: `Message sent to ${email}` });
+      if (error) throw error;
+
+      if (!users || users.length === 0) {
+        res.status(404).json({ error: "No active users found" });
+        return;
+      }
+
+      let sent = 0;
+      let failed = 0;
+
+      for (const user of users) {
+        try {
+          await sendDirectMessageEmail(user.email as string, subject, body);
+          sent++;
+          await new Promise((resolve) => setTimeout(resolve, 150));
+        } catch {
+          failed++;
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Sent to ${sent} users.${failed > 0 ? ` ${failed} failed.` : ""}`,
+      });
+      return;
+    }
+
+    if (!recipient) {
+      res.status(400).json({ error: "Recipient email is required" });
+      return;
+    }
+
+    await sendDirectMessageEmail(recipient, subject, body);
+
+    logger.info("Direct message sent by admin", { recipient, subject });
+
+    res.json({
+      success: true,
+      message: `Message sent successfully to ${recipient}`,
+    });
   } catch (err) {
-    logger.error("Send message failed", {
+    logger.error("Failed to send direct message", {
       error: err instanceof Error ? err.message : "unknown",
     });
     res.status(500).json({ error: "Failed to send message" });
@@ -405,7 +449,7 @@ adminRouter.post("/broadcast", requireAdminAuth, async (req: Request, res: Respo
       void (async () => {
         for (const userEmail of uniqueEmails) {
           try {
-            await sendAdminMessage(userEmail, subject, message);
+            await sendDirectMessageEmail(userEmail, subject, message);
             await new Promise((resolve) => setTimeout(resolve, 300));
           } catch (err) {
             logger.error("Failed to send broadcast to user", {
