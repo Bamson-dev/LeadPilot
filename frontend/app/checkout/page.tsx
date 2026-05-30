@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Script from "next/script";
 import { useFlutterwave, closePaymentModal } from "flutterwave-react-v3";
 import { detectCountry } from "@/lib/geolocation";
 import { SALE_PRICE_USD } from "@/constants/pricing";
@@ -151,10 +150,6 @@ export default function CheckoutPage() {
         fontFamily: "Inter, sans-serif",
       }}
     >
-      {isNigeria && (
-        <Script src="https://js.paystack.co/v1/inline.js" strategy="beforeInteractive" />
-      )}
-
       <div
         style={{
           background: "#111118",
