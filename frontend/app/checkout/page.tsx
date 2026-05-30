@@ -8,7 +8,7 @@ import { SALE_PRICE_USD } from "@/constants/pricing";
 const FLW_PUBLIC_KEY = process.env.NEXT_PUBLIC_FLUTTERWAVE_PUBLIC_KEY ?? "";
 
 function generateFlwTxRef(): string {
-  return `LP-FLW-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+  return `LT-FLW-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 }
 
 export default function CheckoutPage() {
@@ -186,10 +186,10 @@ export default function CheckoutPage() {
                 color: "white",
               }}
             >
-              LP
+              LT
             </div>
             <span style={{ fontSize: 16, fontWeight: 800, color: "#F2F1FF" }}>
-              Lead<span style={{ color: "#A78BFA" }}>Pilot</span>
+              Lead<span style={{ color: "#A78BFA" }}>Thur</span>
             </span>
           </div>
 

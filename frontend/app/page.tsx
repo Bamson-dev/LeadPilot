@@ -358,7 +358,7 @@ export default function HomePage() {
                 fontFamily: FONT,
               }}
             >
-              LP
+              LT
             </div>
             <span
               style={{
@@ -368,7 +368,7 @@ export default function HomePage() {
                 fontFamily: FONT,
               }}
             >
-              Lead<span style={{ color: "#A78BFA" }}>Pilot</span>
+              Lead<span style={{ color: "#A78BFA" }}>Thur</span>
             </span>
         </div>
 
