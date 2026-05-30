@@ -10,7 +10,7 @@ export function Navbar() {
             LP
           </div>
           <span className="text-lg font-semibold tracking-tight">
-            Lead<span className="text-violet-400">Pilot</span>
+            Lead<span className="text-violet-400">Thur</span>
           </span>
         </Link>
         <nav>
