@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useFlutterwave, closePaymentModal } from "flutterwave-react-v3";
 import { detectCountry } from "@/lib/geolocation";
 import { SALE_PRICE_USD } from "@/constants/pricing";
+import { getApiUrl } from "@/utils/env";
 
 const FLW_PUBLIC_KEY = process.env.NEXT_PUBLIC_FLUTTERWAVE_PUBLIC_KEY ?? "";
 
@@ -75,9 +76,15 @@ export default function CheckoutPage() {
     setLoading(true);
     setError("");
 
+    const apiUrl = getApiUrl();
+    if (!apiUrl) {
+      setError("Checkout is not configured. Missing API URL.");
+      return;
+    }
+
     try {
       const refCode = getRefCode();
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/checkout/initialize`, {
+      const res = await fetch(`${apiUrl}/checkout/initialize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, refCode }),
