@@ -3,7 +3,7 @@ import type {
   ConfidenceLabel,
   PredictedEmail,
   PredictionSource,
-} from "@leadpilot/shared";
+} from "@leadthur/shared";
 import { isValidEmail } from "../scraper/parsers/email-validation";
 import { resolveGenerationDomain } from "../scraper/utils/domain-utils";
 

@@ -9,6 +9,7 @@ import {
   paystackAsync,
   resolveBankAccount,
 } from "../services/paystack-client";
+import { sendPayoutRequestedEmail } from "../services/brevo-service";
 import { logger } from "../utils/logger";
 
 const router = Router();
@@ -188,6 +189,22 @@ router.post("/request-payout", requireLicense, async (req: Request, res: Respons
     });
 
     if (insertError) throw new Error(insertError.message);
+
+    try {
+      await sendPayoutRequestedEmail(
+        email,
+        pendingNgn,
+        pendingNgn / 1000,
+        (license.account_name as string) || "",
+        (license.bank_name as string) || ""
+      );
+      logger.info("Payout request email sent", { email });
+    } catch (err) {
+      logger.error("Failed to send payout request email", {
+        email,
+        error: err instanceof Error ? err.message : "unknown",
+      });
+    }
 
     res.json({
       success: true,

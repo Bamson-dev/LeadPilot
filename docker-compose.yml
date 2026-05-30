@@ -8,7 +8,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    container_name: leadpilot-backend
+    container_name: leadthur-backend
     ports:
       - "3000:3000"
     env_file:

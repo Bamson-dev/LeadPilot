@@ -1,4 +1,4 @@
-import type { PredictedEmail } from "@leadpilot/shared";
+import type { PredictedEmail } from "@leadthur/shared";
 import type { Lead } from "@/types/lead";
 
 export function getVerifiedEmails(

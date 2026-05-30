@@ -12,8 +12,8 @@ export default function SuspendedPage() {
   }, []);
 
   useEffect(() => {
-    const email = localStorage.getItem("leadpilot_email");
-    const key = localStorage.getItem("leadpilot_key");
+    const email = localStorage.getItem("leadthur_email");
+    const key = localStorage.getItem("leadthur_key");
 
     if (!email || !key) return;
 
@@ -127,7 +127,7 @@ export default function SuspendedPage() {
         </a>
 
         <p style={{ fontSize: 12, color: "#555575" }}>
-          WhatsApp: 09067285890 · access@leadpilot.live
+          WhatsApp: 09067285890 · access@leadthur.com
         </p>
 
         <p

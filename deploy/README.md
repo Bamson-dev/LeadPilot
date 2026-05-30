@@ -4,7 +4,7 @@
 
 | File | Use |
 |------|-----|
-| [`.env.production.example`](../.env.production.example) | Copy to `/opt/leadpilot/.env.production` on VPS |
+| [`.env.production.example`](../.env.production.example) | Copy to `/opt/leadthur/.env.production` on VPS |
 | [`vps.env.example`](./vps.env.example) | Same values — downloadable for VPS upload |
 | **[VPS.md](./VPS.md)** | Full setup + GitHub Actions guide |
 

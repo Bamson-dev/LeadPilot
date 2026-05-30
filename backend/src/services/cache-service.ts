@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import type { BusinessLead } from "@leadpilot/shared";
+import type { BusinessLead } from "@leadthur/shared";
 import { supabase } from "../database/client";
 import { predictionsFromDb, predictionStorageFields } from "../utils/lead-mapper";
 import { parseEmailList } from "../scraper/parsers/email-filter";

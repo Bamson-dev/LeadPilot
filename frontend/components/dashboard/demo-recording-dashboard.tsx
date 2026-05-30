@@ -75,7 +75,7 @@ function LifetimeAccessEnd() {
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-violet-400 opacity-60" />
           <span className="relative inline-flex h-2 w-2 rounded-full bg-violet-400" />
         </span>
-        LeadPilot
+        LeadThur
       </div>
     </motion.div>
   );

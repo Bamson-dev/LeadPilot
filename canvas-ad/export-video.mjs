@@ -14,8 +14,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = 8765;
 const DURATION_MS = 45000;
 const OUT_DIR = join(__dirname, "output");
-const WEBM_OUT = join(OUT_DIR, "leadpilot-ad.webm");
-const MP4_OUT = join(OUT_DIR, "leadpilot-ad.mp4");
+const WEBM_OUT = join(OUT_DIR, "leadthur-ad.webm");
+const MP4_OUT = join(OUT_DIR, "leadthur-ad.mp4");
 
 const MIME = {
   ".html": "text/html",
@@ -83,11 +83,11 @@ async function main() {
   const page = await context.newPage();
 
   await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "networkidle" });
-  await page.waitForFunction(() => window.LeadPilotCanvasAd && document.fonts.ready);
+  await page.waitForFunction(() => window.LeadThurCanvasAd && document.fonts.ready);
 
   console.log("Recording 45 seconds…");
   const webmBase64 = await page.evaluate(async (durationMs) => {
-    const { loadFonts, renderFrame, FPS } = window.LeadPilotCanvasAd;
+    const { loadFonts, renderFrame, FPS } = window.LeadThurCanvasAd;
     const canvas = document.getElementById("c");
     const ctx = canvas.getContext("2d", { alpha: false });
     await loadFonts();

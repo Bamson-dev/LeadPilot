@@ -244,7 +244,7 @@ export function DirectMessaging({ onSessionExpired }: DirectMessagingProps) {
               lineHeight: 1.6,
             }}
           >
-            ⚠️ You are about to send an email to ALL active LeadPilot users. Double check
+            ⚠️ You are about to send an email to ALL active LeadThur users. Double check
             your message before sending.
           </div>
           <input

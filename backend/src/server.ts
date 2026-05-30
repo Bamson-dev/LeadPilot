@@ -18,14 +18,17 @@ export const app = express();
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
 
-const allowedOrigins = process.env.CORS_ORIGINS
-  ? process.env.CORS_ORIGINS.split(",").map((o) => o.trim())
-  : [
-      "https://www.leadpilot.live",
-      "https://leadpilot.live",
-      "http://localhost:3000",
-      "http://localhost:3001",
-    ];
+const allowedOrigins = (
+  process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(",").map((o) => o.trim())
+    : [
+        process.env.FRONTEND_URL,
+        "https://www.leadthur.com",
+        "https://leadthur.com",
+        "http://localhost:3000",
+        "http://localhost:3001",
+      ]
+).filter((origin): origin is string => Boolean(origin));
 
 const corsOptions = {
   origin: allowedOrigins,
@@ -45,7 +48,7 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
 
-// Health routes — CORS applied above so browser fetches from www.leadpilot.live work.
+// Health routes — CORS applied above so browser fetches from www.leadthur.com work.
 app.use("/health", healthRouter);
 app.use("/api/health", healthRouter);
 

@@ -1,8 +1,8 @@
 // PAYSTACK DASHBOARD SETUP
 // Settings → API Keys & Webhooks
-// Webhook URL: https://backend.leadpilot.live/webhooks/paystack
-// Success Redirect: https://www.leadpilot.live/checkout/success
-// Paystack sends its own receipt email; LeadPilot sends the license key via Brevo when this webhook runs.
+// Webhook URL: https://backend.leadthur.com/webhooks/paystack
+// Success Redirect: https://www.leadthur.com/checkout/success
+// Paystack sends its own receipt email; LeadThur sends the license key via Brevo when this webhook runs.
 
 import { Router, type Request, type Response } from "express";
 import express from "express";

@@ -1,4 +1,4 @@
-import type { BusinessLead } from "@leadpilot/shared";
+import type { BusinessLead } from "@leadthur/shared";
 import { getAllEmailsForDisplay, hasAnyEmail } from "@/utils/get-display-email";
 import type { Lead } from "@/types/lead";
 import { businessLeadToLead } from "@/types/lead";
@@ -75,7 +75,7 @@ export function exportToCSV(leads: (Lead | BusinessLead)[], filename: string): v
     "Website",
     "Rating",
     "Reviews",
-    "LeadPilot URL",
+    "LeadThur URL",
     "Email Source",
   ];
 
@@ -120,7 +120,7 @@ export function exportCSV(
       .replace(/^-|-$/g, "");
   exportToCSV(
     leads,
-    `leadpilot-${slug(business)}-${slug(location)}-${Date.now()}.csv`
+    `leadthur-${slug(business)}-${slug(location)}-${Date.now()}.csv`
   );
 }
 
@@ -134,7 +134,7 @@ export function leadsToCsv(leads: Lead[]): string {
     "Website",
     "Rating",
     "Reviews",
-    "LeadPilot URL",
+    "LeadThur URL",
     "Email Source",
   ];
   const rows = leads.map((lead) => {

@@ -1,6 +1,6 @@
 import { getApiUrl } from "@/utils/env";
 
-const TOKEN_KEY = "leadpilot_admin_token";
+const TOKEN_KEY = "leadthur_admin_token";
 
 export function getAdminToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -216,6 +216,16 @@ export async function getPayouts(): Promise<{ payouts: PayoutRequest[] }> {
   if (res.status === 401) throw new Error("SESSION_EXPIRED");
   if (!res.ok) throw new Error("Failed to fetch payouts");
   return res.json();
+}
+
+export async function markPayoutProcessing(payoutId: string) {
+  const res = await fetch(`${getApiUrl()}/admin/payouts/${payoutId}/processing`, {
+    method: "POST",
+    headers: getAdminHeaders(),
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to update payout status");
+  return res.json() as Promise<{ success: boolean; message: string }>;
 }
 
 export async function payPayout(payoutId: string) {

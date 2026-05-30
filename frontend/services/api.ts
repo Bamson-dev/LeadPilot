@@ -1,4 +1,4 @@
-import type { BusinessLead, SearchJob, SearchResponse } from "@leadpilot/shared";
+import type { BusinessLead, SearchJob, SearchResponse } from "@leadthur/shared";
 import type { Lead } from "@/types/lead";
 import { businessLeadToLead } from "@/types/lead";
 import { getApiUrl } from "@/utils/env";
@@ -10,9 +10,9 @@ export interface HealthStatus {
 
 export function getLicenseHeaders(): HeadersInit {
   const email =
-    typeof window !== "undefined" ? localStorage.getItem("leadpilot_email") || "" : "";
+    typeof window !== "undefined" ? localStorage.getItem("leadthur_email") || "" : "";
   const key =
-    typeof window !== "undefined" ? localStorage.getItem("leadpilot_key") || "" : "";
+    typeof window !== "undefined" ? localStorage.getItem("leadthur_key") || "" : "";
   return {
     "Content-Type": "application/json",
     "x-license-key": key,
@@ -87,9 +87,9 @@ export async function startSearch(
 ): Promise<SearchResponse> {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL?.trim()?.replace(/\/$/, "") ?? "";
   const email =
-    typeof window !== "undefined" ? localStorage.getItem("leadpilot_email") || "" : "";
+    typeof window !== "undefined" ? localStorage.getItem("leadthur_email") || "" : "";
   const key =
-    typeof window !== "undefined" ? localStorage.getItem("leadpilot_key") || "" : "";
+    typeof window !== "undefined" ? localStorage.getItem("leadthur_key") || "" : "";
 
   if (!apiUrl) {
     throw new Error(
@@ -112,8 +112,8 @@ export async function startSearch(
   if (res.status === 401) {
     const data = (await res.json().catch(() => ({}))) as { error?: string };
     if (typeof window !== "undefined") {
-      localStorage.removeItem("leadpilot_email");
-      localStorage.removeItem("leadpilot_key");
+      localStorage.removeItem("leadthur_email");
+      localStorage.removeItem("leadthur_key");
       window.location.href = "/activate";
     }
     throw new Error(data.error || "Invalid license");
@@ -130,8 +130,8 @@ export async function startSearch(
         data.error ||
           "Your account has been suspended. Contact support on WhatsApp 09067285890."
       );
-      localStorage.removeItem("leadpilot_email");
-      localStorage.removeItem("leadpilot_key");
+      localStorage.removeItem("leadthur_email");
+      localStorage.removeItem("leadthur_key");
       window.location.href = "/suspended";
       return data as never;
     }

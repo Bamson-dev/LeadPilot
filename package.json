@@ -1,24 +1,24 @@
 {
-  "name": "leadpilot",
+  "name": "leadthur",
   "version": "0.1.0",
   "private": true,
   "author": "Bamidele",
-  "description": "LeadPilot — Business Discovery Intelligence",
+  "description": "LeadThur — Business Discovery Intelligence",
   "workspaces": [
     "frontend",
     "backend",
     "shared"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace=@leadpilot/frontend",
-    "dev:frontend": "npm run dev --workspace=@leadpilot/frontend",
-    "dev:backend": "npm run dev --workspace=@leadpilot/backend",
+    "dev": "npm run dev --workspace=@leadthur/frontend",
+    "dev:frontend": "npm run dev --workspace=@leadthur/frontend",
+    "dev:backend": "npm run dev --workspace=@leadthur/backend",
     "dev:all": "npm run dev:backend & npm run dev:frontend",
     "build": "npm run build:all",
-    "build:all": "npm run build --workspace=@leadpilot/shared && npm run build --workspace=@leadpilot/backend && npm run build --workspace=@leadpilot/frontend",
-    "build:backend": "npm run build --workspace=@leadpilot/shared && npm run build --workspace=@leadpilot/backend",
-    "build:frontend": "npm run build --workspace=@leadpilot/frontend",
-    "lint": "npm run lint --workspace=@leadpilot/frontend && npm run lint --workspace=@leadpilot/backend",
+    "build:all": "npm run build --workspace=@leadthur/shared && npm run build --workspace=@leadthur/backend && npm run build --workspace=@leadthur/frontend",
+    "build:backend": "npm run build --workspace=@leadthur/shared && npm run build --workspace=@leadthur/backend",
+    "build:frontend": "npm run build --workspace=@leadthur/frontend",
+    "lint": "npm run lint --workspace=@leadthur/frontend && npm run lint --workspace=@leadthur/backend",
     "setup": "npx playwright install chromium",
     "check-playwright": "node -e \"require('playwright').chromium.launch().then(b=>b.close()).then(()=>console.log('Playwright OK')).catch(e=>{console.error(e.message);process.exit(1)})\""
   }

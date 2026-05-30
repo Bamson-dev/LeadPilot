@@ -39,8 +39,8 @@ export function DashboardRouter({ skipAccessCheck = false }: { skipAccessCheck?:
   useEffect(() => {
     if (!ready || searchParams.get("demo") === "recording") return;
 
-    const email = localStorage.getItem("leadpilot_email");
-    const key = localStorage.getItem("leadpilot_key");
+    const email = localStorage.getItem("leadthur_email");
+    const key = localStorage.getItem("leadthur_key");
     if (!email || !key) return;
 
     const raw = [
@@ -69,8 +69,8 @@ export function DashboardRouter({ skipAccessCheck = false }: { skipAccessCheck?:
     })
       .then((res) => {
         if (res.status === 403) {
-          localStorage.removeItem("leadpilot_email");
-          localStorage.removeItem("leadpilot_key");
+          localStorage.removeItem("leadthur_email");
+          localStorage.removeItem("leadthur_key");
           window.location.href = "/activate?error=max_devices";
         }
       })

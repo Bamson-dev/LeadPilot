@@ -4,7 +4,7 @@ set -euo pipefail
 BACKEND_URL=${1:-"http://localhost:3000"}
 BACKEND_URL="${BACKEND_URL%/}"
 
-echo "Testing LeadPilot backend at $BACKEND_URL"
+echo "Testing LeadThur backend at $BACKEND_URL"
 echo "============================================"
 
 echo ""
@@ -52,4 +52,4 @@ fi
 echo ""
 echo "============================================"
 echo "Run against production:"
-echo "  bash backend/scripts/verify-deployment.sh https://backend.leadpilot.live"
+echo "  bash backend/scripts/verify-deployment.sh https://backend.leadthur.com"

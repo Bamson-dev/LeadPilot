@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# One-time Contabo VPS setup for LeadPilot backend
+# One-time Contabo VPS setup for LeadThur backend
 set -euo pipefail
 
-APP_DIR="${1:-/opt/leadpilot}"
-REPO_URL="${2:-https://github.com/Bamson-dev/LeadPilot.git}"
+APP_DIR="${1:-/opt/leadthur}"
+REPO_URL="${2:-https://github.com/Bamson-dev/LeadThur.git}"
 
 echo "==> Installing Docker if missing..."
 if ! command -v docker &>/dev/null; then

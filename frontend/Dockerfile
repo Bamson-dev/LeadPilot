@@ -7,7 +7,7 @@ COPY shared/package.json shared/tsconfig.json shared/index.ts ./shared/
 COPY shared/types ./shared/types
 COPY shared/utils ./shared/utils
 COPY frontend/package.json frontend/tsconfig.json frontend/next.config.ts ./frontend/
-RUN npm install --workspace=@leadpilot/shared --workspace=@leadpilot/frontend
+RUN npm install --workspace=@leadthur/shared --workspace=@leadthur/frontend
 
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
@@ -16,8 +16,8 @@ COPY shared ./shared
 COPY frontend ./frontend
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV DOCKER_BUILD=1
-RUN npm run build --workspace=@leadpilot/shared
-RUN npm run build --workspace=@leadpilot/frontend
+RUN npm run build --workspace=@leadthur/shared
+RUN npm run build --workspace=@leadthur/frontend
 
 FROM base AS runner
 ENV NODE_ENV=production

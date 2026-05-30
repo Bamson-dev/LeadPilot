@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { Search, Download, RotateCcw, Trash2, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { BusinessLead } from "@leadpilot/shared";
+import type { BusinessLead } from "@leadthur/shared";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -217,7 +217,7 @@ export function SearchDashboard() {
   };
 
   const handleDownload = () => {
-    exportToCSV(leadsToExport, `leadpilot-${query}-${loc}-${Date.now()}.csv`);
+    exportToCSV(leadsToExport, `leadthur-${query}-${loc}-${Date.now()}.csv`);
   };
 
   const startNewSession = () => {
@@ -714,7 +714,7 @@ export function SearchDashboard() {
           </div>
 
           <p style={{ color: "#6B6B80", fontSize: 11, margin: 0 }}>
-            Powered by LeadPilot — suggestions are generated for your specific search and
+            Powered by LeadThur — suggestions are generated for your specific search and
             location
           </p>
         </div>

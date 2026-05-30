@@ -20,7 +20,7 @@ async function sendEmail(params: {
       Accept: "application/json",
     },
     body: JSON.stringify({
-      sender: { email: config.BREVO_SENDER_EMAIL, name: "LeadPilot" },
+      sender: { email: config.BREVO_SENDER_EMAIL, name: "LeadThur" },
       to: [{ email: params.to }],
       subject: params.subject,
       htmlContent: params.html,
@@ -65,7 +65,7 @@ export async function sendCommissionNotification(
               <div style="width:34px;height:34px;background:rgba(255,255,255,0.2);border-radius:8px;display:inline-flex;align-items:center;justify-content:center;">
                 <span style="color:white;font-size:12px;font-weight:800;">LP</span>
               </div>
-              <span style="font-size:18px;font-weight:800;color:white;letter-spacing:-0.5px;">LeadPilot</span>
+              <span style="font-size:18px;font-weight:800;color:white;letter-spacing:-0.5px;">LeadThur</span>
             </div>
           </div>
 
@@ -77,7 +77,7 @@ export async function sendCommissionNotification(
             </h2>
 
             <p style="font-size:15px;color:#666666;margin:0 0 28px;line-height:1.6;">
-              Someone just bought LeadPilot through your referral link.<br>
+              Someone just bought LeadThur through your referral link.<br>
               Your commission has been added to your balance.
             </p>
 
@@ -130,7 +130,7 @@ export async function sendCommissionNotification(
 
           <div style="background:#F8F8FB;border-top:1px solid #EEEEEE;padding:20px 32px;text-align:center;">
             <p style="font-size:12px;color:#AAAAAA;margin:0;">
-              LeadPilot — Business Discovery Intelligence
+              LeadThur — Business Discovery Intelligence
               <br>
               Questions? <a href="https://wa.me/2349067285890" style="color:#7C3AED;text-decoration:none;">WhatsApp 09067285890</a>
             </p>
@@ -144,7 +144,180 @@ export async function sendCommissionNotification(
 
   await sendEmail({
     to: referrerEmail,
-    subject: `You just earned $${commissionUsd.toFixed(2)} — LeadPilot commission`,
+    subject: `You just earned $${commissionUsd.toFixed(2)} — LeadThur commission`,
+    html,
+  });
+}
+
+export async function sendPayoutRequestedEmail(
+  email: string,
+  amountNgn: number,
+  amountUsd: number,
+  accountName: string,
+  bankName: string
+): Promise<void> {
+  const dashboardUrl = `${config.FRONTEND_URL.replace(/\/$/, "")}/dashboard`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body style="margin:0;padding:0;background:#F4F4F8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+      <div style="max-width:560px;margin:0 auto;padding:40px 20px;">
+        <div style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 2px 20px rgba(0,0,0,0.06);">
+
+          <div style="background:#7C3AED;padding:24px 32px;display:flex;align-items:center;gap:12px;">
+            <div style="width:34px;height:34px;background:rgba(255,255,255,0.2);border-radius:8px;display:inline-flex;align-items:center;justify-content:center;">
+              <span style="color:white;font-size:12px;font-weight:800;">LP</span>
+            </div>
+            <span style="font-size:18px;font-weight:800;color:white;">LeadThur</span>
+          </div>
+
+          <div style="padding:36px 32px;text-align:center;">
+            <div style="font-size:48px;margin-bottom:16px;">🏦</div>
+
+            <h2 style="font-size:24px;font-weight:800;color:#111111;margin:0 0 10px;letter-spacing:-0.5px;">
+              Payout request received
+            </h2>
+
+            <p style="font-size:15px;color:#555555;margin:0 0 28px;line-height:1.7;">
+              We have received your payout request and it is being processed. Expect your money within 24 hours.
+            </p>
+
+            <div style="background:#F8F8FB;border-radius:14px;padding:24px;margin-bottom:28px;text-align:left;">
+              <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #EEEEEE;font-size:14px;">
+                <span style="color:#888888;">Amount</span>
+                <span style="font-weight:800;color:#111111;">₦${amountNgn.toLocaleString()} ($${amountUsd.toFixed(2)})</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #EEEEEE;font-size:14px;">
+                <span style="color:#888888;">Account name</span>
+                <span style="font-weight:700;color:#111111;">${accountName}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:10px 0;font-size:14px;">
+                <span style="color:#888888;">Bank</span>
+                <span style="font-weight:700;color:#111111;">${bankName}</span>
+              </div>
+            </div>
+
+            <p style="font-size:14px;color:#555555;line-height:1.75;margin-bottom:28px;">
+              Keep sharing your referral link while you wait. Every new referral adds to your next payout. There is no limit to how much you can earn.
+            </p>
+
+            <a href="${dashboardUrl}"
+               style="display:inline-block;background:#7C3AED;color:white;font-weight:800;font-size:15px;padding:16px 32px;border-radius:10px;text-decoration:none;">
+              View My Dashboard →
+            </a>
+          </div>
+
+          <div style="background:#F8F8FB;border-top:1px solid #EEEEEE;padding:20px 32px;text-align:center;">
+            <p style="font-size:12px;color:#AAAAAA;margin:0;">
+              Questions? <a href="https://wa.me/2349067285890" style="color:#7C3AED;text-decoration:none;">WhatsApp 09067285890</a>
+              &nbsp;·&nbsp;
+              <a href="mailto:access@leadthur.com" style="color:#7C3AED;text-decoration:none;">access@leadthur.com</a>
+            </p>
+          </div>
+
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  await sendEmail({
+    to: email,
+    subject: "Your payout request is being processed — LeadThur",
+    html,
+  });
+}
+
+export async function sendPayoutPaidEmail(
+  email: string,
+  amountNgn: number,
+  amountUsd: number,
+  accountName: string,
+  bankName: string,
+  accountNumber: string
+): Promise<void> {
+  const dashboardUrl = `${config.FRONTEND_URL.replace(/\/$/, "")}/dashboard`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body style="margin:0;padding:0;background:#F4F4F8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+      <div style="max-width:560px;margin:0 auto;padding:40px 20px;">
+        <div style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 2px 20px rgba(0,0,0,0.06);">
+
+          <div style="background:#10B981;padding:24px 32px;display:flex;align-items:center;gap:12px;">
+            <div style="width:34px;height:34px;background:rgba(255,255,255,0.2);border-radius:8px;display:inline-flex;align-items:center;justify-content:center;">
+              <span style="color:white;font-size:12px;font-weight:800;">LP</span>
+            </div>
+            <span style="font-size:18px;font-weight:800;color:white;">LeadThur</span>
+          </div>
+
+          <div style="padding:36px 32px;text-align:center;">
+            <div style="font-size:48px;margin-bottom:16px;">💸</div>
+
+            <h2 style="font-size:24px;font-weight:800;color:#111111;margin:0 0 10px;letter-spacing:-0.5px;">
+              Your money is on the way
+            </h2>
+
+            <p style="font-size:15px;color:#555555;margin:0 0 28px;line-height:1.7;">
+              Your payout has been processed and the transfer has been initiated to your bank account. Check your account within a few hours.
+            </p>
+
+            <div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:14px;padding:24px;margin-bottom:28px;text-align:left;">
+              <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #D1FAE5;font-size:14px;">
+                <span style="color:#065F46;font-weight:600;">Amount paid</span>
+                <span style="font-weight:900;color:#065F46;font-size:18px;">₦${amountNgn.toLocaleString()}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #D1FAE5;font-size:14px;">
+                <span style="color:#6B7280;">Account name</span>
+                <span style="font-weight:700;color:#111111;">${accountName}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #D1FAE5;font-size:14px;">
+                <span style="color:#6B7280;">Bank</span>
+                <span style="font-weight:700;color:#111111;">${bankName}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:10px 0;font-size:14px;">
+                <span style="color:#6B7280;">Account number</span>
+                <span style="font-weight:700;color:#111111;">${accountNumber}</span>
+              </div>
+            </div>
+
+            <p style="font-size:14px;color:#555555;line-height:1.75;margin-bottom:28px;">
+              Thank you for promoting LeadThur. Keep sharing your referral link and you can request your next payout anytime your balance reaches ₦7,500. There is no limit on how much you can earn.
+            </p>
+
+            <a href="${dashboardUrl}"
+               style="display:inline-block;background:#10B981;color:white;font-weight:800;font-size:15px;padding:16px 32px;border-radius:10px;text-decoration:none;">
+              View My Dashboard →
+            </a>
+          </div>
+
+          <div style="background:#F8F8FB;border-top:1px solid #EEEEEE;padding:20px 32px;text-align:center;">
+            <p style="font-size:12px;color:#AAAAAA;margin:0;">
+              Questions? <a href="https://wa.me/2349067285890" style="color:#10B981;text-decoration:none;">WhatsApp 09067285890</a>
+              &nbsp;·&nbsp;
+              <a href="mailto:access@leadthur.com" style="color:#10B981;text-decoration:none;">access@leadthur.com</a>
+            </p>
+          </div>
+
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  await sendEmail({
+    to: email,
+    subject: `Your ₦${amountNgn.toLocaleString()} payout has been sent — LeadThur`,
     html,
   });
 }
@@ -154,17 +327,17 @@ export async function sendActivationEmail(email: string, licenseKey: string): Pr
 
   const html = `
     <div style="font-family: Inter, Arial, sans-serif; max-width: 560px; margin: 0 auto; color: #111;">
-      <h1 style="color: #7c3aed;">Your LeadPilot access is ready</h1>
+      <h1 style="color: #7c3aed;">Your LeadThur access is ready</h1>
       <p>Thank you for your purchase. Use your license key to activate lifetime access:</p>
       <p style="font-size: 20px; font-weight: bold; letter-spacing: 1px;">${licenseKey}</p>
-      <p><a href="${activateUrl}" style="background:#7c3aed;color:#fff;padding:12px 20px;text-decoration:none;border-radius:8px;display:inline-block;">Activate LeadPilot</a></p>
+      <p><a href="${activateUrl}" style="background:#7c3aed;color:#fff;padding:12px 20px;text-decoration:none;border-radius:8px;display:inline-block;">Activate LeadThur</a></p>
       <p style="color:#666;font-size:14px;">If the button does not work, copy your key into the dashboard activation screen.</p>
     </div>
   `;
 
   await sendEmail({
     to: email,
-    subject: "Your LeadPilot activation key",
+    subject: "Your LeadThur activation key",
     html,
   });
 }
@@ -184,7 +357,7 @@ export async function sendSearchCompleteEmail(
     <body style="margin:0;padding:0;background:#07070A;font-family:Arial,sans-serif;">
       <div style="max-width:520px;margin:0 auto;padding:40px 24px;">
         <div style="margin-bottom:32px;">
-          <span style="background:#7C3AED;color:white;padding:6px 14px;border-radius:100px;font-size:12px;font-weight:700;letter-spacing:0.05em;">LEADPILOT</span>
+          <span style="background:#7C3AED;color:white;padding:6px 14px;border-radius:100px;font-size:12px;font-weight:700;letter-spacing:0.05em;">LEADTHUR</span>
         </div>
         <h1 style="color:#F4F4FF;font-size:28px;font-weight:800;margin:0 0 12px;line-height:1.2;">Your results are ready</h1>
         <p style="color:#A1A1AA;font-size:15px;line-height:1.6;margin:0 0 24px;">
@@ -201,7 +374,7 @@ export async function sendSearchCompleteEmail(
           View My Results
         </a>
         <p style="color:#6B6B80;font-size:12px;line-height:1.6;margin:0;border-top:1px solid rgba(255,255,255,0.07);padding-top:20px;">
-          LeadPilot — Business Discovery Intelligence<br>Your results are saved and available any time you log in.
+          LeadThur — Business Discovery Intelligence<br>Your results are saved and available any time you log in.
         </p>
       </div>
     </body>
@@ -210,7 +383,7 @@ export async function sendSearchCompleteEmail(
 
   await sendEmail({
     to: email,
-    subject: `Your search found ${totalFound} businesses — LeadPilot`,
+    subject: `Your search found ${totalFound} businesses — LeadThur`,
     html,
   });
 }
@@ -229,7 +402,7 @@ export async function sendSearchRunningEmail(
     <body style="margin:0;padding:0;background:#07070A;font-family:Arial,sans-serif;">
       <div style="max-width:520px;margin:0 auto;padding:40px 24px;">
         <div style="margin-bottom:32px;">
-          <span style="background:#7C3AED;color:white;padding:6px 14px;border-radius:100px;font-size:12px;font-weight:700;letter-spacing:0.05em;">LEADPILOT</span>
+          <span style="background:#7C3AED;color:white;padding:6px 14px;border-radius:100px;font-size:12px;font-weight:700;letter-spacing:0.05em;">LEADTHUR</span>
         </div>
         <h1 style="color:#F4F4FF;font-size:28px;font-weight:800;margin:0 0 12px;line-height:1.2;">Still searching. Hang tight.</h1>
         <p style="color:#A1A1AA;font-size:15px;line-height:1.6;margin:0 0 24px;">
@@ -244,7 +417,7 @@ export async function sendSearchRunningEmail(
           Go to Dashboard
         </a>
         <p style="color:#6B6B80;font-size:12px;line-height:1.6;margin:0;border-top:1px solid rgba(255,255,255,0.07);padding-top:20px;">
-          LeadPilot — Business Discovery Intelligence<br>We will notify you again when your results are ready.
+          LeadThur — Business Discovery Intelligence<br>We will notify you again when your results are ready.
         </p>
       </div>
     </body>
@@ -253,7 +426,7 @@ export async function sendSearchRunningEmail(
 
   await sendEmail({
     to: email,
-    subject: "Your LeadPilot search is still running — we will notify you when done",
+    subject: "Your LeadThur search is still running — we will notify you when done",
     html,
   });
 }
@@ -272,7 +445,7 @@ export async function sendSearchFailedEmail(
     <body style="margin:0;padding:0;background:#07070A;font-family:Arial,sans-serif;">
       <div style="max-width:520px;margin:0 auto;padding:40px 24px;">
         <div style="margin-bottom:32px;">
-          <span style="background:#7C3AED;color:white;padding:6px 14px;border-radius:100px;font-size:12px;font-weight:700;letter-spacing:0.05em;">LEADPILOT</span>
+          <span style="background:#7C3AED;color:white;padding:6px 14px;border-radius:100px;font-size:12px;font-weight:700;letter-spacing:0.05em;">LEADTHUR</span>
         </div>
         <h1 style="color:#F4F4FF;font-size:28px;font-weight:800;margin:0 0 12px;line-height:1.2;">Search did not complete</h1>
         <p style="color:#A1A1AA;font-size:15px;line-height:1.6;margin:0 0 24px;">
@@ -294,7 +467,7 @@ export async function sendSearchFailedEmail(
           Try Another Search
         </a>
         <p style="color:#6B6B80;font-size:12px;line-height:1.6;margin:0;border-top:1px solid rgba(255,255,255,0.07);padding-top:20px;">
-          LeadPilot — Business Discovery Intelligence<br>If this keeps happening contact us and we will help you out.
+          LeadThur — Business Discovery Intelligence<br>If this keeps happening contact us and we will help you out.
         </p>
       </div>
     </body>
@@ -303,7 +476,7 @@ export async function sendSearchFailedEmail(
 
   await sendEmail({
     to: email,
-    subject: "Your LeadPilot search did not complete — here is what to try",
+    subject: "Your LeadThur search did not complete — here is what to try",
     html,
   });
 }
@@ -319,7 +492,7 @@ export async function sendLimitReachedEmail(
     <body style="margin:0;padding:0;background:#07070A;font-family:Arial,sans-serif;">
       <div style="max-width:520px;margin:0 auto;padding:40px 24px;">
         <div style="margin-bottom:32px;">
-          <span style="background:#7C3AED;color:white;padding:6px 14px;border-radius:100px;font-size:12px;font-weight:700;letter-spacing:0.05em;">LEADPILOT</span>
+          <span style="background:#7C3AED;color:white;padding:6px 14px;border-radius:100px;font-size:12px;font-weight:700;letter-spacing:0.05em;">LEADTHUR</span>
         </div>
         <h1 style="color:#F4F4FF;font-size:28px;font-weight:800;margin:0 0 12px;line-height:1.2;">You have used all your searches</h1>
         <p style="color:#A1A1AA;font-size:15px;line-height:1.6;margin:0 0 24px;">
@@ -340,7 +513,7 @@ export async function sendLimitReachedEmail(
           </p>
         </div>
         <p style="color:#6B6B80;font-size:12px;line-height:1.6;margin:0;border-top:1px solid rgba(255,255,255,0.07);padding-top:20px;">
-          LeadPilot — Business Discovery Intelligence<br>Your searches reset on ${resetDate}.
+          LeadThur — Business Discovery Intelligence<br>Your searches reset on ${resetDate}.
         </p>
       </div>
     </body>
@@ -349,7 +522,7 @@ export async function sendLimitReachedEmail(
 
   await sendEmail({
     to: email,
-    subject: `Your LeadPilot monthly searches have been used — reset on ${resetDate}`,
+    subject: `Your LeadThur monthly searches have been used — reset on ${resetDate}`,
     html,
   });
 }
@@ -386,7 +559,7 @@ export async function sendAdminMessage(
             <div style="width:34px;height:34px;background:rgba(255,255,255,0.2);border-radius:8px;display:inline-flex;align-items:center;justify-content:center;">
               <span style="color:white;font-size:12px;font-weight:800;">LP</span>
             </div>
-            <span style="font-size:18px;font-weight:800;color:white;letter-spacing:-0.5px;">LeadPilot</span>
+            <span style="font-size:18px;font-weight:800;color:white;letter-spacing:-0.5px;">LeadThur</span>
           </div>
 
           <div style="padding:36px 32px;">
@@ -400,13 +573,13 @@ export async function sendAdminMessage(
 
           <div style="background:#F8F8FB;border-top:1px solid #EEEEEE;padding:20px 32px;text-align:center;">
             <p style="font-size:13px;color:#888888;margin:0 0 6px;font-weight:600;">
-              LeadPilot — Business Discovery Intelligence
+              LeadThur — Business Discovery Intelligence
             </p>
             <p style="font-size:12px;color:#AAAAAA;margin:0;">
               Questions? 
               <a href="https://wa.me/2349067285890" style="color:#7C3AED;text-decoration:none;font-weight:600;">WhatsApp 09067285890</a>
               &nbsp;·&nbsp;
-              <a href="mailto:access@leadpilot.live" style="color:#7C3AED;text-decoration:none;font-weight:600;">access@leadpilot.live</a>
+              <a href="mailto:access@leadthur.com" style="color:#7C3AED;text-decoration:none;font-weight:600;">access@leadthur.com</a>
             </p>
           </div>
 

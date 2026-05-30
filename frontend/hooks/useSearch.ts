@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { AreaSuggestion, BusinessLead } from "@leadpilot/shared";
+import type { AreaSuggestion, BusinessLead } from "@leadthur/shared";
 import { getResults, getSearch, startSearch } from "@/services/api";
 import { getApiUrl } from "@/utils/env";
 import {

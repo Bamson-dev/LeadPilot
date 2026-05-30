@@ -1,4 +1,4 @@
-import type { BusinessLead, PredictedEmail } from "@leadpilot/shared";
+import type { BusinessLead, PredictedEmail } from "@leadthur/shared";
 import type { RawLeadInput } from "../types/scraper";
 import { crawlEmailForWebsite } from "../scraper/emailCrawler/email-crawler";
 import { resolveEffectiveBusinessWebsite } from "../scraper/utils/effective-website";

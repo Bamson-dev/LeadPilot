@@ -1,4 +1,4 @@
-import type { BusinessLead, SearchJob } from "@leadpilot/shared";
+import type { BusinessLead, SearchJob } from "@leadthur/shared";
 import {
   predictionsFromDb,
   predictionStorageFields,

@@ -11,8 +11,8 @@ function redirectSuspended(reason: string) {
 }
 
 function clearLicenseAndRedirectActivate() {
-  localStorage.removeItem("leadpilot_email");
-  localStorage.removeItem("leadpilot_key");
+  localStorage.removeItem("leadthur_email");
+  localStorage.removeItem("leadthur_key");
   window.location.href = "/activate";
 }
 
@@ -35,8 +35,8 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
-    const email = localStorage.getItem("leadpilot_email");
-    const key = localStorage.getItem("leadpilot_key");
+    const email = localStorage.getItem("leadthur_email");
+    const key = localStorage.getItem("leadthur_key");
 
     if (!email || !key) {
       window.location.href = "/activate";

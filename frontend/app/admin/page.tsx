@@ -15,6 +15,7 @@ import {
   getRecentUsers,
   getTrialActivity,
   getTrialStats,
+  markPayoutProcessing,
   payPayout,
   setAdminToken,
   type AdminLicense,
@@ -83,21 +84,32 @@ export default function AdminPage() {
     }
   }, [handleSessionError]);
 
-  const handlePayout = async (payoutId: string, email: string, amount: number) => {
-    const confirmed = window.confirm(
-      `Pay ₦${amount.toLocaleString()} to ${email}?\n\nThis will immediately transfer the money from your Paystack balance. This cannot be undone.`
-    );
-    if (!confirmed) return;
-
-    setPayingOut(payoutId);
+  const handleMarkProcessing = async (payoutId: string) => {
     setPayoutMsg("");
-
     try {
-      const data = await payPayout(payoutId);
+      const data = await markPayoutProcessing(payoutId);
       setPayoutMsg(data.message);
       await loadPayouts();
     } catch (err) {
-      setPayoutMsg(err instanceof Error ? err.message : "Payout failed. Check your Paystack balance.");
+      setPayoutMsg(err instanceof Error ? err.message : "Failed to update payout status.");
+    }
+  };
+
+  const handlePayout = async (payout: PayoutRequest) => {
+    const confirmed = window.confirm(
+      `Mark ₦${payout.amount_ngn.toLocaleString()} as paid to ${payout.referrer_email}?\n\nAccount: ${payout.account_name}\nBank: ${payout.bank_name}\nAccount Number: ${payout.account_number}\n\nOnly click confirm AFTER you have completed the manual bank transfer. This will notify the affiliate that their payment has been sent.`
+    );
+    if (!confirmed) return;
+
+    setPayingOut(payout.id);
+    setPayoutMsg("");
+
+    try {
+      const data = await payPayout(payout.id);
+      setPayoutMsg(data.message);
+      await loadPayouts();
+    } catch (err) {
+      setPayoutMsg(err instanceof Error ? err.message : "Failed to mark payout as paid.");
     } finally {
       setPayingOut(null);
     }
@@ -229,7 +241,7 @@ export default function AdminPage() {
           className="glass w-full max-w-md rounded-2xl p-8"
         >
           <h1 className={`${bricolage.className} text-2xl font-bold text-[#F4F4FF]`}>
-            LeadPilot Admin
+            LeadThur Admin
           </h1>
           <p className="mt-2 text-sm text-[#6B6B80]">Sign in to manage licenses</p>
 
@@ -273,7 +285,7 @@ export default function AdminPage() {
     <main className="min-h-screen bg-[#09090B] px-4 py-8 sm:px-6">
       <header className="mx-auto flex max-w-6xl items-center justify-between">
         <h1 className={`${bricolage.className} text-2xl font-bold text-[#F4F4FF]`}>
-          LeadPilot Admin
+          LeadThur Admin
         </h1>
         <button
           type="button"
@@ -664,13 +676,17 @@ export default function AdminPage() {
                               ? "rgba(16,185,129,0.1)"
                               : payout.status === "failed"
                                 ? "rgba(239,68,68,0.1)"
-                                : "rgba(251,191,36,0.1)",
+                                : payout.status === "processing"
+                                  ? "rgba(59,130,246,0.1)"
+                                  : "rgba(251,191,36,0.1)",
                           color:
                             payout.status === "paid"
                               ? "#10B981"
                               : payout.status === "failed"
                                 ? "#EF4444"
-                                : "#FBBF24",
+                                : payout.status === "processing"
+                                  ? "#60A5FA"
+                                  : "#FBBF24",
                           padding: "3px 10px",
                           borderRadius: 100,
                           fontSize: 10,
@@ -695,61 +711,54 @@ export default function AdminPage() {
                       })}
                     </td>
                     <td style={{ padding: "12px 14px" }}>
-                      {payout.status === "pending" && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void handlePayout(
-                              payout.id,
-                              payout.referrer_email,
-                              payout.amount_ngn
-                            )
-                          }
-                          disabled={payingOut === payout.id}
-                          style={{
-                            background:
-                              payingOut === payout.id
-                                ? "rgba(16,185,129,0.1)"
-                                : "#10B981",
-                            color: "white",
-                            border: "none",
-                            borderRadius: 6,
-                            padding: "6px 14px",
-                            fontSize: 11,
-                            fontWeight: 700,
-                            cursor: payingOut === payout.id ? "not-allowed" : "pointer",
-                            fontFamily: "Inter, sans-serif",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {payingOut === payout.id ? "Paying..." : "Pay Now"}
-                        </button>
-                      )}
-                      {payout.status === "failed" && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void handlePayout(
-                              payout.id,
-                              payout.referrer_email,
-                              payout.amount_ngn
-                            )
-                          }
-                          style={{
-                            background: "transparent",
-                            color: "#EF4444",
-                            border: "1px solid rgba(239,68,68,0.3)",
-                            borderRadius: 6,
-                            padding: "6px 14px",
-                            fontSize: 11,
-                            fontWeight: 700,
-                            cursor: "pointer",
-                            fontFamily: "Inter, sans-serif",
-                          }}
-                        >
-                          Retry
-                        </button>
-                      )}
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {payout.status === "pending" && (
+                          <button
+                            type="button"
+                            onClick={() => void handleMarkProcessing(payout.id)}
+                            style={{
+                              background: "transparent",
+                              color: "#60A5FA",
+                              border: "1px solid rgba(59,130,246,0.35)",
+                              borderRadius: 6,
+                              padding: "6px 10px",
+                              fontSize: 11,
+                              fontWeight: 700,
+                              cursor: "pointer",
+                              fontFamily: "Inter, sans-serif",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            Processing
+                          </button>
+                        )}
+                        {(payout.status === "pending" ||
+                          payout.status === "processing" ||
+                          payout.status === "failed") && (
+                          <button
+                            type="button"
+                            onClick={() => void handlePayout(payout)}
+                            disabled={payingOut === payout.id}
+                            style={{
+                              background:
+                                payingOut === payout.id
+                                  ? "rgba(16,185,129,0.1)"
+                                  : "#10B981",
+                              color: "white",
+                              border: "none",
+                              borderRadius: 6,
+                              padding: "6px 14px",
+                              fontSize: 11,
+                              fontWeight: 700,
+                              cursor: payingOut === payout.id ? "not-allowed" : "pointer",
+                              fontFamily: "Inter, sans-serif",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {payingOut === payout.id ? "Saving..." : "Mark Paid"}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -800,7 +809,7 @@ export default function AdminPage() {
                 Free Trial Activity
               </h3>
               <p style={{ fontSize: 12, color: "#888888", margin: 0 }}>
-                Track who is testing LeadPilot before buying
+                Track who is testing LeadThur before buying
               </p>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

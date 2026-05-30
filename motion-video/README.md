@@ -1,4 +1,4 @@
-# LeadPilot motion video
+# LeadThur motion video
 
 Hardcoded **46-second** promo motion design (1920×1080). Renders to **MP4** on your Mac — no After Effects required.
 
@@ -27,7 +27,7 @@ npm install
 npm run render
 ```
 
-**Output file:** `motion-video/out/leadpilot-promo.mp4`
+**Output file:** `motion-video/out/leadthur-promo.mp4`
 
 Optional:
 
@@ -52,7 +52,7 @@ npm run motion:render
 | File | Purpose |
 |------|---------|
 | `src/data/demo-leads.ts` | Business names, phones, emails in the table |
-| `src/LeadPilotPromo.tsx` | Scene timing & animations |
+| `src/LeadThurPromo.tsx` | Scene timing & animations |
 | `src/theme.ts` | Colors, duration, resolution |
 
 Edit copy or leads, then run `npm run render` again.

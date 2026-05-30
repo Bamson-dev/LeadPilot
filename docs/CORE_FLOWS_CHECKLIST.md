@@ -8,16 +8,16 @@ ADMIN_EMAIL=...
 ADMIN_PASSWORD=...
 JWT_SECRET=<openssl rand -hex 64>
 BREVO_API_KEY=...
-BREVO_SENDER_EMAIL=access@leadpilot.live
+BREVO_SENDER_EMAIL=access@leadthur.com
 SUPABASE_URL=...
 SUPABASE_SERVICE_KEY=...
-FRONTEND_URL=https://www.leadpilot.live
+FRONTEND_URL=https://www.leadthur.com
 ```
 
 **Supabase:** Run `supabase/migrations/004_license_keys.sql`
 
 **Test:**
-1. Open https://www.leadpilot.live/admin
+1. Open https://www.leadthur.com/admin
 2. Log in with `ADMIN_EMAIL` / `ADMIN_PASSWORD`
 3. Generate access for a test email
 4. Confirm Brevo email arrives with license key
@@ -29,8 +29,8 @@ FRONTEND_URL=https://www.leadpilot.live
 **Coolify:** `PAYSTACK_SECRET_KEY=sk_live_...`, `LIFETIME_ACCESS_PRICE=1500000`
 
 **Paystack dashboard:**
-- Webhook: `https://backend.leadpilot.live/webhooks/paystack`
-- Success URL: `https://www.leadpilot.live/payment-success`
+- Webhook: `https://backend.leadthur.com/webhooks/paystack`
+- Success URL: `https://www.leadthur.com/payment-success`
 
 **Test:** Real ₦15,000 payment → license row in Supabase → activation email
 
@@ -38,7 +38,7 @@ FRONTEND_URL=https://www.leadpilot.live
 
 ## 3. Search (leads on screen)
 
-**Vercel:** `NEXT_PUBLIC_API_URL=https://backend.leadpilot.live`
+**Vercel:** `NEXT_PUBLIC_API_URL=https://backend.leadthur.com`
 
 **Test:**
 1. Activate at `/activate`

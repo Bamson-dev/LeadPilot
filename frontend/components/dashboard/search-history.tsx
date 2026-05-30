@@ -74,7 +74,7 @@ export function SearchHistory({ isMobile = false, onViewResults }: SearchHistory
     setExportingId(item.id);
     try {
       const { leads } = await getResults(item.search_id);
-      exportToCSV(leads, `leadpilot-${item.query}-${item.location}-${item.id}.csv`);
+      exportToCSV(leads, `leadthur-${item.query}-${item.location}-${item.id}.csv`);
     } finally {
       setExportingId(null);
     }

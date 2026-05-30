@@ -1,5 +1,5 @@
 /**
- * LeadPilot 9:16 canvas ad — 45s @ 30fps · 1080×1920
+ * LeadThur 9:16 canvas ad — 45s @ 30fps · 1080×1920
  */
 (function (global) {
   const W = 1080;
@@ -287,8 +287,8 @@
     ctx.restore();
   }
 
-  /** Full LeadPilot app UI — matches demo-recording dashboard */
-  function drawLeadPilotApp(ctx, t, local, opts) {
+  /** Full LeadThur app UI — matches demo-recording dashboard */
+  function drawLeadThurApp(ctx, t, local, opts) {
     const { slideAlpha = 1 } = opts;
     const pad = 36;
     const cardX = pad;
@@ -327,7 +327,7 @@
 
     let y = 72;
 
-    drawText(ctx, "LeadPilot", pad + 8, y, 22, C.purpleLight, FONT_HEAD, "left", "700");
+    drawText(ctx, "LeadThur", pad + 8, y, 22, C.purpleLight, FONT_HEAD, "left", "700");
     y += 52;
 
     roundRect(ctx, cardX, y, cardW, 340, 24);
@@ -590,7 +590,7 @@
     drawPurpleGlow(ctx, W / 2, H * 0.36, 300, 1 + 0.1 * Math.sin(local / 380));
     drawLogo(ctx, W / 2, H * 0.33, 120);
 
-    const brand = "LeadPilot";
+    const brand = "LeadThur";
     const letters = Math.floor(smoothstep(500, 1600, local) * brand.length);
     drawText(ctx, brand.slice(0, letters), W / 2, H * 0.33 + 100, 64, C.white, FONT_HEAD);
 
@@ -662,7 +662,7 @@
     const slideIn = easeOutCubic(smoothstep(0, 600, local));
     const slideOut = local > 14800 ? easeOutCubic(smoothstep(14800, 15500, local)) : 0;
 
-    drawLeadPilotApp(ctx, t, local, { slideAlpha: slideIn * (1 - slideOut) });
+    drawLeadThurApp(ctx, t, local, { slideAlpha: slideIn * (1 - slideOut) });
 
     CALLOUTS.forEach((c) => {
       const ca =
@@ -674,7 +674,7 @@
 
     if (local > 400 && local < 2000) {
       const ta = smoothstep(400, 800, local) * (1 - smoothstep(1600, 2000, local));
-      drawText(ctx, "How LeadPilot works", W / 2, 36, 22, C.purpleLight, FONT_BODY, "center", "600");
+      drawText(ctx, "How LeadThur works", W / 2, 36, 22, C.purpleLight, FONT_BODY, "center", "600");
       ctx.globalAlpha = ta;
     }
   }
@@ -684,7 +684,7 @@
     const local = localT(t, T.export[0]);
     const fade = smoothstep(0, 400, local);
 
-    drawLeadPilotApp(ctx, t, 12000, { slideAlpha: 1 });
+    drawLeadThurApp(ctx, t, 12000, { slideAlpha: 1 });
 
     const pad = 36;
     const cardX = pad;
@@ -901,7 +901,7 @@
       y += 78;
     }
     if (step(1) > 0) {
-      drawText(ctx, "LeadPilot", W / 2, y, 54, C.white, FONT_HEAD);
+      drawText(ctx, "LeadThur", W / 2, y, 54, C.white, FONT_HEAD);
       y += 72;
     }
     if (step(2) > 0) {
@@ -1035,7 +1035,7 @@
     await document.fonts.ready;
   }
 
-  global.LeadPilotCanvasAd = {
+  global.LeadThurCanvasAd = {
     W,
     H,
     DURATION_MS,

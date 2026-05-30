@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
-export default function FreeTrialPage() {
+export default function StartPage() {
   redirect("/checkout");
 }

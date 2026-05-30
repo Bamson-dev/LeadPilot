@@ -1,9 +1,9 @@
 {
-  "name": "@leadpilot/frontend",
+  "name": "@leadthur/frontend",
   "version": "0.1.0",
   "private": true,
   "author": "Bamidele",
-  "description": "LeadPilot — Business Discovery Intelligence",
+  "description": "LeadThur — Business Discovery Intelligence",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
@@ -11,7 +11,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@leadpilot/shared": "*",
+    "@leadthur/shared": "*",
     "@radix-ui/react-dialog": "^1.1.6",
     "@radix-ui/react-progress": "^1.1.2",
     "@radix-ui/react-slot": "^1.1.2",

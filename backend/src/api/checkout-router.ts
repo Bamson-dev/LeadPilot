@@ -32,7 +32,7 @@ router.post("/initialize", async (req: Request, res: Response) => {
     const frontendUrl = config.FRONTEND_URL.replace(/\/$/, "");
 
     const metadata: Record<string, string> = {
-      product: "LeadPilot Lifetime",
+      product: "LeadThur Lifetime",
       cancel_action: `${frontendUrl}/`,
     };
 
@@ -54,7 +54,7 @@ router.post("/initialize", async (req: Request, res: Response) => {
             metadata,
             channels: ["card", "bank", "ussd", "bank_transfer"],
             customizations: {
-              title: "LeadPilot Lifetime Access",
+              title: "LeadThur Lifetime Access",
               description: "One payment. Find clients forever.",
               logo: `${frontendUrl}/logo.png`,
             },

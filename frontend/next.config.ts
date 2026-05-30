@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 
-const DEFAULT_PRODUCTION_API_URL = "https://backend.leadpilot.live";
+const DEFAULT_PRODUCTION_API_URL = "https://backend.leadthur.com";
 
 if (
   process.env.NODE_ENV === "production" &&
@@ -11,7 +11,7 @@ if (
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: require("path").join(__dirname, ".."),
-  transpilePackages: ["@leadpilot/shared"],
+  transpilePackages: ["@leadthur/shared"],
   // Standalone is for Docker only — breaks default Vercel Next.js deploy
   ...(process.env.DOCKER_BUILD === "1" ? { output: "standalone" as const } : {}),
 };

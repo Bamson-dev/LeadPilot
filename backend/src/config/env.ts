@@ -94,7 +94,7 @@ export const config = {
     return getEnv().BREVO_API_KEY ?? "";
   },
   get BREVO_SENDER_EMAIL() {
-    return getEnv().BREVO_SENDER_EMAIL ?? "access@leadpilot.live";
+    return getEnv().BREVO_SENDER_EMAIL ?? "access@leadthur.com";
   },
   get FRONTEND_URL() {
     return getEnv().FRONTEND_URL;

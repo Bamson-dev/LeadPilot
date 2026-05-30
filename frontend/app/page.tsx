@@ -59,7 +59,7 @@ const features = [
   {
     icon: "✉️",
     title: "Email Discovery",
-    desc: "Contact emails extracted from business websites. LeadPilot finds emails even when they are buried deep in pages.",
+    desc: "Contact emails extracted from business websites. LeadThur finds emails even when they are buried deep in pages.",
   },
   {
     icon: "🌍",
@@ -79,12 +79,12 @@ const features = [
   {
     icon: "📋",
     title: "Lead Status Tracking",
-    desc: "Mark each lead as Contacted, Interested, Closed, or Not Interested. Track your entire pipeline inside LeadPilot.",
+    desc: "Mark each lead as Contacted, Interested, Closed, or Not Interested. Track your entire pipeline inside LeadThur.",
   },
   {
     icon: "🔍",
     title: "Smart Area Suggestions",
-    desc: "After each search LeadPilot suggests specific areas to search next. Stack searches to build lists of 500 plus businesses.",
+    desc: "After each search LeadThur suggests specific areas to search next. Stack searches to build lists of 500 plus businesses.",
   },
   {
     icon: "💬",
@@ -116,7 +116,7 @@ const testimonials = [
   },
   {
     stars: 5,
-    text: '"I run a small marketing agency in London. Finding local restaurant clients used to take days of manual research. LeadPilot gave me 90 contacts in under a minute. Closed three within a week."',
+    text: '"I run a small marketing agency in London. Finding local restaurant clients used to take days of manual research. LeadThur gave me 90 contacts in under a minute. Closed three within a week."',
     result: "✓ 3 UK restaurant clients closed in one week",
     initials: "JB",
     name: "James B.",
@@ -162,7 +162,7 @@ const faqs = [
   },
   {
     q: "Does this work in every country?",
-    a: "Yes. LeadPilot covers 195 countries. Lagos, London, New York, Dubai, Nairobi, Toronto, Accra, Johannesburg, Sydney, Singapore. Any business type, any city, anywhere in the world. The more specific the city the more results you get.",
+    a: "Yes. LeadThur covers 195 countries. Lagos, London, New York, Dubai, Nairobi, Toronto, Accra, Johannesburg, Sydney, Singapore. Any business type, any city, anywhere in the world. The more specific the city the more results you get.",
   },
   {
     q: "What happens immediately after I pay?",
@@ -170,11 +170,11 @@ const faqs = [
   },
   {
     q: "Is there really no monthly fee?",
-    a: "Right now there is no monthly fee. $15 once and LeadPilot is yours for life. But this is a limited lifetime deal. LeadPilot is moving to a subscription model very soon. These 20 slots are the last chance to pay once and own it forever. Once slots are gone new users pay monthly. Existing lifetime users are protected forever regardless of when the subscription launches.",
+    a: "Right now there is no monthly fee. $15 once and LeadThur is yours for life. But this is a limited lifetime deal. LeadThur is moving to a subscription model very soon. These 20 slots are the last chance to pay once and own it forever. Once slots are gone new users pay monthly. Existing lifetime users are protected forever regardless of when the subscription launches.",
   },
   {
     q: "How many businesses can I find per search?",
-    a: "Each search returns up to 200 businesses. After each search LeadPilot suggests specific areas within the city so you can run follow-up searches that stack on top of your existing results. Users regularly build lists of 500 plus businesses in a single session.",
+    a: "Each search returns up to 200 businesses. After each search LeadThur suggests specific areas within the city so you can run follow-up searches that stack on top of your existing results. Users regularly build lists of 500 plus businesses in a single session.",
   },
   {
     q: "Can I use this for WhatsApp outreach?",
@@ -182,11 +182,11 @@ const faqs = [
   },
   {
     q: "How does the affiliate programme work?",
-    a: "Every LeadPilot user gets a unique referral link in their dashboard after activation. Share it anywhere. When someone buys through your link you earn 50% of the sale which is $7.50 per referral. Earnings are paid directly to your bank account with no cap on how much you can earn. You must be an active LeadPilot user to access your affiliate link.",
+    a: "Every LeadThur user gets a unique referral link in their dashboard after activation. Share it anywhere. When someone buys through your link you earn 50% of the sale which is $7.50 per referral. Earnings are paid directly to your bank account with no cap on how much you can earn. You must be an active LeadThur user to access your affiliate link.",
   },
   {
     q: "Is this difficult to use?",
-    a: "If you can use Google you can use LeadPilot. Two fields. Business type. City. One button. Results appear within 60 seconds. No setup required. No training. Nothing to install. You are finding contacts the moment you log in.",
+    a: "If you can use Google you can use LeadThur. Two fields. Business type. City. One button. Results appear within 60 seconds. No setup required. No training. Nothing to install. You are finding contacts the moment you log in.",
   },
 ];
 
@@ -211,7 +211,7 @@ const affiliateSteps = [
 const toasts = [
   { flag: "🇳🇬", text: "Tunde in Lagos just got lifetime access", delay: 0 },
   { flag: "🇬🇧", text: "Sarah in London found 142 restaurant leads", delay: 13 },
-  { flag: "🇬🇭", text: "Kwame in Accra activated LeadPilot", delay: 26 },
+  { flag: "🇬🇭", text: "Kwame in Accra activated LeadThur", delay: 26 },
   { flag: "🇿🇦", text: "Nomsa in Johannesburg found 89 salon contacts", delay: 39 },
   { flag: "🇦🇪", text: "Fatima in Dubai just purchased lifetime access", delay: 52 },
   { flag: "🇰🇪", text: "Brian in Nairobi found 203 gym leads", delay: 65 },
@@ -219,7 +219,7 @@ const toasts = [
   { flag: "🇳🇬", text: "Chidi in Port Harcourt found 167 leads", delay: 91 },
   { flag: "🇬🇧", text: "Emma in Manchester got lifetime access", delay: 104 },
   { flag: "🇦🇪", text: "Omar in Abu Dhabi found 94 hotel contacts", delay: 117 },
-  { flag: "🇰🇪", text: "Grace in Mombasa activated LeadPilot", delay: 130 },
+  { flag: "🇰🇪", text: "Grace in Mombasa activated LeadThur", delay: 130 },
   { flag: "🇳🇬", text: "Aisha in Kano found 128 pharmacy leads", delay: 143 },
 ];
 
@@ -325,7 +325,7 @@ export default function HomePage() {
         <strong style={{ color: colors.text }}>
           Lifetime deal ends soon.
         </strong>{" "}
-        Only 20 slots at $15. After that LeadPilot becomes a monthly subscription.
+        Only 20 slots at $15. After that LeadThur becomes a monthly subscription.
       </div>
 
       {/* 2 — Navigation */}
@@ -587,7 +587,7 @@ export default function HomePage() {
         >
           Type any business type and any city in the world.{" "}
           <strong style={{ color: colors.text }}>
-            LeadPilot returns real businesses
+            LeadThur returns real businesses
           </strong>{" "}
           with phone numbers, emails, and addresses. Ready to reach out. Same day.
         </p>
@@ -615,7 +615,7 @@ export default function HomePage() {
               display: "inline-block",
             }}
           />
-          One client from this list pays for LeadPilot 100 times over.
+          One client from this list pays for LeadThur 100 times over.
         </p>
 
         <div
@@ -803,7 +803,7 @@ export default function HomePage() {
                 fontFamily: FONT,
               }}
             >
-              LeadPilot — Live Demo
+              LeadThur — Live Demo
             </span>
           </div>
           <div
@@ -816,7 +816,7 @@ export default function HomePage() {
           >
             <iframe
               src="https://www.youtube.com/embed/uSB2NOFMvWQ?rel=0&modestbranding=1"
-              title="LeadPilot demo"
+              title="LeadThur demo"
               style={{
                 position: "absolute",
                 top: 0,
@@ -952,7 +952,7 @@ export default function HomePage() {
             fontFamily: FONT,
           }}
         >
-          Try LeadPilot Free — No Signup
+          Try LeadThur Free — No Signup
         </a>
 
         <p
@@ -1350,7 +1350,7 @@ export default function HomePage() {
                 fontFamily: FONT,
               }}
             >
-              ⚠️ This is a limited lifetime deal. LeadPilot is moving to a monthly
+              ⚠️ This is a limited lifetime deal. LeadThur is moving to a monthly
               subscription model very soon. These 20 slots are the last chance to pay
               once and own it forever. Several slots have already been taken.
             </div>
@@ -1524,7 +1524,7 @@ export default function HomePage() {
                 fontFamily: FONT,
               }}
             >
-              ✓ 7-day money-back guarantee if LeadPilot does not work for you
+              ✓ 7-day money-back guarantee if LeadThur does not work for you
             </div>
 
             <p
@@ -1622,7 +1622,7 @@ export default function HomePage() {
               fontFamily: FONT,
             }}
           >
-            Share your unique referral link. When someone buys LeadPilot through your
+            Share your unique referral link. When someone buys LeadThur through your
             link you earn 50% of every sale. That is $7.50 per referral paid directly
             to your account. No cap on earnings.
           </p>
@@ -1757,7 +1757,7 @@ export default function HomePage() {
               fontFamily: FONT,
             }}
           >
-            You must be a LeadPilot user to join the affiliate programme. Your unique
+            You must be a LeadThur user to join the affiliate programme. Your unique
             referral link appears automatically in your dashboard after activation.
           </p>
         </div>
@@ -1860,7 +1860,7 @@ export default function HomePage() {
             padding: `0 ${padX}px`,
           }}
         >
-          Every business you need to contact is out there. LeadPilot finds them in 60
+          Every business you need to contact is out there. LeadThur finds them in 60
           seconds.
         </p>
         <div
@@ -1956,7 +1956,7 @@ export default function HomePage() {
                 LP
               </div>
               <span style={{ fontWeight: 800, fontSize: 18, fontFamily: FONT }}>
-                LeadPilot
+                LeadThur
               </span>
             </div>
             <p
@@ -2049,7 +2049,7 @@ export default function HomePage() {
               WhatsApp
             </a>
             <a
-              href="mailto:support@leadpilot.live"
+              href="mailto:support@leadthur.com"
               style={{
                 color: "#8888A8",
                 textDecoration: "none",
@@ -2057,7 +2057,7 @@ export default function HomePage() {
                 fontFamily: FONT,
               }}
             >
-              support@leadpilot.live
+              support@leadthur.com
             </a>
             <a
               href="https://twitter.com"
@@ -2083,7 +2083,7 @@ export default function HomePage() {
             fontFamily: FONT,
           }}
         >
-          © {new Date().getFullYear()} LeadPilot. Built by Bamidele.
+          © {new Date().getFullYear()} LeadThur. Built by Bamidele.
         </p>
       </footer>
 
