@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "npm install",
+  "buildCommand": "npm run build --workspace=@leadpilot/shared && npm run build --workspace=@leadpilot/frontend",
+  "outputDirectory": "frontend/.next"
+}
