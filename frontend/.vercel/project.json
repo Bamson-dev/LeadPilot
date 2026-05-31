@@ -1,0 +1,16 @@
+{
+  "projectId": "prj_8edYGk3xQoUbixVSmXR34lWVWrkY",
+  "orgId": "team_OLw6UO1uCekhqTWkovWXjTdn",
+  "projectName": "frontend",
+  "settings": {
+    "createdAt": 1779936269841,
+    "framework": "nextjs",
+    "devCommand": null,
+    "installCommand": "cd .. && npm install",
+    "buildCommand": "cd .. && npm run build --workspace=@leadpilot/shared && npm run build --workspace=@leadpilot/frontend",
+    "outputDirectory": null,
+    "rootDirectory": null,
+    "directoryListing": false,
+    "nodeVersion": "24.x"
+  }
+}
