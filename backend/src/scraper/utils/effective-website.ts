@@ -8,7 +8,7 @@ async function fetchHtml(url: string): Promise<string> {
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { "User-Agent": "LeadPilot/1.0 (+https://leadpilot.live)" },
+      headers: { "User-Agent": "LeadThur/1.0 (+https://leadthur.com)" },
       redirect: "follow",
     });
     if (!res.ok) return "";

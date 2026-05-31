@@ -1,4 +1,4 @@
-import type { BusinessLead, PredictedEmail } from "@leadpilot/shared";
+import type { BusinessLead, PredictedEmail } from "@leadthur/shared";
 
 /** Dashboard-compatible lead shape */
 export interface Lead {

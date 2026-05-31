@@ -37,7 +37,7 @@ export default function CheckoutPage() {
 
   const frontendUrl =
     process.env.NEXT_PUBLIC_FRONTEND_URL?.replace(/\/$/, "") ||
-    "https://www.leadpilot.live";
+    "https://www.leadthur.com";
 
   const flwConfig = useMemo(
     () => ({
@@ -47,18 +47,18 @@ export default function CheckoutPage() {
       currency: "USD",
       payment_options: "card",
       customer: {
-        email: email || "customer@leadpilot.live",
+        email: email || "customer@leadthur.com",
         name: email ? email.split("@")[0] : "Customer",
         phone_number: "",
       },
       customizations: {
-        title: "LeadPilot Lifetime Access",
+        title: "LeadThur Lifetime Access",
         description: "One payment. Find clients forever.",
         logo: `${frontendUrl}/logo.png`,
       },
       meta: {
         ref_code: getRefCode() || "",
-        product: "LeadPilot Lifetime",
+        product: "LeadThur Lifetime",
         gateway: "flutterwave",
       },
     }),

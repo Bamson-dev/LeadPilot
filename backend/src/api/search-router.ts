@@ -1,6 +1,6 @@
 import os from "os";
 import { Router, type Request, type Response } from "express";
-import type { SearchResponse } from "@leadpilot/shared";
+import type { SearchResponse } from "@leadthur/shared";
 import {
   createSearchJob,
   getSearchJob,

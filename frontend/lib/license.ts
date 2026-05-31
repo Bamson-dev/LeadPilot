@@ -1,5 +1,5 @@
-const EMAIL_KEY = "leadpilot_email";
-const LICENSE_KEY = "leadpilot_key";
+const EMAIL_KEY = "leadthur_email";
+const LICENSE_KEY = "leadthur_key";
 
 export function getStoredLicense(): { email: string; key: string } | null {
   if (typeof window === "undefined") return null;

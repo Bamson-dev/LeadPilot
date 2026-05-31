@@ -1,4 +1,4 @@
-import type { BusinessLead, StreamEvent } from "@leadpilot/shared";
+import type { BusinessLead, StreamEvent } from "@leadthur/shared";
 import { getBrowserPool } from "../scraper/browser/browser-pool";
 import { scrapeGoogleMaps } from "../scraper/googleMaps/maps-scraper";
 import {

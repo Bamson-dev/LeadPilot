@@ -8,11 +8,12 @@ import {
   listRecentLicenses,
   lookupLicensesByEmail,
   truncateLicenseKey,
+  resetDevices,
 } from "../database/license-repository";
 import { supabase } from "../database/client";
 import {
   sendActivationEmail,
-  sendAdminMessage,
+  sendDirectMessageEmail,
   sendPayoutPaidEmail,
 } from "../services/brevo-service";
 import { logger } from "../utils/logger";
@@ -277,38 +278,21 @@ adminRouter.post("/reset-searches", requireAdminAuth, async (req: Request, res: 
 adminRouter.post("/reset-devices", requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const { email } = req.body as { email?: string };
-
     if (!email) {
       res.status(400).json({ error: "Email required" });
       return;
     }
 
-    const { data: license, error } = await supabase
-      .from("license_keys")
-      .select("id, email")
-      .eq("email", email.toLowerCase().trim())
-      .eq("activated", true)
-      .single();
-
-    if (error || !license) {
-      return res.status(404).json({ error: `No activated license found for ${email}` });
+    const license = await fetchLatestLicenseByEmail(email);
+    if (!license) {
+      res.status(404).json({ error: "License not found" });
+      return;
     }
 
-    await supabase
-      .from("license_keys")
-      .update({
-        device_one: null,
-        device_two: null,
-        device_three: null,
-        device_four: null,
-      })
-      .eq("id", license.id);
-
-    logger.info("Devices reset by admin", { email });
-
+    await resetDevices(license.id as string);
     res.json({
       success: true,
-      message: `All devices reset for ${email}. User can now log in from up to 4 new devices.`,
+      message: `Devices reset for ${email}. User can now log in from new devices.`,
     });
   } catch (err) {
     logger.error("Reset devices failed", {
@@ -359,22 +343,66 @@ adminRouter.post("/update-device-limit", requireAdminAuth, async (req: Request, 
 
 adminRouter.post("/send-message", requireAdminAuth, async (req: Request, res: Response) => {
   try {
-    const { email, subject, message } = req.body as {
-      email?: string;
+    const { mode, recipient, subject, body } = req.body as {
+      mode?: string;
+      recipient?: string;
       subject?: string;
-      message?: string;
+      body?: string;
     };
 
-    if (!email || !subject || !message) {
-      res.status(400).json({ error: "Email, subject and message required" });
+    if (!subject || !body) {
+      res.status(400).json({ error: "Subject and body are required" });
       return;
     }
 
-    await sendAdminMessage(email, subject, message);
+    if (mode === "broadcast") {
+      const { data: users, error } = await supabase
+        .from("license_keys")
+        .select("email")
+        .eq("activated", true);
 
-    res.json({ success: true, message: `Message sent to ${email}` });
+      if (error) throw error;
+
+      if (!users || users.length === 0) {
+        res.status(404).json({ error: "No active users found" });
+        return;
+      }
+
+      let sent = 0;
+      let failed = 0;
+
+      for (const user of users) {
+        try {
+          await sendDirectMessageEmail(user.email as string, subject, body);
+          sent++;
+          await new Promise((resolve) => setTimeout(resolve, 150));
+        } catch {
+          failed++;
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Sent to ${sent} users.${failed > 0 ? ` ${failed} failed.` : ""}`,
+      });
+      return;
+    }
+
+    if (!recipient) {
+      res.status(400).json({ error: "Recipient email is required" });
+      return;
+    }
+
+    await sendDirectMessageEmail(recipient, subject, body);
+
+    logger.info("Direct message sent by admin", { recipient, subject });
+
+    res.json({
+      success: true,
+      message: `Message sent successfully to ${recipient}`,
+    });
   } catch (err) {
-    logger.error("Send message failed", {
+    logger.error("Failed to send direct message", {
       error: err instanceof Error ? err.message : "unknown",
     });
     res.status(500).json({ error: "Failed to send message" });
@@ -421,7 +449,7 @@ adminRouter.post("/broadcast", requireAdminAuth, async (req: Request, res: Respo
       void (async () => {
         for (const userEmail of uniqueEmails) {
           try {
-            await sendAdminMessage(userEmail, subject, message);
+            await sendDirectMessageEmail(userEmail, subject, message);
             await new Promise((resolve) => setTimeout(resolve, 300));
           } catch (err) {
             logger.error("Failed to send broadcast to user", {
@@ -626,25 +654,13 @@ adminRouter.get("/recent-users", requireAdminAuth, async (_req: Request, res: Re
   try {
     const { data: users, error } = await supabase
       .from("license_keys")
-      .select(
-        "email, activated, is_suspended, created_at, searches_used, max_devices, device_one, device_two, device_three, device_four"
-      )
+      .select("email, activated, is_suspended, created_at, searches_used, max_devices")
       .order("created_at", { ascending: false })
       .limit(10);
 
     if (error) throw error;
 
-    const usersWithDeviceCount = (users ?? []).map((user) => ({
-      ...user,
-      devices_used: [
-        user.device_one,
-        user.device_two,
-        user.device_three,
-        user.device_four,
-      ].filter(Boolean).length,
-    }));
-
-    res.json({ users: usersWithDeviceCount });
+    res.json({ users: users ?? [] });
   } catch (err) {
     logger.error("Recent users failed", {
       error: err instanceof Error ? err.message : "unknown",

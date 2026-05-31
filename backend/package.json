@@ -1,18 +1,19 @@
 {
-  "name": "@leadpilot/backend",
+  "name": "@leadthur/backend",
   "version": "1.0.0",
   "private": true,
   "author": "Bamidele",
-  "description": "LeadPilot — Business Discovery Intelligence",
+  "description": "LeadThur — Business Discovery Intelligence",
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "send-domain-change": "tsx src/scripts/send-domain-change.ts"
   },
   "dependencies": {
-    "@leadpilot/shared": "*",
+    "@leadthur/shared": "*",
     "@supabase/supabase-js": "^2.49.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.17",

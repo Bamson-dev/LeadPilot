@@ -98,7 +98,7 @@ export async function getAffiliateStats(email: string): Promise<AffiliateStats |
 
   const frontendBase = config.FRONTEND_URL.replace(/\/$/, "");
   const referralBase =
-    frontendBase.includes("localhost") ? "https://www.leadpilot.live" : frontendBase;
+    frontendBase.includes("localhost") ? "https://www.leadthur.com" : frontendBase;
 
   return {
     refCode,

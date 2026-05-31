@@ -1,4 +1,4 @@
-import type { StreamEvent } from "@leadpilot/shared";
+import type { StreamEvent } from "@leadthur/shared";
 import { getSearchJob, markSearchFailed } from "../database/search-repository";
 import { logger } from "../utils/logger";
 import { runScraperJob } from "../services/scraper-service";

@@ -48,7 +48,7 @@ export default function ActivatePage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#09090B] px-4">
       <form onSubmit={handleSubmit} className="glass w-full max-w-md rounded-2xl p-8">
-        <h1 className="text-2xl font-bold text-[#F4F4FF]">Activate LeadPilot</h1>
+        <h1 className="text-2xl font-bold text-[#F4F4FF]">Activate LeadThur</h1>
         <p className="mt-2 text-sm text-[#6B6B80]">
           Enter the email and license key from your activation email.
         </p>

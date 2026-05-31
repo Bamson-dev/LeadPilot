@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Try LeadPilot Free — See Real Business Leads",
+  title: "Try LeadThur Free — See Real Business Leads",
   description:
-    "Run a real LeadPilot search with no signup. Preview 15 businesses with phone numbers before you pay.",
+    "Run a real LeadThur search with no signup. Preview 15 businesses with phone numbers before you pay.",
 };
 
 export default function FreeTrialLayout({

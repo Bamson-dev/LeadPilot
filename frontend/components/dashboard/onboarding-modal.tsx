@@ -2,7 +2,7 @@
 
 const onboardingSteps = [
   {
-    title: "Welcome to LeadPilot 👋",
+    title: "Welcome to LeadThur 👋",
     body: "You are about to find your first business leads. This takes less than 60 seconds. Let us walk you through it quickly.",
   },
   {
@@ -11,7 +11,7 @@ const onboardingSteps = [
   },
   {
     title: "Type any city in the world",
-    body: "Enter any city anywhere. Lagos, Abuja, London, Dubai, Nairobi. LeadPilot covers over 195 countries. The more specific the city the more results you get.",
+    body: "Enter any city anywhere. Lagos, Abuja, London, Dubai, Nairobi. LeadThur covers over 195 countries. The more specific the city the more results you get.",
   },
   {
     title: "Watch results appear live",

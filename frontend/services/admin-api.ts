@@ -1,6 +1,6 @@
 import { getApiUrl } from "@/utils/env";
 
-const TOKEN_KEY = "leadpilot_admin_token";
+const TOKEN_KEY = "leadthur_admin_token";
 
 export function getAdminToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -177,7 +177,6 @@ export interface RecentAdminUser {
   created_at: string;
   searches_used: number;
   max_devices: number;
-  devices_used?: number;
 }
 
 export async function getOverview(): Promise<AdminOverview> {
@@ -299,10 +298,7 @@ export async function resetDevices(email: string) {
     body: JSON.stringify({ email }),
   });
   await handleAdminResponse(res);
-  if (!res.ok) {
-    const data = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(data.error ?? "Failed to reset devices");
-  }
+  if (!res.ok) throw new Error("Failed to reset devices");
   return res.json() as Promise<{ success: boolean; message?: string }>;
 }
 

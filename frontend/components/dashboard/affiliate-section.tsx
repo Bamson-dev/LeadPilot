@@ -777,7 +777,7 @@ export function AffiliateSection() {
                 Share your link and start earning
               </p>
               <p style={{ fontSize: 12, color: "#8888A8", lineHeight: 1.6, margin: 0 }}>
-                Every person who buys LeadPilot through your link earns you $7.50. Share on
+                Every person who buys LeadThur through your link earns you $7.50. Share on
                 WhatsApp, Twitter, or anywhere your audience is.
               </p>
             </div>

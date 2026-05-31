@@ -141,9 +141,9 @@ function CheckoutSuccessContent() {
 
         <p style={{ fontSize: 12, color: "#7878A0", marginBottom: 20, lineHeight: 1.6 }}>
           {isFlutterwave
-            ? "Flutterwave sends a payment receipt. LeadPilot sends a separate email with your license key from "
-            : "Paystack sends a payment receipt. LeadPilot sends a separate email with your license key from "}
-          <strong style={{ color: "#A78BFA" }}>access@leadpilot.live</strong>.
+            ? "Flutterwave sends a payment receipt. LeadThur sends a separate email with your license key from "
+            : "Paystack sends a payment receipt. LeadThur sends a separate email with your license key from "}
+          <strong style={{ color: "#A78BFA" }}>access@leadthur.com</strong>.
         </p>
 
         {reference && (
@@ -179,7 +179,7 @@ function CheckoutSuccessContent() {
             textDecoration: "none",
           }}
         >
-          Back to LeadPilot.live
+          Back to LeadThur.live
         </Link>
       </div>
     </div>
