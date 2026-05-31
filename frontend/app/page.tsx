@@ -1495,7 +1495,7 @@ export default function HomePage() {
                   </button>
                 </div>
                 <div>
-                  <strong>Amount:</strong> ₦15,000
+                  <strong>Amount:</strong> $15
                 </div>
                 <div style={{ fontSize: 12, color: colors.text2, marginTop: 8 }}>
                   After payment send proof to WhatsApp{" "}
