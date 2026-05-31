@@ -145,7 +145,7 @@ const testimonials = [
 
 const pricingFeatures = [
   "Unlimited searches forever",
-  "200+ leads per search",
+  "1,000+ leads per search",
   "Phone numbers and emails",
   "One-click CSV export",
   "Lead status tracking",
@@ -174,7 +174,7 @@ const faqs = [
   },
   {
     q: "How many businesses can I find per search?",
-    a: "Each search returns up to 200 businesses. After each search LeadPilot suggests specific areas within the city so you can run follow-up searches that stack on top of your existing results. Users regularly build lists of 500 plus businesses in a single session.",
+    a: "Each search returns up to 1,000+ businesses. After each search LeadThur suggests specific areas within the city so you can run follow-up searches that stack on top of your existing results. Users regularly build lists of 500 plus businesses in a single session.",
   },
   {
     q: "Can I use this for WhatsApp outreach?",
@@ -696,7 +696,7 @@ export default function HomePage() {
           }}
         >
           {[
-            { n: "200+", l: "Leads per search" },
+            { n: "1,000+", l: "Leads per search" },
             { n: "60s", l: "To first result" },
             { n: "195+", l: "Countries covered" },
             { n: "$0", l: "Monthly fee" },
