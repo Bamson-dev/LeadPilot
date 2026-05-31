@@ -179,7 +179,7 @@ function CheckoutSuccessContent() {
             textDecoration: "none",
           }}
         >
-          Back to LeadThur.live
+          Back to leadthur.com
         </Link>
       </div>
     </div>

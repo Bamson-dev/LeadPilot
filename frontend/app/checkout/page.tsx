@@ -224,14 +224,8 @@ export default function CheckoutPage() {
             }}
           >
             One payment of{" "}
-            <strong style={{ color: "#F2F1FF" }}>
-              {detecting
-                ? "…"
-                : isNigeriaGateway
-                  ? "₦15,000"
-                  : "$15 USD"}
-            </strong>
-            . No monthly fee. No renewal. Ever.
+            <strong style={{ color: "#F2F1FF" }}>{detecting ? "…" : "$15"}</strong>. No monthly
+            fee. No renewal. Ever.
           </p>
 
           <div
@@ -285,7 +279,7 @@ export default function CheckoutPage() {
                 textDecoration: "line-through",
               }}
             >
-              {isNigeriaGateway ? "₦30,000" : "$30"}
+              $30
             </span>
             <span
               style={{
@@ -295,7 +289,7 @@ export default function CheckoutPage() {
                 letterSpacing: -1,
               }}
             >
-              {detecting ? "…" : isNigeriaGateway ? "₦15,000" : "$15"}
+              {detecting ? "…" : "$15"}
             </span>
             <span
               style={{
@@ -383,9 +377,7 @@ export default function CheckoutPage() {
               ? "Loading..."
               : loading
                 ? "Opening payment..."
-                : isNigeriaGateway
-                  ? "🔒 Pay ₦15,000 — Get Access Now"
-                  : "🔒 Pay $15 — Get Access Now"}
+                : "🔒 Pay $15 — Get Access Now"}
           </button>
 
           <p
