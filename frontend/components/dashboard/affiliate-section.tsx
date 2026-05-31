@@ -191,7 +191,7 @@ export function AffiliateSection() {
     affiliateMsg.toLowerCase().includes("error");
 
   const whatsappText = encodeURIComponent(
-    `I have been using LeadThur to find business clients and it actually works. You can find 200+ business contacts in any city in 60 seconds. Try it free here: ${affiliateStats.referralLink}`
+    `I have been using LeadThur to find business clients and it actually works. You can find 1,000+ business contacts in any city in 60 seconds. Try it free here: ${affiliateStats.referralLink}`
   );
 
   return (
