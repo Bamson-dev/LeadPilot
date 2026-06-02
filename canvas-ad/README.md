@@ -1,4 +1,4 @@
-# LeadPilot Canvas Ad (9:16)
+# LeadThur Canvas Ad (9:16)
 
 Portrait product ad: **1080×1920**, **45 seconds**, **30fps**.
 
@@ -19,8 +19,8 @@ Then open: **http://localhost:8765**
 
 ## Export (browser)
 
-1. Click **Record 45s Video** — plays animation from start and downloads `leadpilot-ad.webm`
-2. Click **Convert to MP4** — downloads `leadpilot-ad.mp4` (requires internet for FFmpeg.wasm)
+1. Click **Record 45s Video** — plays animation from start and downloads `leadthur-ad.webm`
+2. Click **Convert to MP4** — downloads `leadthur-ad.mp4` (requires internet for FFmpeg.wasm)
 
 Use **Chrome** or **Edge** for best MediaRecorder support.
 
@@ -34,8 +34,8 @@ npm run canvas-ad:export
 
 This records in headless Chrome and saves:
 
-- `~/Downloads/leadpilot-ad.webm`
-- `~/Downloads/leadpilot-ad.mp4`
+- `~/Downloads/leadthur-ad.webm`
+- `~/Downloads/leadthur-ad.mp4`
 
 ## Files
 

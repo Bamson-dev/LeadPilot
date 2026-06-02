@@ -750,14 +750,14 @@ const OutroScene: React.FC = () => {
           Start Finding Leads
         </div>
         <p style={{ marginTop: 28, fontSize: 22, color: colors.muted }}>
-          leadpilot.app · Demo on your Mac in minutes
+          leadthur.app · Demo on your Mac in minutes
         </p>
       </div>
     </AbsoluteFill>
   );
 };
 
-export const LeadPilotPromo: React.FC = () => {
+export const LeadThurPromo: React.FC = () => {
   const searchDuration = SEARCH_SEGMENT_FRAMES * DEMO_SCENARIOS.length;
   const tableDuration = TABLE_SEGMENT_FRAMES * DEMO_SCENARIOS.length;
 

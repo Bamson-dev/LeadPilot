@@ -21,8 +21,8 @@ Record with QuickTime or OBS in full screen.
 
 | File | What it is |
 |------|------------|
-| `motion-video/out/leadpilot-screen-demo.mp4` | Full 3-search demo — **re-render after changes** |
-| `motion-video/out/leadpilot-promo.mp4` | Older 46s marketing cut — **not** the screen-recording demo |
+| `motion-video/out/leadthur-screen-demo.mp4` | Full 3-search demo — **re-render after changes** |
+| `motion-video/out/leadthur-promo.mp4` | Older 46s marketing cut — **not** the screen-recording demo |
 
 Re-render the screen demo:
 
@@ -31,7 +31,7 @@ cd motion-video
 npm run render:screen
 ```
 
-Output: `motion-video/out/leadpilot-screen-demo.mp4`
+Output: `motion-video/out/leadthur-screen-demo.mp4`
 
 ---
 

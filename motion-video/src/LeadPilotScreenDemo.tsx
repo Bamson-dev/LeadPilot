@@ -68,7 +68,7 @@ function getCycleState(frame: number) {
   };
 }
 
-export const LeadPilotScreenDemo: React.FC = () => {
+export const LeadThurScreenDemo: React.FC = () => {
   const frame = useCurrentFrame();
   const {
     index,

@@ -2,7 +2,7 @@
 
 ## Backend Service Configuration
 
-Go to your Coolify dashboard → LeadPilot **backend** service → **Configuration**.
+Go to your Coolify dashboard → LeadThur **backend** service → **Configuration**.
 
 Set these values exactly:
 
@@ -26,7 +26,7 @@ Required minimum:
 
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_KEY` (service_role only)
-- `FRONTEND_URL` (e.g. `https://www.leadpilot.live`)
+- `FRONTEND_URL` (e.g. `https://www.leadthur.com`)
 - `PORT=3000`
 - `NODE_ENV=production`
 
@@ -57,7 +57,7 @@ bash backend/scripts/verify-deployment.sh http://localhost:3000
 
 ## Cloudflare DNS
 
-`backend.leadpilot.live` → A record to Contabo VPS IP, **Proxied** (orange cloud).
+`backend.leadthur.com` → A record to Contabo VPS IP, **Proxied** (orange cloud).
 
 `app.set('trust proxy', 1)` is enabled so rate limits and logs see the real client IP behind Cloudflare.
 
@@ -66,14 +66,14 @@ bash backend/scripts/verify-deployment.sh http://localhost:3000
 | Setting | Value |
 |---------|-------|
 | Root Directory | `frontend` |
-| `NEXT_PUBLIC_API_URL` | `https://backend.leadpilot.live` |
+| `NEXT_PUBLIC_API_URL` | `https://backend.leadthur.com` |
 
 See [`deploy/VERCEL.md`](./deploy/VERCEL.md).
 
 ## Testing Production
 
 ```bash
-bash backend/scripts/verify-deployment.sh https://backend.leadpilot.live
+bash backend/scripts/verify-deployment.sh https://backend.leadthur.com
 ```
 
 All five tests should pass before connecting the dashboard.

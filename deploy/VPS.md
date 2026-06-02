@@ -1,4 +1,4 @@
-# LeadPilot Backend — Contabo VPS Deployment
+# LeadThur Backend — Contabo VPS Deployment
 
 **Coolify:** Base Directory `/`, Dockerfile `backend/Dockerfile` — see [DEPLOYMENT.md](../DEPLOYMENT.md).
 
@@ -13,14 +13,14 @@ Deploy flow: push to `main` → GitHub Actions → SSH → Docker rebuild → au
 SSH into your Contabo VPS as root:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Bamson-dev/LeadPilot/main/scripts/vps-setup.sh | bash -s /opt/leadpilot
+curl -fsSL https://raw.githubusercontent.com/Bamson-dev/LeadThur/main/scripts/vps-setup.sh | bash -s /opt/leadthur
 ```
 
 Or manually:
 
 ```bash
-git clone https://github.com/Bamson-dev/LeadPilot.git /opt/leadpilot
-cd /opt/leadpilot
+git clone https://github.com/Bamson-dev/LeadThur.git /opt/leadthur
+cd /opt/leadthur
 cp .env.production.example .env.production
 nano .env.production   # fill in Supabase + Vercel URL
 chmod +x scripts/deploy-vps.sh
@@ -51,7 +51,7 @@ Never put `SUPABASE_SERVICE_KEY` in Vercel or the browser — backend only.
 
 ## Environment file
 
-On the VPS, create `/opt/leadpilot/.env.production` from:
+On the VPS, create `/opt/leadthur/.env.production` from:
 
 - [`.env.production.example`](../.env.production.example) (repo root)
 - [`deploy/vps.env.example`](./vps.env.example) (downloadable copy)
@@ -77,16 +77,16 @@ Repo → **Settings → Secrets and variables → Actions**
 | `VPS_USER` | `root` or deploy user |
 | `VPS_SSH_KEY` | Private SSH key (full PEM) |
 | `VPS_PORT` | `22` (optional) |
-| `VPS_APP_DIR` | `/opt/leadpilot` (optional) |
+| `VPS_APP_DIR` | `/opt/leadthur` (optional) |
 
 ### Generate deploy key (recommended)
 
 On your Mac:
 
 ```bash
-ssh-keygen -t ed25519 -C "leadpilot-deploy" -f ~/.ssh/leadpilot_deploy -N ""
-ssh-copy-id -i ~/.ssh/leadpilot_deploy.pub root@YOUR_VPS_IP
-cat ~/.ssh/leadpilot_deploy   # paste into VPS_SSH_KEY secret
+ssh-keygen -t ed25519 -C "leadthur-deploy" -f ~/.ssh/leadthur_deploy -N ""
+ssh-copy-id -i ~/.ssh/leadthur_deploy.pub root@YOUR_VPS_IP
+cat ~/.ssh/leadthur_deploy   # paste into VPS_SSH_KEY secret
 ```
 
 ---
@@ -130,7 +130,7 @@ Set Vercel `NEXT_PUBLIC_API_URL=https://api.yourdomain.com`
 ## Operations
 
 ```bash
-cd /opt/leadpilot
+cd /opt/leadthur
 
 # Logs
 docker compose --env-file .env.production logs -f backend

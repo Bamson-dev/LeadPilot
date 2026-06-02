@@ -8,7 +8,7 @@
   const progressBar = document.getElementById("progressBar");
   const convertNote = document.getElementById("convertNote");
 
-  const { DURATION_MS, FPS, loadFonts, renderFrame } = window.LeadPilotCanvasAd;
+  const { DURATION_MS, FPS, loadFonts, renderFrame } = window.LeadThurCanvasAd;
 
   let frame = 0;
   let rafId = null;
@@ -98,9 +98,9 @@
 
     recorder.onstop = () => {
       webmBlob = new Blob(recordedChunks, { type: "video/webm" });
-      downloadBlob(webmBlob, "leadpilot-ad.webm");
+      downloadBlob(webmBlob, "leadthur-ad.webm");
       btnConvert.disabled = false;
-      setStatus("Downloaded leadpilot-ad.webm — click Convert to MP4");
+      setStatus("Downloaded leadthur-ad.webm — click Convert to MP4");
       convertNote.textContent =
         "If MP4 conversion fails, use CloudConvert or HandBrake on the WebM file.";
       hideProgress();
@@ -172,13 +172,13 @@
       ]);
       const data = await ffmpeg.readFile("output.mp4");
       const mp4Blob = new Blob([data.buffer], { type: "video/mp4" });
-      downloadBlob(mp4Blob, "leadpilot-ad.mp4");
-      setStatus("Downloaded leadpilot-ad.mp4");
+      downloadBlob(mp4Blob, "leadthur-ad.mp4");
+      setStatus("Downloaded leadthur-ad.mp4");
       convertNote.textContent = "";
     } catch {
       setStatus("MP4 conversion failed — WebM file is ready.");
       convertNote.textContent =
-        "Convert leadpilot-ad.webm using CloudConvert or HandBrake, then upload to social.";
+        "Convert leadthur-ad.webm using CloudConvert or HandBrake, then upload to social.";
     } finally {
       btnConvert.disabled = false;
       hideProgress();

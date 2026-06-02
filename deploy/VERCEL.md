@@ -20,9 +20,13 @@ Settings → **Environment Variables** → **Import .env** → upload `deploy/ve
 
 Required:
 
-- `NEXT_PUBLIC_API_URL`
+- `NEXT_PUBLIC_API_URL` — must be your **backend** host, not the Next.js site
+  - Production: `https://backend.leadthur.com`
+  - Staging branch (Preview): `https://staging-backend.leadthur.com`
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
+If `NEXT_PUBLIC_API_URL` is empty or set to `https://staging.leadthur.com`, checkout will POST to `/checkout/initialize` on the frontend and return **404**. The build also auto-selects the staging backend when `VERCEL_GIT_COMMIT_REF=staging`.
 
 Apply to **Production**, **Preview**, and **Development**.
 

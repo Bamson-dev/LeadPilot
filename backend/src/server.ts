@@ -56,7 +56,7 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
 
-// Health routes — CORS applied above so browser fetches from www.leadpilot.live work.
+// Health routes — CORS applied above so browser fetches from www.leadthur.com work.
 app.use("/health", healthRouter);
 app.use("/api/health", healthRouter);
 
