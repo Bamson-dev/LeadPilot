@@ -753,94 +753,111 @@ adminRouter.get("/activations", requireAdminAuth, async (req: Request, res: Resp
     let startDate: string;
     let endDate: string;
 
-    const now = new Date();
+    if (from && to) {
+      startDate = new Date(from).toISOString();
+      endDate = new Date(to).toISOString();
+    } else {
+      const presetValue = (preset as string) || "today";
 
-    if (preset) {
-      switch (preset) {
-        case "today":
-          startDate = new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
+      switch (presetValue) {
+        case "today": {
+          const start = new Date();
+          start.setUTCHours(0, 0, 0, 0);
+          startDate = start.toISOString();
           endDate = new Date().toISOString();
           break;
+        }
         case "yesterday": {
-          const yesterday = new Date();
-          yesterday.setDate(yesterday.getDate() - 1);
-          startDate = new Date(yesterday.setHours(0, 0, 0, 0)).toISOString();
-          endDate = new Date(yesterday.setHours(23, 59, 59, 999)).toISOString();
+          const start = new Date();
+          start.setUTCDate(start.getUTCDate() - 1);
+          start.setUTCHours(0, 0, 0, 0);
+          const end = new Date();
+          end.setUTCDate(end.getUTCDate() - 1);
+          end.setUTCHours(23, 59, 59, 999);
+          startDate = start.toISOString();
+          endDate = end.toISOString();
           break;
         }
         case "7days": {
-          const sevenAgo = new Date();
-          sevenAgo.setDate(sevenAgo.getDate() - 7);
-          startDate = new Date(sevenAgo.setHours(0, 0, 0, 0)).toISOString();
+          const start = new Date();
+          start.setUTCDate(start.getUTCDate() - 7);
+          start.setUTCHours(0, 0, 0, 0);
+          startDate = start.toISOString();
           endDate = new Date().toISOString();
           break;
         }
         case "14days": {
-          const fourteenAgo = new Date();
-          fourteenAgo.setDate(fourteenAgo.getDate() - 14);
-          startDate = new Date(fourteenAgo.setHours(0, 0, 0, 0)).toISOString();
+          const start = new Date();
+          start.setUTCDate(start.getUTCDate() - 14);
+          start.setUTCHours(0, 0, 0, 0);
+          startDate = start.toISOString();
           endDate = new Date().toISOString();
           break;
         }
         case "30days": {
-          const thirtyAgo = new Date();
-          thirtyAgo.setDate(thirtyAgo.getDate() - 30);
-          startDate = new Date(thirtyAgo.setHours(0, 0, 0, 0)).toISOString();
+          const start = new Date();
+          start.setUTCDate(start.getUTCDate() - 30);
+          start.setUTCHours(0, 0, 0, 0);
+          startDate = start.toISOString();
           endDate = new Date().toISOString();
           break;
         }
-        case "thismonth":
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        case "thismonth": {
+          const start = new Date();
+          start.setUTCDate(1);
+          start.setUTCHours(0, 0, 0, 0);
+          startDate = start.toISOString();
           endDate = new Date().toISOString();
           break;
+        }
         default: {
-          const defaultAgo = new Date();
-          defaultAgo.setDate(defaultAgo.getDate() - 7);
-          startDate = new Date(defaultAgo.setHours(0, 0, 0, 0)).toISOString();
+          const start = new Date();
+          start.setUTCHours(0, 0, 0, 0);
+          startDate = start.toISOString();
           endDate = new Date().toISOString();
         }
       }
-    } else if (from && to) {
-      startDate = new Date(from).toISOString();
-      endDate = new Date(to).toISOString();
-    } else {
-      const fallbackAgo = new Date();
-      fallbackAgo.setDate(fallbackAgo.getDate() - 7);
-      startDate = new Date(fallbackAgo.setHours(0, 0, 0, 0)).toISOString();
-      endDate = new Date().toISOString();
     }
 
-    const { data, error } = await supabase
-      .from("license_keys")
-      .select("email, activated, created_at, updated_at, activated_at")
-      .eq("activated", true)
-      .not("activated_at", "is", null)
-      .gte("activated_at", startDate)
-      .lte("activated_at", endDate)
-      .order("activated_at", { ascending: true });
-
-    if (error) throw error;
-
-    logger.info("Activations query executed", {
+    logger.info("Activations query range", {
       preset,
       startDate,
       endDate,
+    });
+
+    const { data, error } = await supabase
+      .from("license_keys")
+      .select("created_at, email")
+      .eq("activated", true)
+      .gte("created_at", startDate)
+      .lte("created_at", endDate)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      logger.error("Activations query error", {
+        error: error.message,
+      });
+      throw error;
+    }
+
+    logger.info("Activations query result", {
       totalFound: data?.length || 0,
-      firstRow: data?.[0] || null,
+      startDate,
+      endDate,
     });
 
     const total = data?.length || 0;
 
     const dailyMap: Record<string, number> = {};
     data?.forEach((row) => {
-      const day = new Date(row.activated_at as string).toISOString().split("T")[0];
+      const day = new Date(row.created_at as string).toISOString().split("T")[0];
       dailyMap[day] = (dailyMap[day] || 0) + 1;
     });
 
     const daily = Object.entries(dailyMap).map(([date, count]) => ({
       date,
       count,
-      label: new Date(date).toLocaleDateString("en-GB", {
+      label: new Date(`${date}T12:00:00Z`).toLocaleDateString("en-GB", {
         weekday: "short",
         day: "numeric",
         month: "short",
