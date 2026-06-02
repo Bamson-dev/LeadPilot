@@ -812,19 +812,28 @@ adminRouter.get("/activations", requireAdminAuth, async (req: Request, res: Resp
 
     const { data, error } = await supabase
       .from("license_keys")
-      .select("created_at, email")
+      .select("email, activated, created_at, updated_at, activated_at")
       .eq("activated", true)
-      .gte("created_at", startDate)
-      .lte("created_at", endDate)
-      .order("created_at", { ascending: true });
+      .not("activated_at", "is", null)
+      .gte("activated_at", startDate)
+      .lte("activated_at", endDate)
+      .order("activated_at", { ascending: true });
 
     if (error) throw error;
+
+    logger.info("Activations query executed", {
+      preset,
+      startDate,
+      endDate,
+      totalFound: data?.length || 0,
+      firstRow: data?.[0] || null,
+    });
 
     const total = data?.length || 0;
 
     const dailyMap: Record<string, number> = {};
     data?.forEach((row) => {
-      const day = new Date(row.created_at as string).toISOString().split("T")[0];
+      const day = new Date(row.activated_at as string).toISOString().split("T")[0];
       dailyMap[day] = (dailyMap[day] || 0) + 1;
     });
 
@@ -840,8 +849,6 @@ adminRouter.get("/activations", requireAdminAuth, async (req: Request, res: Resp
 
     const peak = daily.reduce((max, day) => (day.count > max ? day.count : max), 0);
     const average = daily.length > 0 ? Math.round(total / daily.length) : 0;
-
-    logger.info("Activations fetched", { total, from: startDate, to: endDate });
 
     res.json({
       total,

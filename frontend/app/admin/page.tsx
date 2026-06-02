@@ -83,7 +83,7 @@ export default function AdminPage() {
   const [msgPreview, setMsgPreview] = useState(false);
   const [activations, setActivations] = useState<ActivationData | null>(null);
   const [activationsLoading, setActivationsLoading] = useState(false);
-  const [activePreset, setActivePreset] = useState("7days");
+  const [activePreset, setActivePreset] = useState("today");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [showCustom, setShowCustom] = useState(false);
@@ -128,18 +128,24 @@ export default function AdminPage() {
     setActivationsLoading(true);
     try {
       let url = `${process.env.NEXT_PUBLIC_API_URL}/admin/activations`;
+
       if (from && to) {
-        url += `?from=${from}&to=${to}`;
+        url += `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
       } else {
-        url += `?preset=${preset || activePreset}`;
+        const presetToUse = preset || "today";
+        url += `?preset=${presetToUse}`;
       }
+
       const res = await fetch(url, { headers: getAdminHeaders() });
+
       if (res.ok) {
         const data = (await res.json()) as ActivationData;
         setActivations(data);
+      } else {
+        console.error("[loadActivations] failed with status:", res.status);
       }
     } catch (err) {
-      console.error("Failed to load activations", err);
+      console.error("[loadActivations] error:", err);
     } finally {
       setActivationsLoading(false);
     }
@@ -237,7 +243,7 @@ export default function AdminPage() {
         ]);
         setOverview(overviewData);
         setRecentUsers(recentData.users || []);
-        await loadActivations("7days");
+        await loadActivations("today");
         await loadSiteSettings();
         await loadPayouts();
       } catch (err) {
@@ -860,7 +866,7 @@ export default function AdminPage() {
                 </div>
               ) : (
                 <div style={{ textAlign: "center", padding: "32px 0", fontSize: 13, color: "#555570" }}>
-                  No activations in this time range.
+                  No activations found for this period. Try a wider date range.
                 </div>
               )}
             </>
