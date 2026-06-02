@@ -87,6 +87,10 @@ export default function AdminPage() {
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [showCustom, setShowCustom] = useState(false);
+  const [headScripts, setHeadScripts] = useState("");
+  const [bodyScripts, setBodyScripts] = useState("");
+  const [scriptsSaving, setScriptsSaving] = useState(false);
+  const [scriptsMsg, setScriptsMsg] = useState("");
 
   useEffect(() => {
     setToken(getAdminToken());
@@ -138,6 +142,44 @@ export default function AdminPage() {
       console.error("Failed to load activations", err);
     } finally {
       setActivationsLoading(false);
+    }
+  }
+
+  async function loadSiteSettings() {
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/site-settings`, {
+        headers: getAdminHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHeadScripts(data.headScripts || "");
+        setBodyScripts(data.bodyScripts || "");
+      }
+    } catch {}
+  }
+
+  async function saveScripts() {
+    setScriptsSaving(true);
+    setScriptsMsg("");
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/site-settings`, {
+        method: "POST",
+        headers: {
+          ...getAdminHeaders(),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ headScripts, bodyScripts }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setScriptsMsg("Scripts saved. Changes apply to every page within 60 seconds.");
+      } else {
+        setScriptsMsg(data.error || "Failed to save scripts.");
+      }
+    } catch {
+      setScriptsMsg("Failed to save scripts.");
+    } finally {
+      setScriptsSaving(false);
     }
   }
 
@@ -196,6 +238,7 @@ export default function AdminPage() {
         setOverview(overviewData);
         setRecentUsers(recentData.users || []);
         await loadActivations("7days");
+        await loadSiteSettings();
         await loadPayouts();
       } catch (err) {
         if (!handleSessionError(err)) {
@@ -821,6 +864,176 @@ export default function AdminPage() {
                 </div>
               )}
             </>
+          )}
+        </div>
+      </div>
+
+      {/* GLOBAL SCRIPTS MANAGER */}
+      <div
+        className="mx-auto max-w-6xl"
+        style={{
+          background: "#111118",
+          border: "1px solid rgba(255,255,255,0.07)",
+          borderRadius: 14,
+          overflow: "hidden",
+          marginBottom: 24,
+        }}
+      >
+        <div
+          style={{
+            padding: "14px 16px",
+            borderBottom: "1px solid rgba(255,255,255,0.07)",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <div>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: "#F2F1FF", margin: 0 }}>
+              Global Scripts
+            </h3>
+            <p style={{ fontSize: 11, color: "#555570", marginTop: 3 }}>
+              Inject tracking codes and scripts into every page sitewide
+            </p>
+          </div>
+        </div>
+
+        <div style={{ padding: 16 }}>
+          <div
+            style={{
+              background: "rgba(251,191,36,0.06)",
+              border: "1px solid rgba(251,191,36,0.15)",
+              borderRadius: 8,
+              padding: "10px 14px",
+              marginBottom: 20,
+              fontSize: 12,
+              color: "#FBBF24",
+              lineHeight: 1.6,
+            }}
+          >
+            Scripts added here inject into every page on leadthur.com. A broken script can affect
+            the entire site. Test on staging before saving to production. Keep a backup before
+            making changes.
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label
+              style={{
+                display: "block",
+                fontSize: 11,
+                fontWeight: 700,
+                color: "#8888A8",
+                textTransform: "uppercase" as const,
+                letterSpacing: "0.08em",
+                marginBottom: 6,
+              }}
+            >
+              Head Scripts
+            </label>
+            <p style={{ fontSize: 11, color: "#555570", marginBottom: 8, lineHeight: 1.5 }}>
+              Paste Google Analytics, Meta Pixel, or any script that belongs inside the head tag.
+            </p>
+            <textarea
+              value={headScripts}
+              onChange={(e) => setHeadScripts(e.target.value)}
+              placeholder={`<!-- Example: Google Analytics -->\n<script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>`}
+              rows={8}
+              style={{
+                width: "100%",
+                background: "#0A0A10",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 8,
+                padding: "12px 14px",
+                fontSize: 12,
+                color: "#F2F1FF",
+                fontFamily: "monospace",
+                resize: "vertical" as const,
+                outline: "none",
+                lineHeight: 1.6,
+              }}
+            />
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label
+              style={{
+                display: "block",
+                fontSize: 11,
+                fontWeight: 700,
+                color: "#8888A8",
+                textTransform: "uppercase" as const,
+                letterSpacing: "0.08em",
+                marginBottom: 6,
+              }}
+            >
+              Body Scripts
+            </label>
+            <p style={{ fontSize: 11, color: "#555570", marginBottom: 8, lineHeight: 1.5 }}>
+              Paste scripts that belong before the closing body tag. Use for chat widgets or
+              heatmaps.
+            </p>
+            <textarea
+              value={bodyScripts}
+              onChange={(e) => setBodyScripts(e.target.value)}
+              placeholder={`<!-- Example: Meta Pixel -->\n<script>\n  fbq('init', 'YOUR_PIXEL_ID');\n  fbq('track', 'PageView');\n</script>`}
+              rows={8}
+              style={{
+                width: "100%",
+                background: "#0A0A10",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 8,
+                padding: "12px 14px",
+                fontSize: 12,
+                color: "#F2F1FF",
+                fontFamily: "monospace",
+                resize: "vertical" as const,
+                outline: "none",
+                lineHeight: 1.6,
+              }}
+            />
+          </div>
+
+          <button
+            onClick={saveScripts}
+            disabled={scriptsSaving}
+            style={{
+              background: scriptsSaving ? "#1A1A24" : "#7C3AED",
+              color: "white",
+              border: "none",
+              borderRadius: 8,
+              padding: "12px 24px",
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: scriptsSaving ? "not-allowed" : "pointer",
+              fontFamily: "Inter, sans-serif",
+              opacity: scriptsSaving ? 0.7 : 1,
+              transition: "all 0.2s",
+            }}
+          >
+            {scriptsSaving ? "Saving..." : "Save Scripts"}
+          </button>
+
+          {scriptsMsg && (
+            <div
+              style={{
+                marginTop: 12,
+                padding: "10px 14px",
+                background: scriptsMsg.includes("saved")
+                  ? "rgba(16,185,129,0.08)"
+                  : "rgba(239,68,68,0.08)",
+                border: `1px solid ${
+                  scriptsMsg.includes("saved")
+                    ? "rgba(16,185,129,0.2)"
+                    : "rgba(239,68,68,0.2)"
+                }`,
+                borderRadius: 8,
+                fontSize: 12,
+                color: scriptsMsg.includes("saved") ? "#10B981" : "#EF4444",
+                fontWeight: 600,
+              }}
+            >
+              {scriptsMsg}
+            </div>
           )}
         </div>
       </div>

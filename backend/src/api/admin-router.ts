@@ -860,6 +860,55 @@ adminRouter.get("/activations", requireAdminAuth, async (req: Request, res: Resp
   }
 });
 
+adminRouter.get("/site-settings", requireAdminAuth, async (_req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabase
+      .from("site_settings")
+      .select("id, value")
+      .in("id", ["head_scripts", "body_scripts"]);
+
+    if (error) throw error;
+
+    const settings: Record<string, string> = {};
+    data?.forEach((row) => {
+      settings[row.id as string] = row.value as string;
+    });
+
+    res.json({
+      headScripts: settings["head_scripts"] || "",
+      bodyScripts: settings["body_scripts"] || "",
+    });
+  } catch (err) {
+    logger.error("Failed to fetch site settings", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to fetch site settings" });
+  }
+});
+
+adminRouter.post("/site-settings", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { headScripts, bodyScripts } = req.body as {
+      headScripts?: string;
+      bodyScripts?: string;
+    };
+
+    const { error } = await supabase.from("site_settings").upsert([
+      { id: "head_scripts", value: headScripts || "", updated_at: new Date().toISOString() },
+      { id: "body_scripts", value: bodyScripts || "", updated_at: new Date().toISOString() },
+    ]);
+    if (error) throw error;
+
+    logger.info("Site settings updated");
+    res.json({ success: true, message: "Scripts saved successfully" });
+  } catch (err) {
+    logger.error("Failed to save site settings", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to save site settings" });
+  }
+});
+
 adminRouter.get("/payouts", requireAdminAuth, async (_req: Request, res: Response) => {
   try {
     const { data: payouts, error } = await supabase
