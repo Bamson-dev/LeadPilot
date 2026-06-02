@@ -41,13 +41,77 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+async function getSiteScripts(): Promise<{
+  headScripts: string;
+  bodyScripts: string;
+}> {
+  try {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+
+    if (!apiUrl) {
+      console.warn("[getSiteScripts] NEXT_PUBLIC_API_URL is not set");
+      return { headScripts: "", bodyScripts: "" };
+    }
+
+    console.log("[getSiteScripts] fetching from:", `${apiUrl}/public/site-scripts`);
+
+    const res = await fetch(`${apiUrl}/public/site-scripts`, {
+      next: { revalidate: 60 },
+    });
+
+    if (!res.ok) {
+      console.warn("[getSiteScripts] fetch failed with status:", res.status);
+      return { headScripts: "", bodyScripts: "" };
+    }
+
+    const data = await res.json();
+
+    console.log("[getSiteScripts] headScripts length:", data.headScripts?.length || 0);
+    console.log("[getSiteScripts] bodyScripts length:", data.bodyScripts?.length || 0);
+
+    return {
+      headScripts: data.headScripts || "",
+      bodyScripts: data.bodyScripts || "",
+    };
+  } catch (err) {
+    console.warn("[getSiteScripts] error:", err);
+    return { headScripts: "", bodyScripts: "" };
+  }
+}
+
+function HeadScriptInjector({ scripts }: { scripts: string }) {
+  // Strips outer <script> tags and renders inner content as an inline script.
+  // Works for a single script block. Multiple separate <script> tags need a richer parser.
+  // For Meta Pixel, paste inner JavaScript only (no outer <script> tags) in Head Scripts.
+  return (
+    <>
+      <script
+        dangerouslySetInnerHTML={{
+          __html: scripts
+            .replace(/<script[^>]*>/gi, "")
+            .replace(/<\/script>/gi, "")
+            .trim(),
+        }}
+      />
+    </>
+  );
+}
+
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const { headScripts, bodyScripts } = await getSiteScripts();
+
   return (
-    <html lang="en" className="dark" data-scroll-behavior="smooth">
+    <html lang="en" className={`dark ${inter.variable}`} data-scroll-behavior="smooth">
+      <head>
+        {headScripts ? <HeadScriptInjector scripts={headScripts} /> : null}
+      </head>
       <body className={`${inter.variable} font-sans antialiased`}>
         {children}
+        {bodyScripts ? (
+          <div dangerouslySetInnerHTML={{ __html: bodyScripts }} />
+        ) : null}
       </body>
     </html>
   );

@@ -936,7 +936,7 @@ export default function AdminPage() {
             <textarea
               value={headScripts}
               onChange={(e) => setHeadScripts(e.target.value)}
-              placeholder={`<!-- Example: Google Analytics -->\n<script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>`}
+              placeholder={`Paste your pixel or tracking script content here.\n\nFor Meta Pixel, paste the JavaScript content only (without the outer <script> tags):\n\n!function(f,b,e,v,n,t,s){...}\nfbq('init', 'YOUR_PIXEL_ID');\nfbq('track', 'PageView');`}
               rows={8}
               style={{
                 width: "100%",
