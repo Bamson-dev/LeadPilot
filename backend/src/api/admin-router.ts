@@ -650,6 +650,120 @@ adminRouter.get("/overview", requireAdminAuth, async (_req: Request, res: Respon
   }
 });
 
+// GET /admin/activations
+adminRouter.get("/activations", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { from, to, preset } = req.query;
+
+    let startDate: string;
+    let endDate: string;
+
+    const now = new Date();
+
+    if (preset) {
+      switch (preset) {
+        case "today":
+          startDate = new Date(now.setHours(0, 0, 0, 0)).toISOString();
+          endDate = new Date().toISOString();
+          break;
+        case "yesterday": {
+          const yesterday = new Date(now);
+          yesterday.setDate(yesterday.getDate() - 1);
+          startDate = new Date(yesterday.setHours(0, 0, 0, 0)).toISOString();
+          endDate = new Date(yesterday.setHours(23, 59, 59, 999)).toISOString();
+          break;
+        }
+        case "7days": {
+          const sevenDaysAgo = new Date(now);
+          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+          startDate = new Date(sevenDaysAgo.setHours(0, 0, 0, 0)).toISOString();
+          endDate = new Date().toISOString();
+          break;
+        }
+        case "14days": {
+          const fourteenDaysAgo = new Date(now);
+          fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+          startDate = new Date(fourteenDaysAgo.setHours(0, 0, 0, 0)).toISOString();
+          endDate = new Date().toISOString();
+          break;
+        }
+        case "30days": {
+          const thirtyDaysAgo = new Date(now);
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+          startDate = new Date(thirtyDaysAgo.setHours(0, 0, 0, 0)).toISOString();
+          endDate = new Date().toISOString();
+          break;
+        }
+        case "thismonth":
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+          endDate = new Date().toISOString();
+          break;
+        default:
+          startDate = new Date(now.setHours(0, 0, 0, 0)).toISOString();
+          endDate = new Date().toISOString();
+      }
+    } else if (from && to) {
+      startDate = new Date(from as string).toISOString();
+      endDate = new Date(to as string).toISOString();
+    } else {
+      const sevenDaysAgo = new Date(now);
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      startDate = new Date(sevenDaysAgo.setHours(0, 0, 0, 0)).toISOString();
+      endDate = new Date().toISOString();
+    }
+
+    const { data, error } = await supabase
+      .from("license_keys")
+      .select("created_at, email")
+      .eq("activated", true)
+      .gte("created_at", startDate)
+      .lte("created_at", endDate)
+      .order("created_at", { ascending: true });
+
+    if (error) throw error;
+
+    const total = data?.length || 0;
+
+    const dailyMap: Record<string, number> = {};
+
+    data?.forEach((row) => {
+      const day = new Date(row.created_at as string).toISOString().split("T")[0];
+      dailyMap[day] = (dailyMap[day] || 0) + 1;
+    });
+
+    const daily = Object.entries(dailyMap).map(([date, count]) => ({
+      date,
+      count,
+      label: new Date(date).toLocaleDateString("en-GB", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+      }),
+    }));
+
+    const peak = daily.reduce((max, day) => (day.count > max ? day.count : max), 0);
+
+    const average = daily.length > 0 ? Math.round(total / daily.length) : 0;
+
+    logger.info("Activations fetched", { total, from: startDate, to: endDate });
+
+    res.json({
+      total,
+      daily,
+      peak,
+      average,
+      from: startDate,
+      to: endDate,
+      days: daily.length,
+    });
+  } catch (err) {
+    logger.error("Failed to fetch activations", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to fetch activations" });
+  }
+});
+
 adminRouter.get("/recent-users", requireAdminAuth, async (_req: Request, res: Response) => {
   try {
     const { data: users, error } = await supabase
