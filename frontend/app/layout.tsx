@@ -2,6 +2,7 @@
 // Built by Bamidele
 
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Inter } from "next/font/google";
 import "../styles/globals.css";
 
@@ -49,25 +50,23 @@ async function getSiteScripts(): Promise<{
     const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
     if (!apiUrl) {
-      console.warn("[getSiteScripts] NEXT_PUBLIC_API_URL is not set");
+      console.warn("[getSiteScripts] NEXT_PUBLIC_API_URL missing");
       return { headScripts: "", bodyScripts: "" };
     }
-
-    console.log("[getSiteScripts] fetching from:", `${apiUrl}/public/site-scripts`);
 
     const res = await fetch(`${apiUrl}/public/site-scripts`, {
       next: { revalidate: 60 },
     });
 
     if (!res.ok) {
-      console.warn("[getSiteScripts] fetch failed with status:", res.status);
+      console.warn("[getSiteScripts] fetch failed:", res.status);
       return { headScripts: "", bodyScripts: "" };
     }
 
     const data = await res.json();
 
-    console.log("[getSiteScripts] headScripts length:", data.headScripts?.length || 0);
-    console.log("[getSiteScripts] bodyScripts length:", data.bodyScripts?.length || 0);
+    console.log("[getSiteScripts] head length:", data.headScripts?.length || 0);
+    console.log("[getSiteScripts] body length:", data.bodyScripts?.length || 0);
 
     return {
       headScripts: data.headScripts || "",
@@ -79,73 +78,87 @@ async function getSiteScripts(): Promise<{
   }
 }
 
-function HeadScriptInjector({ scripts }: { scripts: string }) {
-  // Extract all script tag contents and render each as a real script element
-  // Also handle noscript tags for pixel fallbacks
-  const scriptContents: string[] = [];
-  const noscriptContents: string[] = [];
-
-  // Match all script tag inner contents
-  const scriptRegex = /<script[^>]*>([\s\S]*?)<\/script>/gi;
-  let match;
-  while ((match = scriptRegex.exec(scripts)) !== null) {
-    if (match[1].trim()) {
-      scriptContents.push(match[1].trim());
-    }
-  }
-
-  // Match all noscript tag inner contents
-  const noscriptRegex = /<noscript[^>]*>([\s\S]*?)<\/noscript>/gi;
-  while ((match = noscriptRegex.exec(scripts)) !== null) {
-    if (match[1].trim()) {
-      noscriptContents.push(match[1].trim());
-    }
-  }
-
-  // If no script tags found, treat the entire content as raw JS
-  if (scriptContents.length === 0 && !scripts.includes("<")) {
-    scriptContents.push(scripts.trim());
-  }
-
-  return (
-    <>
-      {scriptContents.map((content, index) => (
-        <script
-          key={`head-script-${index}`}
-          dangerouslySetInnerHTML={{ __html: content }}
-        />
-      ))}
-      {noscriptContents.map((content, index) => (
-        <noscript
-          key={`head-noscript-${index}`}
-          dangerouslySetInnerHTML={{ __html: content }}
-        />
-      ))}
-    </>
-  );
-}
-
-function BodyScriptInjector({ scripts }: { scripts: string }) {
-  return <div dangerouslySetInnerHTML={{ __html: scripts }} />;
-}
-
 export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const { headScripts, bodyScripts } = await getSiteScripts();
 
+  // Extract inline script content from saved script tags
+  // next/script requires content as a string prop, not dangerouslySetInnerHTML
+  const extractInlineScripts = (html: string): string[] => {
+    const results: string[] = [];
+    const regex = /<script[^>]*>([\s\S]*?)<\/script>/gi;
+    let match;
+    while ((match = regex.exec(html)) !== null) {
+      if (match[1].trim()) {
+        results.push(match[1].trim());
+      }
+    }
+    // If no script tags found treat entire string as raw JS
+    if (results.length === 0 && html.trim() && !html.includes("<")) {
+      results.push(html.trim());
+    }
+    return results;
+  };
+
+  const extractExternalScripts = (html: string): string[] => {
+    const results: string[] = [];
+    const regex = /<script[^>]*\ssrc=["']([^"']+)["'][^>]*>/gi;
+    let match;
+    while ((match = regex.exec(html)) !== null) {
+      results.push(match[1]);
+    }
+    return results;
+  };
+
+  const headInlineScripts = headScripts ? extractInlineScripts(headScripts) : [];
+  const headExternalScripts = headScripts ? extractExternalScripts(headScripts) : [];
+  const bodyInlineScripts = bodyScripts ? extractInlineScripts(bodyScripts) : [];
+  const bodyExternalScripts = bodyScripts ? extractExternalScripts(bodyScripts) : [];
+
   return (
     <html lang="en" className={`dark ${inter.variable}`} data-scroll-behavior="smooth">
-      <head>
-        {headScripts && headScripts.trim() ? (
-          <HeadScriptInjector scripts={headScripts} />
-        ) : null}
-      </head>
+      <head />
       <body className={`${inter.variable} font-sans antialiased`}>
+        {/* Head external scripts — load before page renders */}
+        {headExternalScripts.map((src, i) => (
+          <Script
+            key={`head-ext-${i}`}
+            src={src}
+            strategy="beforeInteractive"
+          />
+        ))}
+
+        {/* Head inline scripts — load before interactive */}
+        {headInlineScripts.map((content, i) => (
+          <Script
+            key={`head-inline-${i}`}
+            id={`head-script-${i}`}
+            strategy="beforeInteractive"
+            dangerouslySetInnerHTML={{ __html: content }}
+          />
+        ))}
+
         {children}
-        {bodyScripts && bodyScripts.trim() ? (
-          <BodyScriptInjector scripts={bodyScripts} />
-        ) : null}
+
+        {/* Body external scripts */}
+        {bodyExternalScripts.map((src, i) => (
+          <Script
+            key={`body-ext-${i}`}
+            src={src}
+            strategy="afterInteractive"
+          />
+        ))}
+
+        {/* Body inline scripts */}
+        {bodyInlineScripts.map((content, i) => (
+          <Script
+            key={`body-inline-${i}`}
+            id={`body-script-${i}`}
+            strategy="afterInteractive"
+            dangerouslySetInnerHTML={{ __html: content }}
+          />
+        ))}
       </body>
     </html>
   );
