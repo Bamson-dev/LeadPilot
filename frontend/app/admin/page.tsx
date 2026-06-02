@@ -936,7 +936,7 @@ export default function AdminPage() {
             <textarea
               value={headScripts}
               onChange={(e) => setHeadScripts(e.target.value)}
-              placeholder={`Paste your pixel or tracking script content here.\n\nFor Meta Pixel, paste the JavaScript content only (without the outer <script> tags):\n\n!function(f,b,e,v,n,t,s){...}\nfbq('init', 'YOUR_PIXEL_ID');\nfbq('track', 'PageView');`}
+              placeholder={`Paste the full tracking code exactly as provided.\n\nInclude the outer <script> tags.\n\nExample Meta Pixel:\n<script>\n  fbq('init', 'YOUR_PIXEL_ID');\n  fbq('track', 'PageView');\n</script>\n<noscript>...</noscript>`}
               rows={8}
               style={{
                 width: "100%",

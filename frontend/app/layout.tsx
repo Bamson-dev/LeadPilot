@@ -80,21 +80,53 @@ async function getSiteScripts(): Promise<{
 }
 
 function HeadScriptInjector({ scripts }: { scripts: string }) {
-  // Strips outer <script> tags and renders inner content as an inline script.
-  // Works for a single script block. Multiple separate <script> tags need a richer parser.
-  // For Meta Pixel, paste inner JavaScript only (no outer <script> tags) in Head Scripts.
+  // Extract all script tag contents and render each as a real script element
+  // Also handle noscript tags for pixel fallbacks
+  const scriptContents: string[] = [];
+  const noscriptContents: string[] = [];
+
+  // Match all script tag inner contents
+  const scriptRegex = /<script[^>]*>([\s\S]*?)<\/script>/gi;
+  let match;
+  while ((match = scriptRegex.exec(scripts)) !== null) {
+    if (match[1].trim()) {
+      scriptContents.push(match[1].trim());
+    }
+  }
+
+  // Match all noscript tag inner contents
+  const noscriptRegex = /<noscript[^>]*>([\s\S]*?)<\/noscript>/gi;
+  while ((match = noscriptRegex.exec(scripts)) !== null) {
+    if (match[1].trim()) {
+      noscriptContents.push(match[1].trim());
+    }
+  }
+
+  // If no script tags found, treat the entire content as raw JS
+  if (scriptContents.length === 0 && !scripts.includes("<")) {
+    scriptContents.push(scripts.trim());
+  }
+
   return (
     <>
-      <script
-        dangerouslySetInnerHTML={{
-          __html: scripts
-            .replace(/<script[^>]*>/gi, "")
-            .replace(/<\/script>/gi, "")
-            .trim(),
-        }}
-      />
+      {scriptContents.map((content, index) => (
+        <script
+          key={`head-script-${index}`}
+          dangerouslySetInnerHTML={{ __html: content }}
+        />
+      ))}
+      {noscriptContents.map((content, index) => (
+        <noscript
+          key={`head-noscript-${index}`}
+          dangerouslySetInnerHTML={{ __html: content }}
+        />
+      ))}
     </>
   );
+}
+
+function BodyScriptInjector({ scripts }: { scripts: string }) {
+  return <div dangerouslySetInnerHTML={{ __html: scripts }} />;
 }
 
 export default async function RootLayout({
@@ -105,12 +137,14 @@ export default async function RootLayout({
   return (
     <html lang="en" className={`dark ${inter.variable}`} data-scroll-behavior="smooth">
       <head>
-        {headScripts ? <HeadScriptInjector scripts={headScripts} /> : null}
+        {headScripts && headScripts.trim() ? (
+          <HeadScriptInjector scripts={headScripts} />
+        ) : null}
       </head>
       <body className={`${inter.variable} font-sans antialiased`}>
         {children}
-        {bodyScripts ? (
-          <div dangerouslySetInnerHTML={{ __html: bodyScripts }} />
+        {bodyScripts && bodyScripts.trim() ? (
+          <BodyScriptInjector scripts={bodyScripts} />
         ) : null}
       </body>
     </html>
