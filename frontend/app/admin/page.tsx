@@ -101,13 +101,6 @@ export default function AdminPage() {
     return false;
   }, []);
 
-  function getAdminHeaders(): HeadersInit {
-    const authToken = getAdminToken();
-    return {
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-    };
-  }
-
   const loadPayouts = useCallback(async () => {
     if (!getAdminToken()) return;
     try {
@@ -120,21 +113,23 @@ export default function AdminPage() {
     }
   }, [handleSessionError]);
 
+  function getAdminHeaders(): HeadersInit {
+    const currentToken = getAdminToken();
+    return {
+      ...(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}),
+    };
+  }
+
   async function loadActivations(preset?: string, from?: string, to?: string) {
     setActivationsLoading(true);
     try {
       let url = `${process.env.NEXT_PUBLIC_API_URL}/admin/activations`;
-
       if (from && to) {
         url += `?from=${from}&to=${to}`;
       } else {
         url += `?preset=${preset || activePreset}`;
       }
-
-      const res = await fetch(url, {
-        headers: getAdminHeaders(),
-      });
-
+      const res = await fetch(url, { headers: getAdminHeaders() });
       if (res.ok) {
         const data = (await res.json()) as ActivationData;
         setActivations(data);
@@ -200,8 +195,8 @@ export default function AdminPage() {
         ]);
         setOverview(overviewData);
         setRecentUsers(recentData.users || []);
-        await loadPayouts();
         await loadActivations("7days");
+        await loadPayouts();
       } catch (err) {
         if (!handleSessionError(err)) {
           /* silent fail */
@@ -431,7 +426,7 @@ export default function AdminPage() {
         </button>
       </header>
 
-      {/* ACTIVATION TRACKER — MUST BE FIRST SECTION */}
+      {/* ACTIVATION TRACKER */}
       <div
         className="mx-auto mt-8 max-w-6xl"
         style={{
@@ -462,15 +457,7 @@ export default function AdminPage() {
             </p>
           </div>
           {activations && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                fontSize: 11,
-                color: "#555570",
-              }}
-            >
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#555570" }}>
               <span
                 style={{
                   width: 6,
@@ -504,20 +491,15 @@ export default function AdminPage() {
                 }}
                 style={{
                   background:
-                    activePreset === preset.value && !showCustom
-                      ? "#7C3AED"
-                      : "rgba(255,255,255,0.04)",
+                    activePreset === preset.value && !showCustom ? "#7C3AED" : "rgba(255,255,255,0.04)",
                   border: `1px solid ${
-                    activePreset === preset.value && !showCustom
-                      ? "#7C3AED"
-                      : "rgba(255,255,255,0.08)"
+                    activePreset === preset.value && !showCustom ? "#7C3AED" : "rgba(255,255,255,0.08)"
                   }`,
                   borderRadius: 8,
                   padding: "6px 12px",
                   fontSize: 12,
                   fontWeight: 600,
-                  color:
-                    activePreset === preset.value && !showCustom ? "white" : "#8888A8",
+                  color: activePreset === preset.value && !showCustom ? "white" : "#8888A8",
                   cursor: "pointer",
                   fontFamily: "Inter, sans-serif",
                   transition: "all 0.15s",
@@ -526,7 +508,6 @@ export default function AdminPage() {
                 {preset.label}
               </button>
             ))}
-
             <button
               onClick={() => setShowCustom(!showCustom)}
               style={{
@@ -547,15 +528,7 @@ export default function AdminPage() {
           </div>
 
           {showCustom && (
-            <div
-              style={{
-                display: "flex",
-                gap: 8,
-                marginBottom: 16,
-                flexWrap: "wrap",
-                alignItems: "flex-end",
-              }}
-            >
+            <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "flex-end" }}>
               <div>
                 <label
                   style={{
@@ -649,46 +622,17 @@ export default function AdminPage() {
 
           {!activationsLoading && activations && (
             <>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(4, 1fr)",
-                  gap: 8,
-                  marginBottom: 20,
-                }}
-              >
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 20 }}>
                 {[
-                  {
-                    label: "Total Activations",
-                    value: activations.total,
-                    color: "#A78BFA",
-                    highlight: true,
-                  },
-                  {
-                    label: "Daily Average",
-                    value: activations.average,
-                    color: "#10B981",
-                    highlight: false,
-                  },
-                  {
-                    label: "Peak Day",
-                    value: activations.peak,
-                    color: "#F59E0B",
-                    highlight: false,
-                  },
-                  {
-                    label: "Days Tracked",
-                    value: activations.days,
-                    color: "#8888A8",
-                    highlight: false,
-                  },
+                  { label: "Total Activations", value: activations.total, color: "#A78BFA", highlight: true },
+                  { label: "Daily Average", value: activations.average, color: "#10B981", highlight: false },
+                  { label: "Peak Day", value: activations.peak, color: "#F59E0B", highlight: false },
+                  { label: "Days Tracked", value: activations.days, color: "#8888A8", highlight: false },
                 ].map((stat) => (
                   <div
                     key={stat.label}
                     style={{
-                      background: stat.highlight
-                        ? "rgba(124,58,237,0.08)"
-                        : "rgba(255,255,255,0.03)",
+                      background: stat.highlight ? "rgba(124,58,237,0.08)" : "rgba(255,255,255,0.03)",
                       border: `1px solid ${
                         stat.highlight ? "rgba(124,58,237,0.2)" : "rgba(255,255,255,0.06)"
                       }`,
@@ -738,6 +682,7 @@ export default function AdminPage() {
                   >
                     Daily Breakdown
                   </div>
+
                   <div
                     style={{
                       display: "flex",
@@ -752,7 +697,6 @@ export default function AdminPage() {
                     {activations.daily.map((day) => {
                       const heightPercent = activations.peak > 0 ? (day.count / activations.peak) * 100 : 0;
                       const barHeight = Math.max(heightPercent * 0.96, day.count > 0 ? 4 : 0);
-
                       return (
                         <div
                           key={day.date}
@@ -783,7 +727,6 @@ export default function AdminPage() {
                               {day.count}
                             </div>
                           )}
-
                           <div
                             style={{
                               width: "100%",
@@ -801,7 +744,6 @@ export default function AdminPage() {
                               bottom: 20,
                             }}
                           />
-
                           <div
                             style={{
                               fontSize: 9,
@@ -850,9 +792,7 @@ export default function AdminPage() {
                                 width: activations.peak > 0 ? `${(day.count / activations.peak) * 100}%` : "0%",
                                 height: "100%",
                                 background:
-                                  day.count === activations.peak
-                                    ? "#7C3AED"
-                                    : "rgba(124,58,237,0.5)",
+                                  day.count === activations.peak ? "#7C3AED" : "rgba(124,58,237,0.5)",
                                 borderRadius: 2,
                               }}
                             />
