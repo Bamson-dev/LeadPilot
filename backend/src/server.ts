@@ -9,6 +9,7 @@ import { webhookRouter } from "./api/webhook-router";
 import affiliateRouter from "./api/affiliate-router";
 import checkoutRouter from "./api/checkout-router";
 import healthRouter from "./api/health-router";
+import publicRouter from "./api/public-router";
 import { rateLimit } from "./middleware/rate-limit";
 import { getBrowserPool } from "./scraper/browser/browser-pool";
 import { logger } from "./utils/logger";
@@ -79,6 +80,7 @@ function registerRoutes(): void {
   app.use("/admin", adminRouter);
   app.use("/affiliate", affiliateRouter);
   app.use("/checkout", checkoutRouter);
+  app.use("/public", publicRouter);
   app.post("/freetrial", rateLimit, handleFreeTrialSearch);
   app.use("/search", rateLimit, searchRouter);
 

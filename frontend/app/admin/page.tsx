@@ -36,6 +36,22 @@ function formatDate(value: string | null): string {
   return new Date(value).toLocaleString();
 }
 
+type DailyActivation = {
+  date: string;
+  count: number;
+  label: string;
+};
+
+type ActivationData = {
+  total: number;
+  daily: DailyActivation[];
+  peak: number;
+  average: number;
+  from: string;
+  to: string;
+  days: number;
+};
+
 export default function AdminPage() {
   const [token, setToken] = useState<string | null>(null);
   const [loginEmail, setLoginEmail] = useState("");
@@ -65,6 +81,16 @@ export default function AdminPage() {
   const [msgSending, setMsgSending] = useState(false);
   const [msgResult, setMsgResult] = useState("");
   const [msgPreview, setMsgPreview] = useState(false);
+  const [activations, setActivations] = useState<ActivationData | null>(null);
+  const [activationsLoading, setActivationsLoading] = useState(false);
+  const [activePreset, setActivePreset] = useState("7days");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [showCustom, setShowCustom] = useState(false);
+  const [headScripts, setHeadScripts] = useState("");
+  const [bodyScripts, setBodyScripts] = useState("");
+  const [scriptsSaving, setScriptsSaving] = useState(false);
+  const [scriptsMsg, setScriptsMsg] = useState("");
 
   useEffect(() => {
     setToken(getAdminToken());
@@ -90,6 +116,72 @@ export default function AdminPage() {
       }
     }
   }, [handleSessionError]);
+
+  function getAdminHeaders(): HeadersInit {
+    const currentToken = getAdminToken();
+    return {
+      ...(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}),
+    };
+  }
+
+  async function loadActivations(preset?: string, from?: string, to?: string) {
+    setActivationsLoading(true);
+    try {
+      let url = `${process.env.NEXT_PUBLIC_API_URL}/admin/activations`;
+      if (from && to) {
+        url += `?from=${from}&to=${to}`;
+      } else {
+        url += `?preset=${preset || activePreset}`;
+      }
+      const res = await fetch(url, { headers: getAdminHeaders() });
+      if (res.ok) {
+        const data = (await res.json()) as ActivationData;
+        setActivations(data);
+      }
+    } catch (err) {
+      console.error("Failed to load activations", err);
+    } finally {
+      setActivationsLoading(false);
+    }
+  }
+
+  async function loadSiteSettings() {
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/site-settings`, {
+        headers: getAdminHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHeadScripts(data.headScripts || "");
+        setBodyScripts(data.bodyScripts || "");
+      }
+    } catch {}
+  }
+
+  async function saveScripts() {
+    setScriptsSaving(true);
+    setScriptsMsg("");
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/site-settings`, {
+        method: "POST",
+        headers: {
+          ...getAdminHeaders(),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ headScripts, bodyScripts }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setScriptsMsg("Scripts saved. Changes apply to every page within 60 seconds.");
+      } else {
+        setScriptsMsg(data.error || "Failed to save scripts.");
+      }
+    } catch {
+      setScriptsMsg("Failed to save scripts.");
+    } finally {
+      setScriptsSaving(false);
+    }
+  }
 
   const handleMarkProcessing = async (payoutId: string) => {
     setPayoutMsg("");
@@ -145,6 +237,8 @@ export default function AdminPage() {
         ]);
         setOverview(overviewData);
         setRecentUsers(recentData.users || []);
+        await loadActivations("7days");
+        await loadSiteSettings();
         await loadPayouts();
       } catch (err) {
         if (!handleSessionError(err)) {
@@ -374,6 +468,575 @@ export default function AdminPage() {
           Logout
         </button>
       </header>
+
+      {/* ACTIVATION TRACKER */}
+      <div
+        className="mx-auto mt-8 max-w-6xl"
+        style={{
+          background: "#111118",
+          border: "1px solid rgba(255,255,255,0.07)",
+          borderRadius: 14,
+          overflow: "hidden",
+          marginBottom: 24,
+        }}
+      >
+        <div
+          style={{
+            padding: "14px 16px",
+            borderBottom: "1px solid rgba(255,255,255,0.07)",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: 8,
+          }}
+        >
+          <div>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: "#F2F1FF", margin: 0 }}>
+              Activation Tracker
+            </h3>
+            <p style={{ fontSize: 11, color: "#555570", marginTop: 3 }}>
+              Daily signups and activations over time
+            </p>
+          </div>
+          {activations && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#555570" }}>
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: "50%",
+                  background: "#10B981",
+                  display: "inline-block",
+                }}
+              />
+              Live data from Supabase
+            </div>
+          )}
+        </div>
+
+        <div style={{ padding: 16 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
+            {[
+              { label: "Today", value: "today" },
+              { label: "Yesterday", value: "yesterday" },
+              { label: "7 Days", value: "7days" },
+              { label: "14 Days", value: "14days" },
+              { label: "30 Days", value: "30days" },
+              { label: "This Month", value: "thismonth" },
+            ].map((preset) => (
+              <button
+                key={preset.value}
+                onClick={() => {
+                  setActivePreset(preset.value);
+                  setShowCustom(false);
+                  void loadActivations(preset.value);
+                }}
+                style={{
+                  background:
+                    activePreset === preset.value && !showCustom ? "#7C3AED" : "rgba(255,255,255,0.04)",
+                  border: `1px solid ${
+                    activePreset === preset.value && !showCustom ? "#7C3AED" : "rgba(255,255,255,0.08)"
+                  }`,
+                  borderRadius: 8,
+                  padding: "6px 12px",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: activePreset === preset.value && !showCustom ? "white" : "#8888A8",
+                  cursor: "pointer",
+                  fontFamily: "Inter, sans-serif",
+                  transition: "all 0.15s",
+                }}
+              >
+                {preset.label}
+              </button>
+            ))}
+            <button
+              onClick={() => setShowCustom(!showCustom)}
+              style={{
+                background: showCustom ? "#7C3AED" : "rgba(255,255,255,0.04)",
+                border: `1px solid ${showCustom ? "#7C3AED" : "rgba(255,255,255,0.08)"}`,
+                borderRadius: 8,
+                padding: "6px 12px",
+                fontSize: 12,
+                fontWeight: 600,
+                color: showCustom ? "white" : "#8888A8",
+                cursor: "pointer",
+                fontFamily: "Inter, sans-serif",
+                transition: "all 0.15s",
+              }}
+            >
+              Custom Range
+            </button>
+          </div>
+
+          {showCustom && (
+            <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "flex-end" }}>
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: 10,
+                    color: "#555570",
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                    marginBottom: 5,
+                  }}
+                >
+                  From
+                </label>
+                <input
+                  type="date"
+                  value={customFrom}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  style={{
+                    background: "#0A0A10",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: 8,
+                    padding: "8px 12px",
+                    fontSize: 12,
+                    color: "#F2F1FF",
+                    fontFamily: "Inter, sans-serif",
+                    outline: "none",
+                  }}
+                />
+              </div>
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: 10,
+                    color: "#555570",
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                    marginBottom: 5,
+                  }}
+                >
+                  To
+                </label>
+                <input
+                  type="date"
+                  value={customTo}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  style={{
+                    background: "#0A0A10",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: 8,
+                    padding: "8px 12px",
+                    fontSize: 12,
+                    color: "#F2F1FF",
+                    fontFamily: "Inter, sans-serif",
+                    outline: "none",
+                  }}
+                />
+              </div>
+              <button
+                onClick={() => {
+                  if (customFrom && customTo) {
+                    void loadActivations(undefined, customFrom, customTo);
+                  }
+                }}
+                disabled={!customFrom || !customTo}
+                style={{
+                  background: customFrom && customTo ? "#7C3AED" : "#1A1A24",
+                  border: "none",
+                  borderRadius: 8,
+                  padding: "8px 16px",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: "white",
+                  cursor: customFrom && customTo ? "pointer" : "not-allowed",
+                  fontFamily: "Inter, sans-serif",
+                  opacity: customFrom && customTo ? 1 : 0.5,
+                }}
+              >
+                Apply
+              </button>
+            </div>
+          )}
+
+          {activationsLoading && (
+            <div style={{ textAlign: "center", padding: "32px 0", fontSize: 13, color: "#555570" }}>
+              Loading activations...
+            </div>
+          )}
+
+          {!activationsLoading && activations && (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 20 }}>
+                {[
+                  { label: "Total Activations", value: activations.total, color: "#A78BFA", highlight: true },
+                  { label: "Daily Average", value: activations.average, color: "#10B981", highlight: false },
+                  { label: "Peak Day", value: activations.peak, color: "#F59E0B", highlight: false },
+                  { label: "Days Tracked", value: activations.days, color: "#8888A8", highlight: false },
+                ].map((stat) => (
+                  <div
+                    key={stat.label}
+                    style={{
+                      background: stat.highlight ? "rgba(124,58,237,0.08)" : "rgba(255,255,255,0.03)",
+                      border: `1px solid ${
+                        stat.highlight ? "rgba(124,58,237,0.2)" : "rgba(255,255,255,0.06)"
+                      }`,
+                      borderRadius: 10,
+                      padding: "12px 14px",
+                      textAlign: "center",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 28,
+                        fontWeight: 900,
+                        color: stat.color,
+                        lineHeight: 1,
+                        marginBottom: 5,
+                        letterSpacing: "-1px",
+                      }}
+                    >
+                      {stat.value}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        color: "#555570",
+                        fontWeight: 600,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.07em",
+                      }}
+                    >
+                      {stat.label}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {activations.daily.length > 0 ? (
+                <div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "#555570",
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      marginBottom: 12,
+                    }}
+                  >
+                    Daily Breakdown
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-end",
+                      gap: 4,
+                      height: 120,
+                      paddingBottom: 24,
+                      position: "relative",
+                      borderBottom: "1px solid rgba(255,255,255,0.06)",
+                    }}
+                  >
+                    {activations.daily.map((day) => {
+                      const heightPercent = activations.peak > 0 ? (day.count / activations.peak) * 100 : 0;
+                      const barHeight = Math.max(heightPercent * 0.96, day.count > 0 ? 4 : 0);
+                      return (
+                        <div
+                          key={day.date}
+                          style={{
+                            flex: 1,
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            justifyContent: "flex-end",
+                            height: "100%",
+                            gap: 4,
+                            position: "relative",
+                          }}
+                          title={`${day.label}: ${day.count} activation${day.count !== 1 ? "s" : ""}`}
+                        >
+                          {day.count > 0 && (
+                            <div
+                              style={{
+                                fontSize: 10,
+                                fontWeight: 700,
+                                color: "#A78BFA",
+                                position: "absolute",
+                                bottom: `${barHeight + 26}px`,
+                                left: "50%",
+                                transform: "translateX(-50%)",
+                              }}
+                            >
+                              {day.count}
+                            </div>
+                          )}
+                          <div
+                            style={{
+                              width: "100%",
+                              height: `${barHeight}%`,
+                              background:
+                                day.count === activations.peak && day.count > 0
+                                  ? "#7C3AED"
+                                  : day.count > 0
+                                    ? "rgba(124,58,237,0.45)"
+                                    : "rgba(255,255,255,0.04)",
+                              borderRadius: "4px 4px 0 0",
+                              transition: "all 0.3s ease",
+                              minHeight: day.count > 0 ? 4 : 0,
+                              position: "absolute",
+                              bottom: 20,
+                            }}
+                          />
+                          <div
+                            style={{
+                              fontSize: 9,
+                              color: "#555570",
+                              position: "absolute",
+                              bottom: 2,
+                              left: "50%",
+                              transform: "translateX(-50%)",
+                              whiteSpace: "nowrap",
+                              fontWeight: 600,
+                            }}
+                          >
+                            {day.label.split(" ")[0]}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div style={{ marginTop: 16 }}>
+                    {[...activations.daily].reverse().map((day) => (
+                      <div
+                        key={day.date}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          padding: "8px 0",
+                          borderBottom: "1px solid rgba(255,255,255,0.04)",
+                          fontSize: 12,
+                        }}
+                      >
+                        <span style={{ color: "#8888A8", fontWeight: 500 }}>{day.label}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <div
+                            style={{
+                              width: 80,
+                              height: 4,
+                              background: "rgba(255,255,255,0.06)",
+                              borderRadius: 2,
+                              overflow: "hidden",
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: activations.peak > 0 ? `${(day.count / activations.peak) * 100}%` : "0%",
+                                height: "100%",
+                                background:
+                                  day.count === activations.peak ? "#7C3AED" : "rgba(124,58,237,0.5)",
+                                borderRadius: 2,
+                              }}
+                            />
+                          </div>
+                          <span
+                            style={{
+                              color: day.count > 0 ? "#F2F1FF" : "#555570",
+                              fontWeight: 700,
+                              minWidth: 20,
+                              textAlign: "right",
+                            }}
+                          >
+                            {day.count}
+                          </span>
+                          <span style={{ color: "#555570", fontSize: 10 }}>
+                            {day.count === 1 ? "activation" : "activations"}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ textAlign: "center", padding: "32px 0", fontSize: 13, color: "#555570" }}>
+                  No activations in this time range.
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* GLOBAL SCRIPTS MANAGER */}
+      <div
+        className="mx-auto max-w-6xl"
+        style={{
+          background: "#111118",
+          border: "1px solid rgba(255,255,255,0.07)",
+          borderRadius: 14,
+          overflow: "hidden",
+          marginBottom: 24,
+        }}
+      >
+        <div
+          style={{
+            padding: "14px 16px",
+            borderBottom: "1px solid rgba(255,255,255,0.07)",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <div>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: "#F2F1FF", margin: 0 }}>
+              Global Scripts
+            </h3>
+            <p style={{ fontSize: 11, color: "#555570", marginTop: 3 }}>
+              Inject tracking codes and scripts into every page sitewide
+            </p>
+          </div>
+        </div>
+
+        <div style={{ padding: 16 }}>
+          <div
+            style={{
+              background: "rgba(251,191,36,0.06)",
+              border: "1px solid rgba(251,191,36,0.15)",
+              borderRadius: 8,
+              padding: "10px 14px",
+              marginBottom: 20,
+              fontSize: 12,
+              color: "#FBBF24",
+              lineHeight: 1.6,
+            }}
+          >
+            Scripts added here inject into every page on leadthur.com. A broken script can affect
+            the entire site. Test on staging before saving to production. Keep a backup before
+            making changes.
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label
+              style={{
+                display: "block",
+                fontSize: 11,
+                fontWeight: 700,
+                color: "#8888A8",
+                textTransform: "uppercase" as const,
+                letterSpacing: "0.08em",
+                marginBottom: 6,
+              }}
+            >
+              Head Scripts
+            </label>
+            <p style={{ fontSize: 11, color: "#555570", marginBottom: 8, lineHeight: 1.5 }}>
+              Paste Google Analytics, Meta Pixel, or any script that belongs inside the head tag.
+            </p>
+            <textarea
+              value={headScripts}
+              onChange={(e) => setHeadScripts(e.target.value)}
+              placeholder={`Paste the full tracking code exactly as provided.\n\nInclude the outer <script> tags.\n\nExample Meta Pixel:\n<script>\n  fbq('init', 'YOUR_PIXEL_ID');\n  fbq('track', 'PageView');\n</script>\n<noscript>...</noscript>`}
+              rows={8}
+              style={{
+                width: "100%",
+                background: "#0A0A10",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 8,
+                padding: "12px 14px",
+                fontSize: 12,
+                color: "#F2F1FF",
+                fontFamily: "monospace",
+                resize: "vertical" as const,
+                outline: "none",
+                lineHeight: 1.6,
+              }}
+            />
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label
+              style={{
+                display: "block",
+                fontSize: 11,
+                fontWeight: 700,
+                color: "#8888A8",
+                textTransform: "uppercase" as const,
+                letterSpacing: "0.08em",
+                marginBottom: 6,
+              }}
+            >
+              Body Scripts
+            </label>
+            <p style={{ fontSize: 11, color: "#555570", marginBottom: 8, lineHeight: 1.5 }}>
+              Paste scripts that belong before the closing body tag. Use for chat widgets or
+              heatmaps.
+            </p>
+            <textarea
+              value={bodyScripts}
+              onChange={(e) => setBodyScripts(e.target.value)}
+              placeholder={`<!-- Example: Meta Pixel -->\n<script>\n  fbq('init', 'YOUR_PIXEL_ID');\n  fbq('track', 'PageView');\n</script>`}
+              rows={8}
+              style={{
+                width: "100%",
+                background: "#0A0A10",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 8,
+                padding: "12px 14px",
+                fontSize: 12,
+                color: "#F2F1FF",
+                fontFamily: "monospace",
+                resize: "vertical" as const,
+                outline: "none",
+                lineHeight: 1.6,
+              }}
+            />
+          </div>
+
+          <button
+            onClick={saveScripts}
+            disabled={scriptsSaving}
+            style={{
+              background: scriptsSaving ? "#1A1A24" : "#7C3AED",
+              color: "white",
+              border: "none",
+              borderRadius: 8,
+              padding: "12px 24px",
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: scriptsSaving ? "not-allowed" : "pointer",
+              fontFamily: "Inter, sans-serif",
+              opacity: scriptsSaving ? 0.7 : 1,
+              transition: "all 0.2s",
+            }}
+          >
+            {scriptsSaving ? "Saving..." : "Save Scripts"}
+          </button>
+
+          {scriptsMsg && (
+            <div
+              style={{
+                marginTop: 12,
+                padding: "10px 14px",
+                background: scriptsMsg.includes("saved")
+                  ? "rgba(16,185,129,0.08)"
+                  : "rgba(239,68,68,0.08)",
+                border: `1px solid ${
+                  scriptsMsg.includes("saved")
+                    ? "rgba(16,185,129,0.2)"
+                    : "rgba(239,68,68,0.2)"
+                }`,
+                borderRadius: 8,
+                fontSize: 12,
+                color: scriptsMsg.includes("saved") ? "#10B981" : "#EF4444",
+                fontWeight: 600,
+              }}
+            >
+              {scriptsMsg}
+            </div>
+          )}
+        </div>
+      </div>
 
       {overview && (
         <div className="mx-auto mt-8 max-w-6xl" style={{ marginBottom: 28 }}>

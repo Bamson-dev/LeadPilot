@@ -741,6 +741,174 @@ adminRouter.get("/trial-stats", requireAdminAuth, async (_req: Request, res: Res
   }
 });
 
+// GET /admin/activations
+adminRouter.get("/activations", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { from, to, preset } = req.query as {
+      from?: string;
+      to?: string;
+      preset?: string;
+    };
+
+    let startDate: string;
+    let endDate: string;
+
+    const now = new Date();
+
+    if (preset) {
+      switch (preset) {
+        case "today":
+          startDate = new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
+          endDate = new Date().toISOString();
+          break;
+        case "yesterday": {
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+          startDate = new Date(yesterday.setHours(0, 0, 0, 0)).toISOString();
+          endDate = new Date(yesterday.setHours(23, 59, 59, 999)).toISOString();
+          break;
+        }
+        case "7days": {
+          const sevenAgo = new Date();
+          sevenAgo.setDate(sevenAgo.getDate() - 7);
+          startDate = new Date(sevenAgo.setHours(0, 0, 0, 0)).toISOString();
+          endDate = new Date().toISOString();
+          break;
+        }
+        case "14days": {
+          const fourteenAgo = new Date();
+          fourteenAgo.setDate(fourteenAgo.getDate() - 14);
+          startDate = new Date(fourteenAgo.setHours(0, 0, 0, 0)).toISOString();
+          endDate = new Date().toISOString();
+          break;
+        }
+        case "30days": {
+          const thirtyAgo = new Date();
+          thirtyAgo.setDate(thirtyAgo.getDate() - 30);
+          startDate = new Date(thirtyAgo.setHours(0, 0, 0, 0)).toISOString();
+          endDate = new Date().toISOString();
+          break;
+        }
+        case "thismonth":
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+          endDate = new Date().toISOString();
+          break;
+        default: {
+          const defaultAgo = new Date();
+          defaultAgo.setDate(defaultAgo.getDate() - 7);
+          startDate = new Date(defaultAgo.setHours(0, 0, 0, 0)).toISOString();
+          endDate = new Date().toISOString();
+        }
+      }
+    } else if (from && to) {
+      startDate = new Date(from).toISOString();
+      endDate = new Date(to).toISOString();
+    } else {
+      const fallbackAgo = new Date();
+      fallbackAgo.setDate(fallbackAgo.getDate() - 7);
+      startDate = new Date(fallbackAgo.setHours(0, 0, 0, 0)).toISOString();
+      endDate = new Date().toISOString();
+    }
+
+    const { data, error } = await supabase
+      .from("license_keys")
+      .select("created_at, email")
+      .eq("activated", true)
+      .gte("created_at", startDate)
+      .lte("created_at", endDate)
+      .order("created_at", { ascending: true });
+
+    if (error) throw error;
+
+    const total = data?.length || 0;
+
+    const dailyMap: Record<string, number> = {};
+    data?.forEach((row) => {
+      const day = new Date(row.created_at as string).toISOString().split("T")[0];
+      dailyMap[day] = (dailyMap[day] || 0) + 1;
+    });
+
+    const daily = Object.entries(dailyMap).map(([date, count]) => ({
+      date,
+      count,
+      label: new Date(date).toLocaleDateString("en-GB", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+      }),
+    }));
+
+    const peak = daily.reduce((max, day) => (day.count > max ? day.count : max), 0);
+    const average = daily.length > 0 ? Math.round(total / daily.length) : 0;
+
+    logger.info("Activations fetched", { total, from: startDate, to: endDate });
+
+    res.json({
+      total,
+      daily,
+      peak,
+      average,
+      from: startDate,
+      to: endDate,
+      days: daily.length,
+    });
+  } catch (err) {
+    logger.error("Failed to fetch activations", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to fetch activations" });
+  }
+});
+
+adminRouter.get("/site-settings", requireAdminAuth, async (_req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabase
+      .from("site_settings")
+      .select("id, value")
+      .in("id", ["head_scripts", "body_scripts"]);
+
+    if (error) throw error;
+
+    const settings: Record<string, string> = {};
+    data?.forEach((row) => {
+      settings[row.id as string] = row.value as string;
+    });
+
+    res.json({
+      headScripts: settings["head_scripts"] || "",
+      bodyScripts: settings["body_scripts"] || "",
+    });
+  } catch (err) {
+    logger.error("Failed to fetch site settings", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to fetch site settings" });
+  }
+});
+
+adminRouter.post("/site-settings", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { headScripts, bodyScripts } = req.body as {
+      headScripts?: string;
+      bodyScripts?: string;
+    };
+
+    const { error } = await supabase.from("site_settings").upsert([
+      { id: "head_scripts", value: headScripts || "", updated_at: new Date().toISOString() },
+      { id: "body_scripts", value: bodyScripts || "", updated_at: new Date().toISOString() },
+    ]);
+    if (error) throw error;
+
+    logger.info("Site settings updated");
+    res.json({ success: true, message: "Scripts saved successfully" });
+  } catch (err) {
+    logger.error("Failed to save site settings", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to save site settings" });
+  }
+});
+
 adminRouter.get("/payouts", requireAdminAuth, async (_req: Request, res: Response) => {
   try {
     const { data: payouts, error } = await supabase
