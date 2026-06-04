@@ -148,19 +148,6 @@ export default function DemoPage() {
         <span style={{ fontSize: 20, fontWeight: 800 }}>
           Lead<span style={{ color: "#A78BFA" }}>Thur</span>
         </span>
-        <span
-          style={{
-            background: "rgba(124,58,237,0.15)",
-            border: "1px solid rgba(124,58,237,0.3)",
-            borderRadius: 6,
-            padding: "2px 10px",
-            fontSize: 10,
-            fontWeight: 700,
-            color: "#A78BFA",
-          }}
-        >
-          LIVE DEMO
-        </span>
       </div>
 
       <div style={{ marginBottom: 20 }}>
