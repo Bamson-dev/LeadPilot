@@ -51,7 +51,8 @@ export default function DemoPage() {
     setSearchDone(false);
     setIsSearching(true);
 
-    const url = `${apiUrl}/demo/search?businessType=${encodeURIComponent(bType)}&city=${encodeURIComponent(bCity)}&count=1000`;
+    const baseCount = 900 + Math.floor(Math.random() * 300);
+    const url = `${apiUrl}/demo/search?businessType=${encodeURIComponent(bType)}&city=${encodeURIComponent(bCity)}&count=${baseCount}`;
 
     const eventSource = new EventSource(url);
     eventSourceRef.current = eventSource;
