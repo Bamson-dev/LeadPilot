@@ -89,14 +89,14 @@ export default function DemoPage() {
   }
 
   function exportCSV() {
-    const headers = ["Business Name", "Phone", "Email", "Address", "Rating", "Website", "Category"];
+    const headers = ["Business Name", "Phone", "Email", "Website", "Address", "Rating", "Category"];
     const rows = contacts.map((c) => [
       c.name,
       c.phone,
       c.email,
+      c.website,
       c.address,
       c.rating,
-      c.website,
       c.category,
     ]);
 
@@ -361,7 +361,7 @@ export default function DemoPage() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead style={{ position: "sticky", top: 0, zIndex: 10 }}>
               <tr style={{ background: "#111118", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-                {["#", "Business Name", "Phone", "Email", "Address", "Rating"].map((h) => (
+                {["#", "Business Name", "Phone", "Email", "Website", "Address", "Rating"].map((h) => (
                   <th
                     key={h}
                     style={{
@@ -406,6 +406,21 @@ export default function DemoPage() {
                     {contact.phone}
                   </td>
                   <td style={{ padding: "8px 14px", color: "#A78BFA" }}>{contact.email}</td>
+                  <td style={{ padding: "8px 14px" }}>
+                    <a
+                      href={`https://${contact.website}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        color: "#7C3AED",
+                        textDecoration: "none",
+                        fontSize: 12,
+                        fontWeight: 500,
+                      }}
+                    >
+                      {contact.website}
+                    </a>
+                  </td>
                   <td style={{ padding: "8px 14px", color: "#8888A8", maxWidth: 220 }}>
                     {contact.address}
                   </td>
