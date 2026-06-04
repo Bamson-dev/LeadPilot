@@ -10,6 +10,7 @@ import affiliateRouter from "./api/affiliate-router";
 import checkoutRouter from "./api/checkout-router";
 import healthRouter from "./api/health-router";
 import publicRouter from "./api/public-router";
+import demoRouter from "./api/demo-router";
 import { rateLimit } from "./middleware/rate-limit";
 import { getBrowserPool } from "./scraper/browser/browser-pool";
 import { logger } from "./utils/logger";
@@ -81,6 +82,12 @@ function registerRoutes(): void {
   app.use("/affiliate", affiliateRouter);
   app.use("/checkout", checkoutRouter);
   app.use("/public", publicRouter);
+
+  if (process.env.DEMO_MODE === "true") {
+    app.use("/demo", demoRouter);
+    logger.info("DEMO MODE ACTIVE — /demo/search endpoint enabled");
+  }
+
   app.post("/freetrial", rateLimit, handleFreeTrialSearch);
   app.use("/search", rateLimit, searchRouter);
 
