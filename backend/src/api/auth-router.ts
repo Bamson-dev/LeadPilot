@@ -6,6 +6,7 @@ import {
   registerDevice,
 } from "../database/license-repository";
 import { ensureRefCodeForEmail } from "../services/license-service";
+import { getLicenseUsage } from "../services/topup-service";
 import { supabase } from "../database/client";
 import { logger } from "../utils/logger";
 
@@ -120,6 +121,37 @@ authRouter.get("/status", async (req: Request, res: Response) => {
       error: err instanceof Error ? err.message : "unknown",
     });
     res.status(500).json({ valid: false, reason: "Status check failed" });
+  }
+});
+
+authRouter.get("/usage", async (req: Request, res: Response) => {
+  try {
+    const licenseKey = (req.headers["x-license-key"] as string)?.trim().toUpperCase();
+    const email = (req.headers["x-license-email"] as string)?.toLowerCase().trim();
+
+    if (!licenseKey || !email) {
+      res.status(401).json({ error: "License required" });
+      return;
+    }
+
+    const license = await getLicenseByKeyAndEmail(licenseKey, email);
+    if (!license) {
+      res.status(401).json({ error: "Invalid license" });
+      return;
+    }
+
+    const usage = await getLicenseUsage(license.id);
+    if (!usage) {
+      res.status(404).json({ error: "Usage not found" });
+      return;
+    }
+
+    res.json(usage);
+  } catch (err) {
+    logger.error("Auth usage check failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Usage check failed" });
   }
 });
 

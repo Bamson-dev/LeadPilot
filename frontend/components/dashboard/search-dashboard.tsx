@@ -15,10 +15,13 @@ import { ResultsTable } from "@/features/results/results-table";
 import { useSearch } from "@/hooks/useSearch";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { exportToCSV } from "@/features/export/csv-export";
+import SearchLimitModal from "@/components/SearchLimitModal";
 import {
   getSearchSuggestions,
   getRecentActivity,
   getTotalDiscovered,
+  getLicenseUsage,
+  type LicenseUsage,
 } from "@/services/api";
 import { businessLeadToLead } from "@/types/lead";
 import type { Lead } from "@/types/lead";
@@ -55,6 +58,27 @@ export function SearchDashboard() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [totalDiscovered, setTotalDiscovered] = useState(0);
+  const [showLimitModal, setShowLimitModal] = useState(false);
+  const [limitModalCredits, setLimitModalCredits] = useState(0);
+  const [userStats, setUserStats] = useState<LicenseUsage | null>(null);
+  const [userEmail, setUserEmail] = useState("");
+
+  const loadUserData = useCallback(async () => {
+    const usage = await getLicenseUsage();
+    if (usage) setUserStats(usage);
+  }, []);
+
+  useEffect(() => {
+    const email = localStorage.getItem("leadthur_email") || "";
+    setUserEmail(email);
+    void loadUserData();
+
+    const onTopUpSuccess = () => {
+      void loadUserData();
+    };
+    window.addEventListener("leadthur:topup-success", onTopUpSuccess);
+    return () => window.removeEventListener("leadthur:topup-success", onTopUpSuccess);
+  }, [loadUserData]);
 
   const onSearchCompleteRef = useRef<
     | ((
@@ -87,6 +111,10 @@ export function SearchDashboard() {
     loadSavedLeads,
   } = useSearch({
     onSearchComplete: (...args) => onSearchCompleteRef.current?.(...args),
+    onSearchLimitReached: (creditsRemaining) => {
+      setLimitModalCredits(creditsRemaining);
+      setShowLimitModal(true);
+    },
   });
 
   const fetchSuggestions = useCallback(
@@ -114,6 +142,7 @@ export function SearchDashboard() {
     setAllLeads((prev) => dedupeLeads(prev, newLeads));
     setSessionSearchCount((prev) => prev + 1);
     void fetchSuggestions(query, loc, totalFound);
+    void loadUserData();
   };
 
   useEffect(() => {
@@ -291,10 +320,38 @@ export function SearchDashboard() {
           </div>
         )}
 
-        {searchesRemaining != null && (
-          <p className="mt-3 text-xs text-[#6B6B80]">
-            {searchesRemaining} searches remaining this month
-          </p>
+        {(userStats || searchesRemaining != null) && (
+          <div
+            style={{
+              display: "flex",
+              gap: 16,
+              alignItems: "center",
+              fontSize: 12,
+              color: "#8888A8",
+              marginTop: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <span>
+              Free searches:{" "}
+              <strong style={{ color: "#F2F1FF" }}>
+                {userStats?.freeSearchesRemaining ??
+                  Math.max(0, searchesRemaining ?? 0)}{" "}
+                remaining
+              </strong>
+            </span>
+            {(userStats?.search_credits ?? 0) > 0 && (
+              <span>
+                Credits:{" "}
+                <strong style={{ color: "#A78BFA" }}>
+                  {userStats?.search_credits} (
+                  {userStats?.creditSearchesRemaining ??
+                    Math.floor((userStats?.search_credits ?? 0) / 3)}{" "}
+                  searches)
+                </strong>
+              </span>
+            )}
+          </div>
         )}
 
         <div
@@ -757,6 +814,13 @@ export function SearchDashboard() {
             </button>
           </div>
         </>
+      )}
+      {showLimitModal && userEmail && (
+        <SearchLimitModal
+          email={userEmail}
+          creditsRemaining={limitModalCredits}
+          onClose={() => setShowLimitModal(false)}
+        />
       )}
     </div>
   );

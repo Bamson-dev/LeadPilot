@@ -13,6 +13,8 @@ export interface LicenseKey {
   searches_used: number;
   exports_used: number;
   search_count?: number;
+  search_credits?: number;
+  total_credits_purchased?: number;
   monthly_search_limit?: number;
   export_count?: number;
   last_reset_at?: string | null;
@@ -187,82 +189,145 @@ export async function getLicenseByKeyAndEmail(
   return data ? normalizeLicenseRow(data as Record<string, unknown>) : null;
 }
 
-export async function checkAndIncrementSearchCount(licenseId: string): Promise<{
-  allowed: boolean;
-  remaining: number;
+export async function consumeSearch(licenseId: string): Promise<{
+  success: boolean;
   reason?: string;
+  searchesRemaining: number;
+  creditsRemaining: number;
+  usedCredits: boolean;
 }> {
-  const { data, error } = await supabase
+  const { data: license, error } = await supabase
     .from("license_keys")
     .select(
-      "search_count, monthly_search_limit, is_suspended, suspension_reason, last_reset_at"
+      "searches_used, search_count, monthly_search_limit, search_credits, last_reset_at, activated, is_suspended, suspension_reason"
     )
     .eq("id", licenseId)
     .single();
 
-  if (error || !data) {
-    return { allowed: false, remaining: 0, reason: "License not found" };
-  }
-
-  if (data.is_suspended) {
+  if (error || !license) {
     return {
-      allowed: false,
-      remaining: 0,
-      reason:
-        (data.suspension_reason as string | null) ||
-        "Account suspended. Contact support.",
+      success: false,
+      reason: "License not found",
+      searchesRemaining: 0,
+      creditsRemaining: 0,
+      usedCredits: false,
     };
   }
 
-  const lastReset = new Date(data.last_reset_at as string);
+  if (!license.activated) {
+    return {
+      success: false,
+      reason: "License not activated",
+      searchesRemaining: 0,
+      creditsRemaining: 0,
+      usedCredits: false,
+    };
+  }
+
+  if (license.is_suspended) {
+    return {
+      success: false,
+      reason:
+        (license.suspension_reason as string | null) ||
+        "Account suspended. Contact support.",
+      searchesRemaining: 0,
+      creditsRemaining: 0,
+      usedCredits: false,
+    };
+  }
+
   const now = new Date();
-  const daysSinceReset =
-    (now.getTime() - lastReset.getTime()) / (1000 * 60 * 60 * 24);
+  const lastResetRaw = license.last_reset_at as string | null;
+  const lastReset = lastResetRaw ? new Date(lastResetRaw) : now;
+  const monthsSinceReset =
+    (now.getFullYear() - lastReset.getFullYear()) * 12 +
+    (now.getMonth() - lastReset.getMonth());
 
-  let currentCount = (data.search_count as number) ?? 0;
-  const monthlyLimit = (data.monthly_search_limit as number) ?? 100;
+  let searchesUsed =
+    (license.search_count as number | undefined) ??
+    (license.searches_used as number | undefined) ??
+    0;
 
-  if (daysSinceReset >= 30) {
+  if (monthsSinceReset >= 1) {
     await supabase
       .from("license_keys")
       .update({
+        searches_used: 0,
         search_count: 0,
         last_reset_at: now.toISOString(),
         limit_email_sent: false,
       })
       .eq("id", licenseId);
-    currentCount = 0;
+
+    searchesUsed = 0;
   }
 
-  const remaining = monthlyLimit - currentCount;
+  const monthlyLimit = (license.monthly_search_limit as number | undefined) ?? 100;
+  const creditsRemaining = (license.search_credits as number | undefined) ?? 0;
+  const freeRemaining = monthlyLimit - searchesUsed;
 
-  if (remaining <= 0) {
-    const resetDate = new Date(lastReset);
-    resetDate.setDate(resetDate.getDate() + 30);
-    const resetDateStr = resetDate.toLocaleDateString("en-GB", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
+  if (freeRemaining > 0) {
+    const nextCount = searchesUsed + 1;
+    await supabase
+      .from("license_keys")
+      .update({ searches_used: nextCount, search_count: nextCount })
+      .eq("id", licenseId);
+
     return {
-      allowed: false,
-      remaining: 0,
-      reason: `Monthly search limit reached. Your ${monthlyLimit} searches reset on ${resetDateStr}.`,
+      success: true,
+      searchesRemaining: freeRemaining - 1,
+      creditsRemaining,
+      usedCredits: false,
     };
   }
 
-  const { error: rpcError } = await supabase.rpc("increment_search_count", {
-    license_id: licenseId,
-  });
-
-  if (rpcError) {
+  if (creditsRemaining >= 3) {
     await supabase
       .from("license_keys")
-      .update({ search_count: currentCount + 1 })
+      .update({ search_credits: creditsRemaining - 3 })
       .eq("id", licenseId);
+
+    return {
+      success: true,
+      searchesRemaining: 0,
+      creditsRemaining: creditsRemaining - 3,
+      usedCredits: true,
+    };
   }
 
-  return { allowed: true, remaining: remaining - 1 };
+  return {
+    success: false,
+    reason: "Search limit reached",
+    searchesRemaining: 0,
+    creditsRemaining,
+    usedCredits: false,
+  };
+}
+
+export async function checkAndIncrementSearchCount(licenseId: string): Promise<{
+  allowed: boolean;
+  remaining: number;
+  reason?: string;
+  creditsRemaining?: number;
+  usedCredits?: boolean;
+}> {
+  const result = await consumeSearch(licenseId);
+
+  if (!result.success) {
+    return {
+      allowed: false,
+      remaining: 0,
+      reason: result.reason,
+      creditsRemaining: result.creditsRemaining,
+    };
+  }
+
+  return {
+    allowed: true,
+    remaining: result.searchesRemaining,
+    creditsRemaining: result.creditsRemaining,
+    usedCredits: result.usedCredits,
+  };
 }
 
 export async function getLicenseEmailBySearchId(

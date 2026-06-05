@@ -5,6 +5,7 @@ declare global {
       licenseKey?: string;
       licenseEmail?: string;
       searchesRemaining?: number;
+      creditsRemaining?: number;
     }
   }
 }

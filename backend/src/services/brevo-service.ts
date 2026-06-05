@@ -715,3 +715,66 @@ export async function sendLimitReachedEmail(
   });
 }
 
+export async function sendTopUpConfirmationEmail({
+  email,
+  credits,
+  searches,
+  amountNgn,
+}: {
+  email: string;
+  credits: number;
+  searches: number;
+  amountNgn: number;
+}): Promise<void> {
+  const dashboardUrl = `${getFrontendUrl()}/dashboard`;
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"></head>
+    <body style="margin:0;padding:0;background:#f4f4f4;font-family:Inter,Arial,sans-serif;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:40px 20px;">
+        <tr><td align="center">
+          <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:white;border-radius:12px;overflow:hidden;">
+            <tr><td style="background:#7C3AED;padding:24px 32px;">
+              <div style="font-size:20px;font-weight:800;color:white;">LeadThur</div>
+              <div style="font-size:10px;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:0.12em;">Business Discovery</div>
+            </td></tr>
+            <tr><td style="padding:36px 32px;">
+              <h2 style="margin:0 0 16px;font-size:22px;font-weight:800;color:#111;">Top Up Confirmed</h2>
+              <p style="margin:0 0 16px;font-size:15px;color:#333;line-height:1.7;">Your search credits have been added to your account.</p>
+              <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:20px;margin-bottom:24px;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:10px;">
+                  <span style="font-size:13px;color:#6b7280;">Credits Added</span>
+                  <strong style="font-size:13px;color:#111;">${credits} credits</strong>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:10px;">
+                  <span style="font-size:13px;color:#6b7280;">Extra Searches</span>
+                  <strong style="font-size:13px;color:#111;">${searches} searches</strong>
+                </div>
+                <div style="display:flex;justify-content:space-between;">
+                  <span style="font-size:13px;color:#6b7280;">Amount Paid</span>
+                  <strong style="font-size:13px;color:#111;">₦${amountNgn.toLocaleString()}</strong>
+                </div>
+              </div>
+              <p style="margin:0 0 16px;font-size:14px;color:#555;line-height:1.7;">Your credits carry over every month until fully used. Go back to your dashboard and keep searching.</p>
+              <a href="${dashboardUrl}" style="display:inline-block;background:#7C3AED;color:white;font-weight:700;font-size:14px;padding:14px 28px;border-radius:10px;text-decoration:none;">Back to Dashboard</a>
+            </td></tr>
+            <tr><td style="padding:20px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;">
+              <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;line-height:1.6;">
+                Questions? WhatsApp <strong style="color:#374151;">09067285890</strong>
+              </p>
+            </td></tr>
+          </table>
+        </td></tr>
+      </table>
+    </body>
+    </html>
+  `;
+
+  await sendEmail({
+    to: email,
+    subject: "Your search credits have been added",
+    html,
+  });
+}
+
