@@ -313,22 +313,22 @@ export async function updateDeviceLimit(email: string, maxDevices: number) {
   return res.json() as Promise<{ success: boolean; message?: string }>;
 }
 
-export async function sendMessage(email: string, subject: string, message: string) {
+export async function sendMessage(email: string, subject: string, htmlBody: string) {
   const res = await fetch(`${getApiUrl()}/admin/send-message`, {
     method: "POST",
     headers: getAdminHeaders(),
-    body: JSON.stringify({ email, subject, message }),
+    body: JSON.stringify({ email, subject, htmlBody }),
   });
   await handleAdminResponse(res);
   if (!res.ok) throw new Error("Failed to send message");
   return res.json() as Promise<{ success: boolean; message?: string }>;
 }
 
-export async function sendBroadcast(subject: string, message: string) {
-  const res = await fetch(`${getApiUrl()}/admin/broadcast`, {
+export async function sendBroadcast(subject: string, htmlBody: string) {
+  const res = await fetch(`${getApiUrl()}/admin/broadcast-message`, {
     method: "POST",
     headers: getAdminHeaders(),
-    body: JSON.stringify({ subject, message }),
+    body: JSON.stringify({ subject, htmlBody }),
   });
   await handleAdminResponse(res);
   if (!res.ok) throw new Error("Failed to send broadcast");

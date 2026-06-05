@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import multer from "multer";
 import bcrypt from "bcryptjs";
 import { config } from "../config/env";
 import { requireAdminAuth } from "../middleware/admin-auth";
@@ -13,12 +14,18 @@ import {
 import { supabase } from "../database/client";
 import {
   sendActivationEmail,
+  sendDirectEmailHtml,
   sendDirectMessageEmail,
   sendPayoutPaidEmail,
 } from "../services/brevo-service";
 import { logger } from "../utils/logger";
 
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024 },
+});
 
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
@@ -341,66 +348,104 @@ adminRouter.post("/update-device-limit", requireAdminAuth, async (req: Request, 
   }
 });
 
+function buildRichDirectEmailHtml(htmlBody: string): string {
+  return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+      </head>
+      <body style="margin:0;padding:0;background:#f4f4f4;font-family:Inter,Arial,sans-serif;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:40px 20px;">
+          <tr><td align="center">
+            <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+              <tr><td style="background:#7C3AED;padding:24px 32px;">
+                <table cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td style="width:44px;height:44px;background:rgba(255,255,255,0.15);border-radius:9px;text-align:center;vertical-align:middle;">
+                      <span style="font-size:13px;font-weight:800;color:white;line-height:44px;">LT</span>
+                    </td>
+                    <td style="padding-left:12px;">
+                      <div style="font-size:20px;font-weight:800;color:white;line-height:1;">LeadThur</div>
+                      <div style="font-size:10px;color:rgba(255,255,255,0.7);letter-spacing:0.12em;text-transform:uppercase;margin-top:2px;">Business Discovery</div>
+                    </td>
+                  </tr>
+                </table>
+              </td></tr>
+              <tr><td style="padding:36px 32px;">
+                ${htmlBody}
+              </td></tr>
+              <tr><td style="padding:20px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;">
+                <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;line-height:1.6;">
+                  This message was sent from the LeadThur team.<br/>
+                  Questions? WhatsApp <strong style="color:#374151;">09067285890</strong>
+                  or email <strong style="color:#374151;">support@leadthur.com</strong>
+                </p>
+              </td></tr>
+            </table>
+          </td></tr>
+        </table>
+      </body>
+      </html>
+    `;
+}
+
+function hasHtmlContent(htmlBody: string): boolean {
+  return htmlBody.replace(/<[^>]*>/g, "").trim().length > 0;
+}
+
+function personalizeMessageContent(text: string, email: string): string {
+  const localPart = email.split("@")[0] ?? "there";
+  const nameSegment = localPart.split(/[._-]/)[0] ?? localPart;
+  const firstName =
+    nameSegment.length > 0
+      ? nameSegment.charAt(0).toUpperCase() + nameSegment.slice(1).toLowerCase()
+      : "there";
+  const dashboardUrl = `${config.FRONTEND_URL.replace(/\/$/, "")}/dashboard`;
+
+  return text
+    .replace(/\{\{firstName\}\}/g, firstName)
+    .replace(/\{\{email\}\}/g, email)
+    .replace(/\{\{dashboardUrl\}\}/g, dashboardUrl);
+}
+
 adminRouter.post("/send-message", requireAdminAuth, async (req: Request, res: Response) => {
   try {
-    const { mode, recipient, subject, body } = req.body as {
-      mode?: string;
-      recipient?: string;
+    const { email, subject, htmlBody } = req.body as {
+      email?: string;
       subject?: string;
-      body?: string;
+      htmlBody?: string;
     };
 
-    if (!subject || !body) {
-      res.status(400).json({ error: "Subject and body are required" });
+    if (!subject?.trim() || !htmlBody?.trim()) {
+      res.status(400).json({ error: "Subject and htmlBody are required" });
       return;
     }
 
-    if (mode === "broadcast") {
-      const { data: users, error } = await supabase
-        .from("license_keys")
-        .select("email")
-        .eq("activated", true);
-
-      if (error) throw error;
-
-      if (!users || users.length === 0) {
-        res.status(404).json({ error: "No active users found" });
-        return;
-      }
-
-      let sent = 0;
-      let failed = 0;
-
-      for (const user of users) {
-        try {
-          await sendDirectMessageEmail(user.email as string, subject, body);
-          sent++;
-          await new Promise((resolve) => setTimeout(resolve, 150));
-        } catch {
-          failed++;
-        }
-      }
-
-      res.json({
-        success: true,
-        message: `Sent to ${sent} users.${failed > 0 ? ` ${failed} failed.` : ""}`,
-      });
+    if (!hasHtmlContent(htmlBody)) {
+      res.status(400).json({ error: "Subject and htmlBody are required" });
       return;
     }
 
-    if (!recipient) {
-      res.status(400).json({ error: "Recipient email is required" });
+    if (!email?.trim()) {
+      res.status(400).json({ error: "Recipient email is required for single send" });
       return;
     }
 
-    await sendDirectMessageEmail(recipient, subject, body);
+    const recipient = email.trim();
+    const personalizedBody = personalizeMessageContent(htmlBody, recipient);
+    const personalizedSubject = personalizeMessageContent(subject.trim(), recipient);
+    const fullHtml = buildRichDirectEmailHtml(personalizedBody);
 
-    logger.info("Direct message sent by admin", { recipient, subject });
-
-    res.json({
-      success: true,
-      message: `Message sent successfully to ${recipient}`,
+    await sendDirectEmailHtml({
+      to: recipient,
+      subject: personalizedSubject,
+      html: fullHtml,
     });
+
+    logger.info("Direct message sent", { email: recipient, subject: personalizedSubject });
+    res.json({ success: true });
   } catch (err) {
     logger.error("Failed to send direct message", {
       error: err instanceof Error ? err.message : "unknown",
@@ -408,6 +453,118 @@ adminRouter.post("/send-message", requireAdminAuth, async (req: Request, res: Re
     res.status(500).json({ error: "Failed to send message" });
   }
 });
+
+adminRouter.post("/broadcast-message", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { subject, htmlBody } = req.body as {
+      subject?: string;
+      htmlBody?: string;
+    };
+
+    if (!subject?.trim() || !htmlBody?.trim()) {
+      res.status(400).json({ error: "Subject and htmlBody are required" });
+      return;
+    }
+
+    if (!hasHtmlContent(htmlBody)) {
+      res.status(400).json({ error: "Subject and htmlBody are required" });
+      return;
+    }
+
+    const { data: users, error } = await supabase
+      .from("license_keys")
+      .select("email")
+      .eq("activated", true);
+
+    if (error) throw error;
+
+    if (!users || users.length === 0) {
+      res.status(404).json({ error: "No active users found" });
+      return;
+    }
+
+    const uniqueEmails = [
+      ...new Set(
+        users
+          .map((user) => (user.email as string)?.toLowerCase().trim())
+          .filter(Boolean)
+      ),
+    ];
+
+    let sent = 0;
+    let failed = 0;
+
+    for (const userEmail of uniqueEmails) {
+      try {
+        const personalizedBody = personalizeMessageContent(htmlBody, userEmail);
+        const personalizedSubject = personalizeMessageContent(subject.trim(), userEmail);
+        const fullHtml = buildRichDirectEmailHtml(personalizedBody);
+
+        await sendDirectEmailHtml({
+          to: userEmail,
+          subject: personalizedSubject,
+          html: fullHtml,
+        });
+        sent++;
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      } catch {
+        failed++;
+      }
+    }
+
+    logger.info("Broadcast message sent", { sent, failed, total: uniqueEmails.length });
+
+    res.json({
+      success: true,
+      message: `Sent to ${sent} users.${failed > 0 ? ` ${failed} failed.` : ""}`,
+    });
+  } catch (err) {
+    logger.error("Failed to send broadcast message", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to send broadcast" });
+  }
+});
+
+adminRouter.post(
+  "/upload-image",
+  requireAdminAuth,
+  upload.single("image"),
+  async (req: Request, res: Response) => {
+    try {
+      if (!req.file) {
+        res.status(400).json({ error: "No image file provided" });
+        return;
+      }
+
+      const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+      if (!allowedTypes.includes(req.file.mimetype)) {
+        res.status(400).json({ error: "Only JPEG, PNG, GIF and WebP images are allowed" });
+        return;
+      }
+
+      const base64 = req.file.buffer.toString("base64");
+      const dataUrl = `data:${req.file.mimetype};base64,${base64}`;
+
+      logger.info("Image uploaded for email", {
+        size: req.file.size,
+        type: req.file.mimetype,
+      });
+
+      res.json({
+        success: true,
+        url: dataUrl,
+        filename: req.file.originalname,
+        size: req.file.size,
+      });
+    } catch (err) {
+      logger.error("Image upload failed", {
+        error: err instanceof Error ? err.message : "unknown",
+      });
+      res.status(500).json({ error: "Image upload failed" });
+    }
+  }
+);
 
 adminRouter.post("/broadcast", requireAdminAuth, async (req: Request, res: Response) => {
   try {
