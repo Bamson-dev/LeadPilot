@@ -10,6 +10,8 @@ import { Color } from "@tiptap/extension-color";
 import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
 import { useEffect, useCallback, useState } from "react";
+import { getAdminToken } from "@/services/admin-api";
+import { getApiUrl } from "@/utils/env";
 
 interface RichEmailEditorProps {
   value: string;
@@ -48,6 +50,8 @@ export default function RichEmailEditor({
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [imageUrl, setImageUrl] = useState("");
   const [showImageInput, setShowImageInput] = useState(false);
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageTab, setImageTab] = useState<"upload" | "url">("upload");
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -420,48 +424,172 @@ export default function RichEmailEditor({
           style={{
             background: "#0F0F14",
             borderBottom: "1px solid rgba(255,255,255,0.07)",
-            padding: "10px 12px",
-            display: "flex",
-            gap: 8,
-            alignItems: "center",
+            padding: "12px 14px",
           }}
         >
-          <span style={{ fontSize: 11, color: "#8888A8", whiteSpace: "nowrap" }}>Image URL</span>
-          <input
-            value={imageUrl}
-            onChange={(e) => setImageUrl(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addImage()}
-            placeholder="https://example.com/image.png"
-            autoFocus
-            style={{
-              flex: 1,
-              background: "#0A0A10",
-              border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: 6,
-              padding: "6px 10px",
-              fontSize: 12,
-              color: "#F2F1FF",
-              fontFamily: "Inter, sans-serif",
-              outline: "none",
-            }}
-          />
-          <button
-            type="button"
-            onClick={addImage}
-            style={{
-              background: "#7C3AED",
-              color: "white",
-              border: "none",
-              borderRadius: 6,
-              padding: "6px 14px",
-              fontSize: 11,
-              fontWeight: 700,
-              cursor: "pointer",
-              fontFamily: "Inter, sans-serif",
-            }}
-          >
-            Insert
-          </button>
+          <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+            <button
+              type="button"
+              onClick={() => setImageTab("upload")}
+              style={{
+                background: imageTab === "upload" ? "#7C3AED" : "rgba(255,255,255,0.04)",
+                border: `1px solid ${imageTab === "upload" ? "#7C3AED" : "rgba(255,255,255,0.08)"}`,
+                borderRadius: 6,
+                padding: "4px 12px",
+                fontSize: 11,
+                fontWeight: 700,
+                color: imageTab === "upload" ? "white" : "#8888A8",
+                cursor: "pointer",
+                fontFamily: "Inter, sans-serif",
+              }}
+            >
+              Upload from Computer
+            </button>
+            <button
+              type="button"
+              onClick={() => setImageTab("url")}
+              style={{
+                background: imageTab === "url" ? "#7C3AED" : "rgba(255,255,255,0.04)",
+                border: `1px solid ${imageTab === "url" ? "#7C3AED" : "rgba(255,255,255,0.08)"}`,
+                borderRadius: 6,
+                padding: "4px 12px",
+                fontSize: 11,
+                fontWeight: 700,
+                color: imageTab === "url" ? "white" : "#8888A8",
+                cursor: "pointer",
+                fontFamily: "Inter, sans-serif",
+              }}
+            >
+              From URL
+            </button>
+          </div>
+
+          {imageTab === "upload" && (
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <label
+                style={{
+                  flex: 1,
+                  background: "#0A0A10",
+                  border: "2px dashed rgba(124,58,237,0.3)",
+                  borderRadius: 8,
+                  padding: "14px",
+                  textAlign: "center",
+                  cursor: imageUploading ? "not-allowed" : "pointer",
+                  fontSize: 12,
+                  color: "#8888A8",
+                  fontFamily: "Inter, sans-serif",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  flexWrap: "wrap",
+                }}
+              >
+                {imageUploading ? (
+                  <span>Uploading...</span>
+                ) : (
+                  <>
+                    <span style={{ fontSize: 18 }}>🖼</span>
+                    <span>Click to choose image from your computer</span>
+                    <span style={{ fontSize: 10, color: "#555570" }}>
+                      JPEG, PNG, GIF, WebP — max 2MB
+                    </span>
+                  </>
+                )}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  style={{ display: "none" }}
+                  disabled={imageUploading}
+                  onChange={(e) => {
+                    void (async () => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+
+                      const apiUrl = getApiUrl();
+                      const token = getAdminToken();
+                      if (!apiUrl || !token) {
+                        alert("Admin session expired. Please log in again.");
+                        return;
+                      }
+
+                      setImageUploading(true);
+                      try {
+                        const formData = new FormData();
+                        formData.append("image", file);
+
+                        const res = await fetch(`${apiUrl}/admin/upload-image`, {
+                          method: "POST",
+                          headers: {
+                            Authorization: `Bearer ${token}`,
+                          },
+                          body: formData,
+                        });
+
+                        const data = (await res.json()) as {
+                          success?: boolean;
+                          url?: string;
+                          error?: string;
+                        };
+
+                        if (data.success && data.url) {
+                          editor?.chain().focus().setImage({ src: data.url }).run();
+                          setShowImageInput(false);
+                        } else {
+                          alert(data.error || "Upload failed. Try again.");
+                        }
+                      } catch {
+                        alert("Upload failed. Check your connection.");
+                      } finally {
+                        setImageUploading(false);
+                        e.target.value = "";
+                      }
+                    })();
+                  }}
+                />
+              </label>
+            </div>
+          )}
+
+          {imageTab === "url" && (
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input
+                value={imageUrl}
+                onChange={(e) => setImageUrl(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addImage()}
+                placeholder="https://example.com/image.png"
+                autoFocus
+                style={{
+                  flex: 1,
+                  background: "#0A0A10",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: 6,
+                  padding: "8px 12px",
+                  fontSize: 12,
+                  color: "#F2F1FF",
+                  fontFamily: "Inter, sans-serif",
+                  outline: "none",
+                }}
+              />
+              <button
+                type="button"
+                onClick={addImage}
+                style={{
+                  background: "#7C3AED",
+                  color: "white",
+                  border: "none",
+                  borderRadius: 6,
+                  padding: "8px 16px",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  fontFamily: "Inter, sans-serif",
+                }}
+              >
+                Insert
+              </button>
+            </div>
+          )}
         </div>
       )}
 

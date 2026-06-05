@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import multer from "multer";
 import bcrypt from "bcryptjs";
 import { config } from "../config/env";
 import { requireAdminAuth } from "../middleware/admin-auth";
@@ -20,6 +21,11 @@ import {
 import { logger } from "../utils/logger";
 
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024 },
+});
 
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
@@ -385,6 +391,10 @@ function buildRichDirectEmailHtml(htmlBody: string): string {
     `;
 }
 
+function hasHtmlContent(htmlBody: string): boolean {
+  return htmlBody.replace(/<[^>]*>/g, "").trim().length > 0;
+}
+
 function personalizeMessageContent(text: string, email: string): string {
   const localPart = email.split("@")[0] ?? "there";
   const nameSegment = localPart.split(/[._-]/)[0] ?? localPart;
@@ -408,22 +418,33 @@ adminRouter.post("/send-message", requireAdminAuth, async (req: Request, res: Re
       htmlBody?: string;
     };
 
-    if (!email || !subject || !htmlBody) {
-      res.status(400).json({ error: "Email, subject and htmlBody are required" });
+    if (!subject?.trim() || !htmlBody?.trim()) {
+      res.status(400).json({ error: "Subject and htmlBody are required" });
       return;
     }
 
-    const personalizedBody = personalizeMessageContent(htmlBody, email);
-    const personalizedSubject = personalizeMessageContent(subject, email);
+    if (!hasHtmlContent(htmlBody)) {
+      res.status(400).json({ error: "Subject and htmlBody are required" });
+      return;
+    }
+
+    if (!email?.trim()) {
+      res.status(400).json({ error: "Recipient email is required for single send" });
+      return;
+    }
+
+    const recipient = email.trim();
+    const personalizedBody = personalizeMessageContent(htmlBody, recipient);
+    const personalizedSubject = personalizeMessageContent(subject.trim(), recipient);
     const fullHtml = buildRichDirectEmailHtml(personalizedBody);
 
     await sendDirectEmailHtml({
-      to: email,
+      to: recipient,
       subject: personalizedSubject,
       html: fullHtml,
     });
 
-    logger.info("Direct message sent", { email, subject: personalizedSubject });
+    logger.info("Direct message sent", { email: recipient, subject: personalizedSubject });
     res.json({ success: true });
   } catch (err) {
     logger.error("Failed to send direct message", {
@@ -440,7 +461,12 @@ adminRouter.post("/broadcast-message", requireAdminAuth, async (req: Request, re
       htmlBody?: string;
     };
 
-    if (!subject || !htmlBody) {
+    if (!subject?.trim() || !htmlBody?.trim()) {
+      res.status(400).json({ error: "Subject and htmlBody are required" });
+      return;
+    }
+
+    if (!hasHtmlContent(htmlBody)) {
       res.status(400).json({ error: "Subject and htmlBody are required" });
       return;
     }
@@ -471,7 +497,7 @@ adminRouter.post("/broadcast-message", requireAdminAuth, async (req: Request, re
     for (const userEmail of uniqueEmails) {
       try {
         const personalizedBody = personalizeMessageContent(htmlBody, userEmail);
-        const personalizedSubject = personalizeMessageContent(subject, userEmail);
+        const personalizedSubject = personalizeMessageContent(subject.trim(), userEmail);
         const fullHtml = buildRichDirectEmailHtml(personalizedBody);
 
         await sendDirectEmailHtml({
@@ -499,6 +525,46 @@ adminRouter.post("/broadcast-message", requireAdminAuth, async (req: Request, re
     res.status(500).json({ error: "Failed to send broadcast" });
   }
 });
+
+adminRouter.post(
+  "/upload-image",
+  requireAdminAuth,
+  upload.single("image"),
+  async (req: Request, res: Response) => {
+    try {
+      if (!req.file) {
+        res.status(400).json({ error: "No image file provided" });
+        return;
+      }
+
+      const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+      if (!allowedTypes.includes(req.file.mimetype)) {
+        res.status(400).json({ error: "Only JPEG, PNG, GIF and WebP images are allowed" });
+        return;
+      }
+
+      const base64 = req.file.buffer.toString("base64");
+      const dataUrl = `data:${req.file.mimetype};base64,${base64}`;
+
+      logger.info("Image uploaded for email", {
+        size: req.file.size,
+        type: req.file.mimetype,
+      });
+
+      res.json({
+        success: true,
+        url: dataUrl,
+        filename: req.file.originalname,
+        size: req.file.size,
+      });
+    } catch (err) {
+      logger.error("Image upload failed", {
+        error: err instanceof Error ? err.message : "unknown",
+      });
+      res.status(500).json({ error: "Image upload failed" });
+    }
+  }
+);
 
 adminRouter.post("/broadcast", requireAdminAuth, async (req: Request, res: Response) => {
   try {
