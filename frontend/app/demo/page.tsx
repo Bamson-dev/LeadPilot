@@ -24,7 +24,7 @@ const PRESET_SEARCHES = [
   { label: "Restaurants — Toronto", businessType: "Restaurants", city: "Toronto, Canada" },
 ];
 
-export default function DemoPage() {
+function DemoPageContent() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchDone, setSearchDone] = useState(false);
@@ -481,4 +481,27 @@ export default function DemoPage() {
       `}</style>
     </div>
   );
+}
+
+export default function DemoPage() {
+  if (process.env.NEXT_PUBLIC_DEMO_MODE !== "true") {
+    return (
+      <div
+        style={{
+          background: "#050508",
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "Inter, sans-serif",
+          color: "#555570",
+          fontSize: 14,
+        }}
+      >
+        Page not found.
+      </div>
+    );
+  }
+
+  return <DemoPageContent />;
 }
