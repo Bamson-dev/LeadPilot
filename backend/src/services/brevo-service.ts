@@ -476,6 +476,18 @@ export async function sendDomainChangeEmail(email: string): Promise<void> {
   });
 }
 
+export async function sendDirectEmailHtml({
+  to,
+  subject,
+  html,
+}: {
+  to: string;
+  subject: string;
+  html: string;
+}): Promise<void> {
+  await sendEmail({ to, subject, html });
+}
+
 export async function sendDirectMessageEmail(
   to: string,
   subject: string,

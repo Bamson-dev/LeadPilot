@@ -13,6 +13,7 @@ import {
 import { supabase } from "../database/client";
 import {
   sendActivationEmail,
+  sendDirectEmailHtml,
   sendDirectMessageEmail,
   sendPayoutPaidEmail,
 } from "../services/brevo-service";
@@ -341,71 +342,161 @@ adminRouter.post("/update-device-limit", requireAdminAuth, async (req: Request, 
   }
 });
 
+function buildRichDirectEmailHtml(htmlBody: string): string {
+  return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+      </head>
+      <body style="margin:0;padding:0;background:#f4f4f4;font-family:Inter,Arial,sans-serif;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:40px 20px;">
+          <tr><td align="center">
+            <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+              <tr><td style="background:#7C3AED;padding:24px 32px;">
+                <table cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td style="width:44px;height:44px;background:rgba(255,255,255,0.15);border-radius:9px;text-align:center;vertical-align:middle;">
+                      <span style="font-size:13px;font-weight:800;color:white;line-height:44px;">LT</span>
+                    </td>
+                    <td style="padding-left:12px;">
+                      <div style="font-size:20px;font-weight:800;color:white;line-height:1;">LeadThur</div>
+                      <div style="font-size:10px;color:rgba(255,255,255,0.7);letter-spacing:0.12em;text-transform:uppercase;margin-top:2px;">Business Discovery</div>
+                    </td>
+                  </tr>
+                </table>
+              </td></tr>
+              <tr><td style="padding:36px 32px;">
+                ${htmlBody}
+              </td></tr>
+              <tr><td style="padding:20px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;">
+                <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;line-height:1.6;">
+                  This message was sent from the LeadThur team.<br/>
+                  Questions? WhatsApp <strong style="color:#374151;">09067285890</strong>
+                  or email <strong style="color:#374151;">support@leadthur.com</strong>
+                </p>
+              </td></tr>
+            </table>
+          </td></tr>
+        </table>
+      </body>
+      </html>
+    `;
+}
+
+function personalizeMessageContent(text: string, email: string): string {
+  const localPart = email.split("@")[0] ?? "there";
+  const nameSegment = localPart.split(/[._-]/)[0] ?? localPart;
+  const firstName =
+    nameSegment.length > 0
+      ? nameSegment.charAt(0).toUpperCase() + nameSegment.slice(1).toLowerCase()
+      : "there";
+  const dashboardUrl = `${config.FRONTEND_URL.replace(/\/$/, "")}/dashboard`;
+
+  return text
+    .replace(/\{\{firstName\}\}/g, firstName)
+    .replace(/\{\{email\}\}/g, email)
+    .replace(/\{\{dashboardUrl\}\}/g, dashboardUrl);
+}
+
 adminRouter.post("/send-message", requireAdminAuth, async (req: Request, res: Response) => {
   try {
-    const { mode, recipient, subject, body } = req.body as {
-      mode?: string;
-      recipient?: string;
+    const { email, subject, htmlBody } = req.body as {
+      email?: string;
       subject?: string;
-      body?: string;
+      htmlBody?: string;
     };
 
-    if (!subject || !body) {
-      res.status(400).json({ error: "Subject and body are required" });
+    if (!email || !subject || !htmlBody) {
+      res.status(400).json({ error: "Email, subject and htmlBody are required" });
       return;
     }
 
-    if (mode === "broadcast") {
-      const { data: users, error } = await supabase
-        .from("license_keys")
-        .select("email")
-        .eq("activated", true);
+    const personalizedBody = personalizeMessageContent(htmlBody, email);
+    const personalizedSubject = personalizeMessageContent(subject, email);
+    const fullHtml = buildRichDirectEmailHtml(personalizedBody);
 
-      if (error) throw error;
-
-      if (!users || users.length === 0) {
-        res.status(404).json({ error: "No active users found" });
-        return;
-      }
-
-      let sent = 0;
-      let failed = 0;
-
-      for (const user of users) {
-        try {
-          await sendDirectMessageEmail(user.email as string, subject, body);
-          sent++;
-          await new Promise((resolve) => setTimeout(resolve, 150));
-        } catch {
-          failed++;
-        }
-      }
-
-      res.json({
-        success: true,
-        message: `Sent to ${sent} users.${failed > 0 ? ` ${failed} failed.` : ""}`,
-      });
-      return;
-    }
-
-    if (!recipient) {
-      res.status(400).json({ error: "Recipient email is required" });
-      return;
-    }
-
-    await sendDirectMessageEmail(recipient, subject, body);
-
-    logger.info("Direct message sent by admin", { recipient, subject });
-
-    res.json({
-      success: true,
-      message: `Message sent successfully to ${recipient}`,
+    await sendDirectEmailHtml({
+      to: email,
+      subject: personalizedSubject,
+      html: fullHtml,
     });
+
+    logger.info("Direct message sent", { email, subject: personalizedSubject });
+    res.json({ success: true });
   } catch (err) {
     logger.error("Failed to send direct message", {
       error: err instanceof Error ? err.message : "unknown",
     });
     res.status(500).json({ error: "Failed to send message" });
+  }
+});
+
+adminRouter.post("/broadcast-message", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { subject, htmlBody } = req.body as {
+      subject?: string;
+      htmlBody?: string;
+    };
+
+    if (!subject || !htmlBody) {
+      res.status(400).json({ error: "Subject and htmlBody are required" });
+      return;
+    }
+
+    const { data: users, error } = await supabase
+      .from("license_keys")
+      .select("email")
+      .eq("activated", true);
+
+    if (error) throw error;
+
+    if (!users || users.length === 0) {
+      res.status(404).json({ error: "No active users found" });
+      return;
+    }
+
+    const uniqueEmails = [
+      ...new Set(
+        users
+          .map((user) => (user.email as string)?.toLowerCase().trim())
+          .filter(Boolean)
+      ),
+    ];
+
+    let sent = 0;
+    let failed = 0;
+
+    for (const userEmail of uniqueEmails) {
+      try {
+        const personalizedBody = personalizeMessageContent(htmlBody, userEmail);
+        const personalizedSubject = personalizeMessageContent(subject, userEmail);
+        const fullHtml = buildRichDirectEmailHtml(personalizedBody);
+
+        await sendDirectEmailHtml({
+          to: userEmail,
+          subject: personalizedSubject,
+          html: fullHtml,
+        });
+        sent++;
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      } catch {
+        failed++;
+      }
+    }
+
+    logger.info("Broadcast message sent", { sent, failed, total: uniqueEmails.length });
+
+    res.json({
+      success: true,
+      message: `Sent to ${sent} users.${failed > 0 ? ` ${failed} failed.` : ""}`,
+    });
+  } catch (err) {
+    logger.error("Failed to send broadcast message", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to send broadcast" });
   }
 });
 
@@ -753,62 +844,77 @@ adminRouter.get("/activations", requireAdminAuth, async (req: Request, res: Resp
     let startDate: string;
     let endDate: string;
 
-    const now = new Date();
+    if (from && to) {
+      startDate = new Date(from).toISOString();
+      endDate = new Date(to).toISOString();
+    } else {
+      const presetValue = (preset as string) || "today";
 
-    if (preset) {
-      switch (preset) {
-        case "today":
-          startDate = new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
+      switch (presetValue) {
+        case "today": {
+          const start = new Date();
+          start.setUTCHours(0, 0, 0, 0);
+          startDate = start.toISOString();
           endDate = new Date().toISOString();
           break;
+        }
         case "yesterday": {
-          const yesterday = new Date();
-          yesterday.setDate(yesterday.getDate() - 1);
-          startDate = new Date(yesterday.setHours(0, 0, 0, 0)).toISOString();
-          endDate = new Date(yesterday.setHours(23, 59, 59, 999)).toISOString();
+          const start = new Date();
+          start.setUTCDate(start.getUTCDate() - 1);
+          start.setUTCHours(0, 0, 0, 0);
+          const end = new Date();
+          end.setUTCDate(end.getUTCDate() - 1);
+          end.setUTCHours(23, 59, 59, 999);
+          startDate = start.toISOString();
+          endDate = end.toISOString();
           break;
         }
         case "7days": {
-          const sevenAgo = new Date();
-          sevenAgo.setDate(sevenAgo.getDate() - 7);
-          startDate = new Date(sevenAgo.setHours(0, 0, 0, 0)).toISOString();
+          const start = new Date();
+          start.setUTCDate(start.getUTCDate() - 7);
+          start.setUTCHours(0, 0, 0, 0);
+          startDate = start.toISOString();
           endDate = new Date().toISOString();
           break;
         }
         case "14days": {
-          const fourteenAgo = new Date();
-          fourteenAgo.setDate(fourteenAgo.getDate() - 14);
-          startDate = new Date(fourteenAgo.setHours(0, 0, 0, 0)).toISOString();
+          const start = new Date();
+          start.setUTCDate(start.getUTCDate() - 14);
+          start.setUTCHours(0, 0, 0, 0);
+          startDate = start.toISOString();
           endDate = new Date().toISOString();
           break;
         }
         case "30days": {
-          const thirtyAgo = new Date();
-          thirtyAgo.setDate(thirtyAgo.getDate() - 30);
-          startDate = new Date(thirtyAgo.setHours(0, 0, 0, 0)).toISOString();
+          const start = new Date();
+          start.setUTCDate(start.getUTCDate() - 30);
+          start.setUTCHours(0, 0, 0, 0);
+          startDate = start.toISOString();
           endDate = new Date().toISOString();
           break;
         }
-        case "thismonth":
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        case "thismonth": {
+          const start = new Date();
+          start.setUTCDate(1);
+          start.setUTCHours(0, 0, 0, 0);
+          startDate = start.toISOString();
           endDate = new Date().toISOString();
           break;
+        }
         default: {
-          const defaultAgo = new Date();
-          defaultAgo.setDate(defaultAgo.getDate() - 7);
-          startDate = new Date(defaultAgo.setHours(0, 0, 0, 0)).toISOString();
+          const start = new Date();
+          start.setUTCHours(0, 0, 0, 0);
+          startDate = start.toISOString();
           endDate = new Date().toISOString();
         }
       }
-    } else if (from && to) {
-      startDate = new Date(from).toISOString();
-      endDate = new Date(to).toISOString();
-    } else {
-      const fallbackAgo = new Date();
-      fallbackAgo.setDate(fallbackAgo.getDate() - 7);
-      startDate = new Date(fallbackAgo.setHours(0, 0, 0, 0)).toISOString();
-      endDate = new Date().toISOString();
     }
+
+    logger.info("Activations query range", {
+      preset,
+      startDate,
+      endDate,
+    });
 
     const { data, error } = await supabase
       .from("license_keys")
@@ -818,7 +924,18 @@ adminRouter.get("/activations", requireAdminAuth, async (req: Request, res: Resp
       .lte("created_at", endDate)
       .order("created_at", { ascending: true });
 
-    if (error) throw error;
+    if (error) {
+      logger.error("Activations query error", {
+        error: error.message,
+      });
+      throw error;
+    }
+
+    logger.info("Activations query result", {
+      totalFound: data?.length || 0,
+      startDate,
+      endDate,
+    });
 
     const total = data?.length || 0;
 
@@ -831,7 +948,7 @@ adminRouter.get("/activations", requireAdminAuth, async (req: Request, res: Resp
     const daily = Object.entries(dailyMap).map(([date, count]) => ({
       date,
       count,
-      label: new Date(date).toLocaleDateString("en-GB", {
+      label: new Date(`${date}T12:00:00Z`).toLocaleDateString("en-GB", {
         weekday: "short",
         day: "numeric",
         month: "short",
@@ -840,8 +957,6 @@ adminRouter.get("/activations", requireAdminAuth, async (req: Request, res: Resp
 
     const peak = daily.reduce((max, day) => (day.count > max ? day.count : max), 0);
     const average = daily.length > 0 ? Math.round(total / daily.length) : 0;
-
-    logger.info("Activations fetched", { total, from: startDate, to: endDate });
 
     res.json({
       total,
