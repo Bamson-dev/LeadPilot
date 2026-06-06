@@ -16,10 +16,13 @@ import { useSearch } from "@/hooks/useSearch";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { exportToCSV } from "@/features/export/csv-export";
 import SearchLimitModal from "@/components/SearchLimitModal";
+import SearchUpgradeBanner from "@/components/SearchUpgradeBanner";
 import {
+  getLicenseUsage,
   getSearchSuggestions,
   getRecentActivity,
   getTotalDiscovered,
+  type LicenseUsage,
 } from "@/services/api";
 import { businessLeadToLead } from "@/types/lead";
 import type { Lead } from "@/types/lead";
@@ -58,10 +61,23 @@ export function SearchDashboard() {
   const [totalDiscovered, setTotalDiscovered] = useState(0);
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [userEmail, setUserEmail] = useState("");
+  const [userStats, setUserStats] = useState<LicenseUsage | null>(null);
+
+  const loadUserStats = useCallback(async () => {
+    const usage = await getLicenseUsage();
+    if (usage) setUserStats(usage);
+  }, []);
 
   useEffect(() => {
     setUserEmail(localStorage.getItem("leadthur_email") || "");
-  }, []);
+    void loadUserStats();
+
+    const onTopUpSuccess = () => {
+      void loadUserStats();
+    };
+    window.addEventListener("leadthur:topup-success", onTopUpSuccess);
+    return () => window.removeEventListener("leadthur:topup-success", onTopUpSuccess);
+  }, [loadUserStats]);
 
   const onSearchCompleteRef = useRef<
     | ((
@@ -95,6 +111,7 @@ export function SearchDashboard() {
     onSearchComplete: (...args) => onSearchCompleteRef.current?.(...args),
     onSearchLimitReached: () => {
       setShowLimitModal(true);
+      void loadUserStats();
     },
   });
 
@@ -268,8 +285,23 @@ export function SearchDashboard() {
   const exportCount = leadsToExport.length;
   const exportPulse = status === "completed" && exportCount > 0;
 
+  const searchesRemaining =
+    userStats?.freeSearchesRemaining ??
+    Math.max(
+      0,
+      (userStats?.monthly_search_limit ?? 100) - (userStats?.searches_used ?? 0)
+    );
+  const creditsRemaining = userStats?.search_credits ?? 0;
+
   return (
     <div className="space-y-6 sm:space-y-8">
+      {userStats && (
+        <SearchUpgradeBanner
+          searchesRemaining={searchesRemaining}
+          creditsRemaining={creditsRemaining}
+          onUpgradeClick={() => setShowLimitModal(true)}
+        />
+      )}
       <div className="glass rounded-2xl p-4 sm:p-6">
         <h1 className="text-xl sm:text-2xl font-bold text-[#F4F4FF]">
           Discover Prospects
