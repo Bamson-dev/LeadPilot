@@ -129,15 +129,43 @@ export default function SearchLimitModal({ email, onClose }: SearchLimitModalPro
               fontSize: 22,
               fontWeight: 900,
               color: "#F2F1FF",
-              margin: "0 0 8px",
+              margin: "0 0 10px",
               letterSpacing: -0.5,
+              lineHeight: 1.25,
             }}
           >
-            Search limit reached
+            You have used all your free searches
           </h2>
-          <p style={{ fontSize: 14, color: "#8888A8", margin: 0, lineHeight: 1.6 }}>
-            Choose a top-up below to continue searching.
+          <p
+            style={{
+              fontSize: 14,
+              color: "#8888A8",
+              margin: "0 0 14px",
+              lineHeight: 1.65,
+              maxWidth: 400,
+              marginLeft: "auto",
+              marginRight: "auto",
+            }}
+          >
+            Your 100 free monthly searches are used up. Top up below to keep searching and
+            discovering new leads instantly.
           </p>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              background: "rgba(124,58,237,0.1)",
+              border: "1px solid rgba(124,58,237,0.25)",
+              borderRadius: 100,
+              padding: "5px 12px",
+              fontSize: 11,
+              color: "#C4B5FD",
+              fontWeight: 600,
+            }}
+          >
+            Credits are added to your account immediately after payment
+          </div>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
@@ -153,6 +181,7 @@ export default function SearchLimitModal({ email, onClose }: SearchLimitModalPro
                 alignItems: "center",
                 justifyContent: "space-between",
                 position: "relative",
+                gap: 12,
               }}
             >
               {tier.popular && (
@@ -171,13 +200,19 @@ export default function SearchLimitModal({ email, onClose }: SearchLimitModalPro
                     letterSpacing: "0.08em",
                   }}
                 >
-                  Most Popular
+                  Best Value
                 </div>
               )}
 
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "#F2F1FF" }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#F2F1FF", marginBottom: 4 }}>
                   {tier.label}
+                </div>
+                <div style={{ fontSize: 13, color: "#A78BFA", fontWeight: 600, marginBottom: 2 }}>
+                  +{tier.searches.toLocaleString()} extra searches
+                </div>
+                <div style={{ fontSize: 12, color: "#8888A8" }}>
+                  {tier.credits.toLocaleString()} credits included
                 </div>
               </div>
 
@@ -187,6 +222,7 @@ export default function SearchLimitModal({ email, onClose }: SearchLimitModalPro
                   flexDirection: "column",
                   alignItems: "flex-end",
                   gap: 8,
+                  flexShrink: 0,
                 }}
               >
                 <div style={{ fontSize: 18, fontWeight: 900, color: "#F2F1FF" }}>
@@ -233,6 +269,18 @@ export default function SearchLimitModal({ email, onClose }: SearchLimitModalPro
             {error}
           </div>
         )}
+
+        <p
+          style={{
+            fontSize: 11,
+            color: "#555570",
+            textAlign: "center",
+            margin: 0,
+            lineHeight: 1.6,
+          }}
+        >
+          Secure checkout via Paystack. Pick a plan, pay once, and continue searching right away.
+        </p>
       </div>
     </div>
   );
