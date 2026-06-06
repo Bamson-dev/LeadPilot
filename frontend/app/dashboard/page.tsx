@@ -19,6 +19,7 @@ function clearLicenseAndRedirectActivate() {
 export default function DashboardPage() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
+  const [topUpSuccess, setTopUpSuccess] = useState(false);
 
   function completeOnboarding() {
     setShowOnboarding(false);
@@ -33,6 +34,15 @@ export default function DashboardPage() {
       completeOnboarding();
     }
   }
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("topup") === "success") {
+      setTopUpSuccess(true);
+      window.history.replaceState({}, "", "/dashboard");
+      window.dispatchEvent(new CustomEvent("leadthur:topup-success"));
+    }
+  }, []);
 
   useEffect(() => {
     const email = localStorage.getItem("leadthur_email");
@@ -104,6 +114,44 @@ export default function DashboardPage() {
 
   return (
     <>
+      {topUpSuccess && (
+        <div
+          style={{
+            background: "rgba(16,185,129,0.08)",
+            border: "1px solid rgba(16,185,129,0.2)",
+            borderRadius: 10,
+            padding: "12px 20px",
+            fontSize: 13,
+            color: "#10B981",
+            fontWeight: 600,
+            margin: "16px 16px 0",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            maxWidth: 1200,
+            marginLeft: "auto",
+            marginRight: "auto",
+          }}
+        >
+          <span>✓</span>
+          Top up successful. Your credits have been added. Keep searching.
+          <button
+            type="button"
+            onClick={() => setTopUpSuccess(false)}
+            style={{
+              marginLeft: "auto",
+              background: "none",
+              border: "none",
+              color: "#10B981",
+              cursor: "pointer",
+              fontSize: 16,
+              fontFamily: "Inter, sans-serif",
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <DashboardGate />
       <OnboardingModal
         open={showOnboarding}

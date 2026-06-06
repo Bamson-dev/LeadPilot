@@ -55,7 +55,12 @@ export async function checkSearchLimit(
       return;
     }
 
-    let limitCheck: { allowed: boolean; remaining: number; reason?: string } = {
+    let limitCheck: {
+      allowed: boolean;
+      remaining: number;
+      reason?: string;
+      creditsRemaining?: number;
+    } = {
       allowed: true,
       remaining: 99,
     };
@@ -68,45 +73,54 @@ export async function checkSearchLimit(
     }
 
     if (!limitCheck.allowed) {
-      const { data: row } = await supabase
-        .from("license_keys")
-        .select("limit_email_sent, last_reset_at, email")
-        .eq("id", license.id)
-        .single();
+      const isSearchLimitReached = limitCheck.reason === "Search limit reached";
 
-      if (row && !row.limit_email_sent) {
-        const resetDate = new Date(row.last_reset_at as string);
-        resetDate.setDate(resetDate.getDate() + 30);
-        const resetDateStr = resetDate.toLocaleDateString("en-GB", {
-          day: "numeric",
-          month: "long",
-          year: "numeric",
-        });
-
-        await supabase
+      if (isSearchLimitReached) {
+        const { data: row } = await supabase
           .from("license_keys")
-          .update({ limit_email_sent: true })
-          .eq("id", license.id);
+          .select("limit_email_sent, last_reset_at, email")
+          .eq("id", license.id)
+          .single();
 
-        void sendLimitReachedEmail(row.email as string, resetDateStr).catch(
-          (err) =>
-            logger.error("Failed to send limit email", {
-              error: err instanceof Error ? err.message : "unknown",
-            })
-        );
+        if (row && !row.limit_email_sent) {
+          const resetDate = new Date(row.last_reset_at as string);
+          resetDate.setMonth(resetDate.getMonth() + 1);
+          const resetDateStr = resetDate.toLocaleDateString("en-GB", {
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+          });
+
+          await supabase
+            .from("license_keys")
+            .update({ limit_email_sent: true })
+            .eq("id", license.id);
+
+          void sendLimitReachedEmail(row.email as string, resetDateStr).catch(
+            (err) =>
+              logger.error("Failed to send limit email", {
+                error: err instanceof Error ? err.message : "unknown",
+              })
+          );
+        }
+
+        res.status(402).json({
+          error: "search_limit_reached",
+          message: "You have used all your searches for this month.",
+          searchesRemaining: 0,
+          creditsRemaining: limitCheck.creditsRemaining ?? 0,
+        });
+        return;
       }
 
-      res.status(429).json({
-        error: limitCheck.reason,
-        code: "LIMIT_REACHED",
-        remaining: 0,
-      });
+      res.status(403).json({ error: limitCheck.reason ?? "Search not allowed" });
       return;
     }
 
     req.licenseId = license.id;
     req.licenseKey = licenseKey;
     req.searchesRemaining = limitCheck.remaining;
+    req.creditsRemaining = limitCheck.creditsRemaining;
     next();
   } catch (err) {
     logger.error("Search limit middleware error — allowing search", {

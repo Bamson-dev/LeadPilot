@@ -15,6 +15,7 @@ import { ResultsTable } from "@/features/results/results-table";
 import { useSearch } from "@/hooks/useSearch";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { exportToCSV } from "@/features/export/csv-export";
+import SearchLimitModal from "@/components/SearchLimitModal";
 import {
   getSearchSuggestions,
   getRecentActivity,
@@ -55,6 +56,12 @@ export function SearchDashboard() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [totalDiscovered, setTotalDiscovered] = useState(0);
+  const [showLimitModal, setShowLimitModal] = useState(false);
+  const [userEmail, setUserEmail] = useState("");
+
+  useEffect(() => {
+    setUserEmail(localStorage.getItem("leadthur_email") || "");
+  }, []);
 
   const onSearchCompleteRef = useRef<
     | ((
@@ -77,7 +84,6 @@ export function SearchDashboard() {
     searchMeta,
     status,
     totalFound,
-    searchesRemaining,
     runSearch,
     runSearchWithSuggestion,
     suggestions,
@@ -87,6 +93,9 @@ export function SearchDashboard() {
     loadSavedLeads,
   } = useSearch({
     onSearchComplete: (...args) => onSearchCompleteRef.current?.(...args),
+    onSearchLimitReached: () => {
+      setShowLimitModal(true);
+    },
   });
 
   const fetchSuggestions = useCallback(
@@ -289,12 +298,6 @@ export function SearchDashboard() {
               businesses discovered and counting
             </span>
           </div>
-        )}
-
-        {searchesRemaining != null && (
-          <p className="mt-3 text-xs text-[#6B6B80]">
-            {searchesRemaining} searches remaining this month
-          </p>
         )}
 
         <div
@@ -538,9 +541,8 @@ export function SearchDashboard() {
             <p className="text-sm text-red-300">{error}</p>
             {showLimitMessage && (
               <p className="mt-2 text-sm text-[#A1A1B5]">
-                You have used all your searches for this month. Your searches reset on
-                the date shown in the message above. Contact support to increase your
-                limit.
+                You have reached your search limit. Top up from the options below to continue
+                searching.
               </p>
             )}
             <Button variant="outline" size="sm" className="mt-3" onClick={handleClearResults}>
@@ -757,6 +759,9 @@ export function SearchDashboard() {
             </button>
           </div>
         </>
+      )}
+      {showLimitModal && userEmail && (
+        <SearchLimitModal email={userEmail} onClose={() => setShowLimitModal(false)} />
       )}
     </div>
   );

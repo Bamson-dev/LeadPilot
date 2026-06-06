@@ -9,6 +9,7 @@ import express from "express";
 import crypto from "crypto";
 import { config } from "../config/env";
 import { getLicenseByPaymentReference } from "../database/license-repository";
+import { fulfillTopUpPayment } from "../services/topup-service";
 import {
   fulfillFlutterwaveCharge,
   fulfillPaystackCharge,
@@ -59,6 +60,29 @@ webhookRouter.post(
       }
 
       const reference = event.data?.reference;
+      const metadata = (event.data?.metadata ?? {}) as Record<string, unknown>;
+
+      if (metadata.type === "topup") {
+        res.status(200).send("ok");
+        setImmediate(() => {
+          void (async () => {
+            try {
+              await fulfillTopUpPayment({
+                reference: reference ?? "",
+                amount: event.data?.amount ?? 0,
+                channel: (event.data as { channel?: string })?.channel,
+                metadata,
+              });
+            } catch (err) {
+              logger.error("Top up webhook processing failed", {
+                error: err instanceof Error ? err.message : "unknown",
+              });
+            }
+          })();
+        });
+        return;
+      }
+
       if (reference) {
         const existing = await getLicenseByPaymentReference(reference);
         if (existing) {
@@ -76,6 +100,17 @@ webhookRouter.post(
             const email = event.data?.customer?.email;
             const ref = event.data?.reference;
             const amount = event.data?.amount ?? 0;
+            const meta = (event.data?.metadata ?? {}) as Record<string, unknown>;
+
+            if (meta.type === "topup") {
+              await fulfillTopUpPayment({
+                reference: ref ?? "",
+                amount,
+                channel: (event.data as { channel?: string })?.channel,
+                metadata: meta,
+              });
+              return;
+            }
 
             if (!email || !ref) {
               logger.error("Missing email or reference in Paystack webhook", { event });

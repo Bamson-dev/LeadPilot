@@ -8,6 +8,7 @@ import { authRouter } from "./api/auth-router";
 import { webhookRouter } from "./api/webhook-router";
 import affiliateRouter from "./api/affiliate-router";
 import checkoutRouter from "./api/checkout-router";
+import { topupRouter } from "./api/topup-router";
 import healthRouter from "./api/health-router";
 import publicRouter from "./api/public-router";
 import demoRouter from "./api/demo-router";
@@ -81,6 +82,7 @@ function registerRoutes(): void {
   app.use("/admin", adminRouter);
   app.use("/affiliate", affiliateRouter);
   app.use("/checkout", checkoutRouter);
+  app.use("/topup", topupRouter);
   app.use("/public", publicRouter);
 
   if (process.env.DEMO_MODE === "true") {

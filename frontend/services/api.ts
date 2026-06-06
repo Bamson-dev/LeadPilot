@@ -20,6 +20,37 @@ export function getLicenseHeaders(): HeadersInit {
   };
 }
 
+export class SearchLimitError extends Error {
+  creditsRemaining: number;
+
+  constructor(message: string, creditsRemaining: number) {
+    super(message);
+    this.name = "SearchLimitError";
+    this.creditsRemaining = creditsRemaining;
+  }
+}
+
+export interface LicenseUsage {
+  monthly_search_limit: number;
+  searches_used: number;
+  search_credits: number;
+  freeSearchesRemaining: number;
+  creditSearchesRemaining: number;
+}
+
+export async function getLicenseUsage(): Promise<LicenseUsage | null> {
+  try {
+    const res = await fetch(`${getApiUrl()}/auth/usage`, {
+      headers: getLicenseHeaders(),
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as LicenseUsage;
+  } catch {
+    return null;
+  }
+}
+
 export async function checkHealth(): Promise<HealthStatus> {
   try {
     const res = await fetch(`${getApiUrl()}/health`, {
@@ -136,6 +167,21 @@ export async function startSearch(
       return data as never;
     }
     throw new Error(data.error || "Request forbidden");
+  }
+
+  if (res.status === 402) {
+    const data = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      message?: string;
+      creditsRemaining?: number;
+    };
+    if (data.error === "search_limit_reached") {
+      throw new SearchLimitError(
+        data.message || "You have used all your searches for this month.",
+        data.creditsRemaining ?? 0
+      );
+    }
+    throw new Error(data.message || data.error || "Search limit reached");
   }
 
   if (res.status === 429) {

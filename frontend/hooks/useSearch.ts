@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { AreaSuggestion, BusinessLead } from "@leadthur/shared";
-import { getResults, getSearch, startSearch } from "@/services/api";
+import { getResults, getSearch, SearchLimitError, startSearch } from "@/services/api";
 import { getApiUrl } from "@/utils/env";
 import {
   getSearchProgressMessage,
@@ -66,6 +66,7 @@ export interface UseSearchOptions {
     location: string,
     totalFound: number
   ) => void;
+  onSearchLimitReached?: (creditsRemaining: number) => void;
 }
 
 export interface RunSearchOptions {
@@ -75,6 +76,8 @@ export interface RunSearchOptions {
 export function useSearch(options?: UseSearchOptions) {
   const onCompleteRef = useRef(options?.onSearchComplete);
   onCompleteRef.current = options?.onSearchComplete;
+  const onLimitRef = useRef(options?.onSearchLimitReached);
+  onLimitRef.current = options?.onSearchLimitReached;
   const [state, setState] = useState<SearchState>({
     status: "idle",
     leads: [],
@@ -805,6 +808,16 @@ export function useSearch(options?: UseSearchOptions) {
         }, SEARCH_TIMEOUT_MS);
       } catch (err) {
         closeStream();
+        if (err instanceof SearchLimitError) {
+          onLimitRef.current?.(err.creditsRemaining);
+          setState((prev) => ({
+            ...prev,
+            status: "error",
+            error: err.message,
+            message: progressMessage(0, "failed", 0),
+          }));
+          return;
+        }
         setState((prev) => ({
           ...prev,
           status: "error",
@@ -920,7 +933,8 @@ export function useSearch(options?: UseSearchOptions) {
       !!state.error &&
       (state.error.includes("limit") ||
         state.error.includes("Monthly") ||
-        state.error.includes("search limit")),
+        state.error.includes("search limit") ||
+        state.error.includes("all your searches")),
   };
 }
 

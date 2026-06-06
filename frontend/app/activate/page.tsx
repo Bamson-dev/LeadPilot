@@ -25,7 +25,12 @@ export default function ActivatePage() {
     }
 
     if (searchParams.get("error") === "max_devices") {
-      setError("Maximum devices reached. Contact support to register a new device.");
+      const msg = searchParams.get("message");
+      setError(
+        msg
+          ? decodeURIComponent(msg)
+          : "Maximum devices reached. Contact support on WhatsApp 09067285890 to reset your devices."
+      );
     }
   }, [router, searchParams]);
 

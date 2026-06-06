@@ -6,6 +6,7 @@ import {
   registerDevice,
 } from "../database/license-repository";
 import { ensureRefCodeForEmail } from "../services/license-service";
+import { getLicenseUsage } from "../services/topup-service";
 import { supabase } from "../database/client";
 import { logger } from "../utils/logger";
 
@@ -123,6 +124,37 @@ authRouter.get("/status", async (req: Request, res: Response) => {
   }
 });
 
+authRouter.get("/usage", async (req: Request, res: Response) => {
+  try {
+    const licenseKey = (req.headers["x-license-key"] as string)?.trim().toUpperCase();
+    const email = (req.headers["x-license-email"] as string)?.toLowerCase().trim();
+
+    if (!licenseKey || !email) {
+      res.status(401).json({ error: "License required" });
+      return;
+    }
+
+    const license = await getLicenseByKeyAndEmail(licenseKey, email);
+    if (!license) {
+      res.status(401).json({ error: "Invalid license" });
+      return;
+    }
+
+    const usage = await getLicenseUsage(license.id);
+    if (!usage) {
+      res.status(404).json({ error: "Usage not found" });
+      return;
+    }
+
+    res.json(usage);
+  } catch (err) {
+    logger.error("Auth usage check failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Usage check failed" });
+  }
+});
+
 authRouter.post("/register-device", async (req: Request, res: Response) => {
   try {
     const { email, key, deviceSignature } = req.body as {
@@ -144,9 +176,10 @@ authRouter.post("/register-device", async (req: Request, res: Response) => {
 
     const result = await registerDevice(license.id, deviceSignature);
     if (!result.allowed) {
+      const isMaxDevices = result.reason?.includes("Maximum devices") ?? false;
       res.status(403).json({
-        error: result.reason,
-        code: "MAX_DEVICES",
+        error: result.reason ?? "Device registration denied",
+        code: isMaxDevices ? "MAX_DEVICES" : "DEVICE_DENIED",
       });
       return;
     }
