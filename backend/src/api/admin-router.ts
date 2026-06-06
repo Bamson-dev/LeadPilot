@@ -9,7 +9,6 @@ import {
   listRecentLicenses,
   lookupLicensesByEmail,
   truncateLicenseKey,
-  resetDevices,
 } from "../database/license-repository";
 import { supabase } from "../database/client";
 import {
@@ -285,27 +284,115 @@ adminRouter.post("/reset-searches", requireAdminAuth, async (req: Request, res: 
 adminRouter.post("/reset-devices", requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const { email } = req.body as { email?: string };
+
     if (!email) {
-      res.status(400).json({ error: "Email required" });
+      res.status(400).json({ error: "Email is required" });
       return;
     }
 
-    const license = await fetchLatestLicenseByEmail(email);
-    if (!license) {
-      res.status(404).json({ error: "License not found" });
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const { data: license, error: findError } = await supabase
+      .from("license_keys")
+      .select("id, email, device_one, device_two, device_three, device_four, max_devices")
+      .eq("email", normalizedEmail)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (findError || !license) {
+      res.status(404).json({ error: `No license found for ${email}` });
       return;
     }
 
-    await resetDevices(license.id as string);
+    const { error: updateError } = await supabase
+      .from("license_keys")
+      .update({
+        device_one: null,
+        device_two: null,
+        device_three: null,
+        device_four: null,
+      })
+      .eq("id", license.id);
+
+    if (updateError) {
+      logger.error("Failed to reset devices", {
+        error: updateError.message,
+        email: normalizedEmail,
+      });
+      res.status(500).json({ error: "Failed to reset devices in database" });
+      return;
+    }
+
+    logger.info("Devices reset successfully by admin", { email: normalizedEmail });
+
     res.json({
       success: true,
-      message: `Devices reset for ${email}. User can now log in from new devices.`,
+      message: `All devices reset for ${email}. They can now log in from up to ${(license.max_devices as number) || 4} new devices.`,
     });
   } catch (err) {
-    logger.error("Reset devices failed", {
+    logger.error("Reset devices endpoint error", {
       error: err instanceof Error ? err.message : "unknown",
     });
-    res.status(500).json({ error: "Failed to reset devices" });
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+adminRouter.post("/upgrade-devices", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { email, maxDevices } = req.body as { email?: string; maxDevices?: number | string };
+
+    if (!email || maxDevices === undefined || maxDevices === null || maxDevices === "") {
+      res.status(400).json({ error: "Email and maxDevices are required" });
+      return;
+    }
+
+    const newLimit = parseInt(String(maxDevices), 10);
+    if (Number.isNaN(newLimit) || newLimit < 1 || newLimit > 20) {
+      res.status(400).json({ error: "maxDevices must be between 1 and 20" });
+      return;
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const { data: license, error: findError } = await supabase
+      .from("license_keys")
+      .select("id, email, max_devices")
+      .eq("email", normalizedEmail)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (findError || !license) {
+      res.status(404).json({ error: `No license found for ${email}` });
+      return;
+    }
+
+    const { error: updateError } = await supabase
+      .from("license_keys")
+      .update({ max_devices: newLimit })
+      .eq("id", license.id);
+
+    if (updateError) {
+      logger.error("Failed to upgrade devices", {
+        error: updateError.message,
+        email: normalizedEmail,
+      });
+      res.status(500).json({ error: "Failed to update device limit" });
+      return;
+    }
+
+    logger.info("Device limit upgraded by admin", { email: normalizedEmail, newLimit });
+
+    res.json({
+      success: true,
+      message: `Device limit updated to ${newLimit} for ${email}.`,
+    });
+  } catch (err) {
+    logger.error("Upgrade devices endpoint error", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

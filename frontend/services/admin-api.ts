@@ -84,6 +84,10 @@ export interface AdminLicense {
   is_suspended?: boolean;
   suspension_reason?: string | null;
   max_devices?: number;
+  device_one?: string | null;
+  device_two?: string | null;
+  device_three?: string | null;
+  device_four?: string | null;
   last_reset_at?: string | null;
   created_at: string;
 }
@@ -291,15 +295,57 @@ export async function getTrialActivity(): Promise<TrialActivity> {
   return res.json();
 }
 
-export async function resetDevices(email: string) {
-  const res = await fetch(`${getApiUrl()}/admin/reset-devices`, {
-    method: "POST",
-    headers: getAdminHeaders(),
-    body: JSON.stringify({ email }),
-  });
-  await handleAdminResponse(res);
-  if (!res.ok) throw new Error("Failed to reset devices");
-  return res.json() as Promise<{ success: boolean; message?: string }>;
+export async function resetDevices(
+  email: string
+): Promise<{ success: boolean; message?: string; error?: string }> {
+  try {
+    const res = await fetch(`${getApiUrl()}/admin/reset-devices`, {
+      method: "POST",
+      headers: getAdminHeaders(),
+      body: JSON.stringify({ email }),
+    });
+
+    const data = (await res.json()) as { error?: string; message?: string };
+
+    if (res.status === 401) {
+      return { success: false, error: "SESSION_EXPIRED" };
+    }
+
+    if (!res.ok) {
+      return { success: false, error: data.error || "Failed to reset devices" };
+    }
+
+    return { success: true, message: data.message };
+  } catch {
+    return { success: false, error: "Network error. Check your connection." };
+  }
+}
+
+export async function upgradeDevices(
+  email: string,
+  maxDevices: number
+): Promise<{ success: boolean; message?: string; error?: string }> {
+  try {
+    const res = await fetch(`${getApiUrl()}/admin/upgrade-devices`, {
+      method: "POST",
+      headers: getAdminHeaders(),
+      body: JSON.stringify({ email, maxDevices }),
+    });
+
+    const data = (await res.json()) as { error?: string; message?: string };
+
+    if (res.status === 401) {
+      return { success: false, error: "SESSION_EXPIRED" };
+    }
+
+    if (!res.ok) {
+      return { success: false, error: data.error || "Failed to upgrade devices" };
+    }
+
+    return { success: true, message: data.message };
+  } catch {
+    return { success: false, error: "Network error. Check your connection." };
+  }
 }
 
 export async function updateDeviceLimit(email: string, maxDevices: number) {

@@ -362,13 +362,14 @@ export async function registerDevice(
 ): Promise<{ allowed: boolean; reason?: string }> {
   const { data } = await supabase
     .from("license_keys")
-    .select("device_one, device_two, device_three, device_four")
+    .select("device_one, device_two, device_three, device_four, max_devices")
     .eq("id", licenseId)
     .single();
 
   if (!data) return { allowed: false, reason: "License not found" };
 
-  // Already registered on one of the slots
+  const maxDevices = (data.max_devices as number | null) || 4;
+
   if (
     data.device_one === deviceSignature ||
     data.device_two === deviceSignature ||
@@ -378,40 +379,37 @@ export async function registerDevice(
     return { allowed: true };
   }
 
-  // Fill first available slot
-  if (!data.device_one) {
+  const slots = [
+    { key: "device_one" as const, value: data.device_one as string | null },
+    { key: "device_two" as const, value: data.device_two as string | null },
+    { key: "device_three" as const, value: data.device_three as string | null },
+    { key: "device_four" as const, value: data.device_four as string | null },
+  ];
+
+  const isFilled = (value: string | null | undefined) =>
+    value !== null && value !== undefined && String(value).trim() !== "";
+
+  const filledSlots = slots.filter((s) => isFilled(s.value)).length;
+
+  if (filledSlots >= maxDevices) {
+    return {
+      allowed: false,
+      reason:
+        "Maximum devices reached. Contact support on WhatsApp 09067285890 to reset your devices.",
+    };
+  }
+
+  const emptySlot = slots.find((s) => !isFilled(s.value));
+
+  if (emptySlot) {
     await supabase
       .from("license_keys")
-      .update({ device_one: deviceSignature })
+      .update({ [emptySlot.key]: deviceSignature })
       .eq("id", licenseId);
+
     return { allowed: true };
   }
 
-  if (!data.device_two) {
-    await supabase
-      .from("license_keys")
-      .update({ device_two: deviceSignature })
-      .eq("id", licenseId);
-    return { allowed: true };
-  }
-
-  if (!data.device_three) {
-    await supabase
-      .from("license_keys")
-      .update({ device_three: deviceSignature })
-      .eq("id", licenseId);
-    return { allowed: true };
-  }
-
-  if (!data.device_four) {
-    await supabase
-      .from("license_keys")
-      .update({ device_four: deviceSignature })
-      .eq("id", licenseId);
-    return { allowed: true };
-  }
-
-  // All 4 slots filled and device not recognized
   return {
     allowed: false,
     reason:

@@ -6,10 +6,10 @@ import {
   lookupLicense,
   resendAccess,
   resetDevices,
+  upgradeDevices,
   resetSearches,
   suspendAccount,
   unsuspendAccount,
-  updateDeviceLimit,
   updateSearchLimit,
   type AdminLicense,
 } from "@/services/admin-api";
@@ -72,9 +72,11 @@ export function AccountLookup({
   const [showSuspendForm, setShowSuspendForm] = useState(false);
   const [suspendReason, setSuspendReason] = useState("");
   const [confirmReset, setConfirmReset] = useState(false);
-  const [confirmResetDevices, setConfirmResetDevices] = useState(false);
-  const [showDeviceLimitForm, setShowDeviceLimitForm] = useState(false);
-  const [newMaxDevices, setNewMaxDevices] = useState(2);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetResult, setResetResult] = useState("");
+  const [upgradeLoading, setUpgradeLoading] = useState(false);
+  const [upgradeResult, setUpgradeResult] = useState("");
+  const [newDeviceLimit, setNewDeviceLimit] = useState("4");
 
   const clearActionMsg = useCallback(() => {
     const t = setTimeout(() => setActionMsg(null), 4000);
@@ -107,7 +109,7 @@ export function AccountLookup({
     setLicense(result.licenses[0]);
     setNotFound(false);
     setNewLimit(result.licenses[0].monthly_search_limit ?? 100);
-    setNewMaxDevices(result.licenses[0].max_devices ?? 2);
+    setNewDeviceLimit(String(result.licenses[0].max_devices ?? 4));
   };
 
   useEffect(() => {
@@ -147,8 +149,8 @@ export function AccountLookup({
     setShowLimitForm(false);
     setShowSuspendForm(false);
     setConfirmReset(false);
-    setConfirmResetDevices(false);
-    setShowDeviceLimitForm(false);
+    setResetResult("");
+    setUpgradeResult("");
 
     try {
       await refreshLookup(email);
@@ -179,7 +181,41 @@ export function AccountLookup({
 
   const searchCount = license?.search_count ?? license?.searches_used ?? 0;
   const monthlyLimit = license?.monthly_search_limit ?? 100;
-  const maxDevices = license?.max_devices ?? 2;
+  const maxDevices = license?.max_devices ?? 4;
+
+  async function handleResetDevices() {
+    if (!license?.email) return;
+    setResetLoading(true);
+    setResetResult("");
+    const result = await resetDevices(license.email);
+    if (result.error === "SESSION_EXPIRED") {
+      onSessionExpired();
+      setResetLoading(false);
+      return;
+    }
+    setResetResult(result.message || result.error || "Done");
+    setResetLoading(false);
+    if (result.success) {
+      await refreshLookup(license.email);
+    }
+  }
+
+  async function handleUpgradeDevices() {
+    if (!license?.email) return;
+    setUpgradeLoading(true);
+    setUpgradeResult("");
+    const result = await upgradeDevices(license.email, parseInt(newDeviceLimit, 10));
+    if (result.error === "SESSION_EXPIRED") {
+      onSessionExpired();
+      setUpgradeLoading(false);
+      return;
+    }
+    setUpgradeResult(result.message || result.error || "Done");
+    setUpgradeLoading(false);
+    if (result.success) {
+      await refreshLookup(license.email);
+    }
+  }
 
   return (
     <section id="account-lookup" className="glass mx-auto max-w-6xl rounded-2xl p-6">
@@ -307,35 +343,6 @@ export function AccountLookup({
               Reset Searches
             </button>
 
-            <button
-              type="button"
-              disabled={actionLoading}
-              onClick={() => {
-                setConfirmResetDevices(true);
-                setShowDeviceLimitForm(false);
-                setShowLimitForm(false);
-                setShowSuspendForm(false);
-              }}
-              className="rounded-lg border border-white/20 px-4 py-2 text-sm text-[#A1A1B5] hover:bg-white/5 disabled:opacity-50"
-            >
-              Reset Devices
-            </button>
-
-            <button
-              type="button"
-              disabled={actionLoading}
-              onClick={() => {
-                setShowDeviceLimitForm((v) => !v);
-                setShowLimitForm(false);
-                setShowSuspendForm(false);
-                setConfirmResetDevices(false);
-                setNewMaxDevices(maxDevices);
-              }}
-              className="rounded-lg border border-[#7C3AED]/50 px-4 py-2 text-sm font-medium text-[#C4B5FD] hover:bg-[#7C3AED]/10 disabled:opacity-50"
-            >
-              Update Device Limit
-            </button>
-
             {!license.is_suspended ? (
               <button
                 type="button"
@@ -422,64 +429,153 @@ export function AccountLookup({
             </div>
           )}
 
-          {confirmResetDevices && (
-            <div className="mt-4 rounded-lg border border-white/15 bg-white/[0.02] p-3 text-sm text-[#A1A1B5]">
-              <p>
-                This clears both saved devices. The user will need to log in again from
-                their devices. Are you sure?
-              </p>
-              <div className="mt-2 flex gap-2">
-                <button
-                  type="button"
-                  disabled={actionLoading}
-                  onClick={() =>
-                    runAction(
-                      () => resetDevices(license.email) as Promise<{ message?: string }>
-                    ).then(() => setConfirmResetDevices(false))
-                  }
-                  className="rounded-lg border border-white/20 px-3 py-1.5 text-[#F4F4FF]"
-                >
-                  Confirm
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmResetDevices(false)}
-                  className="rounded-lg border border-white/15 px-3 py-1.5"
-                >
-                  Cancel
-                </button>
-              </div>
+          {/* Device Management */}
+          <div
+            style={{
+              background: "#0A0A10",
+              border: "1px solid rgba(255,255,255,0.07)",
+              borderRadius: 10,
+              padding: 14,
+              marginTop: 12,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: "#8888A8",
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                marginBottom: 12,
+              }}
+            >
+              Device Management
             </div>
-          )}
 
-          {showDeviceLimitForm && (
-            <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-[#7C3AED]/30 bg-[#7C3AED]/5 p-3">
-              <label className="text-sm text-[#A1A1B5]">New device limit</label>
-              <input
-                type="number"
-                min={1}
-                max={10}
-                value={newMaxDevices}
-                onChange={(e) => setNewMaxDevices(Number(e.target.value))}
-                className="w-20 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[#F4F4FF]"
-              />
+            <div style={{ fontSize: 12, color: "#555570", marginBottom: 12 }}>
+              Current limit:{" "}
+              <strong style={{ color: "#F2F1FF" }}>{maxDevices} devices</strong>
+              {" · "}
+              Slots used:{" "}
+              <strong style={{ color: "#F2F1FF" }}>
+                {
+                  [
+                    license.device_one,
+                    license.device_two,
+                    license.device_three,
+                    license.device_four,
+                  ].filter((v) => v !== null && v !== undefined && String(v).trim() !== "")
+                    .length
+                }
+              </strong>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
               <button
                 type="button"
-                disabled={actionLoading}
-                onClick={() =>
-                  runAction(
-                    () =>
-                      updateDeviceLimit(license.email, newMaxDevices) as Promise<{
-                        message?: string;
-                      }>
-                  ).then(() => setShowDeviceLimitForm(false))
-                }
-                className="rounded-lg bg-[#7C3AED] px-4 py-1.5 text-sm text-white"
+                onClick={() => void handleResetDevices()}
+                disabled={resetLoading}
+                style={{
+                  background: resetLoading ? "#1A1A24" : "rgba(239,68,68,0.1)",
+                  border: "1px solid rgba(239,68,68,0.3)",
+                  borderRadius: 8,
+                  padding: "8px 16px",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: "#EF4444",
+                  cursor: resetLoading ? "not-allowed" : "pointer",
+                  fontFamily: "Inter, sans-serif",
+                  opacity: resetLoading ? 0.7 : 1,
+                }}
               >
-                Save
+                {resetLoading ? "Resetting..." : "Reset All Devices"}
               </button>
+              <div style={{ fontSize: 10, color: "#555570", marginTop: 5 }}>
+                Clears all registered devices. User can log in fresh from up to {maxDevices} new
+                devices.
+              </div>
+              {resetResult && (
+                <div
+                  style={{
+                    marginTop: 8,
+                    fontSize: 12,
+                    color:
+                      resetResult.toLowerCase().includes("reset") ||
+                      resetResult.toLowerCase().includes("success")
+                        ? "#10B981"
+                        : "#EF4444",
+                    fontWeight: 600,
+                  }}
+                >
+                  {resetResult}
+                </div>
+              )}
             </div>
-          )}
+
+            <div>
+              <div style={{ fontSize: 11, color: "#8888A8", marginBottom: 6 }}>
+                Change device limit
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <select
+                  value={newDeviceLimit}
+                  onChange={(e) => setNewDeviceLimit(e.target.value)}
+                  style={{
+                    background: "#0A0A10",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: 8,
+                    padding: "7px 12px",
+                    fontSize: 12,
+                    color: "#F2F1FF",
+                    fontFamily: "Inter, sans-serif",
+                    outline: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  {[1, 2, 3, 4, 5, 6, 8, 10].map((n) => (
+                    <option key={n} value={n} style={{ background: "#111118" }}>
+                      {n} {n === 4 ? "(default)" : ""} device{n !== 1 ? "s" : ""}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => void handleUpgradeDevices()}
+                  disabled={upgradeLoading}
+                  style={{
+                    background: upgradeLoading ? "#1A1A24" : "#7C3AED",
+                    border: "none",
+                    borderRadius: 8,
+                    padding: "8px 16px",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: "white",
+                    cursor: upgradeLoading ? "not-allowed" : "pointer",
+                    fontFamily: "Inter, sans-serif",
+                    opacity: upgradeLoading ? 0.7 : 1,
+                  }}
+                >
+                  {upgradeLoading ? "Updating..." : "Update Limit"}
+                </button>
+              </div>
+              {upgradeResult && (
+                <div
+                  style={{
+                    marginTop: 8,
+                    fontSize: 12,
+                    color:
+                      upgradeResult.toLowerCase().includes("updated") ||
+                      upgradeResult.toLowerCase().includes("success")
+                        ? "#10B981"
+                        : "#EF4444",
+                    fontWeight: 600,
+                  }}
+                >
+                  {upgradeResult}
+                </div>
+              )}
+            </div>
+          </div>
 
           {confirmReset && (
             <div className="mt-4 rounded-lg border border-blue-500/30 bg-blue-500/5 p-3 text-sm text-[#A1A1B5]">
