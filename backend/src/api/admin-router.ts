@@ -147,21 +147,31 @@ adminRouter.get("/lookup", requireAdminAuth, async (req: Request, res: Response)
 
 adminRouter.post("/update-limit", requireAdminAuth, async (req: Request, res: Response) => {
   try {
-    const { email, newLimit } = req.body as { email?: string; newLimit?: number };
+    const { email, newLimit: rawLimit } = req.body as {
+      email?: string;
+      newLimit?: number | string;
+    };
 
-    if (!email || newLimit === undefined) {
-      res.status(400).json({ error: "Email and newLimit required" });
+    if (!email?.trim()) {
+      res.status(400).json({ error: "Email is required" });
       return;
     }
 
-    if (newLimit < 0 || newLimit > 100_000) {
+    if (rawLimit === undefined || rawLimit === null || rawLimit === "") {
+      res.status(400).json({ error: "newLimit is required" });
+      return;
+    }
+
+    const newLimit = parseInt(String(rawLimit), 10);
+    if (Number.isNaN(newLimit) || newLimit < 0 || newLimit > 100_000) {
       res.status(400).json({ error: "Limit must be between 0 and 100000" });
       return;
     }
 
-    const license = await fetchLatestLicenseByEmail(email);
+    const normalizedEmail = email.toLowerCase().trim();
+    const license = await fetchLatestLicenseByEmail(normalizedEmail);
     if (!license) {
-      res.status(404).json({ error: "No license found for this email" });
+      res.status(404).json({ error: `No license found for ${email}` });
       return;
     }
 
@@ -170,7 +180,16 @@ adminRouter.post("/update-limit", requireAdminAuth, async (req: Request, res: Re
       .update({ monthly_search_limit: newLimit })
       .eq("id", license.id as string);
 
-    if (error) throw error;
+    if (error) {
+      logger.error("Update search limit failed", {
+        error: error.message,
+        email: normalizedEmail,
+      });
+      res.status(500).json({ error: "Failed to update limit in database" });
+      return;
+    }
+
+    logger.info("Search limit updated by admin", { email: normalizedEmail, newLimit });
 
     res.json({
       success: true,

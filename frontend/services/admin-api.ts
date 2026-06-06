@@ -84,6 +84,7 @@ export interface AdminLicense {
   is_suspended?: boolean;
   suspension_reason?: string | null;
   max_devices?: number;
+  search_credits?: number;
   device_one?: string | null;
   device_two?: string | null;
   device_three?: string | null;
@@ -103,15 +104,31 @@ export async function lookupLicense(email: string): Promise<{ licenses: AdminLic
   return res.json();
 }
 
-export async function updateSearchLimit(email: string, newLimit: number) {
-  const res = await fetch(`${getApiUrl()}/admin/update-limit`, {
-    method: "POST",
-    headers: getAdminHeaders(),
-    body: JSON.stringify({ email, newLimit }),
-  });
-  await handleAdminResponse(res);
-  if (!res.ok) throw new Error("Failed to update limit");
-  return res.json();
+export async function updateSearchLimit(
+  email: string,
+  newLimit: number
+): Promise<{ success: boolean; message?: string; error?: string }> {
+  try {
+    const res = await fetch(`${getApiUrl()}/admin/update-limit`, {
+      method: "POST",
+      headers: getAdminHeaders(),
+      body: JSON.stringify({ email, newLimit }),
+    });
+
+    const data = (await res.json()) as { error?: string; message?: string };
+
+    if (res.status === 401) {
+      return { success: false, error: "SESSION_EXPIRED" };
+    }
+
+    if (!res.ok) {
+      return { success: false, error: data.error || "Failed to update search limit" };
+    }
+
+    return { success: true, message: data.message };
+  } catch {
+    return { success: false, error: "Network error. Check your connection." };
+  }
 }
 
 export async function suspendAccount(email: string, reason: string) {
