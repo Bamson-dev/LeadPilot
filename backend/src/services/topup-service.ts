@@ -8,7 +8,8 @@ export const TOPUP_TIERS = [
     credits: 300,
     amountKobo: 1_500_000,
     amountNgn: 15_000,
-    label: "300 Credits",
+    amountUsd: 15,
+    label: "Starter Top Up",
     searches: 100,
   },
   {
@@ -16,7 +17,8 @@ export const TOPUP_TIERS = [
     credits: 750,
     amountKobo: 2_500_000,
     amountNgn: 25_000,
-    label: "750 Credits",
+    amountUsd: 25,
+    label: "Growth Top Up",
     searches: 250,
   },
   {
@@ -24,7 +26,8 @@ export const TOPUP_TIERS = [
     credits: 1200,
     amountKobo: 4_000_000,
     amountNgn: 40_000,
-    label: "1,200 Credits",
+    amountUsd: 40,
+    label: "Pro Top Up",
     searches: 400,
   },
   {
@@ -32,7 +35,8 @@ export const TOPUP_TIERS = [
     credits: 2100,
     amountKobo: 6_000_000,
     amountNgn: 60_000,
-    label: "2,100 Credits",
+    amountUsd: 60,
+    label: "Agency Top Up",
     searches: 700,
   },
 ] as const;
@@ -41,6 +45,18 @@ export type TopUpTierId = (typeof TOPUP_TIERS)[number]["id"];
 
 export function getTopUpTier(tierId: string) {
   return TOPUP_TIERS.find((t) => t.id === tierId);
+}
+
+export function parseTopUpTierIdFromFlwRef(reference: string): string | null {
+  if (!reference.startsWith("topup_flw_")) return null;
+  const rest = reference.slice("topup_flw_".length);
+  const lastUnderscore = rest.lastIndexOf("_");
+  if (lastUnderscore <= 0) return null;
+  return rest.slice(0, lastUnderscore);
+}
+
+export function isTopUpPaymentReference(reference: string): boolean {
+  return reference.startsWith("topup_");
 }
 
 export async function fulfillTopUpPayment(params: {
@@ -57,6 +73,12 @@ export async function fulfillTopUpPayment(params: {
   const licenseId = String(metadata.licenseId ?? "");
   const credits = Number(metadata.credits ?? 0);
   const email = String(metadata.email ?? "").toLowerCase().trim();
+  const tierId = String(metadata.tierId ?? "");
+  const tier = tierId ? getTopUpTier(tierId) : undefined;
+  const amountNgn =
+    Number(metadata.amountNgn ?? 0) ||
+    tier?.amountNgn ||
+    Math.round((params.amount ?? 0) / 100);
 
   if (!licenseId || !credits || !email) {
     logger.error("Top up webhook missing metadata", { metadata, reference: params.reference });
@@ -100,7 +122,7 @@ export async function fulfillTopUpPayment(params: {
     email,
     license_id: licenseId,
     credits_purchased: credits,
-    amount_ngn: Math.round(params.amount / 100),
+    amount_ngn: amountNgn,
     payment_reference: params.reference,
     payment_channel: params.channel ?? "paystack",
   });
@@ -108,7 +130,7 @@ export async function fulfillTopUpPayment(params: {
   void sendTopUpConfirmationEmail({
     email,
     credits,
-    amountNgn: Math.round(params.amount / 100),
+    amountNgn,
   }).catch((err) =>
     logger.error("Failed to send top up confirmation email", {
       error: err instanceof Error ? err.message : "unknown",

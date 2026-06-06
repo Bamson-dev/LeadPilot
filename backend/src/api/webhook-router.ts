@@ -9,7 +9,7 @@ import express from "express";
 import crypto from "crypto";
 import { config } from "../config/env";
 import { getLicenseByPaymentReference } from "../database/license-repository";
-import { fulfillTopUpPayment } from "../services/topup-service";
+import { fulfillTopUpPayment, getTopUpTier, isTopUpPaymentReference, parseTopUpTierIdFromFlwRef } from "../services/topup-service";
 import {
   fulfillFlutterwaveCharge,
   fulfillPaystackCharge,
@@ -17,6 +17,21 @@ import {
 import { logger } from "../utils/logger";
 
 export const webhookRouter = Router();
+
+function parseFlutterwaveMeta(
+  meta: Record<string, unknown> | string | undefined
+): Record<string, unknown> | undefined {
+  if (!meta) return undefined;
+  if (typeof meta === "string") {
+    try {
+      return JSON.parse(meta) as Record<string, unknown>;
+    } catch {
+      return undefined;
+    }
+  }
+  if (typeof meta === "object") return meta;
+  return undefined;
+}
 
 webhookRouter.post(
   "/paystack",
@@ -188,6 +203,50 @@ webhookRouter.post(
         return;
       }
 
+      const meta = parseFlutterwaveMeta(data?.meta);
+      const isTopUp =
+        meta?.type === "topup" ||
+        (typeof reference === "string" && reference.startsWith("topup_flw_"));
+
+      if (isTopUp) {
+        res.status(200).json({ received: true });
+
+        setImmediate(() => {
+          void (async () => {
+            try {
+              const tierId =
+                (typeof meta?.tierId === "string" ? meta.tierId : null) ||
+                parseTopUpTierIdFromFlwRef(reference);
+              const tier = tierId ? getTopUpTier(tierId) : undefined;
+
+              await fulfillTopUpPayment({
+                reference,
+                amount: amount,
+                channel: "flutterwave",
+                metadata: {
+                  type: "topup",
+                  tierId: tierId ?? undefined,
+                  licenseId: meta?.licenseId,
+                  credits: meta?.credits ?? tier?.credits,
+                  email: email.toLowerCase().trim(),
+                  amountNgn: meta?.amountNgn ?? tier?.amountNgn,
+                },
+              });
+            } catch (err) {
+              logger.error("Flutterwave top up webhook processing failed", {
+                error: err instanceof Error ? err.message : "unknown",
+              });
+            }
+          })();
+        });
+        return;
+      }
+
+      if (isTopUpPaymentReference(reference)) {
+        res.status(200).json({ received: true });
+        return;
+      }
+
       const existing = await getLicenseByPaymentReference(reference);
       if (existing) {
         logger.info("Flutterwave webhook already processed — skipping duplicate", {
@@ -210,16 +269,7 @@ webhookRouter.post(
               return;
             }
 
-            let meta: Record<string, unknown> | undefined;
-            if (typeof data?.meta === "string") {
-              try {
-                meta = JSON.parse(data.meta) as Record<string, unknown>;
-              } catch {
-                meta = undefined;
-              }
-            } else if (data?.meta && typeof data.meta === "object") {
-              meta = data.meta;
-            }
+            let meta: Record<string, unknown> | undefined = parseFlutterwaveMeta(data?.meta);
 
             await fulfillFlutterwaveCharge({
               email,
