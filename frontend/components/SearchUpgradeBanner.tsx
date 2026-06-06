@@ -64,8 +64,7 @@ export default function SearchUpgradeBanner({
               You have used all your free searches for this month
             </div>
             <div style={{ fontSize: 12, color: "#8888A8", lineHeight: 1.5 }}>
-              Your 100 free searches reset automatically next month. Top up now to keep
-              finding clients today.
+              Top up now to keep finding clients today.
             </div>
           </div>
         </div>
