@@ -108,7 +108,6 @@ export async function fulfillTopUpPayment(params: {
   void sendTopUpConfirmationEmail({
     email,
     credits,
-    searches: Math.floor(credits / 3),
     amountNgn: Math.round(params.amount / 100),
   }).catch((err) =>
     logger.error("Failed to send top up confirmation email", {

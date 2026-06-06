@@ -176,11 +176,8 @@ export default function SearchLimitModal({ email, onClose }: SearchLimitModalPro
               )}
 
               <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "#F2F1FF", marginBottom: 3 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#F2F1FF" }}>
                   {tier.label}
-                </div>
-                <div style={{ fontSize: 12, color: "#8888A8" }}>
-                  {tier.searches} searches included
                 </div>
               </div>
 

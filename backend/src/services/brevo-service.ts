@@ -683,26 +683,26 @@ export async function sendLimitReachedEmail(
         <div style="margin-bottom:32px;">
           <span style="background:#7C3AED;color:white;padding:6px 14px;border-radius:100px;font-size:12px;font-weight:700;letter-spacing:0.05em;">LEADTHUR</span>
         </div>
-        <h1 style="color:#F4F4FF;font-size:28px;font-weight:800;margin:0 0 12px;line-height:1.2;">You have used all your searches</h1>
+        <h1 style="color:#F4F4FF;font-size:28px;font-weight:800;margin:0 0 12px;line-height:1.2;">Search limit reached</h1>
         <p style="color:#A1A1AA;font-size:15px;line-height:1.6;margin:0 0 24px;">
-          You have reached your monthly search limit. Your searches will reset automatically on <strong style="color:#F4F4FF;">${resetDate}</strong>.
+          You have used all your searches for this billing period. Upgrade from your dashboard to continue searching, or wait until your limit resets on <strong style="color:#F4F4FF;">${resetDate}</strong>.
         </p>
         <div style="background:#0F0F14;border:1px solid rgba(124,58,237,0.2);border-radius:12px;padding:24px;margin-bottom:28px;">
-          <p style="color:#F4F4FF;font-size:15px;font-weight:700;margin:0 0 8px;">Need more searches before your reset date?</p>
+          <p style="color:#F4F4FF;font-size:15px;font-weight:700;margin:0 0 8px;">Continue searching today</p>
           <p style="color:#A1A1AA;font-size:14px;line-height:1.6;margin:0 0 16px;">
-            Top up directly from your dashboard to add extra searches and continue right away.
+            Open your dashboard and choose a top-up plan to add more searches instantly.
           </p>
           <a href="${dashboardUrl}" style="display:inline-block;background:#7C3AED;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;">
-            Go to Dashboard
+            Upgrade on Dashboard
           </a>
         </div>
         <div style="background:#0F0F14;border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:20px;margin-bottom:28px;">
           <p style="color:#A1A1AA;font-size:13px;line-height:1.6;margin:0;">
-            While you wait for your reset you can still view and export all results from your previous searches in your dashboard.
+            Your previous search results are still available to view and export in your dashboard.
           </p>
         </div>
         <p style="color:#6B6B80;font-size:12px;line-height:1.6;margin:0;border-top:1px solid rgba(255,255,255,0.07);padding-top:20px;">
-          LeadThur — Business Discovery Intelligence<br>Your searches reset on ${resetDate}.
+          LeadThur — Business Discovery Intelligence
         </p>
       </div>
     </body>
@@ -711,7 +711,7 @@ export async function sendLimitReachedEmail(
 
   await sendEmail({
     to: email,
-    subject: `Your LeadThur monthly searches have been used — reset on ${resetDate}`,
+    subject: "Your LeadThur search limit has been reached",
     html,
   });
 }
@@ -719,12 +719,10 @@ export async function sendLimitReachedEmail(
 export async function sendTopUpConfirmationEmail({
   email,
   credits,
-  searches,
   amountNgn,
 }: {
   email: string;
   credits: number;
-  searches: number;
   amountNgn: number;
 }): Promise<void> {
   const dashboardUrl = `${getFrontendUrl()}/dashboard`;
@@ -748,10 +746,6 @@ export async function sendTopUpConfirmationEmail({
                   <span style="font-size:13px;color:#6b7280;">Credits Added</span>
                   <strong style="font-size:13px;color:#111;">${credits} credits</strong>
                 </div>
-                <div style="display:flex;justify-content:space-between;margin-bottom:10px;">
-                  <span style="font-size:13px;color:#6b7280;">Extra Searches</span>
-                  <strong style="font-size:13px;color:#111;">${searches} searches</strong>
-                </div>
                 <div style="display:flex;justify-content:space-between;">
                   <span style="font-size:13px;color:#6b7280;">Amount Paid</span>
                   <strong style="font-size:13px;color:#111;">₦${amountNgn.toLocaleString()}</strong>
@@ -762,7 +756,7 @@ export async function sendTopUpConfirmationEmail({
             </td></tr>
             <tr><td style="padding:20px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;">
               <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;line-height:1.6;">
-                Questions? WhatsApp <strong style="color:#374151;">09067285890</strong>
+                LeadThur — Business Discovery Intelligence
               </p>
             </td></tr>
           </table>

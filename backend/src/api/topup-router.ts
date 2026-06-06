@@ -76,7 +76,7 @@ topupRouter.post("/initialize", async (req: Request, res: Response) => {
           channels: ["card", "bank", "ussd", "bank_transfer"],
           customizations: {
             title: "LeadThur Search Top Up",
-            description: `${tier.label} — ${tier.searches} extra searches`,
+            description: tier.label,
           },
         },
         cb
