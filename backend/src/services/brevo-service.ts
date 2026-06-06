@@ -673,6 +673,7 @@ export async function sendLimitReachedEmail(
   email: string,
   resetDate: string
 ): Promise<void> {
+  const dashboardUrl = `${getFrontendUrl()}/dashboard`;
   const html = `
     <!DOCTYPE html>
     <html>
@@ -682,26 +683,26 @@ export async function sendLimitReachedEmail(
         <div style="margin-bottom:32px;">
           <span style="background:#7C3AED;color:white;padding:6px 14px;border-radius:100px;font-size:12px;font-weight:700;letter-spacing:0.05em;">LEADTHUR</span>
         </div>
-        <h1 style="color:#F4F4FF;font-size:28px;font-weight:800;margin:0 0 12px;line-height:1.2;">You have used all your searches</h1>
+        <h1 style="color:#F4F4FF;font-size:28px;font-weight:800;margin:0 0 12px;line-height:1.2;">Search limit reached</h1>
         <p style="color:#A1A1AA;font-size:15px;line-height:1.6;margin:0 0 24px;">
-          You have reached your monthly search limit. Your searches will reset automatically on <strong style="color:#F4F4FF;">${resetDate}</strong>.
+          You have used all your searches for this billing period. Upgrade from your dashboard to continue searching, or wait until your limit resets on <strong style="color:#F4F4FF;">${resetDate}</strong>.
         </p>
         <div style="background:#0F0F14;border:1px solid rgba(124,58,237,0.2);border-radius:12px;padding:24px;margin-bottom:28px;">
-          <p style="color:#F4F4FF;font-size:15px;font-weight:700;margin:0 0 8px;">Need more searches before your reset date?</p>
+          <p style="color:#F4F4FF;font-size:15px;font-weight:700;margin:0 0 8px;">Continue searching today</p>
           <p style="color:#A1A1AA;font-size:14px;line-height:1.6;margin:0 0 16px;">
-            Contact us on WhatsApp and we will increase your limit manually.
+            Open your dashboard and choose a top-up plan to add more searches instantly.
           </p>
-          <a href="https://wa.me/2349067285890" style="display:inline-block;background:#25D366;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;">
-            WhatsApp Us — 09067285890
+          <a href="${dashboardUrl}" style="display:inline-block;background:#7C3AED;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;">
+            Upgrade on Dashboard
           </a>
         </div>
         <div style="background:#0F0F14;border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:20px;margin-bottom:28px;">
           <p style="color:#A1A1AA;font-size:13px;line-height:1.6;margin:0;">
-            While you wait for your reset you can still view and export all results from your previous searches in your dashboard.
+            Your previous search results are still available to view and export in your dashboard.
           </p>
         </div>
         <p style="color:#6B6B80;font-size:12px;line-height:1.6;margin:0;border-top:1px solid rgba(255,255,255,0.07);padding-top:20px;">
-          LeadThur — Business Discovery Intelligence<br>Your searches reset on ${resetDate}.
+          LeadThur — Business Discovery Intelligence
         </p>
       </div>
     </body>
@@ -710,7 +711,64 @@ export async function sendLimitReachedEmail(
 
   await sendEmail({
     to: email,
-    subject: `Your LeadThur monthly searches have been used — reset on ${resetDate}`,
+    subject: "Your LeadThur search limit has been reached",
+    html,
+  });
+}
+
+export async function sendTopUpConfirmationEmail({
+  email,
+  credits,
+  amountNgn,
+}: {
+  email: string;
+  credits: number;
+  amountNgn: number;
+}): Promise<void> {
+  const dashboardUrl = `${getFrontendUrl()}/dashboard`;
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"></head>
+    <body style="margin:0;padding:0;background:#f4f4f4;font-family:Inter,Arial,sans-serif;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:40px 20px;">
+        <tr><td align="center">
+          <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:white;border-radius:12px;overflow:hidden;">
+            <tr><td style="background:#7C3AED;padding:24px 32px;">
+              <div style="font-size:20px;font-weight:800;color:white;">LeadThur</div>
+              <div style="font-size:10px;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:0.12em;">Business Discovery</div>
+            </td></tr>
+            <tr><td style="padding:36px 32px;">
+              <h2 style="margin:0 0 16px;font-size:22px;font-weight:800;color:#111;">Top Up Confirmed</h2>
+              <p style="margin:0 0 16px;font-size:15px;color:#333;line-height:1.7;">Your search credits have been added to your account.</p>
+              <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:20px;margin-bottom:24px;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:10px;">
+                  <span style="font-size:13px;color:#6b7280;">Credits Added</span>
+                  <strong style="font-size:13px;color:#111;">${credits} credits</strong>
+                </div>
+                <div style="display:flex;justify-content:space-between;">
+                  <span style="font-size:13px;color:#6b7280;">Amount Paid</span>
+                  <strong style="font-size:13px;color:#111;">₦${amountNgn.toLocaleString()}</strong>
+                </div>
+              </div>
+              <p style="margin:0 0 16px;font-size:14px;color:#555;line-height:1.7;">Your credits carry over every month until fully used. Go back to your dashboard and keep searching.</p>
+              <a href="${dashboardUrl}" style="display:inline-block;background:#7C3AED;color:white;font-weight:700;font-size:14px;padding:14px 28px;border-radius:10px;text-decoration:none;">Back to Dashboard</a>
+            </td></tr>
+            <tr><td style="padding:20px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;">
+              <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;line-height:1.6;">
+                LeadThur — Business Discovery Intelligence
+              </p>
+            </td></tr>
+          </table>
+        </td></tr>
+      </table>
+    </body>
+    </html>
+  `;
+
+  await sendEmail({
+    to: email,
+    subject: "Your search credits have been added",
     html,
   });
 }
