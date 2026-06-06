@@ -176,9 +176,10 @@ authRouter.post("/register-device", async (req: Request, res: Response) => {
 
     const result = await registerDevice(license.id, deviceSignature);
     if (!result.allowed) {
+      const isMaxDevices = result.reason?.includes("Maximum devices") ?? false;
       res.status(403).json({
-        error: result.reason,
-        code: "MAX_DEVICES",
+        error: result.reason ?? "Device registration denied",
+        code: isMaxDevices ? "MAX_DEVICES" : "DEVICE_DENIED",
       });
       return;
     }

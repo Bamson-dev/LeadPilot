@@ -1,6 +1,7 @@
 import { randomBytes } from "crypto";
 import { supabase } from "./client";
 import { generateUniqueRefCode } from "../services/license-service";
+import { logger } from "../utils/logger";
 
 export interface LicenseKey {
   id: string;
@@ -360,24 +361,21 @@ export async function registerDevice(
   licenseId: string,
   deviceSignature: string
 ): Promise<{ allowed: boolean; reason?: string }> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("license_keys")
     .select("device_one, device_two, device_three, device_four, max_devices")
     .eq("id", licenseId)
     .single();
 
-  if (!data) return { allowed: false, reason: "License not found" };
-
-  const maxDevices = (data.max_devices as number | null) || 4;
-
-  if (
-    data.device_one === deviceSignature ||
-    data.device_two === deviceSignature ||
-    data.device_three === deviceSignature ||
-    data.device_four === deviceSignature
-  ) {
-    return { allowed: true };
+  if (error || !data) {
+    logger.error("registerDevice license lookup failed", {
+      licenseId,
+      error: error?.message ?? "no data",
+    });
+    return { allowed: false, reason: "License not found" };
   }
+
+  const maxDevices = Math.min(4, Math.max(1, (data.max_devices as number | null) || 4));
 
   const slots = [
     { key: "device_one" as const, value: data.device_one as string | null },
@@ -389,9 +387,15 @@ export async function registerDevice(
   const isFilled = (value: string | null | undefined) =>
     value !== null && value !== undefined && String(value).trim() !== "";
 
-  const filledSlots = slots.filter((s) => isFilled(s.value)).length;
+  // Recognise returning device on any slot (even if limit was lowered later)
+  if (slots.some((s) => s.value === deviceSignature)) {
+    return { allowed: true };
+  }
 
-  if (filledSlots >= maxDevices) {
+  const activeSlots = slots.slice(0, maxDevices);
+  const filledActive = activeSlots.filter((s) => isFilled(s.value)).length;
+
+  if (filledActive >= maxDevices) {
     return {
       allowed: false,
       reason:
@@ -399,13 +403,22 @@ export async function registerDevice(
     };
   }
 
-  const emptySlot = slots.find((s) => !isFilled(s.value));
+  const emptySlot = activeSlots.find((s) => !isFilled(s.value));
 
   if (emptySlot) {
-    await supabase
+    const { error: updateError } = await supabase
       .from("license_keys")
       .update({ [emptySlot.key]: deviceSignature })
       .eq("id", licenseId);
+
+    if (updateError) {
+      logger.error("registerDevice slot update failed", {
+        licenseId,
+        slot: emptySlot.key,
+        error: updateError.message,
+      });
+      return { allowed: false, reason: "Device registration failed. Try again." };
+    }
 
     return { allowed: true };
   }

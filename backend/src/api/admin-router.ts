@@ -291,16 +291,9 @@ adminRouter.post("/reset-devices", requireAdminAuth, async (req: Request, res: R
     }
 
     const normalizedEmail = email.toLowerCase().trim();
+    const license = await fetchLatestLicenseByEmail(normalizedEmail);
 
-    const { data: license, error: findError } = await supabase
-      .from("license_keys")
-      .select("id, email, device_one, device_two, device_three, device_four, max_devices")
-      .eq("email", normalizedEmail)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (findError || !license) {
+    if (!license) {
       res.status(404).json({ error: `No license found for ${email}` });
       return;
     }
@@ -313,7 +306,7 @@ adminRouter.post("/reset-devices", requireAdminAuth, async (req: Request, res: R
         device_three: null,
         device_four: null,
       })
-      .eq("id", license.id);
+      .eq("id", license.id as string);
 
     if (updateError) {
       logger.error("Failed to reset devices", {
@@ -354,16 +347,9 @@ adminRouter.post("/upgrade-devices", requireAdminAuth, async (req: Request, res:
     }
 
     const normalizedEmail = email.toLowerCase().trim();
+    const license = await fetchLatestLicenseByEmail(normalizedEmail);
 
-    const { data: license, error: findError } = await supabase
-      .from("license_keys")
-      .select("id, email, max_devices")
-      .eq("email", normalizedEmail)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (findError || !license) {
+    if (!license) {
       res.status(404).json({ error: `No license found for ${email}` });
       return;
     }
@@ -371,7 +357,7 @@ adminRouter.post("/upgrade-devices", requireAdminAuth, async (req: Request, res:
     const { error: updateError } = await supabase
       .from("license_keys")
       .update({ max_devices: newLimit })
-      .eq("id", license.id);
+      .eq("id", license.id as string);
 
     if (updateError) {
       logger.error("Failed to upgrade devices", {
