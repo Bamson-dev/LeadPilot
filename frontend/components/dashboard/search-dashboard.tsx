@@ -57,7 +57,6 @@ export function SearchDashboard() {
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [totalDiscovered, setTotalDiscovered] = useState(0);
   const [showLimitModal, setShowLimitModal] = useState(false);
-  const [limitModalCredits, setLimitModalCredits] = useState(0);
   const [userEmail, setUserEmail] = useState("");
 
   useEffect(() => {
@@ -94,8 +93,7 @@ export function SearchDashboard() {
     loadSavedLeads,
   } = useSearch({
     onSearchComplete: (...args) => onSearchCompleteRef.current?.(...args),
-    onSearchLimitReached: (creditsRemaining) => {
-      setLimitModalCredits(creditsRemaining);
+    onSearchLimitReached: () => {
       setShowLimitModal(true);
     },
   });
@@ -543,9 +541,8 @@ export function SearchDashboard() {
             <p className="text-sm text-red-300">{error}</p>
             {showLimitMessage && (
               <p className="mt-2 text-sm text-[#A1A1B5]">
-                You have used all your searches for this month. Your searches reset on
-                the date shown in the message above. Contact support to increase your
-                limit.
+                You have reached your search limit. Top up from the options below to continue
+                searching.
               </p>
             )}
             <Button variant="outline" size="sm" className="mt-3" onClick={handleClearResults}>
@@ -764,11 +761,7 @@ export function SearchDashboard() {
         </>
       )}
       {showLimitModal && userEmail && (
-        <SearchLimitModal
-          email={userEmail}
-          creditsRemaining={limitModalCredits}
-          onClose={() => setShowLimitModal(false)}
-        />
+        <SearchLimitModal email={userEmail} onClose={() => setShowLimitModal(false)} />
       )}
     </div>
   );

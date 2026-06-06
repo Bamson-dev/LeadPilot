@@ -673,6 +673,7 @@ export async function sendLimitReachedEmail(
   email: string,
   resetDate: string
 ): Promise<void> {
+  const dashboardUrl = `${getFrontendUrl()}/dashboard`;
   const html = `
     <!DOCTYPE html>
     <html>
@@ -689,10 +690,10 @@ export async function sendLimitReachedEmail(
         <div style="background:#0F0F14;border:1px solid rgba(124,58,237,0.2);border-radius:12px;padding:24px;margin-bottom:28px;">
           <p style="color:#F4F4FF;font-size:15px;font-weight:700;margin:0 0 8px;">Need more searches before your reset date?</p>
           <p style="color:#A1A1AA;font-size:14px;line-height:1.6;margin:0 0 16px;">
-            Contact us on WhatsApp and we will increase your limit manually.
+            Top up directly from your dashboard to add extra searches and continue right away.
           </p>
-          <a href="https://wa.me/2349067285890" style="display:inline-block;background:#25D366;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;">
-            WhatsApp Us — 09067285890
+          <a href="${dashboardUrl}" style="display:inline-block;background:#7C3AED;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;">
+            Go to Dashboard
           </a>
         </div>
         <div style="background:#0F0F14;border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:20px;margin-bottom:28px;">

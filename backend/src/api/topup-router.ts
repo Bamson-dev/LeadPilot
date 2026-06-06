@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { config } from "../config/env";
-import { supabase } from "../database/client";
+import { getLicenseByKeyAndEmail } from "../database/license-repository";
 import { getPaystack, paystackAsync } from "../services/paystack-client";
 import { TOPUP_TIERS } from "../services/topup-service";
 import { logger } from "../utils/logger";
@@ -9,10 +9,28 @@ export const topupRouter = Router();
 
 topupRouter.post("/initialize", async (req: Request, res: Response) => {
   try {
-    const { email, tierId } = req.body as { email?: string; tierId?: string };
+    const { email: bodyEmail, tierId, key: bodyKey } = req.body as {
+      email?: string;
+      tierId?: string;
+      key?: string;
+    };
+    const email = (
+      (req.headers["x-license-email"] as string) ||
+      bodyEmail ||
+      ""
+    )
+      .toLowerCase()
+      .trim();
+    const licenseKey = (
+      (req.headers["x-license-key"] as string) ||
+      bodyKey ||
+      ""
+    )
+      .trim()
+      .toUpperCase();
 
-    if (!email?.includes("@") || !tierId) {
-      res.status(400).json({ error: "Email and tier are required" });
+    if (!email.includes("@") || !licenseKey || !tierId) {
+      res.status(400).json({ error: "License, email, and tier are required" });
       return;
     }
 
@@ -27,17 +45,12 @@ topupRouter.post("/initialize", async (req: Request, res: Response) => {
       return;
     }
 
-    const normalizedEmail = email.toLowerCase().trim();
+    const license = await getLicenseByKeyAndEmail(licenseKey, email);
 
-    const { data: license, error: licenseError } = await supabase
-      .from("license_keys")
-      .select("id, email, activated")
-      .eq("email", normalizedEmail)
-      .eq("activated", true)
-      .maybeSingle();
-
-    if (licenseError || !license) {
-      res.status(404).json({ error: "No active license found for this email" });
+    if (!license) {
+      res.status(404).json({
+        error: "No active license found. Check your email and license key, then try again.",
+      });
       return;
     }
 
@@ -48,7 +61,7 @@ topupRouter.post("/initialize", async (req: Request, res: Response) => {
     const response = await paystackAsync<{ data: { authorization_url: string } }>((cb) =>
       paystack.transaction.initialize(
         {
-          email: normalizedEmail,
+          email: license.email,
           amount: tier.amountKobo,
           currency: "NGN",
           reference,
@@ -57,7 +70,7 @@ topupRouter.post("/initialize", async (req: Request, res: Response) => {
             tierId: tier.id,
             credits: tier.credits,
             licenseId: license.id,
-            email: normalizedEmail,
+            email: license.email,
           },
           callback_url: `${frontendUrl}/dashboard?topup=success`,
           channels: ["card", "bank", "ussd", "bank_transfer"],

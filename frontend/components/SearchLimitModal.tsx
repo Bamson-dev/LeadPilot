@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { getLicenseHeaders } from "@/services/api";
 import { getApiUrl } from "@/utils/env";
 
 interface TopUpTier {
@@ -28,15 +29,10 @@ const TIERS: TopUpTier[] = [
 
 interface SearchLimitModalProps {
   email: string;
-  creditsRemaining: number;
   onClose: () => void;
 }
 
-export default function SearchLimitModal({
-  email,
-  creditsRemaining,
-  onClose,
-}: SearchLimitModalProps) {
+export default function SearchLimitModal({ email, onClose }: SearchLimitModalProps) {
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState("");
 
@@ -53,7 +49,7 @@ export default function SearchLimitModal({
 
       const res = await fetch(`${apiUrl}/topup/initialize`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getLicenseHeaders(),
         body: JSON.stringify({ email, tierId: tier.id }),
       });
 
@@ -137,40 +133,11 @@ export default function SearchLimitModal({
               letterSpacing: -0.5,
             }}
           >
-            You have used all your free searches
+            Search limit reached
           </h2>
           <p style={{ fontSize: 14, color: "#8888A8", margin: 0, lineHeight: 1.6 }}>
-            Your 100 free monthly searches are used up.
-            {creditsRemaining > 0
-              ? ` You have ${creditsRemaining} credits remaining (${Math.floor(creditsRemaining / 3)} searches).`
-              : " Top up to keep searching right now."}
+            Choose a top-up below to continue searching.
           </p>
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              background: "rgba(16,185,129,0.08)",
-              border: "1px solid rgba(16,185,129,0.2)",
-              borderRadius: 100,
-              padding: "5px 12px",
-              fontSize: 11,
-              color: "#10B981",
-              fontWeight: 600,
-              marginTop: 12,
-            }}
-          >
-            <span
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: "50%",
-                background: "#10B981",
-                display: "inline-block",
-              }}
-            />
-            Free searches reset next month automatically
-          </div>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
@@ -213,10 +180,7 @@ export default function SearchLimitModal({
                   {tier.label}
                 </div>
                 <div style={{ fontSize: 12, color: "#8888A8" }}>
-                  {tier.searches} extra searches
-                </div>
-                <div style={{ fontSize: 11, color: "#555570", marginTop: 2 }}>
-                  {tier.credits} credits · carries over if unused
+                  {tier.searches} searches included
                 </div>
               </div>
 
@@ -272,19 +236,6 @@ export default function SearchLimitModal({
             {error}
           </div>
         )}
-
-        <p
-          style={{
-            fontSize: 11,
-            color: "#555570",
-            textAlign: "center",
-            margin: 0,
-            lineHeight: 1.6,
-          }}
-        >
-          Credits carry over every month until used up. Free searches always reset to 100 on your
-          monthly date. Questions? WhatsApp 09067285890
-        </p>
       </div>
     </div>
   );
