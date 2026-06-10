@@ -618,44 +618,53 @@ adminRouter.post("/broadcast-message", requireAdminAuth, async (req: Request, re
   }
 });
 
+async function handleAdminImageUpload(req: Request, res: Response): Promise<void> {
+  try {
+    if (!req.file) {
+      res.status(400).json({ error: "No image file provided" });
+      return;
+    }
+
+    const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+    if (!allowedTypes.includes(req.file.mimetype)) {
+      res.status(400).json({ error: "Only JPEG, PNG, GIF and WebP images are allowed" });
+      return;
+    }
+
+    const base64 = req.file.buffer.toString("base64");
+    const dataUrl = `data:${req.file.mimetype};base64,${base64}`;
+
+    logger.info("Image uploaded", {
+      size: req.file.size,
+      type: req.file.mimetype,
+    });
+
+    res.json({
+      success: true,
+      url: dataUrl,
+      filename: req.file.originalname,
+      size: req.file.size,
+    });
+  } catch (err) {
+    logger.error("Image upload failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Image upload failed" });
+  }
+}
+
 adminRouter.post(
   "/upload-image",
   requireAdminAuth,
   upload.single("image"),
-  async (req: Request, res: Response) => {
-    try {
-      if (!req.file) {
-        res.status(400).json({ error: "No image file provided" });
-        return;
-      }
+  handleAdminImageUpload
+);
 
-      const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-      if (!allowedTypes.includes(req.file.mimetype)) {
-        res.status(400).json({ error: "Only JPEG, PNG, GIF and WebP images are allowed" });
-        return;
-      }
-
-      const base64 = req.file.buffer.toString("base64");
-      const dataUrl = `data:${req.file.mimetype};base64,${base64}`;
-
-      logger.info("Image uploaded for email", {
-        size: req.file.size,
-        type: req.file.mimetype,
-      });
-
-      res.json({
-        success: true,
-        url: dataUrl,
-        filename: req.file.originalname,
-        size: req.file.size,
-      });
-    } catch (err) {
-      logger.error("Image upload failed", {
-        error: err instanceof Error ? err.message : "unknown",
-      });
-      res.status(500).json({ error: "Image upload failed" });
-    }
-  }
+adminRouter.post(
+  "/blog/upload-image",
+  requireAdminAuth,
+  upload.single("image"),
+  handleAdminImageUpload
 );
 
 adminRouter.post("/broadcast", requireAdminAuth, async (req: Request, res: Response) => {
@@ -1463,6 +1472,7 @@ adminRouter.post("/blog/posts", requireAdminAuth, async (req: Request, res: Resp
     }
 
     const now = new Date().toISOString();
+    const postStatus = status || "draft";
     const normalizedSlug = slug
       .toLowerCase()
       .replace(/[^a-z0-9-]/g, "-")
@@ -1482,17 +1492,21 @@ adminRouter.post("/blog/posts", requireAdminAuth, async (req: Request, res: Resp
         tags: tags || [],
         meta_title: meta_title || title,
         meta_description: meta_description || excerpt,
-        status: status || "draft",
+        status: postStatus,
         featured: featured || false,
         read_time: read_time || Math.ceil(content.split(" ").length / 200),
-        published_at: status === "published" ? now : null,
+        published_at: postStatus === "published" ? now : null,
         created_at: now,
         updated_at: now,
       })
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      logger.error("Failed to create blog post", { error: error.message, code: error.code });
+      res.status(500).json({ error: error.message || "Failed to create blog post" });
+      return;
+    }
 
     logger.info("Blog post created", { slug: normalizedSlug, status });
     res.json({ success: true, post: data });
@@ -1500,7 +1514,9 @@ adminRouter.post("/blog/posts", requireAdminAuth, async (req: Request, res: Resp
     logger.error("Failed to create blog post", {
       error: err instanceof Error ? err.message : "unknown",
     });
-    res.status(500).json({ error: "Failed to create blog post" });
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Failed to create blog post",
+    });
   }
 });
 
@@ -1511,6 +1527,17 @@ adminRouter.put("/blog/posts/:id", requireAdminAuth, async (req: Request, res: R
 
     const now = new Date().toISOString();
 
+    const { data: existing, error: fetchError } = await supabase
+      .from("blog_posts")
+      .select("published_at")
+      .eq("id", id)
+      .single();
+
+    if (fetchError) {
+      res.status(404).json({ error: fetchError.message || "Post not found" });
+      return;
+    }
+
     if (typeof updates.slug === "string") {
       updates.slug = updates.slug
         .toLowerCase()
@@ -1518,8 +1545,10 @@ adminRouter.put("/blog/posts/:id", requireAdminAuth, async (req: Request, res: R
         .replace(/-+/g, "-");
     }
 
-    if (updates.status === "published" && !updates.published_at) {
+    if (updates.status === "published" && !existing.published_at) {
       updates.published_at = now;
+    } else {
+      delete updates.published_at;
     }
 
     if (typeof updates.content === "string" && !updates.read_time) {
@@ -1540,7 +1569,11 @@ adminRouter.put("/blog/posts/:id", requireAdminAuth, async (req: Request, res: R
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      logger.error("Failed to update blog post", { error: error.message, code: error.code });
+      res.status(500).json({ error: error.message || "Failed to update blog post" });
+      return;
+    }
 
     logger.info("Blog post updated", { id, status: updates.status });
     res.json({ success: true, post: data });
@@ -1548,7 +1581,9 @@ adminRouter.put("/blog/posts/:id", requireAdminAuth, async (req: Request, res: R
     logger.error("Failed to update blog post", {
       error: err instanceof Error ? err.message : "unknown",
     });
-    res.status(500).json({ error: "Failed to update blog post" });
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Failed to update blog post",
+    });
   }
 });
 

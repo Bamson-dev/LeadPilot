@@ -77,6 +77,8 @@ function registerRoutes(): void {
   });
 
   app.use("/webhooks", webhookRouter);
+  // Admin blog posts may include base64 cover images and rich HTML — allow larger payloads.
+  app.use("/admin", express.json({ limit: "15mb" }));
   app.use(express.json({ limit: "1mb" }));
   app.use("/auth", authRouter);
   app.use("/admin", adminRouter);
@@ -93,12 +95,23 @@ function registerRoutes(): void {
   app.post("/freetrial", rateLimit, handleFreeTrialSearch);
   app.use("/search", rateLimit, searchRouter);
 
-  app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-    logger.error("Unhandled error", { message: err.message, stack: err.stack });
-    if (!res.headersSent) {
-      res.status(500).json({ error: "Internal server error" });
+  app.use(
+    (err: Error & { type?: string; status?: number }, _req: Request, res: Response, _next: NextFunction) => {
+      logger.error("Unhandled error", { message: err.message, stack: err.stack, type: err.type });
+
+      if (!res.headersSent) {
+        if (err.type === "entity.too.large") {
+          res.status(413).json({
+            error:
+              "Request too large. Use an external image URL for the cover, or upload a smaller image.",
+          });
+          return;
+        }
+
+        res.status(500).json({ error: "Internal server error" });
+      }
     }
-  });
+  );
 }
 
 async function initBrowserPoolSafe(): Promise<void> {
