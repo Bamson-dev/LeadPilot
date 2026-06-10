@@ -1935,6 +1935,7 @@ export default function HomePage() {
             flexDirection: isMobile ? "column" : "row",
             justifyContent: "space-between",
             gap: 32,
+            flexWrap: "wrap",
           }}
         >
           <div>
@@ -1945,17 +1946,18 @@ export default function HomePage() {
                   height: 30,
                   background: colors.purple,
                   borderRadius: 8,
-                  display: "grid",
-                  placeItems: "center",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                   fontSize: 11,
                   fontWeight: 800,
                   color: "white",
                   fontFamily: FONT,
                 }}
               >
-                LP
+                LT
               </div>
-              <span style={{ fontWeight: 800, fontSize: 18, fontFamily: FONT }}>
+              <span style={{ fontWeight: 800, fontSize: 18, fontFamily: FONT, color: colors.text }}>
                 LeadThur
               </span>
             </div>
@@ -1965,13 +1967,20 @@ export default function HomePage() {
                 color: "#8888A8",
                 lineHeight: 1.6,
                 fontFamily: FONT,
+                marginBottom: 6,
               }}
             >
               Business Discovery Intelligence
               <br />
               Built by Bamidele
             </p>
+            <p style={{ fontSize: 12, color: "#555570", fontFamily: FONT }}>
+              Pdigital Marketstore Ltd (RC 8015428)
+              <br />
+              Lagos, Nigeria
+            </p>
           </div>
+
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <span
               style={{
@@ -2022,6 +2031,40 @@ export default function HomePage() {
               Login
             </a>
           </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: "#7878A0",
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                fontFamily: FONT,
+              }}
+            >
+              Legal
+            </span>
+            {[
+              { label: "Privacy Policy", href: "/privacy" },
+              { label: "Terms of Service", href: "/terms" },
+              { label: "About", href: "/about" },
+            ].map((link) => (
+              <a
+                key={link.label}
+                href={link.href}
+                style={{
+                  color: "#8888A8",
+                  textDecoration: "none",
+                  fontSize: 14,
+                  fontFamily: FONT,
+                }}
+              >
+                {link.label}
+              </a>
+            ))}
+          </div>
+
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <span
               style={{
@@ -2036,7 +2079,7 @@ export default function HomePage() {
               Contact
             </span>
             <a
-              href="https://wa.me/2349067285890"
+              href="https://wa.link/87ruc1"
               target="_blank"
               rel="noopener noreferrer"
               style={{
@@ -2060,7 +2103,7 @@ export default function HomePage() {
               support@leadthur.com
             </a>
             <a
-              href="https://twitter.com"
+              href="https://twitter.com/BamsonOfficial"
               target="_blank"
               rel="noopener noreferrer"
               style={{
@@ -2074,6 +2117,7 @@ export default function HomePage() {
             </a>
           </div>
         </div>
+
         <p
           style={{
             textAlign: "center",
@@ -2083,7 +2127,8 @@ export default function HomePage() {
             fontFamily: FONT,
           }}
         >
-          © {new Date().getFullYear()} LeadThur. Built by Bamidele.
+          © {new Date().getFullYear()} LeadThur. All rights reserved. Built by Pdigital Marketstore
+          Ltd (RC 8015428).
         </p>
       </footer>
 
