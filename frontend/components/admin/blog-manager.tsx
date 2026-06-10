@@ -1,7 +1,10 @@
 "use client";
 
+import { useRef, useState } from "react";
 import Link from "next/link";
 import RichEmailEditor from "@/components/RichEmailEditor";
+import { getAdminToken } from "@/services/admin-api";
+import { getApiUrl } from "@/utils/env";
 
 type BlogPostRow = {
   id: string;
@@ -88,6 +91,49 @@ export function BlogManager(props: BlogManagerProps) {
     saveBlogPost,
     generateSlug,
   } = props;
+
+  const coverInputRef = useRef<HTMLInputElement>(null);
+  const [coverUploading, setCoverUploading] = useState(false);
+
+  async function handleCoverImageUpload(file: File) {
+    const apiUrl = getApiUrl();
+    const token = getAdminToken();
+    if (!apiUrl || !token) {
+      alert("Admin session expired. Please log in again.");
+      return;
+    }
+
+    setCoverUploading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+
+      const res = await fetch(`${apiUrl}/admin/blog/upload-image`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      const data = (await res.json()) as {
+        success?: boolean;
+        url?: string;
+        error?: string;
+      };
+
+      if (data.url) {
+        setBlogCoverImage(data.url);
+      } else {
+        alert(data.error || "Upload failed. Try again.");
+      }
+    } catch {
+      alert("Upload failed. Check your connection.");
+    } finally {
+      setCoverUploading(false);
+    }
+  }
 
   return (
     <div
@@ -448,6 +494,42 @@ export function BlogManager(props: BlogManagerProps) {
               >
                 Cover Image URL
               </label>
+
+              <input
+                ref={coverInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                style={{ display: "none" }}
+                disabled={coverUploading}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    void handleCoverImageUpload(file);
+                  }
+                  e.target.value = "";
+                }}
+              />
+
+              <button
+                type="button"
+                onClick={() => coverInputRef.current?.click()}
+                disabled={coverUploading}
+                style={{
+                  background: coverUploading ? "#1A1A24" : "rgba(124,58,237,0.12)",
+                  border: "1px solid rgba(124,58,237,0.3)",
+                  borderRadius: 8,
+                  padding: "10px 16px",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: coverUploading ? "#555570" : "#A78BFA",
+                  cursor: coverUploading ? "not-allowed" : "pointer",
+                  fontFamily: "Inter, sans-serif",
+                  marginBottom: 10,
+                }}
+              >
+                {coverUploading ? "Uploading..." : "Upload Cover Image"}
+              </button>
+
               <input
                 value={blogCoverImage}
                 onChange={(e) => setBlogCoverImage(e.target.value)}
@@ -464,6 +546,7 @@ export function BlogManager(props: BlogManagerProps) {
                   outline: "none",
                 }}
               />
+
               {blogCoverImage && (
                 <div style={{ marginTop: 8, borderRadius: 8, overflow: "hidden", maxHeight: 200 }}>
                   <img
