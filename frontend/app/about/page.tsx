@@ -1,4 +1,45 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  title: "About LeadThur — Built in Lagos. Used Worldwide.",
+  description:
+    "LeadThur is built by Pdigital Marketstore Ltd (RC 8015428) in Lagos, Nigeria. We help freelancers, agency owners, and consultants find business contacts in any city worldwide in under 60 seconds.",
+  keywords:
+    "about LeadThur, Pdigital Marketstore, Bamidele Matthew, Nigerian SaaS, African lead generation startup, Lagos tech company",
+  alternates: {
+    canonical: "https://www.leadthur.com/about",
+  },
+  openGraph: {
+    title: "About LeadThur — Built in Lagos. Used Worldwide.",
+    description:
+      "LeadThur is built by Pdigital Marketstore Ltd in Lagos, Nigeria. We help freelancers find business contacts in any city in 60 seconds.",
+    url: "https://www.leadthur.com/about",
+    siteName: "LeadThur",
+    images: [
+      {
+        url: "https://www.leadthur.com/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "About LeadThur",
+      },
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "About LeadThur — Built in Lagos. Used Worldwide.",
+    description:
+      "Built by Pdigital Marketstore Ltd in Lagos, Nigeria. Find business contacts in any city in 60 seconds.",
+    creator: "@BamsonOfficial",
+    images: ["https://www.leadthur.com/og-image.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+};
 
 export default function AboutPage() {
   return (

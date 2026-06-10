@@ -1,4 +1,41 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  title: "Privacy Policy — LeadThur",
+  description:
+    "Read the LeadThur privacy policy. Learn how Pdigital Marketstore Ltd (RC 8015428) collects, uses, and protects your personal data. We never sell your information to third parties.",
+  alternates: {
+    canonical: "https://www.leadthur.com/privacy",
+  },
+  openGraph: {
+    title: "Privacy Policy — LeadThur",
+    description:
+      "How LeadThur handles your data. We never sell your information to third parties.",
+    url: "https://www.leadthur.com/privacy",
+    siteName: "LeadThur",
+    images: [
+      {
+        url: "https://www.leadthur.com/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "LeadThur Privacy Policy",
+      },
+    ],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Privacy Policy — LeadThur",
+    description: "How LeadThur handles your data. We never sell your information.",
+    creator: "@BamsonOfficial",
+    images: ["https://www.leadthur.com/og-image.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+};
 
 export default function PrivacyPage() {
   return (
