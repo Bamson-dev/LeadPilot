@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function PrivacyPage() {
   return (
     <div
@@ -22,7 +24,7 @@ export default function PrivacyPage() {
           borderBottom: "1px solid rgba(255,255,255,0.06)",
         }}
       >
-        <a href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
+        <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
           <div
             style={{
               width: 34,
@@ -42,10 +44,10 @@ export default function PrivacyPage() {
           <span style={{ fontSize: 18, fontWeight: 800, color: "#F2F1FF" }}>
             Lead<span style={{ color: "#A78BFA" }}>Thur</span>
           </span>
-        </a>
-        <a href="/" style={{ color: "#A78BFA", fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
+        </Link>
+        <Link href="/" style={{ color: "#A78BFA", fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
           ← Back to Home
-        </a>
+        </Link>
       </nav>
 
       <div style={{ maxWidth: 720, margin: "0 auto", padding: "60px 24px 80px" }}>
@@ -156,15 +158,15 @@ export default function PrivacyPage() {
             flexWrap: "wrap",
           }}
         >
-          <a href="/privacy" style={{ color: "#A78BFA", textDecoration: "none", fontSize: 12 }}>
+          <Link href="/privacy" style={{ color: "#A78BFA", textDecoration: "none", fontSize: 12 }}>
             Privacy Policy
-          </a>
-          <a href="/terms" style={{ color: "#A78BFA", textDecoration: "none", fontSize: 12 }}>
+          </Link>
+          <Link href="/terms" style={{ color: "#A78BFA", textDecoration: "none", fontSize: 12 }}>
             Terms of Service
-          </a>
-          <a href="/about" style={{ color: "#A78BFA", textDecoration: "none", fontSize: 12 }}>
+          </Link>
+          <Link href="/about" style={{ color: "#A78BFA", textDecoration: "none", fontSize: 12 }}>
             About
-          </a>
+          </Link>
         </div>
       </div>
     </div>
