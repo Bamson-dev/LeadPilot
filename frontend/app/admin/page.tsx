@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Bricolage_Grotesque } from "next/font/google";
 import { AccountLookup } from "@/components/admin/account-lookup";
+import { BlogManager } from "@/components/admin/blog-manager";
 import { DirectMessaging } from "@/components/admin/direct-messaging";
 import {
   adminLogin,
@@ -84,6 +85,35 @@ export default function AdminPage() {
   const [bodyScripts, setBodyScripts] = useState("");
   const [scriptsSaving, setScriptsSaving] = useState(false);
   const [scriptsMsg, setScriptsMsg] = useState("");
+
+  const [blogView, setBlogView] = useState<"list" | "editor">("list");
+  const [blogPosts, setBlogPosts] = useState<
+    Array<{
+      id: string;
+      title: string;
+      slug: string;
+      status: string;
+      featured?: boolean;
+      category?: string;
+      read_time?: number;
+      created_at: string;
+    }>
+  >([]);
+  const [blogLoading, setBlogLoading] = useState(false);
+  const [editingPost, setEditingPost] = useState<{ id: string } | null>(null);
+  const [blogTitle, setBlogTitle] = useState("");
+  const [blogSlug, setBlogSlug] = useState("");
+  const [blogExcerpt, setBlogExcerpt] = useState("");
+  const [blogContent, setBlogContent] = useState("");
+  const [blogCoverImage, setBlogCoverImage] = useState("");
+  const [blogCategory, setBlogCategory] = useState("");
+  const [blogTags, setBlogTags] = useState("");
+  const [blogMetaTitle, setBlogMetaTitle] = useState("");
+  const [blogMetaDesc, setBlogMetaDesc] = useState("");
+  const [blogStatus, setBlogStatus] = useState<"draft" | "published">("draft");
+  const [blogFeatured, setBlogFeatured] = useState(false);
+  const [blogSaving, setBlogSaving] = useState(false);
+  const [blogMsg, setBlogMsg] = useState("");
 
   useEffect(() => {
     setToken(getAdminToken());
@@ -182,6 +212,154 @@ export default function AdminPage() {
     }
   }
 
+  function generateSlug(title: string): string {
+    return title
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .trim();
+  }
+
+  async function loadBlogPosts() {
+    setBlogLoading(true);
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/blog/posts`, {
+        headers: getAdminHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setBlogPosts(data.posts || []);
+      }
+    } catch {
+      /* silent */
+    } finally {
+      setBlogLoading(false);
+    }
+  }
+
+  function openNewPost() {
+    setEditingPost(null);
+    setBlogTitle("");
+    setBlogSlug("");
+    setBlogExcerpt("");
+    setBlogContent("");
+    setBlogCoverImage("");
+    setBlogCategory("");
+    setBlogTags("");
+    setBlogMetaTitle("");
+    setBlogMetaDesc("");
+    setBlogStatus("draft");
+    setBlogFeatured(false);
+    setBlogMsg("");
+    setBlogView("editor");
+  }
+
+  async function openEditPost(post: { id: string; title?: string; slug?: string; excerpt?: string; cover_image?: string; category?: string; tags?: string[]; meta_title?: string; meta_description?: string; status?: string; featured?: boolean }) {
+    setEditingPost(post);
+    setBlogTitle(post.title || "");
+    setBlogSlug(post.slug || "");
+    setBlogExcerpt(post.excerpt || "");
+    setBlogCoverImage(post.cover_image || "");
+    setBlogCategory(post.category || "");
+    setBlogTags((post.tags || []).join(", "));
+    setBlogMetaTitle(post.meta_title || "");
+    setBlogMetaDesc(post.meta_description || "");
+    setBlogStatus((post.status as "draft" | "published") || "draft");
+    setBlogFeatured(post.featured || false);
+    setBlogMsg("");
+
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/admin/blog/posts/${post.id}`,
+        { headers: getAdminHeaders() }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setBlogContent(data.content || "");
+      }
+    } catch {
+      /* silent */
+    }
+
+    setBlogView("editor");
+  }
+
+  async function saveBlogPost(publishNow?: boolean) {
+    if (!blogTitle || !blogContent) {
+      setBlogMsg("Title and content are required.");
+      return;
+    }
+
+    setBlogSaving(true);
+    setBlogMsg("");
+
+    const payload = {
+      title: blogTitle,
+      slug: blogSlug || generateSlug(blogTitle),
+      excerpt: blogExcerpt,
+      content: blogContent,
+      cover_image: blogCoverImage,
+      category: blogCategory,
+      tags: blogTags
+        ? blogTags
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean)
+        : [],
+      meta_title: blogMetaTitle || blogTitle,
+      meta_description: blogMetaDesc || blogExcerpt,
+      status: publishNow ? "published" : blogStatus,
+      featured: blogFeatured,
+    };
+
+    try {
+      const url = editingPost
+        ? `${process.env.NEXT_PUBLIC_API_URL}/admin/blog/posts/${editingPost.id}`
+        : `${process.env.NEXT_PUBLIC_API_URL}/admin/blog/posts`;
+
+      const res = await fetch(url, {
+        method: editingPost ? "PUT" : "POST",
+        headers: { ...getAdminHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        setBlogMsg(
+          publishNow ? "Article published successfully." : "Article saved as draft."
+        );
+        if (publishNow) setBlogStatus("published");
+        if (!editingPost && data.post) {
+          setEditingPost(data.post);
+        }
+        await loadBlogPosts();
+      } else {
+        setBlogMsg(data.error || "Failed to save.");
+      }
+    } catch {
+      setBlogMsg("Failed to save. Check your connection.");
+    } finally {
+      setBlogSaving(false);
+    }
+  }
+
+  async function deleteBlogPost(id: string) {
+    if (!window.confirm("Delete this article? This cannot be undone.")) return;
+
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/blog/posts/${id}`, {
+        method: "DELETE",
+        headers: getAdminHeaders(),
+      });
+      await loadBlogPosts();
+      setBlogView("list");
+    } catch {
+      /* silent */
+    }
+  }
+
   const handleMarkProcessing = async (payoutId: string) => {
     setPayoutMsg("");
     try {
@@ -239,6 +417,7 @@ export default function AdminPage() {
         await loadActivations("today");
         await loadSiteSettings();
         await loadPayouts();
+        await loadBlogPosts();
       } catch (err) {
         if (!handleSessionError(err)) {
           /* silent fail */
@@ -1868,6 +2047,42 @@ export default function AdminPage() {
           onPrefillConsumed={() => setPrefillLookupEmail(null)}
         />
         <DirectMessaging onSessionExpired={handleLogout} />
+        <BlogManager
+          blogView={blogView}
+          setBlogView={setBlogView}
+          blogPosts={blogPosts}
+          blogLoading={blogLoading}
+          loadBlogPosts={loadBlogPosts}
+          openNewPost={openNewPost}
+          openEditPost={openEditPost}
+          deleteBlogPost={deleteBlogPost}
+          blogTitle={blogTitle}
+          setBlogTitle={setBlogTitle}
+          blogSlug={blogSlug}
+          setBlogSlug={setBlogSlug}
+          blogExcerpt={blogExcerpt}
+          setBlogExcerpt={setBlogExcerpt}
+          blogContent={blogContent}
+          setBlogContent={setBlogContent}
+          blogCoverImage={blogCoverImage}
+          setBlogCoverImage={setBlogCoverImage}
+          blogCategory={blogCategory}
+          setBlogCategory={setBlogCategory}
+          blogTags={blogTags}
+          setBlogTags={setBlogTags}
+          blogMetaTitle={blogMetaTitle}
+          setBlogMetaTitle={setBlogMetaTitle}
+          blogMetaDesc={blogMetaDesc}
+          setBlogMetaDesc={setBlogMetaDesc}
+          blogStatus={blogStatus}
+          blogFeatured={blogFeatured}
+          setBlogFeatured={setBlogFeatured}
+          blogSaving={blogSaving}
+          blogMsg={blogMsg}
+          editingPost={editingPost}
+          saveBlogPost={saveBlogPost}
+          generateSlug={generateSlug}
+        />
       </div>
 
       <div className="mx-auto mt-8 max-w-6xl">

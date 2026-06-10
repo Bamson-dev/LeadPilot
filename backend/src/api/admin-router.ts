@@ -1369,3 +1369,203 @@ adminRouter.get("/trial-activity", requireAdminAuth, async (req: Request, res: R
     res.status(500).json({ error: "Failed to fetch trial activity" });
   }
 });
+
+adminRouter.get("/blog/posts", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { status, limit = "50", offset = "0" } = req.query;
+
+    let query = supabase
+      .from("blog_posts")
+      .select(
+        "id, title, slug, excerpt, category, tags, status, featured, read_time, published_at, created_at, updated_at"
+      )
+      .order("created_at", { ascending: false })
+      .range(Number(offset), Number(offset) + Number(limit) - 1);
+
+    if (status) {
+      query = query.eq("status", status);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    res.json({ posts: data, total: data?.length || 0 });
+  } catch (err) {
+    logger.error("Failed to fetch blog posts", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to fetch blog posts" });
+  }
+});
+
+adminRouter.get("/blog/posts/:id", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const { data, error } = await supabase
+      .from("blog_posts")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (error) throw error;
+    if (!data) {
+      res.status(404).json({ error: "Post not found" });
+      return;
+    }
+
+    res.json(data);
+  } catch (err) {
+    logger.error("Failed to fetch blog post", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to fetch blog post" });
+  }
+});
+
+adminRouter.post("/blog/posts", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const {
+      title,
+      slug,
+      excerpt,
+      content,
+      cover_image,
+      author,
+      author_title,
+      category,
+      tags,
+      meta_title,
+      meta_description,
+      status,
+      featured,
+      read_time,
+    } = req.body as {
+      title?: string;
+      slug?: string;
+      excerpt?: string;
+      content?: string;
+      cover_image?: string;
+      author?: string;
+      author_title?: string;
+      category?: string;
+      tags?: string[];
+      meta_title?: string;
+      meta_description?: string;
+      status?: string;
+      featured?: boolean;
+      read_time?: number;
+    };
+
+    if (!title || !slug || !content) {
+      res.status(400).json({ error: "Title, slug and content are required" });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const normalizedSlug = slug
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, "-")
+      .replace(/-+/g, "-");
+
+    const { data, error } = await supabase
+      .from("blog_posts")
+      .insert({
+        title,
+        slug: normalizedSlug,
+        excerpt,
+        content,
+        cover_image,
+        author: author || "Bamidele Matthew",
+        author_title: author_title || "Founder, LeadThur",
+        category,
+        tags: tags || [],
+        meta_title: meta_title || title,
+        meta_description: meta_description || excerpt,
+        status: status || "draft",
+        featured: featured || false,
+        read_time: read_time || Math.ceil(content.split(" ").length / 200),
+        published_at: status === "published" ? now : null,
+        created_at: now,
+        updated_at: now,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    logger.info("Blog post created", { slug: normalizedSlug, status });
+    res.json({ success: true, post: data });
+  } catch (err) {
+    logger.error("Failed to create blog post", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to create blog post" });
+  }
+});
+
+adminRouter.put("/blog/posts/:id", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const updates = { ...req.body } as Record<string, unknown>;
+
+    const now = new Date().toISOString();
+
+    if (typeof updates.slug === "string") {
+      updates.slug = updates.slug
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, "-")
+        .replace(/-+/g, "-");
+    }
+
+    if (updates.status === "published" && !updates.published_at) {
+      updates.published_at = now;
+    }
+
+    if (typeof updates.content === "string" && !updates.read_time) {
+      updates.read_time = Math.ceil(updates.content.split(" ").length / 200);
+    }
+
+    if (updates.title && !updates.meta_title) {
+      updates.meta_title = updates.title;
+    }
+
+    updates.updated_at = now;
+    delete updates.id;
+
+    const { data, error } = await supabase
+      .from("blog_posts")
+      .update(updates)
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    logger.info("Blog post updated", { id, status: updates.status });
+    res.json({ success: true, post: data });
+  } catch (err) {
+    logger.error("Failed to update blog post", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to update blog post" });
+  }
+});
+
+adminRouter.delete("/blog/posts/:id", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const { error } = await supabase.from("blog_posts").delete().eq("id", id);
+
+    if (error) throw error;
+
+    logger.info("Blog post deleted", { id });
+    res.json({ success: true });
+  } catch (err) {
+    logger.error("Failed to delete blog post", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to delete blog post" });
+  }
+});
