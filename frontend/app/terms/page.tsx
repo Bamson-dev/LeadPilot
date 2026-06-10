@@ -1,4 +1,41 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  title: "Terms of Service — LeadThur",
+  description:
+    "Read the LeadThur terms of service. Understand your rights and responsibilities when using LeadThur, owned and operated by Pdigital Marketstore Ltd (RC 8015428), Lagos, Nigeria.",
+  alternates: {
+    canonical: "https://www.leadthur.com/terms",
+  },
+  openGraph: {
+    title: "Terms of Service — LeadThur",
+    description:
+      "Terms of service for LeadThur by Pdigital Marketstore Ltd (RC 8015428), Lagos, Nigeria.",
+    url: "https://www.leadthur.com/terms",
+    siteName: "LeadThur",
+    images: [
+      {
+        url: "https://www.leadthur.com/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "LeadThur Terms of Service",
+      },
+    ],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Terms of Service — LeadThur",
+    description: "Terms of service for LeadThur by Pdigital Marketstore Ltd, Lagos, Nigeria.",
+    creator: "@BamsonOfficial",
+    images: ["https://www.leadthur.com/og-image.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+};
 
 export default function TermsPage() {
   return (
