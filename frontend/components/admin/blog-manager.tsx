@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import RichEmailEditor from "@/components/RichEmailEditor";
 import { getAdminToken } from "@/services/admin-api";
@@ -15,88 +15,250 @@ type BlogPostRow = {
   category?: string;
   read_time?: number;
   created_at: string;
+  excerpt?: string;
+  cover_image?: string;
+  tags?: string[];
+  meta_title?: string;
+  meta_description?: string;
+  content?: string;
 };
 
-type BlogManagerProps = {
-  blogView: "list" | "editor";
-  setBlogView: (view: "list" | "editor") => void;
-  blogPosts: BlogPostRow[];
-  blogLoading: boolean;
-  loadBlogPosts: () => Promise<void>;
-  openNewPost: () => void;
-  openEditPost: (post: BlogPostRow) => void;
-  deleteBlogPost: (id: string) => void;
-  blogTitle: string;
-  setBlogTitle: (v: string) => void;
-  blogSlug: string;
-  setBlogSlug: (v: string) => void;
-  blogExcerpt: string;
-  setBlogExcerpt: (v: string) => void;
-  blogContent: string;
-  setBlogContent: (v: string) => void;
-  blogCoverImage: string;
-  setBlogCoverImage: (v: string) => void;
-  blogCategory: string;
-  setBlogCategory: (v: string) => void;
-  blogTags: string;
-  setBlogTags: (v: string) => void;
-  blogMetaTitle: string;
-  setBlogMetaTitle: (v: string) => void;
-  blogMetaDesc: string;
-  setBlogMetaDesc: (v: string) => void;
-  blogStatus: "draft" | "published";
-  blogFeatured: boolean;
-  setBlogFeatured: (v: boolean) => void;
-  blogSaving: boolean;
-  blogMsg: string;
-  editingPost: { id: string } | null;
-  saveBlogPost: (publishNow?: boolean) => void;
-  generateSlug: (title: string) => string;
+type BlogPostFull = BlogPostRow & {
+  content: string;
 };
 
-export function BlogManager(props: BlogManagerProps) {
-  const {
-    blogView,
-    setBlogView,
-    blogPosts,
-    blogLoading,
-    loadBlogPosts,
-    openNewPost,
-    openEditPost,
-    deleteBlogPost,
-    blogTitle,
-    setBlogTitle,
-    blogSlug,
-    setBlogSlug,
-    blogExcerpt,
-    setBlogExcerpt,
-    blogContent,
-    setBlogContent,
-    blogCoverImage,
-    setBlogCoverImage,
-    blogCategory,
-    setBlogCategory,
-    blogTags,
-    setBlogTags,
-    blogMetaTitle,
-    setBlogMetaTitle,
-    blogMetaDesc,
-    setBlogMetaDesc,
-    blogStatus,
-    blogFeatured,
-    setBlogFeatured,
-    blogSaving,
-    blogMsg,
-    editingPost,
-    saveBlogPost,
-    generateSlug,
-  } = props;
+/** @deprecated Props are ignored — BlogManager manages its own state internally. */
+type BlogManagerProps = Record<string, unknown>;
+
+function generateSlug(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .trim();
+}
+
+function adminHeaders(): HeadersInit {
+  const token = getAdminToken();
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+export function BlogManager(_props?: BlogManagerProps) {
+  const [blogView, setBlogView] = useState<"list" | "editor">("list");
+  const [blogPosts, setBlogPosts] = useState<BlogPostRow[]>([]);
+  const [blogLoading, setBlogLoading] = useState(false);
+  const [editorLoading, setEditorLoading] = useState(false);
+  const [editingPost, setEditingPost] = useState<{ id: string } | null>(null);
+  const [blogTitle, setBlogTitle] = useState("");
+  const [blogSlug, setBlogSlug] = useState("");
+  const [blogExcerpt, setBlogExcerpt] = useState("");
+  const [blogContent, setBlogContent] = useState("");
+  const [blogCoverImage, setBlogCoverImage] = useState("");
+  const [blogCategory, setBlogCategory] = useState("");
+  const [blogTags, setBlogTags] = useState("");
+  const [blogMetaTitle, setBlogMetaTitle] = useState("");
+  const [blogMetaDesc, setBlogMetaDesc] = useState("");
+  const [blogStatus, setBlogStatus] = useState<"draft" | "published">("draft");
+  const [blogFeatured, setBlogFeatured] = useState(false);
+  const [blogSaving, setBlogSaving] = useState(false);
+  const [blogMsg, setBlogMsg] = useState("");
+  const [listSuccessMsg, setListSuccessMsg] = useState("");
 
   const coverInputRef = useRef<HTMLInputElement>(null);
   const [coverUploading, setCoverUploading] = useState(false);
 
+  const apiUrl = getApiUrl();
+
+  const loadBlogPosts = useCallback(async () => {
+    if (!apiUrl) return;
+    setBlogLoading(true);
+    try {
+      const res = await fetch(`${apiUrl}/admin/blog/posts`, {
+        headers: adminHeaders(),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { posts?: BlogPostRow[] };
+        setBlogPosts(data.posts || []);
+      }
+    } catch {
+      /* silent */
+    } finally {
+      setBlogLoading(false);
+    }
+  }, [apiUrl]);
+
+  useEffect(() => {
+    void loadBlogPosts();
+  }, [loadBlogPosts]);
+
+  function resetForm() {
+    setEditingPost(null);
+    setBlogTitle("");
+    setBlogSlug("");
+    setBlogExcerpt("");
+    setBlogContent("");
+    setBlogCoverImage("");
+    setBlogCategory("");
+    setBlogTags("");
+    setBlogMetaTitle("");
+    setBlogMetaDesc("");
+    setBlogStatus("draft");
+    setBlogFeatured(false);
+    setBlogMsg("");
+  }
+
+  function openNewPost() {
+    resetForm();
+    setBlogView("editor");
+  }
+
+  function populateFormFromPost(post: BlogPostFull) {
+    setEditingPost({ id: post.id });
+    setBlogTitle(post.title || "");
+    setBlogSlug(post.slug || "");
+    setBlogExcerpt(post.excerpt || "");
+    setBlogContent(post.content || "");
+    setBlogCoverImage(post.cover_image || "");
+    setBlogCategory(post.category || "");
+    setBlogTags((post.tags || []).join(", "));
+    setBlogMetaTitle(post.meta_title || "");
+    setBlogMetaDesc(post.meta_description || "");
+    setBlogStatus((post.status as "draft" | "published") || "draft");
+    setBlogFeatured(post.featured || false);
+    setBlogMsg("");
+  }
+
+  async function openEditPost(post: BlogPostRow) {
+    if (!apiUrl) return;
+
+    setBlogView("editor");
+    setEditorLoading(true);
+    setBlogMsg("");
+
+    try {
+      const res = await fetch(`${apiUrl}/admin/blog/posts/${post.id}`, {
+        headers: adminHeaders(),
+      });
+
+      if (res.ok) {
+        const data = (await res.json()) as BlogPostFull;
+        populateFormFromPost(data);
+      } else {
+        populateFormFromPost({
+          ...post,
+          content: post.content || "",
+        });
+        setBlogMsg("Could not load full article. Some fields may be incomplete.");
+      }
+    } catch {
+      populateFormFromPost({
+        ...post,
+        content: post.content || "",
+      });
+      setBlogMsg("Could not load full article. Check your connection.");
+    } finally {
+      setEditorLoading(false);
+    }
+  }
+
+  function backToList() {
+    resetForm();
+    setBlogView("list");
+  }
+
+  async function saveBlogPost(publishNow?: boolean) {
+    if (!apiUrl) return;
+
+    if (!blogTitle || !blogContent) {
+      setBlogMsg("Title and content are required.");
+      return;
+    }
+
+    setBlogSaving(true);
+    setBlogMsg("");
+
+    const payload = {
+      title: blogTitle,
+      slug: blogSlug || generateSlug(blogTitle),
+      excerpt: blogExcerpt,
+      content: blogContent,
+      cover_image: blogCoverImage,
+      category: blogCategory,
+      tags: blogTags
+        ? blogTags
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean)
+        : [],
+      meta_title: blogMetaTitle || blogTitle,
+      meta_description: blogMetaDesc || blogExcerpt,
+      status: publishNow ? "published" : blogStatus,
+      featured: blogFeatured,
+    };
+
+    const isEditing = Boolean(editingPost);
+
+    try {
+      const url = isEditing
+        ? `${apiUrl}/admin/blog/posts/${editingPost!.id}`
+        : `${apiUrl}/admin/blog/posts`;
+
+      const res = await fetch(url, {
+        method: isEditing ? "PUT" : "POST",
+        headers: adminHeaders(),
+        body: JSON.stringify(payload),
+      });
+
+      const data = (await res.json()) as { success?: boolean; post?: { id: string }; error?: string };
+
+      if (data.success) {
+        if (publishNow) setBlogStatus("published");
+
+        if (isEditing) {
+          const successText = publishNow
+            ? "Article published successfully."
+            : "Article updated successfully.";
+          resetForm();
+          setBlogView("list");
+          setListSuccessMsg(successText);
+          await loadBlogPosts();
+          setTimeout(() => setListSuccessMsg(""), 4000);
+        } else {
+          setBlogMsg(publishNow ? "Article published successfully." : "Article saved as draft.");
+          if (data.post) setEditingPost(data.post);
+          await loadBlogPosts();
+        }
+      } else {
+        setBlogMsg(data.error || "Failed to save.");
+      }
+    } catch {
+      setBlogMsg("Failed to save. Check your connection.");
+    } finally {
+      setBlogSaving(false);
+    }
+  }
+
+  async function deleteBlogPost(id: string) {
+    if (!apiUrl) return;
+    if (!window.confirm("Delete this article? This cannot be undone.")) return;
+
+    try {
+      await fetch(`${apiUrl}/admin/blog/posts/${id}`, {
+        method: "DELETE",
+        headers: adminHeaders(),
+      });
+      await loadBlogPosts();
+      setBlogView("list");
+    } catch {
+      /* silent */
+    }
+  }
+
   async function handleCoverImageUpload(file: File) {
-    const apiUrl = getApiUrl();
     const token = getAdminToken();
     if (!apiUrl || !token) {
       alert("Admin session expired. Please log in again.");
@@ -163,28 +325,6 @@ export function BlogManager(props: BlogManagerProps) {
           </p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          {blogView === "editor" && (
-            <button
-              type="button"
-              onClick={() => {
-                setBlogView("list");
-                void loadBlogPosts();
-              }}
-              style={{
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                borderRadius: 8,
-                padding: "6px 14px",
-                fontSize: 12,
-                fontWeight: 700,
-                color: "#8888A8",
-                cursor: "pointer",
-                fontFamily: "Inter, sans-serif",
-              }}
-            >
-              ← All Articles
-            </button>
-          )}
           <button
             type="button"
             onClick={openNewPost}
@@ -208,6 +348,23 @@ export function BlogManager(props: BlogManagerProps) {
       <div style={{ padding: 16 }}>
         {blogView === "list" && (
           <>
+            {listSuccessMsg && (
+              <div
+                style={{
+                  marginBottom: 14,
+                  padding: "10px 14px",
+                  background: "rgba(16,185,129,0.08)",
+                  border: "1px solid rgba(16,185,129,0.2)",
+                  borderRadius: 8,
+                  fontSize: 12,
+                  color: "#10B981",
+                  fontWeight: 600,
+                }}
+              >
+                {listSuccessMsg}
+              </div>
+            )}
+
             {blogLoading ? (
               <div style={{ textAlign: "center", padding: "32px 0", fontSize: 13, color: "#555570" }}>
                 Loading articles...
@@ -307,7 +464,7 @@ export function BlogManager(props: BlogManagerProps) {
                     <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                       <button
                         type="button"
-                        onClick={() => openEditPost(post)}
+                        onClick={() => void openEditPost(post)}
                         style={{
                           background: "rgba(124,58,237,0.1)",
                           border: "1px solid rgba(124,58,237,0.2)",
@@ -345,7 +502,7 @@ export function BlogManager(props: BlogManagerProps) {
                       )}
                       <button
                         type="button"
-                        onClick={() => deleteBlogPost(post.id)}
+                        onClick={() => void deleteBlogPost(post.id)}
                         style={{
                           background: "rgba(239,68,68,0.08)",
                           border: "1px solid rgba(239,68,68,0.2)",
@@ -370,490 +527,532 @@ export function BlogManager(props: BlogManagerProps) {
 
         {blogView === "editor" && (
           <div>
-            <div style={{ marginBottom: 14 }}>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: "#8888A8",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.08em",
-                  marginBottom: 6,
-                }}
-              >
-                Article Title
-              </label>
-              <input
-                value={blogTitle}
-                onChange={(e) => {
-                  setBlogTitle(e.target.value);
-                  if (!editingPost) setBlogSlug(generateSlug(e.target.value));
-                  if (!blogMetaTitle) setBlogMetaTitle(e.target.value);
-                }}
-                placeholder="How to Find 1,000 Business Contacts in 60 Seconds"
-                style={{
-                  width: "100%",
-                  background: "#0A0A10",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: 8,
-                  padding: "10px 14px",
-                  fontSize: 15,
-                  fontWeight: 700,
-                  color: "#F2F1FF",
-                  fontFamily: "Inter, sans-serif",
-                  outline: "none",
-                }}
-              />
-            </div>
+            <button
+              type="button"
+              onClick={backToList}
+              style={{
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: 8,
+                padding: "6px 14px",
+                fontSize: 12,
+                fontWeight: 700,
+                color: "#8888A8",
+                cursor: "pointer",
+                fontFamily: "Inter, sans-serif",
+                marginBottom: 16,
+              }}
+            >
+              ← Back to Articles
+            </button>
 
-            <div style={{ marginBottom: 14 }}>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: "#8888A8",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.08em",
-                  marginBottom: 6,
-                }}
-              >
-                URL Slug
-              </label>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 12, color: "#555570", whiteSpace: "nowrap" }}>
-                  leadthur.com/blog/
-                </span>
-                <input
-                  value={blogSlug}
-                  onChange={(e) =>
-                    setBlogSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))
-                  }
-                  placeholder="how-to-find-business-contacts"
-                  style={{
-                    flex: 1,
-                    background: "#0A0A10",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: 8,
-                    padding: "8px 12px",
-                    fontSize: 12,
-                    color: "#A78BFA",
-                    fontFamily: "Inter, sans-serif",
-                    outline: "none",
-                  }}
-                />
+            {editorLoading ? (
+              <div style={{ textAlign: "center", padding: "40px 0", fontSize: 13, color: "#555570" }}>
+                Loading article...
               </div>
-            </div>
+            ) : (
+              <>
+                {editingPost && (
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: "#A78BFA",
+                      marginBottom: 14,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.06em",
+                    }}
+                  >
+                    Editing article
+                  </div>
+                )}
 
-            <div style={{ marginBottom: 14 }}>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: "#8888A8",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.08em",
-                  marginBottom: 6,
-                }}
-              >
-                Excerpt (shown on blog listing)
-              </label>
-              <textarea
-                value={blogExcerpt}
-                onChange={(e) => setBlogExcerpt(e.target.value)}
-                placeholder="A short summary of the article. Shows on the blog listing page and in Google search results."
-                rows={2}
-                style={{
-                  width: "100%",
-                  background: "#0A0A10",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: 8,
-                  padding: "10px 14px",
-                  fontSize: 13,
-                  color: "#F2F1FF",
-                  fontFamily: "Inter, sans-serif",
-                  outline: "none",
-                  resize: "vertical",
-                }}
-              />
-            </div>
-
-            <div style={{ marginBottom: 14 }}>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: "#8888A8",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.08em",
-                  marginBottom: 6,
-                }}
-              >
-                Cover Image URL
-              </label>
-
-              <input
-                ref={coverInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/gif,image/webp"
-                style={{ display: "none" }}
-                disabled={coverUploading}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    void handleCoverImageUpload(file);
-                  }
-                  e.target.value = "";
-                }}
-              />
-
-              <button
-                type="button"
-                onClick={() => coverInputRef.current?.click()}
-                disabled={coverUploading}
-                style={{
-                  background: coverUploading ? "#1A1A24" : "rgba(124,58,237,0.12)",
-                  border: "1px solid rgba(124,58,237,0.3)",
-                  borderRadius: 8,
-                  padding: "10px 16px",
-                  fontSize: 13,
-                  fontWeight: 700,
-                  color: coverUploading ? "#555570" : "#A78BFA",
-                  cursor: coverUploading ? "not-allowed" : "pointer",
-                  fontFamily: "Inter, sans-serif",
-                  marginBottom: 10,
-                }}
-              >
-                {coverUploading ? "Uploading..." : "Upload Cover Image"}
-              </button>
-
-              <input
-                value={blogCoverImage}
-                onChange={(e) => setBlogCoverImage(e.target.value)}
-                placeholder="https://example.com/cover-image.png"
-                style={{
-                  width: "100%",
-                  background: "#0A0A10",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: 8,
-                  padding: "10px 14px",
-                  fontSize: 13,
-                  color: "#F2F1FF",
-                  fontFamily: "Inter, sans-serif",
-                  outline: "none",
-                }}
-              />
-
-              {blogCoverImage && (
-                <div style={{ marginTop: 8, borderRadius: 8, overflow: "hidden", maxHeight: 200 }}>
-                  <img
-                    src={blogCoverImage}
-                    alt="Cover preview"
-                    style={{ width: "100%", objectFit: "cover", maxHeight: 200 }}
+                <div style={{ marginBottom: 14 }}>
+                  <label
+                    style={{
+                      display: "block",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: "#8888A8",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      marginBottom: 6,
+                    }}
+                  >
+                    Article Title
+                  </label>
+                  <input
+                    value={blogTitle}
+                    onChange={(e) => {
+                      setBlogTitle(e.target.value);
+                      if (!editingPost) setBlogSlug(generateSlug(e.target.value));
+                      if (!blogMetaTitle) setBlogMetaTitle(e.target.value);
+                    }}
+                    placeholder="How to Find 1,000 Business Contacts in 60 Seconds"
+                    style={{
+                      width: "100%",
+                      background: "#0A0A10",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      borderRadius: 8,
+                      padding: "10px 14px",
+                      fontSize: 15,
+                      fontWeight: 700,
+                      color: "#F2F1FF",
+                      fontFamily: "Inter, sans-serif",
+                      outline: "none",
+                    }}
                   />
                 </div>
-              )}
-            </div>
 
-            <div style={{ display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
-              <div style={{ flex: 1, minWidth: 200 }}>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    color: "#8888A8",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                    marginBottom: 6,
-                  }}
-                >
-                  Category
-                </label>
-                <select
-                  value={blogCategory}
-                  onChange={(e) => setBlogCategory(e.target.value)}
-                  style={{
-                    width: "100%",
-                    background: "#0A0A10",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: 8,
-                    padding: "10px 14px",
-                    fontSize: 13,
-                    color: "#F2F1FF",
-                    fontFamily: "Inter, sans-serif",
-                    outline: "none",
-                  }}
-                >
-                  <option value="">Select category</option>
-                  <option value="Lead Generation">Lead Generation</option>
-                  <option value="Freelancing">Freelancing</option>
-                  <option value="Cold Outreach">Cold Outreach</option>
-                  <option value="Nigeria Business">Nigeria Business</option>
-                  <option value="SMMA">SMMA</option>
-                  <option value="Tools and Software">Tools and Software</option>
-                </select>
-              </div>
-              <div style={{ flex: 2, minWidth: 200 }}>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    color: "#8888A8",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                    marginBottom: 6,
-                  }}
-                >
-                  Tags (comma separated)
-                </label>
-                <input
-                  value={blogTags}
-                  onChange={(e) => setBlogTags(e.target.value)}
-                  placeholder="freelancing, lagos, cold outreach, whatsapp marketing"
-                  style={{
-                    width: "100%",
-                    background: "#0A0A10",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: 8,
-                    padding: "10px 14px",
-                    fontSize: 13,
-                    color: "#F2F1FF",
-                    fontFamily: "Inter, sans-serif",
-                    outline: "none",
-                  }}
-                />
-              </div>
-            </div>
-
-            <div
-              style={{
-                background: "rgba(124,58,237,0.06)",
-                border: "1px solid rgba(124,58,237,0.15)",
-                borderRadius: 10,
-                padding: "14px 16px",
-                marginBottom: 14,
-              }}
-            >
-              <div style={{ fontSize: 12, fontWeight: 700, color: "#A78BFA", marginBottom: 12 }}>
-                SEO Settings
-              </div>
-              <div style={{ marginBottom: 10 }}>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    color: "#8888A8",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                    marginBottom: 5,
-                  }}
-                >
-                  Meta Title (shown in Google)
-                </label>
-                <input
-                  value={blogMetaTitle}
-                  onChange={(e) => setBlogMetaTitle(e.target.value)}
-                  placeholder="Leave blank to use article title"
-                  style={{
-                    width: "100%",
-                    background: "#0A0A10",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: 6,
-                    padding: "8px 12px",
-                    fontSize: 13,
-                    color: "#F2F1FF",
-                    fontFamily: "Inter, sans-serif",
-                    outline: "none",
-                  }}
-                />
-                <div style={{ fontSize: 10, color: "#555570", marginTop: 4 }}>
-                  {blogMetaTitle.length}/60 characters. Keep under 60 for best Google display.
+                <div style={{ marginBottom: 14 }}>
+                  <label
+                    style={{
+                      display: "block",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: "#8888A8",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      marginBottom: 6,
+                    }}
+                  >
+                    URL Slug
+                  </label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 12, color: "#555570", whiteSpace: "nowrap" }}>
+                      leadthur.com/blog/
+                    </span>
+                    <input
+                      value={blogSlug}
+                      onChange={(e) =>
+                        setBlogSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))
+                      }
+                      placeholder="how-to-find-business-contacts"
+                      style={{
+                        flex: 1,
+                        background: "#0A0A10",
+                        border: "1px solid rgba(255,255,255,0.1)",
+                        borderRadius: 8,
+                        padding: "8px 12px",
+                        fontSize: 12,
+                        color: "#A78BFA",
+                        fontFamily: "Inter, sans-serif",
+                        outline: "none",
+                      }}
+                    />
+                  </div>
                 </div>
-              </div>
-              <div>
-                <label
+
+                <div style={{ marginBottom: 14 }}>
+                  <label
+                    style={{
+                      display: "block",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: "#8888A8",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      marginBottom: 6,
+                    }}
+                  >
+                    Excerpt (shown on blog listing)
+                  </label>
+                  <textarea
+                    value={blogExcerpt}
+                    onChange={(e) => setBlogExcerpt(e.target.value)}
+                    placeholder="A short summary of the article. Shows on the blog listing page and in Google search results."
+                    rows={2}
+                    style={{
+                      width: "100%",
+                      background: "#0A0A10",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      borderRadius: 8,
+                      padding: "10px 14px",
+                      fontSize: 13,
+                      color: "#F2F1FF",
+                      fontFamily: "Inter, sans-serif",
+                      outline: "none",
+                      resize: "vertical",
+                    }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: 14 }}>
+                  <label
+                    style={{
+                      display: "block",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: "#8888A8",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      marginBottom: 6,
+                    }}
+                  >
+                    Cover Image URL
+                  </label>
+
+                  <input
+                    ref={coverInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    style={{ display: "none" }}
+                    disabled={coverUploading}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        void handleCoverImageUpload(file);
+                      }
+                      e.target.value = "";
+                    }}
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => coverInputRef.current?.click()}
+                    disabled={coverUploading}
+                    style={{
+                      background: coverUploading ? "#1A1A24" : "rgba(124,58,237,0.12)",
+                      border: "1px solid rgba(124,58,237,0.3)",
+                      borderRadius: 8,
+                      padding: "10px 16px",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: coverUploading ? "#555570" : "#A78BFA",
+                      cursor: coverUploading ? "not-allowed" : "pointer",
+                      fontFamily: "Inter, sans-serif",
+                      marginBottom: 10,
+                    }}
+                  >
+                    {coverUploading ? "Uploading..." : "Upload Cover Image"}
+                  </button>
+
+                  <input
+                    value={blogCoverImage}
+                    onChange={(e) => setBlogCoverImage(e.target.value)}
+                    placeholder="https://example.com/cover-image.png"
+                    style={{
+                      width: "100%",
+                      background: "#0A0A10",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      borderRadius: 8,
+                      padding: "10px 14px",
+                      fontSize: 13,
+                      color: "#F2F1FF",
+                      fontFamily: "Inter, sans-serif",
+                      outline: "none",
+                    }}
+                  />
+
+                  {blogCoverImage && (
+                    <div style={{ marginTop: 8, borderRadius: 8, overflow: "hidden", maxHeight: 200 }}>
+                      <img
+                        src={blogCoverImage}
+                        alt="Cover preview"
+                        style={{ width: "100%", objectFit: "cover", maxHeight: 200 }}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
+                  <div style={{ flex: 1, minWidth: 200 }}>
+                    <label
+                      style={{
+                        display: "block",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: "#8888A8",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                        marginBottom: 6,
+                      }}
+                    >
+                      Category
+                    </label>
+                    <select
+                      value={blogCategory}
+                      onChange={(e) => setBlogCategory(e.target.value)}
+                      style={{
+                        width: "100%",
+                        background: "#0A0A10",
+                        border: "1px solid rgba(255,255,255,0.1)",
+                        borderRadius: 8,
+                        padding: "10px 14px",
+                        fontSize: 13,
+                        color: "#F2F1FF",
+                        fontFamily: "Inter, sans-serif",
+                        outline: "none",
+                      }}
+                    >
+                      <option value="">Select category</option>
+                      <option value="Lead Generation">Lead Generation</option>
+                      <option value="Freelancing">Freelancing</option>
+                      <option value="Cold Outreach">Cold Outreach</option>
+                      <option value="Nigeria Business">Nigeria Business</option>
+                      <option value="SMMA">SMMA</option>
+                      <option value="Tools and Software">Tools and Software</option>
+                    </select>
+                  </div>
+                  <div style={{ flex: 2, minWidth: 200 }}>
+                    <label
+                      style={{
+                        display: "block",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: "#8888A8",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                        marginBottom: 6,
+                      }}
+                    >
+                      Tags (comma separated)
+                    </label>
+                    <input
+                      value={blogTags}
+                      onChange={(e) => setBlogTags(e.target.value)}
+                      placeholder="freelancing, lagos, cold outreach, whatsapp marketing"
+                      style={{
+                        width: "100%",
+                        background: "#0A0A10",
+                        border: "1px solid rgba(255,255,255,0.1)",
+                        borderRadius: 8,
+                        padding: "10px 14px",
+                        fontSize: 13,
+                        color: "#F2F1FF",
+                        fontFamily: "Inter, sans-serif",
+                        outline: "none",
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div
                   style={{
-                    display: "block",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    color: "#8888A8",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                    marginBottom: 5,
+                    background: "rgba(124,58,237,0.06)",
+                    border: "1px solid rgba(124,58,237,0.15)",
+                    borderRadius: 10,
+                    padding: "14px 16px",
+                    marginBottom: 14,
                   }}
                 >
-                  Meta Description (shown in Google)
-                </label>
-                <textarea
-                  value={blogMetaDesc}
-                  onChange={(e) => setBlogMetaDesc(e.target.value)}
-                  placeholder="Leave blank to use excerpt"
-                  rows={2}
-                  style={{
-                    width: "100%",
-                    background: "#0A0A10",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: 6,
-                    padding: "8px 12px",
-                    fontSize: 13,
-                    color: "#F2F1FF",
-                    fontFamily: "Inter, sans-serif",
-                    outline: "none",
-                    resize: "vertical",
-                  }}
-                />
-                <div style={{ fontSize: 10, color: "#555570", marginTop: 4 }}>
-                  {blogMetaDesc.length}/160 characters. Keep under 160 for best Google display.
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#A78BFA", marginBottom: 12 }}>
+                    SEO Settings
+                  </div>
+                  <div style={{ marginBottom: 10 }}>
+                    <label
+                      style={{
+                        display: "block",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: "#8888A8",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                        marginBottom: 5,
+                      }}
+                    >
+                      Meta Title (shown in Google)
+                    </label>
+                    <input
+                      value={blogMetaTitle}
+                      onChange={(e) => setBlogMetaTitle(e.target.value)}
+                      placeholder="Leave blank to use article title"
+                      style={{
+                        width: "100%",
+                        background: "#0A0A10",
+                        border: "1px solid rgba(255,255,255,0.1)",
+                        borderRadius: 6,
+                        padding: "8px 12px",
+                        fontSize: 13,
+                        color: "#F2F1FF",
+                        fontFamily: "Inter, sans-serif",
+                        outline: "none",
+                      }}
+                    />
+                    <div style={{ fontSize: 10, color: "#555570", marginTop: 4 }}>
+                      {blogMetaTitle.length}/60 characters. Keep under 60 for best Google display.
+                    </div>
+                  </div>
+                  <div>
+                    <label
+                      style={{
+                        display: "block",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: "#8888A8",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                        marginBottom: 5,
+                      }}
+                    >
+                      Meta Description (shown in Google)
+                    </label>
+                    <textarea
+                      value={blogMetaDesc}
+                      onChange={(e) => setBlogMetaDesc(e.target.value)}
+                      placeholder="Leave blank to use excerpt"
+                      rows={2}
+                      style={{
+                        width: "100%",
+                        background: "#0A0A10",
+                        border: "1px solid rgba(255,255,255,0.1)",
+                        borderRadius: 6,
+                        padding: "8px 12px",
+                        fontSize: 13,
+                        color: "#F2F1FF",
+                        fontFamily: "Inter, sans-serif",
+                        outline: "none",
+                        resize: "vertical",
+                      }}
+                    />
+                    <div style={{ fontSize: 10, color: "#555570", marginTop: 4 }}>
+                      {blogMetaDesc.length}/160 characters. Keep under 160 for best Google display.
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            <div
-              style={{
-                display: "flex",
-                gap: 16,
-                marginBottom: 14,
-                flexWrap: "wrap",
-                alignItems: "center",
-              }}
-            >
-              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-                <input
-                  type="checkbox"
-                  checked={blogFeatured}
-                  onChange={(e) => setBlogFeatured(e.target.checked)}
-                  style={{ width: 16, height: 16 }}
-                />
-                <span style={{ fontSize: 13, color: "#F2F1FF", fontWeight: 600 }}>
-                  Featured article
-                </span>
-              </label>
-              <div style={{ fontSize: 11, color: "#555570" }}>
-                Featured articles appear first on the blog homepage
-              </div>
-            </div>
-
-            <div style={{ marginBottom: 16 }}>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: "#8888A8",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.08em",
-                  marginBottom: 6,
-                }}
-              >
-                Article Content
-              </label>
-              <RichEmailEditor
-                value={blogContent}
-                onChange={setBlogContent}
-                placeholder="Write your article here. Use headings, bold text, links, images, and lists to structure your content for maximum SEO impact."
-              />
-            </div>
-
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button
-                type="button"
-                onClick={() => saveBlogPost(false)}
-                disabled={blogSaving}
-                style={{
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: 8,
-                  padding: "10px 20px",
-                  fontSize: 13,
-                  fontWeight: 700,
-                  color: "#8888A8",
-                  cursor: blogSaving ? "not-allowed" : "pointer",
-                  fontFamily: "Inter, sans-serif",
-                }}
-              >
-                {blogSaving ? "Saving..." : "Save as Draft"}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => saveBlogPost(true)}
-                disabled={blogSaving}
-                style={{
-                  background: blogSaving ? "#1A1A24" : "#10B981",
-                  color: "white",
-                  border: "none",
-                  borderRadius: 8,
-                  padding: "10px 24px",
-                  fontSize: 13,
-                  fontWeight: 700,
-                  cursor: blogSaving ? "not-allowed" : "pointer",
-                  fontFamily: "Inter, sans-serif",
-                  opacity: blogSaving ? 0.7 : 1,
-                }}
-              >
-                {blogSaving ? "Publishing..." : "Publish Now"}
-              </button>
-
-              {editingPost && blogStatus === "published" && (
-                <Link
-                  href={`/blog/${blogSlug}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <div
                   style={{
-                    background: "rgba(124,58,237,0.1)",
-                    border: "1px solid rgba(124,58,237,0.2)",
-                    borderRadius: 8,
-                    padding: "10px 20px",
-                    fontSize: 13,
-                    fontWeight: 700,
-                    color: "#A78BFA",
-                    textDecoration: "none",
-                    display: "inline-flex",
+                    display: "flex",
+                    gap: 16,
+                    marginBottom: 14,
+                    flexWrap: "wrap",
                     alignItems: "center",
                   }}
                 >
-                  View Live →
-                </Link>
-              )}
-            </div>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={blogFeatured}
+                      onChange={(e) => setBlogFeatured(e.target.checked)}
+                      style={{ width: 16, height: 16 }}
+                    />
+                    <span style={{ fontSize: 13, color: "#F2F1FF", fontWeight: 600 }}>
+                      Featured article
+                    </span>
+                  </label>
+                  <div style={{ fontSize: 11, color: "#555570" }}>
+                    Featured articles appear first on the blog homepage
+                  </div>
+                </div>
 
-            {blogMsg && (
-              <div
-                style={{
-                  marginTop: 12,
-                  padding: "10px 14px",
-                  background:
-                    blogMsg.includes("success") ||
-                    blogMsg.includes("published") ||
-                    blogMsg.includes("saved")
-                      ? "rgba(16,185,129,0.08)"
-                      : "rgba(239,68,68,0.08)",
-                  border: `1px solid ${
-                    blogMsg.includes("success") ||
-                    blogMsg.includes("published") ||
-                    blogMsg.includes("saved")
-                      ? "rgba(16,185,129,0.2)"
-                      : "rgba(239,68,68,0.2)"
-                  }`,
-                  borderRadius: 8,
-                  fontSize: 12,
-                  color:
-                    blogMsg.includes("success") ||
-                    blogMsg.includes("published") ||
-                    blogMsg.includes("saved")
-                      ? "#10B981"
-                      : "#EF4444",
-                  fontWeight: 600,
-                }}
-              >
-                {blogMsg}
-              </div>
+                <div style={{ marginBottom: 16 }}>
+                  <label
+                    style={{
+                      display: "block",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: "#8888A8",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      marginBottom: 6,
+                    }}
+                  >
+                    Article Content
+                  </label>
+                  <RichEmailEditor
+                    value={blogContent}
+                    onChange={setBlogContent}
+                    placeholder="Write your article here. Use headings, bold text, links, images, and lists to structure your content for maximum SEO impact."
+                  />
+                </div>
+
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => void saveBlogPost(false)}
+                    disabled={blogSaving}
+                    style={{
+                      background: "rgba(255,255,255,0.04)",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      borderRadius: 8,
+                      padding: "10px 20px",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: "#8888A8",
+                      cursor: blogSaving ? "not-allowed" : "pointer",
+                      fontFamily: "Inter, sans-serif",
+                    }}
+                  >
+                    {blogSaving ? "Saving..." : "Save as Draft"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => void saveBlogPost(true)}
+                    disabled={blogSaving}
+                    style={{
+                      background: blogSaving ? "#1A1A24" : "#10B981",
+                      color: "white",
+                      border: "none",
+                      borderRadius: 8,
+                      padding: "10px 24px",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: blogSaving ? "not-allowed" : "pointer",
+                      fontFamily: "Inter, sans-serif",
+                      opacity: blogSaving ? 0.7 : 1,
+                    }}
+                  >
+                    {blogSaving ? "Publishing..." : "Publish Now"}
+                  </button>
+
+                  {editingPost && blogStatus === "published" && (
+                    <Link
+                      href={`/blog/${blogSlug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        background: "rgba(124,58,237,0.1)",
+                        border: "1px solid rgba(124,58,237,0.2)",
+                        borderRadius: 8,
+                        padding: "10px 20px",
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: "#A78BFA",
+                        textDecoration: "none",
+                        display: "inline-flex",
+                        alignItems: "center",
+                      }}
+                    >
+                      View Live →
+                    </Link>
+                  )}
+                </div>
+
+                {blogMsg && (
+                  <div
+                    style={{
+                      marginTop: 12,
+                      padding: "10px 14px",
+                      background:
+                        blogMsg.includes("success") ||
+                        blogMsg.includes("published") ||
+                        blogMsg.includes("saved")
+                          ? "rgba(16,185,129,0.08)"
+                          : "rgba(239,68,68,0.08)",
+                      border: `1px solid ${
+                        blogMsg.includes("success") ||
+                        blogMsg.includes("published") ||
+                        blogMsg.includes("saved")
+                          ? "rgba(16,185,129,0.2)"
+                          : "rgba(239,68,68,0.2)"
+                      }`,
+                      borderRadius: 8,
+                      fontSize: 12,
+                      color:
+                        blogMsg.includes("success") ||
+                        blogMsg.includes("published") ||
+                        blogMsg.includes("saved")
+                          ? "#10B981"
+                          : "#EF4444",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {blogMsg}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

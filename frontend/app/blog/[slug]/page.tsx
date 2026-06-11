@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { categoryToSlug, tagToSlug } from "@/lib/blog";
+import { BlogArticleView } from "@/components/blog/blog-article-view";
+import { buildArticleSchema, buildFaqPageSchema } from "@/lib/blog-schema";
+import {
+  keyTakeawaysFromExcerpt,
+  prepareArticleContent,
+  type BlogPostListItem,
+} from "@/lib/blog-content";
 
 type BlogPost = {
   title: string;
@@ -27,6 +33,25 @@ async function getPost(slug: string): Promise<BlogPost | null> {
     return await res.json();
   } catch {
     return null;
+  }
+}
+
+async function getRelatedPosts(category: string | undefined, slug: string): Promise<BlogPostListItem[]> {
+  if (!category) return [];
+
+  try {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    const res = await fetch(
+      `${apiUrl}/public/blog/posts?category=${encodeURIComponent(category)}&limit=4`,
+      { next: { revalidate: 60 } }
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+    return ((data.posts || []) as BlogPostListItem[])
+      .filter((p) => p.slug !== slug)
+      .slice(0, 3);
+  } catch {
+    return [];
   }
 }
 
@@ -79,64 +104,47 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
     return (
       <div
         style={{
-          background: "#050508",
+          background: "#FFFFFF",
           minHeight: "100vh",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           fontFamily: "Inter, sans-serif",
-          color: "#555570",
+          color: "#6B7280",
           fontSize: 16,
         }}
       >
         Article not found.{" "}
-        <Link href="/blog" style={{ color: "#A78BFA", marginLeft: 8 }}>
+        <Link href="/blog" style={{ color: "#7C3AED", marginLeft: 8 }}>
           Back to blog
         </Link>
       </div>
     );
   }
 
+  const articleUrl = `https://www.leadthur.com/blog/${post.slug}`;
+  const { content: processedContent, headings } = prepareArticleContent(post.content);
+  const takeaways = keyTakeawaysFromExcerpt(post.excerpt, post.content);
+  const relatedPosts = await getRelatedPosts(post.category, post.slug);
+  const articleSchema = buildArticleSchema(post);
+  const faqSchema = buildFaqPageSchema(post.content);
+
   return (
-    <div
-      style={{
-        background: "#050508",
-        minHeight: "100vh",
-        color: "#F2F1FF",
-        fontFamily: "Inter, sans-serif",
-      }}
-    >
+    <div style={{ minHeight: "100vh", fontFamily: "Inter, sans-serif" }}>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "BlogPosting",
-            headline: post.title,
-            description: post.excerpt,
-            image: post.cover_image || "https://www.leadthur.com/og-image.png",
-            author: {
-              "@type": "Person",
-              name: post.author,
-              url: "https://www.leadthur.com/about",
-            },
-            publisher: {
-              "@type": "Organization",
-              name: "LeadThur",
-              logo: {
-                "@type": "ImageObject",
-                url: "https://www.leadthur.com/og-image.png",
-              },
-            },
-            datePublished: post.published_at,
-            dateModified: post.updated_at,
-            mainEntityOfPage: {
-              "@type": "WebPage",
-              "@id": `https://www.leadthur.com/blog/${post.slug}`,
-            },
-          }),
+          __html: JSON.stringify(articleSchema),
         }}
       />
+      {faqSchema && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(faqSchema),
+          }}
+        />
+      )}
 
       <nav
         style={{
@@ -194,144 +202,14 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
         </div>
       </nav>
 
-      <article style={{ maxWidth: 760, margin: "0 auto", padding: "60px 24px 80px" }}>
-        <div style={{ marginBottom: 20 }}>
-          <Link href="/blog" style={{ color: "#555570", fontSize: 13, textDecoration: "none" }}>
-            Blog
-          </Link>
-          {post.category && (
-            <>
-              <span style={{ color: "#555570", margin: "0 8px" }}>›</span>
-              <Link
-                href={`/blog/category/${categoryToSlug(post.category)}`}
-                style={{ color: "#A78BFA", fontSize: 13, textDecoration: "none" }}
-              >
-                {post.category}
-              </Link>
-            </>
-          )}
-        </div>
-
-        <h1
-          style={{
-            fontSize: 44,
-            fontWeight: 900,
-            letterSpacing: -1.5,
-            color: "#F2F1FF",
-            lineHeight: 1.1,
-            marginBottom: 20,
-          }}
-        >
-          {post.title}
-        </h1>
-
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 16,
-            marginBottom: 32,
-            flexWrap: "wrap",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: "50%",
-                background: "#7C3AED",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 12,
-                fontWeight: 800,
-                color: "white",
-              }}
-            >
-              {post.author?.charAt(0) || "B"}
-            </div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#F2F1FF" }}>{post.author}</div>
-              <div style={{ fontSize: 11, color: "#555570" }}>{post.author_title}</div>
-            </div>
-          </div>
-          <div style={{ color: "#555570", fontSize: 13 }}>
-            {post.published_at &&
-              new Date(post.published_at).toLocaleDateString("en-GB", {
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              })}
-          </div>
-          <div
-            style={{
-              background: "rgba(124,58,237,0.1)",
-              border: "1px solid rgba(124,58,237,0.2)",
-              borderRadius: 100,
-              padding: "3px 10px",
-              fontSize: 11,
-              color: "#A78BFA",
-              fontWeight: 600,
-            }}
-          >
-            {post.read_time} min read
-          </div>
-        </div>
-
-        {post.cover_image && (
-          <div style={{ width: "100%", borderRadius: 12, overflow: "hidden", marginBottom: 40 }}>
-            <img
-              src={post.cover_image}
-              alt={post.title}
-              style={{ width: "100%", height: "auto", display: "block" }}
-            />
-          </div>
-        )}
-
-        <div
-          className="blog-content"
-          dangerouslySetInnerHTML={{ __html: post.content }}
-          style={{ fontSize: 16, lineHeight: 1.8, color: "#C0C0D8" }}
-        />
-
-        {post.tags && post.tags.length > 0 && (
-          <div style={{ marginTop: 48, paddingTop: 32, borderTop: "1px solid rgba(255,255,255,0.07)" }}>
-            <div
-              style={{
-                fontSize: 12,
-                fontWeight: 700,
-                color: "#555570",
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                marginBottom: 12,
-              }}
-            >
-              Tags
-            </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {post.tags.map((tag) => (
-                <Link
-                  key={tag}
-                  href={`/blog/tag/${tagToSlug(tag)}`}
-                  style={{
-                    background: "rgba(255,255,255,0.04)",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    borderRadius: 100,
-                    padding: "5px 12px",
-                    fontSize: 12,
-                    color: "#8888A8",
-                    textDecoration: "none",
-                    fontWeight: 500,
-                  }}
-                >
-                  {tag}
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
-      </article>
+      <BlogArticleView
+        post={post}
+        processedContent={processedContent}
+        headings={headings}
+        takeaways={takeaways}
+        relatedPosts={relatedPosts}
+        articleUrl={articleUrl}
+      />
 
       <div
         style={{
@@ -423,32 +301,9 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
         </div>
       </div>
 
-      <style>{`
-        .blog-content h1 { font-size: 32px; font-weight: 900; color: #F2F1FF; margin: 40px 0 16px; letter-spacing: -1px; line-height: 1.2; }
-        .blog-content h2 { font-size: 26px; font-weight: 800; color: #F2F1FF; margin: 36px 0 14px; letter-spacing: -0.5px; line-height: 1.2; }
-        .blog-content h3 { font-size: 20px; font-weight: 700; color: #F2F1FF; margin: 28px 0 12px; }
-        .blog-content p { margin: 0 0 20px; }
-        .blog-content a { color: #A78BFA; font-weight: 600; text-decoration: underline; }
-        .blog-content a:hover { color: #C4B5FD; }
-        .blog-content ul { padding-left: 24px; margin: 0 0 20px; }
-        .blog-content ol { padding-left: 24px; margin: 0 0 20px; }
-        .blog-content li { margin-bottom: 8px; color: #C0C0D8; line-height: 1.7; }
-        .blog-content blockquote { border-left: 3px solid #7C3AED; padding-left: 20px; margin: 28px 0; color: #8888A8; font-style: italic; font-size: 17px; line-height: 1.7; }
-        .blog-content strong { color: #F2F1FF; font-weight: 700; }
-        .blog-content em { color: #C0C0D8; font-style: italic; }
-        .blog-content code { background: rgba(124,58,237,0.12); border: 1px solid rgba(124,58,237,0.2); border-radius: 4px; padding: 2px 6px; font-size: 14px; color: #A78BFA; font-family: monospace; }
-        .blog-content pre { background: #0A0A10; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 20px; overflow-x: auto; margin: 24px 0; }
-        .blog-content pre code { background: none; border: none; padding: 0; color: #A78BFA; font-size: 14px; }
-        .blog-content img { max-width: 100%; border-radius: 10px; margin: 24px 0; display: block; }
-        .blog-content hr { border: none; border-top: 1px solid rgba(255,255,255,0.08); margin: 36px 0; }
-        .blog-content table { width: 100%; border-collapse: collapse; margin: 24px 0; }
-        .blog-content th { background: #111118; color: #F2F1FF; font-weight: 700; padding: 12px 16px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.1); font-size: 13px; }
-        .blog-content td { padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.06); color: #C0C0D8; font-size: 14px; }
-        .blog-content tr:last-child td { border-bottom: none; }
-      `}</style>
-
       <div
         style={{
+          background: "#050508",
           borderTop: "1px solid rgba(255,255,255,0.06)",
           padding: "28px 24px",
           textAlign: "center",
