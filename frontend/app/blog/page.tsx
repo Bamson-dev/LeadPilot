@@ -245,19 +245,12 @@ export default async function BlogPage({
             }}
           >
             {posts.map((post) => (
-              <Link key={post.id} href={`/blog/${post.slug}`} style={{ textDecoration: "none" }}>
-                <article
-                  style={{
-                    background: "#111118",
-                    border: "1px solid rgba(255,255,255,0.07)",
-                    borderRadius: 14,
-                    overflow: "hidden",
-                    transition: "border-color 0.2s, transform 0.2s",
-                    height: "100%",
-                    display: "flex",
-                    flexDirection: "column",
-                  }}
-                >
+              <Link
+                key={post.id}
+                href={`/blog/${post.slug}`}
+                className="blog-post-card"
+              >
+                <article className="blog-post-card-inner">
                   {post.cover_image ? (
                     <div
                       style={{
@@ -269,8 +262,8 @@ export default async function BlogPage({
                     >
                       <img
                         src={post.cover_image}
-                        alt={post.title}
-                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        alt=""
+                        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                       />
                     </div>
                   ) : (
@@ -321,18 +314,7 @@ export default async function BlogPage({
                       </span>
                     )}
 
-                    <h2
-                      style={{
-                        fontSize: 17,
-                        fontWeight: 800,
-                        color: "#F2F1FF",
-                        lineHeight: 1.4,
-                        marginBottom: 10,
-                        flex: 1,
-                      }}
-                    >
-                      {post.title}
-                    </h2>
+                    <h2 className="blog-post-card-title">{post.title}</h2>
 
                     {post.excerpt && (
                       <p
@@ -374,6 +356,8 @@ export default async function BlogPage({
                         )}
                       </div>
                     </div>
+
+                    <div className="blog-post-card-cta">Read article →</div>
                   </div>
                 </article>
               </Link>
@@ -381,6 +365,62 @@ export default async function BlogPage({
           </div>
         )}
       </div>
+
+      <style>{`
+        .blog-post-card {
+          display: block;
+          text-decoration: none;
+          color: inherit;
+          cursor: pointer;
+          height: 100%;
+          border-radius: 14px;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .blog-post-card-inner {
+          background: #111118;
+          border: 1px solid rgba(255,255,255,0.07);
+          border-radius: 14px;
+          overflow: hidden;
+          transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+          height: 100%;
+          display: flex;
+          flex-direction: column;
+        }
+        .blog-post-card:hover .blog-post-card-inner,
+        .blog-post-card:focus-visible .blog-post-card-inner {
+          border-color: rgba(124,58,237,0.55);
+          transform: translateY(-4px);
+          box-shadow: 0 16px 48px rgba(124,58,237,0.18);
+        }
+        .blog-post-card-title {
+          font-size: 17px;
+          font-weight: 800;
+          color: #F2F1FF;
+          line-height: 1.4;
+          margin: 0 0 10px;
+          flex: 1;
+          transition: color 0.2s ease;
+        }
+        .blog-post-card:hover .blog-post-card-title,
+        .blog-post-card:focus-visible .blog-post-card-title {
+          color: #C4B5FD;
+        }
+        .blog-post-card-cta {
+          margin-top: 16px;
+          font-size: 13px;
+          font-weight: 700;
+          color: #A78BFA;
+          letter-spacing: 0.01em;
+        }
+        .blog-post-card:hover .blog-post-card-cta,
+        .blog-post-card:focus-visible .blog-post-card-cta {
+          color: #C4B5FD;
+        }
+        .blog-post-card:focus-visible {
+          outline: 2px solid rgba(124,58,237,0.6);
+          outline-offset: 3px;
+        }
+      `}</style>
 
       <div
         style={{
