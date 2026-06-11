@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { activateLicense } from "@/services/auth-api";
+import { activateLicense, registerDeviceForLicense } from "@/services/auth-api";
 import { setStoredLicense, hasStoredLicense } from "@/lib/license";
 
 export default function ActivatePage() {
@@ -40,8 +40,11 @@ export default function ActivatePage() {
     setLoading(true);
 
     try {
-      await activateLicense(email.trim(), key.trim());
-      setStoredLicense(email.trim(), key.trim());
+      const normalizedEmail = email.trim();
+      const normalizedKey = key.trim();
+      await activateLicense(normalizedEmail, normalizedKey);
+      await registerDeviceForLicense(normalizedEmail, normalizedKey);
+      setStoredLicense(normalizedEmail, normalizedKey);
       router.push("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Activation failed");
