@@ -357,10 +357,31 @@ export async function getLicenseEmailBySearchId(
   }
 }
 
+function normalizeDeviceSignature(value: string | null | undefined): string {
+  return String(value ?? "").trim();
+}
+
+function isLegacyFingerprintSignature(signature: string): boolean {
+  return /^[a-z0-9]{1,15}$/i.test(signature);
+}
+
+function isStableDeviceId(signature: string): boolean {
+  return (
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      signature
+    ) || signature.startsWith("dev-")
+  );
+}
+
 export async function registerDevice(
   licenseId: string,
   deviceSignature: string
 ): Promise<{ allowed: boolean; reason?: string }> {
+  const normalizedSignature = normalizeDeviceSignature(deviceSignature);
+  if (!normalizedSignature) {
+    return { allowed: false, reason: "Invalid device signature" };
+  }
+
   const { data, error } = await supabase
     .from("license_keys")
     .select("device_one, device_two, device_three, device_four, max_devices")
@@ -385,10 +406,10 @@ export async function registerDevice(
   ];
 
   const isFilled = (value: string | null | undefined) =>
-    value !== null && value !== undefined && String(value).trim() !== "";
+    normalizeDeviceSignature(value) !== "";
 
   // Recognise returning device on any slot (even if limit was lowered later)
-  if (slots.some((s) => s.value === deviceSignature)) {
+  if (slots.some((s) => normalizeDeviceSignature(s.value) === normalizedSignature)) {
     return { allowed: true };
   }
 
@@ -396,6 +417,41 @@ export async function registerDevice(
   const filledActive = activeSlots.filter((s) => isFilled(s.value)).length;
 
   if (filledActive >= maxDevices) {
+    const filledSignatures = slots
+      .filter((s) => isFilled(s.value))
+      .map((s) => normalizeDeviceSignature(s.value));
+
+    // Clients used to send unstable browser fingerprints. When slots are full of
+    // those legacy ids and the client now sends a stable UUID, reset to that device.
+    if (
+      isStableDeviceId(normalizedSignature) &&
+      filledSignatures.length > 0 &&
+      filledSignatures.every(isLegacyFingerprintSignature)
+    ) {
+      const { error: resetError } = await supabase
+        .from("license_keys")
+        .update({
+          device_one: normalizedSignature,
+          device_two: null,
+          device_three: null,
+          device_four: null,
+        })
+        .eq("id", licenseId);
+
+      if (resetError) {
+        logger.error("registerDevice legacy migration failed", {
+          licenseId,
+          error: resetError.message,
+        });
+        return { allowed: false, reason: "Device registration failed. Try again." };
+      }
+
+      logger.info("registerDevice migrated legacy fingerprints to stable device id", {
+        licenseId,
+      });
+      return { allowed: true };
+    }
+
     return {
       allowed: false,
       reason:
@@ -408,7 +464,7 @@ export async function registerDevice(
   if (emptySlot) {
     const { error: updateError } = await supabase
       .from("license_keys")
-      .update({ [emptySlot.key]: deviceSignature })
+      .update({ [emptySlot.key]: normalizedSignature })
       .eq("id", licenseId);
 
     if (updateError) {

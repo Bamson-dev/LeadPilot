@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { DemoRecordingDashboard } from "./demo-recording-dashboard";
 import { SearchDashboard } from "./search-dashboard";
+import { getDeviceId } from "@/lib/device";
 import { hasStoredLicense } from "@/lib/license";
 import { getApiUrl } from "@/utils/env";
 
@@ -43,21 +44,8 @@ export function DashboardRouter({ skipAccessCheck = false }: { skipAccessCheck?:
     const key = localStorage.getItem("leadthur_key");
     if (!email || !key) return;
 
-    const raw = [
-      navigator.userAgent,
-      screen.width,
-      screen.height,
-      navigator.language,
-      Intl.DateTimeFormat().resolvedOptions().timeZone,
-    ].join("|");
-
-    let hash = 0;
-    for (let i = 0; i < raw.length; i++) {
-      const char = raw.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash = hash & hash;
-    }
-    const deviceSignature = Math.abs(hash).toString(36);
+    const deviceSignature = getDeviceId();
+    if (!deviceSignature) return;
 
     const apiUrl = getApiUrl();
     if (!apiUrl) return;
