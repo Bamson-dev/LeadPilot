@@ -2,13 +2,16 @@
 
 import { motion } from "framer-motion";
 import { Search, Download, RotateCcw, Trash2, Loader2 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BusinessLead } from "@leadthur/shared";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { LiveCounter } from "@/components/dashboard/live-counter";
-import { SearchHistory } from "@/components/dashboard/search-history";
+import {
+  RecentSearchesPanel,
+  recordDashboardSearchHistory,
+} from "@/components/dashboard/recent-searches-panel";
 import { AffiliateSection } from "@/components/dashboard/affiliate-section";
 import { WelcomeState } from "@/components/dashboard/welcome-state";
 import { ResultsTable } from "@/features/results/results-table";
@@ -26,6 +29,7 @@ import {
 } from "@/services/api";
 import { businessLeadToLead } from "@/types/lead";
 import type { Lead } from "@/types/lead";
+import { applyRatingFilter, type RatingFilterValue } from "@/lib/rating-filter";
 
 function dedupeLeads(
   prev: BusinessLead[],
@@ -62,6 +66,8 @@ export function SearchDashboard() {
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [userEmail, setUserEmail] = useState("");
   const [userStats, setUserStats] = useState<LicenseUsage | null>(null);
+  const [ratingFilter, setRatingFilter] = useState<RatingFilterValue>("all");
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
   const loadUserStats = useCallback(async () => {
     const usage = await getLicenseUsage();
@@ -106,7 +112,6 @@ export function SearchDashboard() {
     setSuggestions,
     clearResults,
     reset,
-    loadSavedLeads,
   } = useSearch({
     onSearchComplete: (...args) => onSearchCompleteRef.current?.(...args),
     onSearchLimitReached: () => {
@@ -140,6 +145,23 @@ export function SearchDashboard() {
     setAllLeads((prev) => dedupeLeads(prev, newLeads));
     setSessionSearchCount((prev) => prev + 1);
     void fetchSuggestions(query, loc, totalFound);
+
+    if (totalFound > 0) {
+      const email =
+        typeof window !== "undefined"
+          ? localStorage.getItem("leadthur_email") || ""
+          : "";
+      if (email) {
+        void recordDashboardSearchHistory({
+          email,
+          businessType: query,
+          location: loc,
+          resultsCount: totalFound,
+        }).then(() => {
+          setHistoryRefreshKey((prev) => prev + 1);
+        });
+      }
+    }
   };
 
   useEffect(() => {
@@ -204,6 +226,11 @@ export function SearchDashboard() {
         )
       : leads;
 
+  const ratingFilteredTableLeads = useMemo(
+    () => applyRatingFilter(tableLeads, ratingFilter),
+    [tableLeads, ratingFilter]
+  );
+
   const leadsToExport =
     sessionSearchCount > 1
       ? mergedSessionLeads.map((l) =>
@@ -215,13 +242,20 @@ export function SearchDashboard() {
         )
       : leads;
 
+  const filteredLeadsToExport = useMemo(
+    () => applyRatingFilter(leadsToExport, ratingFilter),
+    [leadsToExport, ratingFilter]
+  );
+
   const handleSearch = () => {
     setSavedBanner(null);
+    setRatingFilter("all");
     void runSearch(businessType, location);
   };
 
   const handleExampleSearch = (exampleQuery: string, exampleLocation: string) => {
     setSavedBanner(null);
+    setRatingFilter("all");
     setBusinessType(exampleQuery);
     setLocation(exampleLocation);
     void runSearch(exampleQuery, exampleLocation);
@@ -233,6 +267,7 @@ export function SearchDashboard() {
     label: string;
   }) => {
     setSavedBanner(null);
+    setRatingFilter("all");
     setBusinessType(s.query);
     setLocation(s.location);
     runSearchWithSuggestion(s);
@@ -243,7 +278,15 @@ export function SearchDashboard() {
   };
 
   const handleDownload = () => {
-    exportToCSV(leadsToExport, `leadthur-${query}-${loc}-${Date.now()}.csv`);
+    exportToCSV(filteredLeadsToExport, `leadthur-${query}-${loc}-${Date.now()}.csv`);
+  };
+
+  const handleSearchAgain = (businessTypeValue: string, locationValue: string) => {
+    setSavedBanner(null);
+    setRatingFilter("all");
+    setBusinessType(businessTypeValue);
+    setLocation(locationValue);
+    void runSearch(businessTypeValue, locationValue);
   };
 
   const startNewSession = () => {
@@ -254,6 +297,7 @@ export function SearchDashboard() {
     setSavedBanner(null);
     setBusinessType("");
     setLocation("");
+    setRatingFilter("all");
   };
 
   const handleNewSearch = () => {
@@ -282,7 +326,7 @@ export function SearchDashboard() {
     !isSearching &&
     !savedBanner;
 
-  const exportCount = leadsToExport.length;
+  const exportCount = filteredLeadsToExport.length;
   const exportPulse = status === "completed" && exportCount > 0;
 
   const searchesRemaining =
@@ -590,16 +634,6 @@ export function SearchDashboard() {
         )}
       </div>
 
-      <SearchHistory
-        isMobile={isMobile}
-        onViewResults={(historyLeads, meta) => {
-          loadSavedLeads(historyLeads);
-          setSavedBanner(
-            `Showing saved results from ${meta.date}. Run a new search to get fresh results.`
-          );
-        }}
-      />
-
       <AffiliateSection />
 
       {showWelcome && <WelcomeState onExampleSearch={handleExampleSearch} />}
@@ -632,12 +666,21 @@ export function SearchDashboard() {
 
       {(isSearching || tableLeads.length > 0 || savedBanner) && (
         <ResultsTable
-          leads={tableLeads}
+          leads={ratingFilteredTableLeads}
           isLoading={isSearching && tableLeads.length === 0}
           isMobile={isMobile}
           hideEmptyPlaceholder={showWelcome}
+          ratingFilter={ratingFilter}
+          onRatingFilterChange={setRatingFilter}
+          totalLeadCount={tableLeads.length}
+          ratingMatchCount={ratingFilteredTableLeads.length}
         />
       )}
+
+      <RecentSearchesPanel
+        refreshKey={historyRefreshKey}
+        onSearchAgain={handleSearchAgain}
+      />
 
       {loadingSuggestions && status === "completed" && (
         <div

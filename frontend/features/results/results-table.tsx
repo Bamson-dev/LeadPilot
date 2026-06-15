@@ -11,7 +11,9 @@ import { WebsiteLink } from "@/components/dashboard/website-link";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { LeadStatusSelect } from "@/components/dashboard/lead-status-select";
 import { PipelineSummary } from "@/components/dashboard/pipeline-summary";
+import { RatingFilter } from "@/components/dashboard/rating-filter";
 import { useLeadStatuses } from "@/hooks/useLeadStatuses";
+import type { RatingFilterValue } from "@/lib/rating-filter";
 import type { Lead } from "@/types/lead";
 
 type SortKey = keyof Pick<
@@ -26,6 +28,10 @@ interface ResultsTableProps {
   isMobile?: boolean;
   /** When true, parent renders welcome — skip empty placeholder */
   hideEmptyPlaceholder?: boolean;
+  ratingFilter?: RatingFilterValue;
+  onRatingFilterChange?: (value: RatingFilterValue) => void;
+  totalLeadCount?: number;
+  ratingMatchCount?: number;
 }
 
 export function ResultsTable({
@@ -33,12 +39,15 @@ export function ResultsTable({
   isLoading,
   isMobile = false,
   hideEmptyPlaceholder = false,
+  ratingFilter = "all",
+  onRatingFilterChange,
+  totalLeadCount,
+  ratingMatchCount,
 }: ResultsTableProps) {
   const { copiedId, copyToClipboard } = useCopyToClipboard();
   const [sortKey, setSortKey] = useState<SortKey>("business_name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [hasWebsite, setHasWebsite] = useState<boolean | null>(null);
-  const [minRating, setMinRating] = useState(0);
   const parentRef = useRef<HTMLDivElement>(null);
   const { leadStatuses, statusFilter, setStatusFilter, setLeadStatus } =
     useLeadStatuses();
@@ -47,14 +56,13 @@ export function ResultsTable({
     return leads.filter((lead) => {
       if (hasWebsite === true && !lead.website) return false;
       if (hasWebsite === false && lead.website) return false;
-      if (minRating > 0 && (lead.rating ?? 0) < minRating) return false;
       if (statusFilter !== "all") {
         const leadStatus = leadStatuses[lead.id] || "none";
         if (leadStatus !== statusFilter) return false;
       }
       return true;
     });
-  }, [leads, hasWebsite, minRating, statusFilter, leadStatuses]);
+  }, [leads, hasWebsite, statusFilter, leadStatuses]);
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
@@ -102,6 +110,15 @@ export function ResultsTable({
           onFilterChange={setStatusFilter}
         />
         <div className="flex flex-wrap gap-2 px-1">
+          {onRatingFilterChange && (
+            <RatingFilter
+              value={ratingFilter}
+              onChange={onRatingFilterChange}
+              filteredCount={ratingMatchCount ?? sorted.length}
+              totalCount={totalLeadCount ?? leads.length}
+              isMobile
+            />
+          )}
           <select
             value={hasWebsite === null ? "all" : hasWebsite ? "yes" : "no"}
             onChange={(e) =>
@@ -262,7 +279,15 @@ export function ResultsTable({
         statusFilter={statusFilter}
         onFilterChange={setStatusFilter}
       />
-      <div className="flex flex-col gap-2 border-b border-white/[0.08] px-4 py-3 sm:flex-row sm:flex-wrap sm:gap-3">
+      <div className="flex flex-col gap-2 border-b border-white/[0.08] px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+        {onRatingFilterChange && (
+          <RatingFilter
+            value={ratingFilter}
+            onChange={onRatingFilterChange}
+            filteredCount={ratingMatchCount ?? sorted.length}
+            totalCount={totalLeadCount ?? leads.length}
+          />
+        )}
         <select
           value={hasWebsite === null ? "all" : hasWebsite ? "yes" : "no"}
           onChange={(e) =>
@@ -274,18 +299,6 @@ export function ResultsTable({
           <option value="yes">Has website</option>
           <option value="no">No website</option>
         </select>
-        <label className="flex items-center gap-2 text-xs text-[#6B6B80]">
-          Min rating
-          <input
-            type="number"
-            min={0}
-            max={5}
-            step={0.5}
-            value={minRating}
-            onChange={(e) => setMinRating(Number(e.target.value))}
-            className="w-16 rounded-md border border-white/10 bg-[#16161E] px-2 py-1 text-[#F4F4FF]"
-          />
-        </label>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}

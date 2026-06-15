@@ -317,6 +317,48 @@ export async function getSearchHistory(): Promise<{
   }>;
 }
 
+export type RecentSearchHistoryItem = {
+  id: string;
+  business_type: string;
+  city: string;
+  country: string | null;
+  results_count: number;
+  created_at: string;
+};
+
+export async function fetchRecentSearchHistory(): Promise<{
+  history: RecentSearchHistoryItem[];
+}> {
+  try {
+    const res = await fetch(`${getApiUrl()}/search-history`, {
+      headers: getLicenseHeaders(),
+      cache: "no-store",
+    });
+    if (!res.ok) return { history: [] };
+    return res.json() as Promise<{ history: RecentSearchHistoryItem[] }>;
+  } catch {
+    return { history: [] };
+  }
+}
+
+export async function saveSearchHistory(input: {
+  email: string;
+  business_type: string;
+  city: string;
+  country?: string;
+  results_count: number;
+}): Promise<void> {
+  try {
+    await fetch(`${getApiUrl()}/search-history`, {
+      method: "POST",
+      headers: getLicenseHeaders(),
+      body: JSON.stringify(input),
+    });
+  } catch {
+    /* non-blocking */
+  }
+}
+
 export async function getResults(
   id: string,
   page = 1,
