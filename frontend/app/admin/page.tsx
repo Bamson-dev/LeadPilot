@@ -1144,7 +1144,12 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {overview && (
+      {overview && (() => {
+        const isDemoMode =
+          process.env.NEXT_PUBLIC_DEMO_MODE === "true" ||
+          window.location.hostname === "staging.leadthur.com";
+
+        return (
         <div className="mx-auto mt-8 max-w-6xl" style={{ marginBottom: 28 }}>
           <div
             style={{
@@ -1180,37 +1185,39 @@ export default function AdminPage() {
             {[
               {
                 label: "Total Users",
-                value: overview.totalUsers,
+                value: isDemoMode ? 343 : overview.totalUsers,
                 sub: `${overview.newUsersToday} new today`,
                 color: "#7C3AED",
               },
               {
                 label: "Active Users",
-                value: overview.activeUsers,
+                value: isDemoMode ? 301 : overview.activeUsers,
                 sub: `${overview.suspendedUsers} suspended`,
                 color: "#10B981",
               },
               {
                 label: "New This Week",
-                value: overview.newUsersThisWeek,
+                value: isDemoMode ? 47 : overview.newUsersThisWeek,
                 sub: "activated accounts",
                 color: "#0891B2",
               },
               {
                 label: "Est. Revenue",
-                value: `₦${overview.estimatedRevenue.toLocaleString()}`,
+                value: isDemoMode
+                  ? "₦5,145,000"
+                  : `₦${overview.estimatedRevenue.toLocaleString()}`,
                 sub: "at ₦15,000 per user",
                 color: "#F59E0B",
               },
               {
                 label: "Paid Searches",
-                value: overview.totalSearches,
+                value: isDemoMode ? "1,247" : overview.totalSearches,
                 sub: "by paying users",
                 color: "#7C3AED",
               },
               {
                 label: "Trial Searches",
-                value: overview.totalTrialSearches,
+                value: isDemoMode ? 892 : overview.totalTrialSearches,
                 sub: "free preview usage",
                 color: "#6B7280",
               },
@@ -1252,7 +1259,8 @@ export default function AdminPage() {
             ))}
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {recentUsers.length > 0 && (
         <div
