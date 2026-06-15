@@ -32,6 +32,8 @@ const bricolage = Bricolage_Grotesque({
   weight: ["600", "700"],
 });
 
+const IS_DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+
 function formatDate(value: string | null): string {
   if (!value) return "—";
   return new Date(value).toLocaleString();
@@ -1180,37 +1182,39 @@ export default function AdminPage() {
             {[
               {
                 label: "Total Users",
-                value: overview.totalUsers,
+                value: IS_DEMO_MODE ? 343 : overview.totalUsers,
                 sub: `${overview.newUsersToday} new today`,
                 color: "#7C3AED",
               },
               {
                 label: "Active Users",
-                value: overview.activeUsers,
+                value: IS_DEMO_MODE ? 301 : overview.activeUsers,
                 sub: `${overview.suspendedUsers} suspended`,
                 color: "#10B981",
               },
               {
                 label: "New This Week",
-                value: overview.newUsersThisWeek,
+                value: IS_DEMO_MODE ? 47 : overview.newUsersThisWeek,
                 sub: "activated accounts",
                 color: "#0891B2",
               },
               {
                 label: "Est. Revenue",
-                value: `₦${overview.estimatedRevenue.toLocaleString()}`,
+                value: IS_DEMO_MODE
+                  ? "₦5,145,000"
+                  : `₦${overview.estimatedRevenue.toLocaleString()}`,
                 sub: "at ₦15,000 per user",
                 color: "#F59E0B",
               },
               {
                 label: "Paid Searches",
-                value: overview.totalSearches,
+                value: IS_DEMO_MODE ? "1,247" : overview.totalSearches,
                 sub: "by paying users",
                 color: "#7C3AED",
               },
               {
                 label: "Trial Searches",
-                value: overview.totalTrialSearches,
+                value: IS_DEMO_MODE ? 892 : overview.totalTrialSearches,
                 sub: "free preview usage",
                 color: "#6B7280",
               },
