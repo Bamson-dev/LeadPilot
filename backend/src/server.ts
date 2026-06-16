@@ -19,6 +19,7 @@ import aiMessageRouter from "./routes/aiMessage";
 import { rateLimit } from "./middleware/rate-limit";
 import { getBrowserPool } from "./scraper/browser/browser-pool";
 import { logger } from "./utils/logger";
+import { getDeepseekKeyFingerprint, isDeepseekConfigured } from "./utils/deepseek-config";
 
 export const app = express();
 
@@ -180,6 +181,8 @@ async function start(): Promise<void> {
       nodeEnv: env.NODE_ENV,
       scraperConcurrency: env.SCRAPER_CONCURRENCY,
       corsOrigins: corsOptions.origin,
+      deepseekConfigured: isDeepseekConfigured(),
+      deepseekKeyFingerprint: getDeepseekKeyFingerprint(),
     });
   } catch (err) {
     logger.error("Backend configuration failed — /health works, API routes disabled", {

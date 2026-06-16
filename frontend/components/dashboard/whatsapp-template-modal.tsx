@@ -205,8 +205,10 @@ export function WhatsappTemplateModal({
 
       setAiError(
         result.code === "ai_not_configured"
-          ? "AI generation is not configured on the server yet. Credits refunded."
-          : result.message
+          ? "AI generation is not configured on the server yet. Add DEEPSEEK_API_KEY to the staging backend in Coolify, then redeploy. Credits refunded."
+          : result.code === "deepseek_auth_error"
+            ? "DeepSeek API key is invalid. Update DEEPSEEK_API_KEY in Coolify and redeploy. Credits refunded."
+            : result.message
       );
       if (typeof result.balance === "number") {
         onCreditsUpdated(result.balance);

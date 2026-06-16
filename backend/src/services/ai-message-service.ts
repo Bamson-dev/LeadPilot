@@ -1,4 +1,5 @@
 import { logger } from "../utils/logger";
+import { getDeepseekApiKey } from "../utils/deepseek-config";
 
 const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions";
 
@@ -47,9 +48,12 @@ export async function generateAiWhatsappMessage(
   prompt: string
 ): Promise<
   | { ok: true; message: string }
-  | { ok: false; reason: "missing_key" | "api_error" | "empty_response" }
+  | {
+      ok: false;
+      reason: "missing_key" | "api_error" | "auth_error" | "empty_response";
+    }
 > {
-  const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
+  const apiKey = getDeepseekApiKey();
   if (!apiKey) {
     logger.warn("DEEPSEEK_API_KEY not set — cannot generate AI message");
     return { ok: false, reason: "missing_key" };
@@ -76,7 +80,12 @@ export async function generateAiWhatsappMessage(
         status: response.status,
         body: errorBody.slice(0, 500),
       });
-      return { ok: false, reason: "api_error" };
+
+      const isAuthError =
+        response.status === 401 ||
+        errorBody.toLowerCase().includes("authentication");
+
+      return { ok: false, reason: isAuthError ? "auth_error" : "api_error" };
     }
 
     const data = (await response.json()) as {

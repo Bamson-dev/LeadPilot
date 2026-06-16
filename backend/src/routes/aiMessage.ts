@@ -3,6 +3,7 @@ import { requireLicense } from "../middleware/require-license";
 import {
   applyAiBonusIfEligible,
   deductAiMessageCredits,
+  getSearchCreditsBalance,
   logAiMessageGeneration,
   refundAiMessageCredits,
 } from "../database/ai-message-repository";
@@ -11,6 +12,10 @@ import {
   generateAiWhatsappMessage,
 } from "../services/ai-message-service";
 import { logger } from "../utils/logger";
+import {
+  getDeepseekKeyFingerprint,
+  isDeepseekConfigured,
+} from "../utils/deepseek-config";
 
 const router = Router();
 
@@ -22,12 +27,38 @@ const VALID_NICHES = new Set([
   "general",
 ]);
 
+function generationErrorCode(
+  reason: "missing_key" | "api_error" | "auth_error" | "empty_response"
+): string {
+  if (reason === "missing_key") return "ai_not_configured";
+  if (reason === "auth_error") return "deepseek_auth_error";
+  return "ai_generation_failed";
+}
+
+router.get("/status", requireLicense, async (req: Request, res: Response) => {
+  try {
+    const balance = await getSearchCreditsBalance(req.licenseId!);
+    res.json({
+      deepseekConfigured: isDeepseekConfigured(),
+      deepseekKeyFingerprint: getDeepseekKeyFingerprint(),
+      search_credits: balance ?? 0,
+      canGenerate: (balance ?? 0) >= 3 && isDeepseekConfigured(),
+    });
+  } catch (err) {
+    logger.error("GET /ai-message/status failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to read AI message status" });
+  }
+});
+
 router.post("/claim-bonus", requireLicense, async (req: Request, res: Response) => {
   try {
     const result = await applyAiBonusIfEligible(req.licenseId!);
     res.json({
       applied: result.applied,
       search_credits: result.search_credits,
+      deepseekConfigured: isDeepseekConfigured(),
     });
   } catch (err) {
     logger.error("POST /ai-message/claim-bonus failed", {
@@ -83,6 +114,16 @@ router.post("/generate", requireLicense, async (req: Request, res: Response) => 
       return;
     }
 
+    if (!isDeepseekConfigured()) {
+      res.status(503).json({
+        error: "Generation failed, credits refunded",
+        message: "Generation failed, credits refunded",
+        code: "ai_not_configured",
+        deepseekConfigured: false,
+      });
+      return;
+    }
+
     const licenseId = req.licenseId!;
     const deduction = await deductAiMessageCredits(licenseId);
 
@@ -110,14 +151,17 @@ router.post("/generate", requireLicense, async (req: Request, res: Response) => 
 
     if (!generation.ok) {
       const restoredBalance = await refundAiMessageCredits(licenseId);
-      const status = generation.reason === "missing_key" ? 503 : 502;
+      const status =
+        generation.reason === "missing_key"
+          ? 503
+          : generation.reason === "auth_error"
+            ? 502
+            : 502;
+
       res.status(status).json({
         error: "Generation failed, credits refunded",
         message: "Generation failed, credits refunded",
-        code:
-          generation.reason === "missing_key"
-            ? "ai_not_configured"
-            : "ai_generation_failed",
+        code: generationErrorCode(generation.reason),
         balance: restoredBalance ?? deduction.balance + 3,
       });
       return;
