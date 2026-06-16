@@ -420,15 +420,20 @@ export type WhatsappTemplate = {
 
 export async function fetchWhatsappTemplates(): Promise<{
   templates: Record<string, WhatsappTemplate[]>;
+  ok: boolean;
 }> {
   try {
-    const res = await fetch(`${getApiUrl()}/whatsapp-templates`, {
+    const apiUrl = getApiUrl();
+    if (!apiUrl) return { templates: {}, ok: false };
+
+    const res = await fetch(`${apiUrl}/whatsapp-templates`, {
       cache: "no-store",
     });
-    if (!res.ok) return { templates: {} };
-    return res.json() as Promise<{ templates: Record<string, WhatsappTemplate[]> }>;
+    if (!res.ok) return { templates: {}, ok: false };
+    const data = (await res.json()) as { templates?: Record<string, WhatsappTemplate[]> };
+    return { templates: data.templates ?? {}, ok: true };
   } catch {
-    return { templates: {} };
+    return { templates: {}, ok: false };
   }
 }
 

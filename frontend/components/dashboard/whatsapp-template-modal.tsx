@@ -1,12 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  DEFAULT_WHATSAPP_TEMPLATES,
+  resolveWhatsappTemplates,
+  WHATSAPP_NICHE_ORDER,
+} from "@/lib/whatsapp-template-defaults";
 import {
   buildWhatsappUrl,
   personalizeWhatsappMessage,
   WHATSAPP_NICHE_LABELS,
 } from "@/lib/whatsapp";
-import { fetchWhatsappTemplates, type WhatsappTemplate } from "@/services/api";
+import { fetchWhatsappTemplates } from "@/services/api";
 import type { Lead } from "@/types/lead";
 
 interface WhatsappTemplateModalProps {
@@ -20,34 +25,72 @@ export function WhatsappTemplateModal({
   searchLocation,
   onClose,
 }: WhatsappTemplateModalProps) {
-  const [templatesByNiche, setTemplatesByNiche] = useState<
-    Record<string, WhatsappTemplate[]>
-  >({});
+  const [templatesByNiche, setTemplatesByNiche] = useState(
+    DEFAULT_WHATSAPP_TEMPLATES
+  );
   const [selectedNiche, setSelectedNiche] = useState<string>("general");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [usingFallback, setUsingFallback] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  const loadTemplates = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const data = await fetchWhatsappTemplates();
+      const resolved = resolveWhatsappTemplates(data.templates ?? {});
+      const isFallback = Object.keys(data.templates ?? {}).length === 0;
+      setTemplatesByNiche(resolved);
+      setUsingFallback(isFallback);
+      if (isFallback) {
+        setLoadError(
+          "Could not load templates from the server. Showing built-in templates instead."
+        );
+      }
+      const niches = WHATSAPP_NICHE_ORDER.filter((n) => resolved[n]);
+      setSelectedNiche((current) =>
+        niches.includes(current as (typeof WHATSAPP_NICHE_ORDER)[number])
+          ? current
+          : niches.includes("general")
+            ? "general"
+            : niches[0] ?? "general"
+      );
+    } catch {
+      setTemplatesByNiche(DEFAULT_WHATSAPP_TEMPLATES);
+      setUsingFallback(true);
+      setLoadError(
+        "Could not load templates from the server. Showing built-in templates instead."
+      );
+      setSelectedNiche("general");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (!lead) return;
-    setLoading(true);
-    void (async () => {
-      try {
-        const data = await fetchWhatsappTemplates();
-        setTemplatesByNiche(data.templates ?? {});
-        const niches = Object.keys(data.templates ?? {});
-        if (niches.length > 0) {
-          setSelectedNiche((current) =>
-            niches.includes(current) ? current : niches.includes("general") ? "general" : niches[0]
-          );
-        }
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [lead]);
+    setCopied(false);
+    void loadTemplates();
+  }, [lead, loadTemplates]);
 
-  const templates = templatesByNiche[selectedNiche] ?? [];
-  const template = templates[0];
+  useEffect(() => {
+    if (!lead) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [lead, onClose]);
+
+  const template = templatesByNiche[selectedNiche]?.[0];
 
   const personalizedMessage = useMemo(() => {
     if (!lead || !template) return "";
@@ -62,6 +105,10 @@ export function WhatsappTemplateModal({
     if (!lead) return null;
     return buildWhatsappUrl(lead.phone, personalizedMessage);
   }, [lead, personalizedMessage]);
+
+  const visibleNiches = WHATSAPP_NICHE_ORDER.filter(
+    (niche) => templatesByNiche[niche]?.length
+  );
 
   if (!lead) return null;
 
@@ -78,6 +125,9 @@ export function WhatsappTemplateModal({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="whatsapp-template-title"
       style={{
         position: "fixed",
         inset: 0,
@@ -114,6 +164,7 @@ export function WhatsappTemplateModal({
         >
           <div>
             <h3
+              id="whatsapp-template-title"
               style={{
                 margin: 0,
                 color: "#F4F4FF",
@@ -126,11 +177,13 @@ export function WhatsappTemplateModal({
             </h3>
             <p style={{ margin: "6px 0 0", color: "#6B6B80", fontSize: 13 }}>
               {lead.business_name}
+              {searchLocation ? ` · ${searchLocation}` : ""}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close"
             style={{
               background: "transparent",
               border: "none",
@@ -145,9 +198,54 @@ export function WhatsappTemplateModal({
         </div>
 
         {loading ? (
-          <p style={{ color: "#6B6B80", fontSize: 13 }}>Loading templates...</p>
+          <p style={{ color: "#6B6B80", fontSize: 13, margin: "8px 0 0" }}>
+            Loading templates...
+          </p>
         ) : (
           <>
+            {loadError && (
+              <div
+                style={{
+                  marginBottom: 12,
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  background: usingFallback
+                    ? "rgba(251,191,36,0.08)"
+                    : "rgba(239,68,68,0.08)",
+                  border: `1px solid ${
+                    usingFallback
+                      ? "rgba(251,191,36,0.2)"
+                      : "rgba(239,68,68,0.2)"
+                  }`,
+                  color: usingFallback ? "#FBBF24" : "#F87171",
+                  fontSize: 12,
+                  lineHeight: 1.5,
+                }}
+              >
+                {loadError}
+                {usingFallback && (
+                  <button
+                    type="button"
+                    onClick={() => void loadTemplates()}
+                    style={{
+                      display: "block",
+                      marginTop: 8,
+                      background: "transparent",
+                      border: "none",
+                      color: "#A855F7",
+                      cursor: "pointer",
+                      padding: 0,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      textDecoration: "underline",
+                    }}
+                  >
+                    Retry loading from server
+                  </button>
+                )}
+              </div>
+            )}
+
             <div
               style={{
                 display: "flex",
@@ -156,7 +254,7 @@ export function WhatsappTemplateModal({
                 marginBottom: 16,
               }}
             >
-              {Object.keys(templatesByNiche).map((niche) => (
+              {visibleNiches.map((niche) => (
                 <button
                   key={niche}
                   type="button"
@@ -177,6 +275,7 @@ export function WhatsappTemplateModal({
                     fontSize: 12,
                     fontWeight: 600,
                     cursor: "pointer",
+                    fontFamily: "Inter, sans-serif",
                   }}
                 >
                   {WHATSAPP_NICHE_LABELS[niche] ?? niche}
@@ -184,7 +283,7 @@ export function WhatsappTemplateModal({
               ))}
             </div>
 
-            {template && (
+            {template ? (
               <>
                 <div
                   style={{
@@ -201,9 +300,10 @@ export function WhatsappTemplateModal({
                 <textarea
                   readOnly
                   value={personalizedMessage}
-                  rows={6}
+                  rows={7}
                   style={{
                     width: "100%",
+                    boxSizing: "border-box",
                     background: "#0A0A10",
                     border: "1px solid rgba(255,255,255,0.08)",
                     borderRadius: 10,
@@ -222,7 +322,9 @@ export function WhatsappTemplateModal({
                     type="button"
                     disabled={!whatsappUrl}
                     onClick={() => {
-                      if (whatsappUrl) window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+                      if (whatsappUrl) {
+                        window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+                      }
                     }}
                     style={{
                       background: whatsappUrl ? "#25D366" : "#1A1A24",
@@ -233,6 +335,7 @@ export function WhatsappTemplateModal({
                       fontSize: 13,
                       fontWeight: 700,
                       cursor: whatsappUrl ? "pointer" : "not-allowed",
+                      fontFamily: "Inter, sans-serif",
                     }}
                   >
                     Send via WhatsApp
@@ -249,6 +352,7 @@ export function WhatsappTemplateModal({
                       fontSize: 13,
                       fontWeight: 700,
                       cursor: "pointer",
+                      fontFamily: "Inter, sans-serif",
                     }}
                   >
                     {copied ? "Copied!" : "Copy Message"}
@@ -261,6 +365,10 @@ export function WhatsappTemplateModal({
                   </p>
                 )}
               </>
+            ) : (
+              <p style={{ color: "#6B6B80", fontSize: 13 }}>
+                No template available for this niche.
+              </p>
             )}
           </>
         )}
