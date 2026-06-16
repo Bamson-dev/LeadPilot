@@ -449,7 +449,7 @@ export type GenerateAiMessageInput = {
 
 export type GenerateAiMessageResult =
   | { ok: true; message: string; balance: number }
-  | { ok: false; status: number; message: string; balance?: number };
+  | { ok: false; status: number; message: string; balance?: number; code?: string };
 
 export async function claimAiBonus(): Promise<{
   applied: boolean;
@@ -471,17 +471,37 @@ export async function generateAiMessage(
   input: GenerateAiMessageInput
 ): Promise<GenerateAiMessageResult> {
   try {
-    const res = await fetch(`${getApiUrl()}/ai-message/generate`, {
+    const apiUrl = getApiUrl();
+    if (!apiUrl) {
+      return {
+        ok: false,
+        status: 0,
+        message: "Generation failed, credits refunded",
+      };
+    }
+
+    const res = await fetch(`${apiUrl}/ai-message/generate`, {
       method: "POST",
       headers: getLicenseHeaders(),
       body: JSON.stringify(input),
     });
 
-    const data = (await res.json()) as {
+    let data: {
       message?: string;
       balance?: number;
       error?: string;
-    };
+      code?: string;
+    } = {};
+
+    try {
+      data = (await res.json()) as typeof data;
+    } catch {
+      return {
+        ok: false,
+        status: res.status,
+        message: "Generation failed, credits refunded",
+      };
+    }
 
     if (res.status === 402) {
       return {
@@ -498,6 +518,7 @@ export async function generateAiMessage(
         status: res.status,
         message: data.message ?? data.error ?? "Generation failed, credits refunded",
         balance: data.balance,
+        code: data.code,
       };
     }
 

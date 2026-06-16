@@ -203,7 +203,11 @@ export function WhatsappTemplateModal({
         return;
       }
 
-      setAiError(result.message);
+      setAiError(
+        result.code === "ai_not_configured"
+          ? "AI generation is not configured on the server yet. Credits refunded."
+          : result.message
+      );
       if (typeof result.balance === "number") {
         onCreditsUpdated(result.balance);
       }

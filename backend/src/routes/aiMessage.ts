@@ -106,13 +106,18 @@ router.post("/generate", requireLicense, async (req: Request, res: Response) => 
       has_email: Boolean(has_email),
     });
 
-    const message = await generateAiWhatsappMessage(prompt);
+    const generation = await generateAiWhatsappMessage(prompt);
 
-    if (!message) {
+    if (!generation.ok) {
       const restoredBalance = await refundAiMessageCredits(licenseId);
-      res.status(502).json({
+      const status = generation.reason === "missing_key" ? 503 : 502;
+      res.status(status).json({
         error: "Generation failed, credits refunded",
         message: "Generation failed, credits refunded",
+        code:
+          generation.reason === "missing_key"
+            ? "ai_not_configured"
+            : "ai_generation_failed",
         balance: restoredBalance ?? deduction.balance + 3,
       });
       return;
@@ -125,7 +130,7 @@ router.post("/generate", requireLicense, async (req: Request, res: Response) => 
     }).catch(() => undefined);
 
     res.json({
-      message,
+      message: generation.message,
       balance: deduction.balance,
     });
   } catch (err) {

@@ -45,11 +45,14 @@ export function buildAiMessagePrompt(params: {
 
 export async function generateAiWhatsappMessage(
   prompt: string
-): Promise<string | null> {
-  const apiKey = process.env.DEEPSEEK_API_KEY;
+): Promise<
+  | { ok: true; message: string }
+  | { ok: false; reason: "missing_key" | "api_error" | "empty_response" }
+> {
+  const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
   if (!apiKey) {
     logger.warn("DEEPSEEK_API_KEY not set — cannot generate AI message");
-    return null;
+    return { ok: false, reason: "missing_key" };
   }
 
   try {
@@ -68,10 +71,12 @@ export async function generateAiWhatsappMessage(
     });
 
     if (!response.ok) {
+      const errorBody = await response.text().catch(() => "");
       logger.error("DeepSeek AI message generation failed", {
         status: response.status,
+        body: errorBody.slice(0, 500),
       });
-      return null;
+      return { ok: false, reason: "api_error" };
     }
 
     const data = (await response.json()) as {
@@ -79,13 +84,16 @@ export async function generateAiWhatsappMessage(
     };
 
     const content = data.choices?.[0]?.message?.content?.trim();
-    if (!content) return null;
+    if (!content) {
+      logger.error("DeepSeek AI message generation returned empty content");
+      return { ok: false, reason: "empty_response" };
+    }
 
-    return content.replace(/!/g, "").trim();
+    return { ok: true, message: content.replace(/!/g, "").trim() };
   } catch (err) {
     logger.error("DeepSeek AI message generation error", {
       error: err instanceof Error ? err.message : "unknown",
     });
-    return null;
+    return { ok: false, reason: "api_error" };
   }
 }
