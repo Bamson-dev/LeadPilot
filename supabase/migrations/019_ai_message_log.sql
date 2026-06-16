@@ -3,7 +3,7 @@ alter table if exists license_keys
 
 create table if not exists ai_message_log (
   id uuid primary key default gen_random_uuid(),
-  email text not null references license_keys(email) on delete cascade,
+  email text not null,
   business_name text not null,
   niche text,
   created_at timestamptz not null default now()
