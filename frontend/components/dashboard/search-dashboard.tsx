@@ -27,6 +27,7 @@ import {
   getSearchSuggestions,
   getRecentActivity,
   getTotalDiscovered,
+  claimAiBonus,
   type LicenseUsage,
 } from "@/services/api";
 import { businessLeadToLead } from "@/types/lead";
@@ -72,6 +73,7 @@ export function SearchDashboard() {
   const [ratingFilter, setRatingFilter] = useState<RatingFilterValue>("all");
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [templateLead, setTemplateLead] = useState<Lead | null>(null);
+  const [showCreditDeduction, setShowCreditDeduction] = useState(false);
 
   const loadUserStats = useCallback(async () => {
     const usage = await getLicenseUsage();
@@ -80,7 +82,10 @@ export function SearchDashboard() {
 
   useEffect(() => {
     setUserEmail(localStorage.getItem("leadthur_email") || "");
-    void loadUserStats();
+    void (async () => {
+      await claimAiBonus();
+      await loadUserStats();
+    })();
 
     const onTopUpSuccess = () => {
       void loadUserStats();
@@ -88,6 +93,15 @@ export function SearchDashboard() {
     window.addEventListener("leadthur:topup-success", onTopUpSuccess);
     return () => window.removeEventListener("leadthur:topup-success", onTopUpSuccess);
   }, [loadUserStats]);
+
+  const handleCreditsUpdated = useCallback((balance: number) => {
+    setUserStats((prev) => (prev ? { ...prev, search_credits: balance } : prev));
+  }, []);
+
+  const handleCreditDeducted = useCallback(() => {
+    setShowCreditDeduction(true);
+    window.setTimeout(() => setShowCreditDeduction(false), 2000);
+  }, []);
 
   const onSearchCompleteRef = useRef<
     | ((
@@ -359,6 +373,10 @@ export function SearchDashboard() {
       (userStats?.monthly_search_limit ?? 100) - (userStats?.searches_used ?? 0)
     );
   const creditsRemaining = userStats?.search_credits ?? 0;
+  const creditBannerVisible =
+    (searchesRemaining <= 0 && creditsRemaining < 3) ||
+    (searchesRemaining > 0 && searchesRemaining <= 10) ||
+    (searchesRemaining <= 0 && creditsRemaining >= 3);
 
   return (
     <div className="space-y-6 sm:space-y-8">
@@ -367,7 +385,29 @@ export function SearchDashboard() {
           searchesRemaining={searchesRemaining}
           creditsRemaining={creditsRemaining}
           onUpgradeClick={() => setShowLimitModal(true)}
+          showCreditDeduction={showCreditDeduction}
         />
+      )}
+      {userStats && showCreditDeduction && !creditBannerVisible && (
+        <div
+          style={{
+            position: "relative",
+            marginTop: -12,
+            marginBottom: 12,
+            textAlign: "right",
+          }}
+        >
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              color: "#F87171",
+              animation: "leadthur-credit-fade 2s ease-out forwards",
+            }}
+          >
+            −3 credits
+          </span>
+        </div>
       )}
       <div className="glass rounded-2xl p-4 sm:p-6">
         <h1 className="text-xl sm:text-2xl font-bold text-[#F4F4FF]">
@@ -871,7 +911,12 @@ export function SearchDashboard() {
       <WhatsappTemplateModal
         lead={templateLead}
         searchLocation={loc}
+        userEmail={userEmail}
+        creditsRemaining={creditsRemaining}
         onClose={() => setTemplateLead(null)}
+        onCreditsUpdated={handleCreditsUpdated}
+        onCreditDeducted={handleCreditDeducted}
+        onGetMoreCredits={() => setShowLimitModal(true)}
       />
     </div>
   );

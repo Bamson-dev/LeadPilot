@@ -15,6 +15,7 @@ import demoRouter from "./api/demo-router";
 import searchHistoryRouter from "./routes/searchHistory";
 import leadStatusRouter from "./routes/leadStatus";
 import whatsappTemplatesRouter from "./routes/whatsappTemplates";
+import aiMessageRouter from "./routes/aiMessage";
 import { rateLimit } from "./middleware/rate-limit";
 import { getBrowserPool } from "./scraper/browser/browser-pool";
 import { logger } from "./utils/logger";
@@ -100,6 +101,7 @@ function registerRoutes(): void {
   app.use("/search-history", rateLimit, searchHistoryRouter);
   app.use("/lead-status", rateLimit, leadStatusRouter);
   app.use("/whatsapp-templates", rateLimit, whatsappTemplatesRouter);
+  app.use("/ai-message", rateLimit, aiMessageRouter);
 
   app.use(
     (err: Error & { type?: string; status?: number }, _req: Request, res: Response, _next: NextFunction) => {

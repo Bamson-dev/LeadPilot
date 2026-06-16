@@ -437,6 +437,84 @@ export async function fetchWhatsappTemplates(): Promise<{
   }
 }
 
+export type GenerateAiMessageInput = {
+  email: string;
+  business_name: string;
+  city: string;
+  niche: string;
+  rating: number | null;
+  has_website: boolean;
+  has_email: boolean;
+};
+
+export type GenerateAiMessageResult =
+  | { ok: true; message: string; balance: number }
+  | { ok: false; status: number; message: string; balance?: number };
+
+export async function claimAiBonus(): Promise<{
+  applied: boolean;
+  search_credits: number;
+} | null> {
+  try {
+    const res = await fetch(`${getApiUrl()}/ai-message/claim-bonus`, {
+      method: "POST",
+      headers: getLicenseHeaders(),
+    });
+    if (!res.ok) return null;
+    return res.json() as Promise<{ applied: boolean; search_credits: number }>;
+  } catch {
+    return null;
+  }
+}
+
+export async function generateAiMessage(
+  input: GenerateAiMessageInput
+): Promise<GenerateAiMessageResult> {
+  try {
+    const res = await fetch(`${getApiUrl()}/ai-message/generate`, {
+      method: "POST",
+      headers: getLicenseHeaders(),
+      body: JSON.stringify(input),
+    });
+
+    const data = (await res.json()) as {
+      message?: string;
+      balance?: number;
+      error?: string;
+    };
+
+    if (res.status === 402) {
+      return {
+        ok: false,
+        status: 402,
+        message: data.message ?? data.error ?? "Insufficient credits",
+        balance: data.balance,
+      };
+    }
+
+    if (!res.ok) {
+      return {
+        ok: false,
+        status: res.status,
+        message: data.message ?? data.error ?? "Generation failed, credits refunded",
+        balance: data.balance,
+      };
+    }
+
+    return {
+      ok: true,
+      message: data.message ?? "",
+      balance: data.balance ?? 0,
+    };
+  } catch {
+    return {
+      ok: false,
+      status: 0,
+      message: "Generation failed, credits refunded",
+    };
+  }
+}
+
 export async function getResults(
   id: string,
   page = 1,

@@ -6,24 +6,39 @@ import {
   resolveWhatsappTemplates,
   WHATSAPP_NICHE_ORDER,
 } from "@/lib/whatsapp-template-defaults";
+import { parseSearchLocation } from "@/lib/search-location";
 import {
   buildWhatsappUrl,
   personalizeWhatsappMessage,
   WHATSAPP_NICHE_LABELS,
 } from "@/lib/whatsapp";
-import { fetchWhatsappTemplates } from "@/services/api";
+import { fetchWhatsappTemplates, generateAiMessage } from "@/services/api";
+import { hasAnyEmail } from "@/utils/get-display-email";
 import type { Lead } from "@/types/lead";
+
+const AI_INTRO_DISMISSED_KEY = "leadthur_ai_modal_intro_dismissed";
+const AI_MODAL_OPEN_COUNT_KEY = "leadthur_ai_modal_open_count";
 
 interface WhatsappTemplateModalProps {
   lead: Lead | null;
   searchLocation: string;
+  userEmail: string;
+  creditsRemaining: number;
   onClose: () => void;
+  onCreditsUpdated: (balance: number) => void;
+  onCreditDeducted: () => void;
+  onGetMoreCredits: () => void;
 }
 
 export function WhatsappTemplateModal({
   lead,
   searchLocation,
+  userEmail,
+  creditsRemaining,
   onClose,
+  onCreditsUpdated,
+  onCreditDeducted,
+  onGetMoreCredits,
 }: WhatsappTemplateModalProps) {
   const [templatesByNiche, setTemplatesByNiche] = useState(
     DEFAULT_WHATSAPP_TEMPLATES
@@ -33,6 +48,27 @@ export function WhatsappTemplateModal({
   const [usingFallback, setUsingFallback] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [messageText, setMessageText] = useState("");
+  const [isAiMessage, setIsAiMessage] = useState(false);
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [insufficientCredits, setInsufficientCredits] = useState(false);
+  const [showAiIntro, setShowAiIntro] = useState(false);
+
+  const cityLabel = useMemo(() => {
+    const { city } = parseSearchLocation(searchLocation);
+    return city || searchLocation;
+  }, [searchLocation]);
+
+  const staticMessage = useMemo(() => {
+    const template = templatesByNiche[selectedNiche]?.[0];
+    if (!lead || !template) return "";
+    return personalizeWhatsappMessage(
+      template.message,
+      lead.business_name,
+      searchLocation
+    );
+  }, [lead, templatesByNiche, selectedNiche, searchLocation]);
 
   const loadTemplates = useCallback(async () => {
     setLoading(true);
@@ -70,9 +106,30 @@ export function WhatsappTemplateModal({
 
   useEffect(() => {
     if (!lead) return;
+
     setCopied(false);
+    setIsAiMessage(false);
+    setAiError(null);
+    setAiGenerating(false);
+    setInsufficientCredits(creditsRemaining < 3);
     void loadTemplates();
-  }, [lead, loadTemplates]);
+
+    const dismissed =
+      localStorage.getItem(AI_INTRO_DISMISSED_KEY) === "true";
+    const openCount =
+      parseInt(localStorage.getItem(AI_MODAL_OPEN_COUNT_KEY) || "0", 10) + 1;
+    localStorage.setItem(AI_MODAL_OPEN_COUNT_KEY, String(openCount));
+    setShowAiIntro(!dismissed && openCount <= 3);
+  }, [lead, loadTemplates, creditsRemaining]);
+
+  useEffect(() => {
+    if (!lead || isAiMessage) return;
+    setMessageText(staticMessage);
+  }, [lead, staticMessage, isAiMessage]);
+
+  useEffect(() => {
+    setInsufficientCredits(creditsRemaining < 3);
+  }, [creditsRemaining]);
 
   useEffect(() => {
     if (!lead) return;
@@ -92,19 +149,10 @@ export function WhatsappTemplateModal({
 
   const template = templatesByNiche[selectedNiche]?.[0];
 
-  const personalizedMessage = useMemo(() => {
-    if (!lead || !template) return "";
-    return personalizeWhatsappMessage(
-      template.message,
-      lead.business_name,
-      searchLocation
-    );
-  }, [lead, template, searchLocation]);
-
   const whatsappUrl = useMemo(() => {
     if (!lead) return null;
-    return buildWhatsappUrl(lead.phone, personalizedMessage);
-  }, [lead, personalizedMessage]);
+    return buildWhatsappUrl(lead.phone, messageText);
+  }, [lead, messageText]);
 
   const visibleNiches = WHATSAPP_NICHE_ORDER.filter(
     (niche) => templatesByNiche[niche]?.length
@@ -112,16 +160,78 @@ export function WhatsappTemplateModal({
 
   if (!lead) return null;
 
+  function dismissAiIntro() {
+    localStorage.setItem(AI_INTRO_DISMISSED_KEY, "true");
+    setShowAiIntro(false);
+  }
+
+  function handleSelectNiche(niche: string) {
+    setSelectedNiche(niche);
+    setIsAiMessage(false);
+    setAiError(null);
+  }
+
+  async function handleGenerateAi() {
+    if (!lead) return;
+
+    if (insufficientCredits) {
+      onGetMoreCredits();
+      return;
+    }
+
+    setAiGenerating(true);
+    setAiError(null);
+
+    const result = await generateAiMessage({
+      email: userEmail,
+      business_name: lead.business_name,
+      city: cityLabel,
+      niche: selectedNiche,
+      rating: lead.rating,
+      has_website: Boolean(lead.website?.trim()),
+      has_email: hasAnyEmail(lead),
+    });
+
+    setAiGenerating(false);
+
+    if (!result.ok) {
+      if (result.status === 402) {
+        setInsufficientCredits(true);
+        if (typeof result.balance === "number") {
+          onCreditsUpdated(result.balance);
+        }
+        return;
+      }
+
+      setAiError(result.message);
+      if (typeof result.balance === "number") {
+        onCreditsUpdated(result.balance);
+      }
+      return;
+    }
+
+    setMessageText(result.message);
+    setIsAiMessage(true);
+    onCreditsUpdated(result.balance);
+    onCreditDeducted();
+  }
+
   async function handleCopy() {
-    if (!personalizedMessage) return;
+    if (!messageText) return;
     try {
-      await navigator.clipboard.writeText(personalizedMessage);
+      await navigator.clipboard.writeText(messageText);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
       /* ignore */
     }
   }
+
+  const aiButtonLabel = insufficientCredits
+    ? "Get more credits to generate"
+    : aiGenerating
+      ? "Generating..."
+      : "Generate with AI (3 credits)";
 
   return (
     <div
@@ -203,6 +313,87 @@ export function WhatsappTemplateModal({
           </p>
         ) : (
           <>
+            {showAiIntro && (
+              <div
+                style={{
+                  marginBottom: 12,
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  background: "rgba(124,58,237,0.08)",
+                  border: "1px solid rgba(124,58,237,0.2)",
+                  display: "flex",
+                  alignItems: "flex-start",
+                  justifyContent: "space-between",
+                  gap: 10,
+                }}
+              >
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: 12,
+                    color: "#C4B5FD",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  New: Generate a personalized message with AI for 3 credits, or use
+                  a free template below.
+                </p>
+                <button
+                  type="button"
+                  onClick={dismissAiIntro}
+                  aria-label="Dismiss"
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "#6B6B80",
+                    cursor: "pointer",
+                    fontSize: 16,
+                    lineHeight: 1,
+                    flexShrink: 0,
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => void handleGenerateAi()}
+              disabled={aiGenerating}
+              style={{
+                width: "100%",
+                marginBottom: 12,
+                background: insufficientCredits
+                  ? "rgba(124,58,237,0.08)"
+                  : "rgba(124,58,237,0.16)",
+                border: "1px solid rgba(124,58,237,0.35)",
+                color: "#A855F7",
+                borderRadius: 10,
+                padding: "10px 14px",
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: aiGenerating ? "not-allowed" : "pointer",
+                fontFamily: "Inter, sans-serif",
+                opacity: aiGenerating ? 0.7 : 1,
+              }}
+            >
+              {aiButtonLabel}
+            </button>
+
+            {aiError && (
+              <p
+                style={{
+                  color: "#F87171",
+                  fontSize: 12,
+                  margin: "0 0 12px",
+                  lineHeight: 1.5,
+                }}
+              >
+                {aiError}
+              </p>
+            )}
+
             {loadError && (
               <div
                 style={{
@@ -249,6 +440,41 @@ export function WhatsappTemplateModal({
             <div
               style={{
                 display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+                marginBottom: 8,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: "#6B6B80",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                }}
+              >
+                Free templates
+              </span>
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: "#22C55E",
+                  background: "rgba(34,197,94,0.1)",
+                  border: "1px solid rgba(34,197,94,0.2)",
+                  borderRadius: 100,
+                  padding: "2px 8px",
+                }}
+              >
+                Free
+              </span>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
                 flexWrap: "wrap",
                 gap: 8,
                 marginBottom: 16,
@@ -258,18 +484,19 @@ export function WhatsappTemplateModal({
                 <button
                   key={niche}
                   type="button"
-                  onClick={() => setSelectedNiche(niche)}
+                  onClick={() => handleSelectNiche(niche)}
                   style={{
                     background:
-                      selectedNiche === niche
+                      selectedNiche === niche && !isAiMessage
                         ? "rgba(124,58,237,0.2)"
                         : "rgba(255,255,255,0.04)",
                     border: `1px solid ${
-                      selectedNiche === niche
+                      selectedNiche === niche && !isAiMessage
                         ? "rgba(124,58,237,0.4)"
                         : "rgba(255,255,255,0.08)"
                     }`,
-                    color: selectedNiche === niche ? "#A855F7" : "#A1A1B5",
+                    color:
+                      selectedNiche === niche && !isAiMessage ? "#A855F7" : "#A1A1B5",
                     borderRadius: 100,
                     padding: "6px 12px",
                     fontSize: 12,
@@ -283,7 +510,7 @@ export function WhatsappTemplateModal({
               ))}
             </div>
 
-            {template ? (
+            {template || isAiMessage ? (
               <>
                 <div
                   style={{
@@ -295,11 +522,14 @@ export function WhatsappTemplateModal({
                     letterSpacing: "0.06em",
                   }}
                 >
-                  {template.title}
+                  {isAiMessage ? "AI generated message" : template?.title}
                 </div>
                 <textarea
-                  readOnly
-                  value={personalizedMessage}
+                  readOnly={!isAiMessage}
+                  value={messageText}
+                  onChange={(e) => {
+                    if (isAiMessage) setMessageText(e.target.value);
+                  }}
                   rows={7}
                   style={{
                     width: "100%",
