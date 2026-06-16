@@ -173,6 +173,12 @@ router.post("/generate", requireLicense, async (req: Request, res: Response) => 
       niche: normalizedNiche,
     }).catch(() => undefined);
 
+    logger.info("AI WhatsApp message generated", {
+      email: normalizedEmail,
+      business_name: business_name.trim(),
+      niche: normalizedNiche,
+    });
+
     res.json({
       message: generation.message,
       balance: deduction.balance,

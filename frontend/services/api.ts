@@ -484,6 +484,7 @@ export async function generateAiMessage(
       method: "POST",
       headers: getLicenseHeaders(),
       body: JSON.stringify(input),
+      signal: AbortSignal.timeout(45_000),
     });
 
     let data: {
@@ -527,11 +528,16 @@ export async function generateAiMessage(
       message: data.message ?? "",
       balance: data.balance ?? 0,
     };
-  } catch {
+  } catch (err) {
+    const isTimeout =
+      err instanceof Error &&
+      (err.name === "TimeoutError" || err.name === "AbortError");
     return {
       ok: false,
       status: 0,
-      message: "Generation failed, credits refunded",
+      message: isTimeout
+        ? "Generation timed out. Please try again."
+        : "Could not reach the server. Check your connection and try again.",
     };
   }
 }

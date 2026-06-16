@@ -52,6 +52,7 @@ export function WhatsappTemplateModal({
   const [isAiMessage, setIsAiMessage] = useState(false);
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [aiSuccess, setAiSuccess] = useState(false);
   const [insufficientCredits, setInsufficientCredits] = useState(false);
   const [showAiIntro, setShowAiIntro] = useState(false);
 
@@ -110,6 +111,7 @@ export function WhatsappTemplateModal({
     setCopied(false);
     setIsAiMessage(false);
     setAiError(null);
+    setAiSuccess(false);
     setAiGenerating(false);
     setInsufficientCredits(creditsRemaining < 3);
     void loadTemplates();
@@ -120,16 +122,16 @@ export function WhatsappTemplateModal({
       parseInt(localStorage.getItem(AI_MODAL_OPEN_COUNT_KEY) || "0", 10) + 1;
     localStorage.setItem(AI_MODAL_OPEN_COUNT_KEY, String(openCount));
     setShowAiIntro(!dismissed && openCount <= 3);
-  }, [lead, loadTemplates, creditsRemaining]);
+  }, [lead, loadTemplates]);
+
+  useEffect(() => {
+    setInsufficientCredits(creditsRemaining < 3);
+  }, [creditsRemaining]);
 
   useEffect(() => {
     if (!lead || isAiMessage) return;
     setMessageText(staticMessage);
   }, [lead, staticMessage, isAiMessage]);
-
-  useEffect(() => {
-    setInsufficientCredits(creditsRemaining < 3);
-  }, [creditsRemaining]);
 
   useEffect(() => {
     if (!lead) return;
@@ -175,51 +177,75 @@ export function WhatsappTemplateModal({
     if (!lead) return;
 
     if (insufficientCredits) {
+      setAiError("You need at least 3 credits to generate. Opening top up…");
       onGetMoreCredits();
+      return;
+    }
+
+    if (!cityLabel.trim()) {
+      setAiError(
+        "City is missing for this search. Run the search again with a location, then retry."
+      );
       return;
     }
 
     setAiGenerating(true);
     setAiError(null);
+    setAiSuccess(false);
 
-    const result = await generateAiMessage({
-      email: userEmail,
-      business_name: lead.business_name,
-      city: cityLabel,
-      niche: selectedNiche,
-      rating: lead.rating,
-      has_website: Boolean(lead.website?.trim()),
-      has_email: hasAnyEmail(lead),
-    });
+    try {
+      const result = await generateAiMessage({
+        email: userEmail,
+        business_name: lead.business_name,
+        city: cityLabel,
+        niche: selectedNiche,
+        rating: lead.rating,
+        has_website: Boolean(lead.website?.trim()),
+        has_email: hasAnyEmail(lead),
+      });
 
-    setAiGenerating(false);
+      if (!result.ok) {
+        if (result.status === 402) {
+          setInsufficientCredits(true);
+          setAiError(
+            result.message || "Insufficient credits. You need 3 credits to generate."
+          );
+          if (typeof result.balance === "number") {
+            onCreditsUpdated(result.balance);
+          }
+          return;
+        }
 
-    if (!result.ok) {
-      if (result.status === 402) {
-        setInsufficientCredits(true);
+        setAiError(
+          result.code === "ai_not_configured"
+            ? "AI generation is not configured on the server yet. Add DEEPSEEK_API_KEY to the staging backend in Coolify, then redeploy. Credits refunded."
+            : result.code === "deepseek_auth_error"
+              ? "DeepSeek API key is invalid. Update DEEPSEEK_API_KEY in Coolify and redeploy. Credits refunded."
+              : result.message
+        );
         if (typeof result.balance === "number") {
           onCreditsUpdated(result.balance);
         }
         return;
       }
 
-      setAiError(
-        result.code === "ai_not_configured"
-          ? "AI generation is not configured on the server yet. Add DEEPSEEK_API_KEY to the staging backend in Coolify, then redeploy. Credits refunded."
-          : result.code === "deepseek_auth_error"
-            ? "DeepSeek API key is invalid. Update DEEPSEEK_API_KEY in Coolify and redeploy. Credits refunded."
-            : result.message
-      );
-      if (typeof result.balance === "number") {
+      if (!result.message.trim()) {
+        setAiError("AI returned an empty message. Please try again.");
         onCreditsUpdated(result.balance);
+        return;
       }
-      return;
-    }
 
-    setMessageText(result.message);
-    setIsAiMessage(true);
-    onCreditsUpdated(result.balance);
-    onCreditDeducted();
+      setMessageText(result.message);
+      setIsAiMessage(true);
+      setAiSuccess(true);
+      onCreditsUpdated(result.balance);
+      onCreditDeducted();
+      window.setTimeout(() => setAiSuccess(false), 3000);
+    } catch {
+      setAiError("Something went wrong. Please try again.");
+    } finally {
+      setAiGenerating(false);
+    }
   }
 
   async function handleCopy() {
@@ -386,6 +412,19 @@ export function WhatsappTemplateModal({
             >
               {aiButtonLabel}
             </button>
+
+            {aiSuccess && (
+              <p
+                style={{
+                  color: "#22C55E",
+                  fontSize: 12,
+                  margin: "0 0 12px",
+                  lineHeight: 1.5,
+                }}
+              >
+                Message generated. You can edit it below before sending.
+              </p>
+            )}
 
             {aiError && (
               <p
