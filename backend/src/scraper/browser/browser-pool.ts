@@ -8,26 +8,65 @@ export class BrowserPool {
   private available: Browser[] = [];
   private readonly size: number;
   private healthTimer: ReturnType<typeof setInterval> | null = null;
+  private initPromise: Promise<void> | null = null;
 
   constructor(size?: number) {
     this.size = size ?? getEnv().SCRAPER_CONCURRENCY;
   }
 
   async init(): Promise<void> {
-    for (let i = 0; i < this.size; i++) {
+    if (this.isReady()) return;
+    if (this.initPromise) {
+      await this.initPromise;
+      return;
+    }
+
+    this.initPromise = this.doInit();
+    try {
+      await this.initPromise;
+    } catch (err) {
+      this.initPromise = null;
+      throw err;
+    }
+  }
+
+  private async doInit(): Promise<void> {
+    if (this.browsers.length > 0) {
+      this.available = this.browsers.filter((b) => b.isConnected());
+      if (this.isReady()) return;
+    }
+
+    const toLaunch = this.size - this.browsers.length;
+    for (let i = 0; i < toLaunch; i++) {
       const browser = await this.launchBrowser();
       this.browsers.push(browser);
       this.available.push(browser);
     }
-    logger.info("Browser pool initialized", { size: this.size });
+    logger.info("Browser pool initialized", { size: this.browsers.length });
 
-    this.healthTimer = setInterval(() => {
-      void this.healthCheck().catch((err) => {
-        logger.error("Browser pool health check failed", {
-          error: err instanceof Error ? err.message : "unknown",
+    if (!this.healthTimer) {
+      this.healthTimer = setInterval(() => {
+        void this.healthCheck().catch((err) => {
+          logger.error("Browser pool health check failed", {
+            error: err instanceof Error ? err.message : "unknown",
+          });
         });
+      }, 60_000);
+    }
+  }
+
+  /** Retry browser launch if startup init failed or pool was never ready. */
+  async ensureReady(): Promise<boolean> {
+    if (this.isReady()) return true;
+    try {
+      await this.init();
+      return this.isReady();
+    } catch (err) {
+      logger.error("Browser pool ensureReady failed", {
+        error: err instanceof Error ? err.message : "unknown",
       });
-    }, 60_000);
+      return false;
+    }
   }
 
   private async launchBrowser(): Promise<Browser> {

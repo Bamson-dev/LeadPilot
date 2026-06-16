@@ -118,13 +118,23 @@ function registerRoutes(): void {
 
 async function initBrowserPoolSafe(): Promise<void> {
   if (!routesRegistered) return;
-  try {
-    await getBrowserPool().init();
-    logger.info("Browser pool ready");
-  } catch (err) {
-    logger.error("Browser pool init failed — server stays up, /health remains available", {
-      error: err instanceof Error ? err.message : "unknown",
-    });
+  const pool = getBrowserPool();
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const ready = await pool.ensureReady();
+      if (ready) {
+        logger.info("Browser pool ready", { attempt });
+        return;
+      }
+    } catch (err) {
+      logger.error("Browser pool init failed — server stays up, /health remains available", {
+        attempt,
+        error: err instanceof Error ? err.message : "unknown",
+      });
+    }
+    if (attempt < 3) {
+      await new Promise((r) => setTimeout(r, 10_000));
+    }
   }
 }
 
