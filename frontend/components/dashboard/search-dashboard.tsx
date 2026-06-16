@@ -15,7 +15,9 @@ import {
 import { AffiliateSection } from "@/components/dashboard/affiliate-section";
 import { WelcomeState } from "@/components/dashboard/welcome-state";
 import { ResultsTable } from "@/features/results/results-table";
+import { WhatsappTemplateModal } from "@/components/dashboard/whatsapp-template-modal";
 import { useSearch } from "@/hooks/useSearch";
+import { useLeadStatuses } from "@/hooks/useLeadStatuses";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { exportToCSV } from "@/features/export/csv-export";
 import SearchLimitModal from "@/components/SearchLimitModal";
@@ -30,6 +32,7 @@ import {
 import { businessLeadToLead } from "@/types/lead";
 import type { Lead } from "@/types/lead";
 import { applyRatingFilter, type RatingFilterValue } from "@/lib/rating-filter";
+import { applyStatusFilter } from "@/lib/lead-status";
 
 function dedupeLeads(
   prev: BusinessLead[],
@@ -68,6 +71,7 @@ export function SearchDashboard() {
   const [userStats, setUserStats] = useState<LicenseUsage | null>(null);
   const [ratingFilter, setRatingFilter] = useState<RatingFilterValue>("all");
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const [templateLead, setTemplateLead] = useState<Lead | null>(null);
 
   const loadUserStats = useCallback(async () => {
     const usage = await getLicenseUsage();
@@ -226,9 +230,21 @@ export function SearchDashboard() {
         )
       : leads;
 
+  const {
+    leadStatuses,
+    statusFilter,
+    setStatusFilter,
+    setLeadStatus,
+  } = useLeadStatuses(tableLeads);
+
   const ratingFilteredTableLeads = useMemo(
     () => applyRatingFilter(tableLeads, ratingFilter),
     [tableLeads, ratingFilter]
+  );
+
+  const statusFilteredTableLeads = useMemo(
+    () => applyStatusFilter(ratingFilteredTableLeads, statusFilter, leadStatuses),
+    [ratingFilteredTableLeads, statusFilter, leadStatuses]
   );
 
   const leadsToExport =
@@ -243,8 +259,15 @@ export function SearchDashboard() {
       : leads;
 
   const filteredLeadsToExport = useMemo(
-    () => applyRatingFilter(leadsToExport, ratingFilter),
-    [leadsToExport, ratingFilter]
+    () =>
+      applyStatusFilter(
+        applyRatingFilter(leadsToExport, ratingFilter),
+        statusFilter,
+        Object.fromEntries(
+          leadsToExport.map((lead) => [lead.id, leadStatuses[lead.id] || "new"])
+        )
+      ),
+    [leadsToExport, ratingFilter, statusFilter, leadStatuses]
   );
 
   const handleSearch = () => {
@@ -666,7 +689,7 @@ export function SearchDashboard() {
 
       {(isSearching || tableLeads.length > 0 || savedBanner) && (
         <ResultsTable
-          leads={ratingFilteredTableLeads}
+          leads={statusFilteredTableLeads}
           isLoading={isSearching && tableLeads.length === 0}
           isMobile={isMobile}
           hideEmptyPlaceholder={showWelcome}
@@ -674,6 +697,12 @@ export function SearchDashboard() {
           onRatingFilterChange={setRatingFilter}
           totalLeadCount={tableLeads.length}
           ratingMatchCount={ratingFilteredTableLeads.length}
+          summaryLeads={ratingFilteredTableLeads}
+          leadStatuses={leadStatuses}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
+          onLeadStatusChange={setLeadStatus}
+          onUseTemplate={setTemplateLead}
         />
       )}
 
@@ -838,6 +867,12 @@ export function SearchDashboard() {
       {showLimitModal && userEmail && (
         <SearchLimitModal email={userEmail} onClose={() => setShowLimitModal(false)} />
       )}
+
+      <WhatsappTemplateModal
+        lead={templateLead}
+        searchLocation={loc}
+        onClose={() => setTemplateLead(null)}
+      />
     </div>
   );
 }

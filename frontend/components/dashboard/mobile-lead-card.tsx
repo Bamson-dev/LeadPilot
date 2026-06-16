@@ -12,14 +12,16 @@ interface MobileLeadCardProps {
   onCopy: (text: string, id: string) => void;
   status?: string;
   onStatusChange?: (leadId: string, status: string) => void;
+  onUseTemplate?: (lead: Lead) => void;
 }
 
 export function MobileLeadCard({
   lead,
   copiedId,
   onCopy,
-  status = "none",
+  status = "new",
   onStatusChange,
+  onUseTemplate,
 }: MobileLeadCardProps) {
   const emails = getAllEmailsForDisplay(lead);
   const isPredicted = lead.email_source === "predicted";
@@ -181,13 +183,33 @@ export function MobileLeadCard({
       )}
 
       {onStatusChange && (
-        <div style={{ marginTop: 10 }}>
+        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
           <LeadStatusSelect
             leadId={lead.id}
             status={status}
             onChange={onStatusChange}
             fullWidth
           />
+          {onUseTemplate && (
+            <button
+              type="button"
+              onClick={() => onUseTemplate(lead)}
+              style={{
+                width: "100%",
+                background: "rgba(37,211,102,0.1)",
+                border: "1px solid rgba(37,211,102,0.25)",
+                color: "#25D366",
+                borderRadius: 8,
+                padding: "10px 12px",
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: "pointer",
+                fontFamily: "Inter, sans-serif",
+              }}
+            >
+              Use Template
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -15,11 +15,12 @@ export function LeadStatusSelect({
   onChange,
   fullWidth = false,
 }: LeadStatusSelectProps) {
-  const style = getStatusStyle(status);
+  const normalized = status === "none" ? "new" : status;
+  const style = getStatusStyle(normalized);
 
   return (
     <select
-      value={status}
+      value={normalized}
       onChange={(e) => onChange(leadId, e.target.value)}
       style={{
         width: fullWidth ? "100%" : undefined,
@@ -38,8 +39,8 @@ export function LeadStatusSelect({
         WebkitAppearance: "none",
       }}
     >
-      <option value="none" style={{ background: "#111118", color: "#555575" }}>
-        {fullWidth ? "— Set Status" : "— Status"}
+      <option value="new" style={{ background: "#111118", color: "#9CA3AF" }}>
+        New
       </option>
       <option value="contacted" style={{ background: "#111118", color: "#0EA5E9" }}>
         Contacted
@@ -48,7 +49,7 @@ export function LeadStatusSelect({
         Interested
       </option>
       <option value="closed" style={{ background: "#111118", color: "#10B981" }}>
-        Closed ✓
+        Closed
       </option>
       <option value="not_interested" style={{ background: "#111118", color: "#EF4444" }}>
         Not Interested

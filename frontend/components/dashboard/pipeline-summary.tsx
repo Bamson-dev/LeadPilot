@@ -9,13 +9,22 @@ interface PipelineSummaryProps {
   onFilterChange: (filter: string) => void;
 }
 
+const STATUS_ITEMS = [
+  { key: "new", label: "New", color: "#9CA3AF" },
+  { key: "contacted", label: "Contacted", color: "#0EA5E9" },
+  { key: "interested", label: "Interested", color: "#FBBF24" },
+  { key: "closed", label: "Closed", color: "#10B981" },
+  { key: "not_interested", label: "Not Interested", color: "#EF4444" },
+] as const;
+
 export function PipelineSummary({
   leads,
   leadStatuses,
   statusFilter,
   onFilterChange,
 }: PipelineSummaryProps) {
-  const statusCounts = {
+  const counts: Record<string, number> = {
+    new: 0,
     contacted: 0,
     interested: 0,
     closed: 0,
@@ -23,144 +32,67 @@ export function PipelineSummary({
   };
 
   leads.forEach((lead) => {
-    const s = leadStatuses[lead.id];
-    if (s && s !== "none" && s in statusCounts) {
-      statusCounts[s as keyof typeof statusCounts]++;
-    }
+    const raw = leadStatuses[lead.id] || "new";
+    const status = raw === "none" ? "new" : raw;
+    if (status in counts) counts[status]++;
   });
 
-  const total = Object.values(statusCounts).reduce((a, b) => a + b, 0);
-  if (total === 0) return null;
+  if (leads.length === 0) return null;
 
   return (
     <div
       style={{
-        display: "flex",
-        gap: 8,
-        flexWrap: "wrap",
         marginBottom: 12,
         padding: "10px 14px",
         background: "#0D0D16",
         border: "1px solid rgba(255,255,255,0.06)",
         borderRadius: 10,
+        fontSize: 12,
+        color: "#6B6B80",
+        lineHeight: 1.6,
       }}
     >
-      <span
-        style={{
-          fontSize: 11,
-          color: "#555575",
-          fontWeight: 600,
-          alignSelf: "center",
-        }}
-      >
-        Pipeline:
-      </span>
-      {statusCounts.contacted > 0 && (
-        <span
-          role="button"
-          tabIndex={0}
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            color: "#0EA5E9",
-            background: "rgba(14,165,233,0.1)",
-            border: "1px solid rgba(14,165,233,0.2)",
-            padding: "3px 8px",
-            borderRadius: 100,
-            cursor: "pointer",
-          }}
-          onClick={() => onFilterChange("contacted")}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") onFilterChange("contacted");
-          }}
-        >
-          {statusCounts.contacted} Contacted
+      {STATUS_ITEMS.map((item, index) => (
+        <span key={item.key}>
+          {index > 0 && <span style={{ margin: "0 6px", color: "#3F3F50" }}>·</span>}
+          <button
+            type="button"
+            onClick={() => onFilterChange(item.key)}
+            style={{
+              background: "transparent",
+              border: "none",
+              padding: 0,
+              cursor: "pointer",
+              color: statusFilter === item.key ? item.color : "#A1A1B5",
+              fontWeight: statusFilter === item.key ? 700 : 500,
+              fontSize: 12,
+              fontFamily: "Inter, sans-serif",
+            }}
+          >
+            {item.label}: {counts[item.key]}
+          </button>
         </span>
-      )}
-      {statusCounts.interested > 0 && (
-        <span
-          role="button"
-          tabIndex={0}
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            color: "#FBBF24",
-            background: "rgba(251,191,36,0.1)",
-            border: "1px solid rgba(251,191,36,0.2)",
-            padding: "3px 8px",
-            borderRadius: 100,
-            cursor: "pointer",
-          }}
-          onClick={() => onFilterChange("interested")}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") onFilterChange("interested");
-          }}
-        >
-          {statusCounts.interested} Interested
-        </span>
-      )}
-      {statusCounts.closed > 0 && (
-        <span
-          role="button"
-          tabIndex={0}
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            color: "#10B981",
-            background: "rgba(16,185,129,0.1)",
-            border: "1px solid rgba(16,185,129,0.2)",
-            padding: "3px 8px",
-            borderRadius: 100,
-            cursor: "pointer",
-          }}
-          onClick={() => onFilterChange("closed")}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") onFilterChange("closed");
-          }}
-        >
-          {statusCounts.closed} Closed ✓
-        </span>
-      )}
-      {statusCounts.not_interested > 0 && (
-        <span
-          role="button"
-          tabIndex={0}
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            color: "#EF4444",
-            background: "rgba(239,68,68,0.1)",
-            border: "1px solid rgba(239,68,68,0.2)",
-            padding: "3px 8px",
-            borderRadius: 100,
-            cursor: "pointer",
-          }}
-          onClick={() => onFilterChange("not_interested")}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") onFilterChange("not_interested");
-          }}
-        >
-          {statusCounts.not_interested} Not Interested
-        </span>
-      )}
+      ))}
       {statusFilter !== "all" && (
-        <span
-          role="button"
-          tabIndex={0}
-          style={{
-            fontSize: 11,
-            color: "#555575",
-            cursor: "pointer",
-            alignSelf: "center",
-            textDecoration: "underline",
-          }}
-          onClick={() => onFilterChange("all")}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") onFilterChange("all");
-          }}
-        >
-          Show all
-        </span>
+        <>
+          <span style={{ margin: "0 6px", color: "#3F3F50" }}>·</span>
+          <button
+            type="button"
+            onClick={() => onFilterChange("all")}
+            style={{
+              background: "transparent",
+              border: "none",
+              padding: 0,
+              cursor: "pointer",
+              color: "#6B6B80",
+              textDecoration: "underline",
+              fontSize: 12,
+              fontFamily: "Inter, sans-serif",
+            }}
+          >
+            Show all
+          </button>
+        </>
       )}
     </div>
   );

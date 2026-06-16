@@ -12,7 +12,6 @@ import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { LeadStatusSelect } from "@/components/dashboard/lead-status-select";
 import { PipelineSummary } from "@/components/dashboard/pipeline-summary";
 import { RatingFilter } from "@/components/dashboard/rating-filter";
-import { useLeadStatuses } from "@/hooks/useLeadStatuses";
 import type { RatingFilterValue } from "@/lib/rating-filter";
 import type { Lead } from "@/types/lead";
 
@@ -32,6 +31,13 @@ interface ResultsTableProps {
   onRatingFilterChange?: (value: RatingFilterValue) => void;
   totalLeadCount?: number;
   ratingMatchCount?: number;
+  summaryLeads?: Lead[];
+  leadStatuses: Record<string, string>;
+  statusFilter: string;
+  onStatusFilterChange: (value: string) => void;
+  onLeadStatusChange: (leadId: string, status: string) => void;
+  onUseTemplate?: (lead: Lead) => void;
+  searchLocation?: string;
 }
 
 export function ResultsTable({
@@ -43,22 +49,27 @@ export function ResultsTable({
   onRatingFilterChange,
   totalLeadCount,
   ratingMatchCount,
+  summaryLeads,
+  leadStatuses,
+  statusFilter,
+  onStatusFilterChange,
+  onLeadStatusChange,
+  onUseTemplate,
 }: ResultsTableProps) {
   const { copiedId, copyToClipboard } = useCopyToClipboard();
   const [sortKey, setSortKey] = useState<SortKey>("business_name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [hasWebsite, setHasWebsite] = useState<boolean | null>(null);
   const parentRef = useRef<HTMLDivElement>(null);
-  const { leadStatuses, statusFilter, setStatusFilter, setLeadStatus } =
-    useLeadStatuses();
 
   const filtered = useMemo(() => {
     return leads.filter((lead) => {
       if (hasWebsite === true && !lead.website) return false;
       if (hasWebsite === false && lead.website) return false;
       if (statusFilter !== "all") {
-        const leadStatus = leadStatuses[lead.id] || "none";
-        if (leadStatus !== statusFilter) return false;
+        const leadStatus = leadStatuses[lead.id] || "new";
+        const normalized = leadStatus === "none" ? "new" : leadStatus;
+        if (normalized !== statusFilter) return false;
       }
       return true;
     });
@@ -96,6 +107,8 @@ export function ResultsTable({
     }
   }
 
+  const pipelineLeads = summaryLeads ?? leads;
+
   if (!isLoading && leads.length === 0 && !hideEmptyPlaceholder) {
     return null;
   }
@@ -104,10 +117,10 @@ export function ResultsTable({
     return (
       <div className="space-y-3">
         <PipelineSummary
-          leads={leads}
+          leads={pipelineLeads}
           leadStatuses={leadStatuses}
           statusFilter={statusFilter}
-          onFilterChange={setStatusFilter}
+          onFilterChange={onStatusFilterChange}
         />
         <div className="flex flex-wrap gap-2 px-1">
           {onRatingFilterChange && (
@@ -132,7 +145,7 @@ export function ResultsTable({
           </select>
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => onStatusFilterChange(e.target.value)}
             style={{
               background: "#111118",
               border: "1px solid rgba(255,255,255,0.08)",
@@ -148,7 +161,7 @@ export function ResultsTable({
             }}
           >
             <option value="all">All statuses</option>
-            <option value="none">Not contacted</option>
+            <option value="new">New</option>
             <option value="contacted">Contacted</option>
             <option value="interested">Interested</option>
             <option value="closed">Closed</option>
@@ -176,8 +189,9 @@ export function ResultsTable({
                 lead={lead}
                 copiedId={copiedId}
                 onCopy={copyToClipboard}
-                status={leadStatuses[lead.id] || "none"}
-                onStatusChange={setLeadStatus}
+                status={leadStatuses[lead.id] || "new"}
+                onStatusChange={onLeadStatusChange}
+                onUseTemplate={onUseTemplate}
               />
             ))}
           </div>
@@ -259,11 +273,33 @@ export function ResultsTable({
         {lead.rating != null ? `★ ${lead.rating}` : "—"}
       </td>
       <td style={{ padding: "12px 8px" }}>
-        <LeadStatusSelect
-          leadId={lead.id}
-          status={leadStatuses[lead.id] || "none"}
-          onChange={setLeadStatus}
-        />
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <LeadStatusSelect
+            leadId={lead.id}
+            status={leadStatuses[lead.id] || "new"}
+            onChange={onLeadStatusChange}
+          />
+          {onUseTemplate && (
+            <button
+              type="button"
+              onClick={() => onUseTemplate(lead)}
+              style={{
+                background: "rgba(37,211,102,0.1)",
+                border: "1px solid rgba(37,211,102,0.25)",
+                color: "#25D366",
+                borderRadius: 6,
+                padding: "4px 8px",
+                fontSize: 10,
+                fontWeight: 700,
+                cursor: "pointer",
+                fontFamily: "Inter, sans-serif",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Use Template
+            </button>
+          )}
+        </div>
       </td>
       <td className="px-4 py-3 text-[#6B6B80] align-top">
         {lead.reviews_count ?? "—"}
@@ -274,10 +310,10 @@ export function ResultsTable({
   return (
     <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0F0F14]">
       <PipelineSummary
-        leads={leads}
+        leads={pipelineLeads}
         leadStatuses={leadStatuses}
         statusFilter={statusFilter}
-        onFilterChange={setStatusFilter}
+        onFilterChange={onStatusFilterChange}
       />
       <div className="flex flex-col gap-2 border-b border-white/[0.08] px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
         {onRatingFilterChange && (
@@ -301,7 +337,7 @@ export function ResultsTable({
         </select>
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(e) => onStatusFilterChange(e.target.value)}
           style={{
             background: "#111118",
             border: "1px solid rgba(255,255,255,0.08)",
@@ -317,7 +353,7 @@ export function ResultsTable({
           }}
         >
           <option value="all">All statuses</option>
-          <option value="none">Not contacted</option>
+          <option value="new">New</option>
           <option value="contacted">Contacted</option>
           <option value="interested">Interested</option>
           <option value="closed">Closed</option>

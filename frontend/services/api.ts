@@ -359,6 +359,79 @@ export async function saveSearchHistory(input: {
   }
 }
 
+export type LeadStatusRecord = {
+  id: string;
+  email: string;
+  business_name: string;
+  business_phone: string | null;
+  business_address: string | null;
+  search_id: string | null;
+  status: "new" | "contacted" | "interested" | "closed" | "not_interested";
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function fetchLeadStatuses(status?: string): Promise<{
+  statuses: LeadStatusRecord[];
+}> {
+  try {
+    const params = status ? `?status=${encodeURIComponent(status)}` : "";
+    const res = await fetch(`${getApiUrl()}/lead-status${params}`, {
+      headers: getLicenseHeaders(),
+      cache: "no-store",
+    });
+    if (!res.ok) return { statuses: [] };
+    return res.json() as Promise<{ statuses: LeadStatusRecord[] }>;
+  } catch {
+    return { statuses: [] };
+  }
+}
+
+export async function saveLeadStatus(input: {
+  email: string;
+  business_name: string;
+  business_phone?: string | null;
+  business_address?: string | null;
+  search_id?: string | null;
+  status: LeadStatusRecord["status"];
+  notes?: string | null;
+}): Promise<LeadStatusRecord | null> {
+  try {
+    const res = await fetch(`${getApiUrl()}/lead-status`, {
+      method: "POST",
+      headers: getLicenseHeaders(),
+      body: JSON.stringify(input),
+    });
+    if (!res.ok) return null;
+    return res.json() as Promise<LeadStatusRecord>;
+  } catch {
+    return null;
+  }
+}
+
+export type WhatsappTemplate = {
+  id: string;
+  niche: string;
+  title: string;
+  message: string;
+  created_at: string;
+};
+
+export async function fetchWhatsappTemplates(): Promise<{
+  templates: Record<string, WhatsappTemplate[]>;
+}> {
+  try {
+    const res = await fetch(`${getApiUrl()}/whatsapp-templates`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return { templates: {} };
+    return res.json() as Promise<{ templates: Record<string, WhatsappTemplate[]> }>;
+  } catch {
+    return { templates: {} };
+  }
+}
+
 export async function getResults(
   id: string,
   page = 1,
