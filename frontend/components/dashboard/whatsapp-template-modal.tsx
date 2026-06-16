@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DEFAULT_WHATSAPP_TEMPLATES,
   resolveWhatsappTemplates,
@@ -55,6 +55,8 @@ export function WhatsappTemplateModal({
   const [aiSuccess, setAiSuccess] = useState(false);
   const [insufficientCredits, setInsufficientCredits] = useState(false);
   const [showAiIntro, setShowAiIntro] = useState(false);
+  const aiMessageRef = useRef<HTMLDivElement>(null);
+  const modalBodyRef = useRef<HTMLDivElement>(null);
 
   const cityLabel = useMemo(() => {
     const { city } = parseSearchLocation(searchLocation);
@@ -171,6 +173,7 @@ export function WhatsappTemplateModal({
     setSelectedNiche(niche);
     setIsAiMessage(false);
     setAiError(null);
+    setAiSuccess(false);
   }
 
   async function handleGenerateAi() {
@@ -240,7 +243,11 @@ export function WhatsappTemplateModal({
       setAiSuccess(true);
       onCreditsUpdated(result.balance);
       onCreditDeducted();
-      window.setTimeout(() => setAiSuccess(false), 3000);
+      window.setTimeout(() => {
+        aiMessageRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        modalBodyRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+      }, 50);
+      window.setTimeout(() => setAiSuccess(false), 5000);
     } catch {
       setAiError("Something went wrong. Please try again.");
     } finally {
@@ -265,6 +272,60 @@ export function WhatsappTemplateModal({
       ? "Generating..."
       : "Generate with AI (3 credits)";
 
+  function renderMessageActions() {
+    return (
+      <>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+          <button
+            type="button"
+            disabled={!whatsappUrl}
+            onClick={() => {
+              if (whatsappUrl) {
+                window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+              }
+            }}
+            style={{
+              background: whatsappUrl ? "#25D366" : "#1A1A24",
+              color: "white",
+              border: "none",
+              borderRadius: 8,
+              padding: "10px 16px",
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: whatsappUrl ? "pointer" : "not-allowed",
+              fontFamily: "Inter, sans-serif",
+            }}
+          >
+            Send via WhatsApp
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleCopy()}
+            style={{
+              background: "rgba(124,58,237,0.12)",
+              border: "1px solid rgba(124,58,237,0.3)",
+              color: "#A855F7",
+              borderRadius: 8,
+              padding: "10px 16px",
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: "pointer",
+              fontFamily: "Inter, sans-serif",
+            }}
+          >
+            {copied ? "Copied!" : "Copy Message"}
+          </button>
+        </div>
+
+        {!lead?.phone && (
+          <p style={{ color: "#F87171", fontSize: 12, marginTop: 12 }}>
+            This business has no phone number on file.
+          </p>
+        )}
+      </>
+    );
+  }
+
   return (
     <div
       role="dialog"
@@ -283,6 +344,7 @@ export function WhatsappTemplateModal({
       onClick={onClose}
     >
       <div
+        ref={modalBodyRef}
         style={{
           width: "100%",
           maxWidth: 560,
@@ -413,7 +475,7 @@ export function WhatsappTemplateModal({
               {aiButtonLabel}
             </button>
 
-            {aiSuccess && (
+            {aiSuccess && isAiMessage && (
               <p
                 style={{
                   color: "#22C55E",
@@ -422,7 +484,7 @@ export function WhatsappTemplateModal({
                   lineHeight: 1.5,
                 }}
               >
-                Message generated. You can edit it below before sending.
+                Message generated. Edit it below, then send or copy.
               </p>
             )}
 
@@ -482,11 +544,56 @@ export function WhatsappTemplateModal({
               </div>
             )}
 
+            {isAiMessage && (
+              <div
+                ref={aiMessageRef}
+                style={{
+                  marginBottom: 20,
+                  padding: 14,
+                  borderRadius: 12,
+                  background: "rgba(124,58,237,0.06)",
+                  border: "1px solid rgba(124,58,237,0.25)",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: "#A855F7",
+                    marginBottom: 8,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.06em",
+                  }}
+                >
+                  AI generated message
+                </div>
+                <textarea
+                  value={messageText}
+                  onChange={(e) => setMessageText(e.target.value)}
+                  rows={6}
+                  style={{
+                    width: "100%",
+                    boxSizing: "border-box",
+                    background: "#0A0A10",
+                    border: "1px solid rgba(124,58,237,0.2)",
+                    borderRadius: 10,
+                    padding: 12,
+                    color: "#F4F4FF",
+                    fontSize: 13,
+                    lineHeight: 1.6,
+                    resize: "vertical",
+                    fontFamily: "Inter, sans-serif",
+                    marginBottom: 14,
+                  }}
+                />
+                {renderMessageActions()}
+              </div>
+            )}
+
             <div
               style={{
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "space-between",
                 gap: 8,
                 marginBottom: 8,
               }}
@@ -500,7 +607,7 @@ export function WhatsappTemplateModal({
                   letterSpacing: "0.06em",
                 }}
               >
-                Free templates
+                {isAiMessage ? "Or switch to a free template" : "Free templates"}
               </span>
               <span
                 style={{
@@ -555,7 +662,7 @@ export function WhatsappTemplateModal({
               ))}
             </div>
 
-            {template || isAiMessage ? (
+            {template && !isAiMessage ? (
               <>
                 <div
                   style={{
@@ -567,14 +674,11 @@ export function WhatsappTemplateModal({
                     letterSpacing: "0.06em",
                   }}
                 >
-                  {isAiMessage ? "AI generated message" : template?.title}
+                  {template.title}
                 </div>
                 <textarea
-                  readOnly={!isAiMessage}
+                  readOnly
                   value={messageText}
-                  onChange={(e) => {
-                    if (isAiMessage) setMessageText(e.target.value);
-                  }}
                   rows={7}
                   style={{
                     width: "100%",
@@ -592,59 +696,13 @@ export function WhatsappTemplateModal({
                   }}
                 />
 
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-                  <button
-                    type="button"
-                    disabled={!whatsappUrl}
-                    onClick={() => {
-                      if (whatsappUrl) {
-                        window.open(whatsappUrl, "_blank", "noopener,noreferrer");
-                      }
-                    }}
-                    style={{
-                      background: whatsappUrl ? "#25D366" : "#1A1A24",
-                      color: "white",
-                      border: "none",
-                      borderRadius: 8,
-                      padding: "10px 16px",
-                      fontSize: 13,
-                      fontWeight: 700,
-                      cursor: whatsappUrl ? "pointer" : "not-allowed",
-                      fontFamily: "Inter, sans-serif",
-                    }}
-                  >
-                    Send via WhatsApp
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleCopy()}
-                    style={{
-                      background: "rgba(124,58,237,0.12)",
-                      border: "1px solid rgba(124,58,237,0.3)",
-                      color: "#A855F7",
-                      borderRadius: 8,
-                      padding: "10px 16px",
-                      fontSize: 13,
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      fontFamily: "Inter, sans-serif",
-                    }}
-                  >
-                    {copied ? "Copied!" : "Copy Message"}
-                  </button>
-                </div>
-
-                {!lead.phone && (
-                  <p style={{ color: "#F87171", fontSize: 12, marginTop: 12 }}>
-                    This business has no phone number on file.
-                  </p>
-                )}
+                {renderMessageActions()}
               </>
-            ) : (
+            ) : !isAiMessage ? (
               <p style={{ color: "#6B6B80", fontSize: 13 }}>
                 No template available for this niche.
               </p>
-            )}
+            ) : null}
           </>
         )}
       </div>
