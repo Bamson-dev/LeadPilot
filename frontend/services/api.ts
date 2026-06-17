@@ -20,6 +20,18 @@ export function getLicenseHeaders(): HeadersInit {
   };
 }
 
+export function getLicenseQueryString(): string {
+  if (typeof window === "undefined") return "";
+  const email = localStorage.getItem("leadthur_email")?.trim();
+  const key = localStorage.getItem("leadthur_key")?.trim();
+  if (!email || !key) return "";
+  const params = new URLSearchParams({
+    licenseEmail: email,
+    licenseKey: key,
+  });
+  return `?${params.toString()}`;
+}
+
 export class SearchLimitError extends Error {
   creditsRemaining: number;
 
@@ -232,7 +244,10 @@ export async function testBackendConnection(): Promise<string> {
 }
 
 export async function getSearch(id: string): Promise<SearchJob> {
-  const res = await fetch(`${getApiUrl()}/search/${id}`, { cache: "no-store" });
+  const res = await fetch(`${getApiUrl()}/search/${id}`, {
+    headers: getLicenseHeaders(),
+    cache: "no-store",
+  });
   return parseJson<SearchJob>(res);
 }
 
@@ -658,7 +673,7 @@ export function streamResults(
 
   const connect = () => {
     cleanup();
-    es = new EventSource(`${getApiUrl()}/search/${searchId}/stream`);
+    es = new EventSource(`${getApiUrl()}/search/${searchId}/stream${getLicenseQueryString()}`);
     es.onmessage = handleMessage;
     es.onerror = () => {
       if (completed) {

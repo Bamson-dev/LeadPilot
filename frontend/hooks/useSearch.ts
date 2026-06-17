@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import type { AreaSuggestion, BusinessLead } from "@leadthur/shared";
 import { getResults, getSearch, SearchLimitError, startSearch } from "@/services/api";
 import { getApiUrl } from "@/utils/env";
+import { getLicenseQueryString } from "@/services/api";
 import {
   getSearchProgressMessage,
   getSearchProgressPercent,
@@ -424,7 +425,7 @@ export function useSearch(options?: UseSearchOptions) {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL?.trim()?.replace(/\/$/, "") || getApiUrl();
       if (!apiUrl) return;
 
-      const es = new EventSource(`${apiUrl}/search/${searchId}/stream`);
+      const es = new EventSource(`${apiUrl}/search/${searchId}/stream${getLicenseQueryString()}`);
       eventSourceRef.current = es;
 
       es.onopen = () => {

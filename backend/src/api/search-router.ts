@@ -1,12 +1,14 @@
 import os from "os";
-import { Router, type Request, type Response } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
 import type { SearchResponse } from "@leadthur/shared";
 import {
   createSearchJob,
   getSearchJob,
+  getSearchJobAccess,
   getSearchResults,
   markSearchComplete,
   markSearchFailed,
+  type SearchJobAccess,
 } from "../database/search-repository";
 import {
   copyCachedLeadsForInsert,
@@ -15,6 +17,7 @@ import {
 import { getUserSearchHistory } from "../database/user-search-repository";
 import { searchQueue, getQueuePosition, enqueueSearch } from "../queues/search-queue";
 import { checkSearchLimit } from "../middleware/check-search-limit";
+import { requireLicense } from "../middleware/require-license";
 import { trackSearch } from "../services/abuse-detection";
 import { registerStream, removeStream } from "../services/stream-registry";
 import { formatSearchMessage } from "../utils/search-messages";
@@ -34,6 +37,65 @@ function getMemoryUsagePercent(): number {
   const total = os.totalmem();
   const free = os.freemem();
   return ((total - free) / total) * 100;
+}
+
+function licenseCredentialsFromQuery(req: Request): void {
+  if (!req.headers["x-license-key"] && req.query.licenseKey) {
+    req.headers["x-license-key"] = String(req.query.licenseKey);
+  }
+  if (!req.headers["x-license-email"] && req.query.licenseEmail) {
+    req.headers["x-license-email"] = String(req.query.licenseEmail);
+  }
+}
+
+function licenseQueryToHeaders(req: Request, _res: Response, next: NextFunction): void {
+  licenseCredentialsFromQuery(req);
+  next();
+}
+
+async function loadSearchAccess(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const access = await getSearchJobAccess(String(req.params.id));
+    if (!access) {
+      res.status(404).json({ error: "Search not found" });
+      return;
+    }
+    req.searchAccess = access;
+    next();
+  } catch (err) {
+    logger.error("Failed to load search access", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to fetch search" });
+  }
+}
+
+function requireSearchOwnership(req: Request, res: Response, next: NextFunction): void {
+  const access = req.searchAccess as SearchJobAccess | undefined;
+  if (!access) {
+    res.status(404).json({ error: "Search not found" });
+    return;
+  }
+
+  if (access.isTrial && !access.licenseEmail) {
+    next();
+    return;
+  }
+
+  void requireLicense(req, res, () => {
+    if (res.headersSent) return;
+
+    if (!access.licenseEmail || access.licenseEmail !== req.licenseEmail) {
+      res.status(403).json({ error: "Not authorized to access this search." });
+      return;
+    }
+
+    next();
+  });
 }
 
 searchRouter.get("/queue/status", (_req: Request, res: Response) => {
@@ -107,15 +169,9 @@ searchRouter.get("/stats/total", async (_req: Request, res: Response) => {
   }
 });
 
-searchRouter.get("/history", async (req: Request, res: Response) => {
+searchRouter.get("/history", requireLicense, async (req: Request, res: Response) => {
   try {
-    const licenseKey = req.headers["x-license-key"] as string;
-    if (!licenseKey) {
-      res.status(401).json({ error: "License key required" });
-      return;
-    }
-
-    const history = await getUserSearchHistory(licenseKey, 20);
+    const history = await getUserSearchHistory(req.licenseKey!, 20);
     res.json({ history });
   } catch (err) {
     logger.error("GET /search/history failed", {
@@ -251,7 +307,9 @@ searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => 
 
     const cached = await getCachedSearch(trimmedQuery, trimmedLocation);
     if (cached && cached.leads.length > 0) {
-      const newJob = await createSearchJob(trimmedQuery, trimmedLocation);
+      const newJob = await createSearchJob(trimmedQuery, trimmedLocation, {
+        licenseEmail: req.licenseEmail,
+      });
       const rows = copyCachedLeadsForInsert(cached.leads, newJob.id);
       const { error: insertError } = await supabase
         .from("business_leads")
@@ -274,7 +332,9 @@ searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => 
       return;
     }
 
-    const searchJob = await createSearchJob(trimmedQuery, trimmedLocation);
+    const searchJob = await createSearchJob(trimmedQuery, trimmedLocation, {
+      licenseEmail: req.licenseEmail,
+    });
     const licenseEmail = (req.headers["x-license-email"] as string) || undefined;
     const queuePosition = searchQueue.getQueuePosition();
 
@@ -302,10 +362,15 @@ searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => 
   }
 });
 
-searchRouter.get("/:id", async (req: Request, res: Response) => {
+searchRouter.get(
+  "/:id",
+  licenseQueryToHeaders,
+  loadSearchAccess,
+  requireSearchOwnership,
+  async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
-    const job = await getSearchJob(id);
+    const job = req.searchAccess?.job ?? (await getSearchJob(id));
     if (!job) {
       res.status(404).json({ error: "Search not found" });
       return;
@@ -321,9 +386,15 @@ searchRouter.get("/:id", async (req: Request, res: Response) => {
     });
     res.status(500).json({ error: "Failed to fetch search status" });
   }
-});
+}
+);
 
-searchRouter.get("/:id/results", async (req: Request, res: Response) => {
+searchRouter.get(
+  "/:id/results",
+  licenseQueryToHeaders,
+  loadSearchAccess,
+  requireSearchOwnership,
+  async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
     const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
@@ -331,7 +402,7 @@ searchRouter.get("/:id/results", async (req: Request, res: Response) => {
       250,
       Math.max(1, parseInt(String(req.query.limit ?? "250"), 10) || 250)
     );
-    const job = await getSearchJob(id);
+    const job = req.searchAccess?.job ?? (await getSearchJob(id));
     const { leads, total } = await getSearchResults(id, page, limit);
     res.json({
       searchId: id,
@@ -348,13 +419,19 @@ searchRouter.get("/:id/results", async (req: Request, res: Response) => {
     });
     res.status(500).json({ error: "Failed to fetch results" });
   }
-});
+}
+);
 
-searchRouter.get("/:id/stream", async (req: Request, res: Response) => {
+searchRouter.get(
+  "/:id/stream",
+  licenseQueryToHeaders,
+  loadSearchAccess,
+  requireSearchOwnership,
+  async (req: Request, res: Response) => {
   const searchId = String(req.params.id);
 
   try {
-    const job = await getSearchJob(searchId);
+    const job = req.searchAccess?.job ?? (await getSearchJob(searchId));
     if (!job) {
       res.status(404).json({ error: "Search not found" });
       return;
@@ -481,4 +558,5 @@ searchRouter.get("/:id/stream", async (req: Request, res: Response) => {
       res.status(500).json({ error: "Failed to open stream" });
     }
   }
-});
+}
+);

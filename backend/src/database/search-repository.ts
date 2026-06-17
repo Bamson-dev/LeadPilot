@@ -14,9 +14,16 @@ interface DbSearchJob {
   total_found: number;
   processed: number;
   is_trial?: boolean | null;
+  license_email?: string | null;
   error: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface SearchJobAccess {
+  job: SearchJob;
+  licenseEmail: string | null;
+  isTrial: boolean;
 }
 
 interface DbBusinessLead {
@@ -169,8 +176,9 @@ function normalizeSearchText(value: string): string {
 export async function createSearchJob(
   query: string,
   location: string,
-  options?: { isTrial?: boolean }
+  options?: { isTrial?: boolean; licenseEmail?: string | null }
 ): Promise<SearchJob> {
+  const licenseEmail = options?.licenseEmail?.toLowerCase().trim() || null;
   const { data, error } = await supabase
     .from("search_jobs")
     .insert({
@@ -178,6 +186,7 @@ export async function createSearchJob(
       location: normalizeSearchText(location),
       status: "pending",
       is_trial: options?.isTrial ?? false,
+      license_email: options?.isTrial ? null : licenseEmail,
     })
     .select("*")
     .single();
@@ -208,6 +217,11 @@ export async function updateSearchJob(
 }
 
 export async function getSearchJob(id: string): Promise<SearchJob | null> {
+  const access = await getSearchJobAccess(id);
+  return access?.job ?? null;
+}
+
+export async function getSearchJobAccess(id: string): Promise<SearchJobAccess | null> {
   const { data, error } = await supabase
     .from("search_jobs")
     .select("*")
@@ -215,7 +229,14 @@ export async function getSearchJob(id: string): Promise<SearchJob | null> {
     .maybeSingle();
 
   if (error) throw new Error(error.message);
-  return data ? mapSearchJob(data as DbSearchJob) : null;
+  if (!data) return null;
+
+  const row = data as DbSearchJob;
+  return {
+    job: mapSearchJob(row),
+    licenseEmail: row.license_email?.toLowerCase().trim() || null,
+    isTrial: Boolean(row.is_trial),
+  };
 }
 
 export async function insertBusinessLead(lead: BusinessLead): Promise<BusinessLead> {
