@@ -3,15 +3,44 @@ import { getDeepseekApiKey } from "../utils/deepseek-config";
 
 const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions";
 
-const OPENING_INSTRUCTIONS = [
-  "Open the message casually, like you're continuing a thought, not introducing yourself formally.",
-  "Open by mentioning something specific you noticed about their business first, before saying anything about yourself.",
-  "Open with a quick observation, then mention what you do almost as an aside.",
+const OPENING_OBSERVATION_INSTRUCTIONS = [
+  "Phrase step 1 as a casual aside, like you noticed it while scrolling, not a formal introduction.",
+  "Lead step 1 with one concrete detail about their business, worded as a quick observation before anything else.",
+  "Start step 1 with something specific you spotted about them, as if you're continuing a thought rather than opening a pitch.",
 ] as const;
 
+const FREE_TIP_MARKERS = /\b(try|consider|might help|worth|could)\b/i;
+
 export function pickRandomOpeningInstruction(): string {
-  const index = Math.floor(Math.random() * OPENING_INSTRUCTIONS.length);
-  return OPENING_INSTRUCTIONS[index];
+  const index = Math.floor(Math.random() * OPENING_OBSERVATION_INSTRUCTIONS.length);
+  return OPENING_OBSERVATION_INSTRUCTIONS[index];
+}
+
+function buildNoticedDetail(params: {
+  business_name: string;
+  city: string;
+  rating: number | null;
+  has_website: boolean;
+}): string {
+  const parts: string[] = [];
+
+  if (params.rating !== null && params.rating < 4.0) {
+    parts.push(
+      `mention the ${params.rating} Google rating naturally as something you noticed, not as criticism`
+    );
+  }
+
+  if (!params.has_website) {
+    parts.push("mention that you did not find a website for them");
+  }
+
+  if (parts.length === 0) {
+    parts.push(
+      `mention something generic but specific-sounding about their location or business type, like being well known in ${params.city} or having a strong presence in ${params.city}`
+    );
+  }
+
+  return parts.join("; ");
 }
 
 export function buildAiMessagePrompt(params: {
@@ -25,43 +54,39 @@ export function buildAiMessagePrompt(params: {
 }): string {
   const niche = params.niche.trim();
   const opening = params.openingInstruction ?? pickRandomOpeningInstruction();
+  const noticed = buildNoticedDetail(params);
 
-  const contextClauses: string[] = [];
-  if (params.rating !== null && params.rating < 4.0) {
-    contextClauses.push(
-      `their Google rating is ${params.rating}, which you can reference casually as something you noticed, not as a criticism`
-    );
-  }
-  if (!params.has_website) {
-    contextClauses.push("mention casually that you didn't find a website for them");
-  }
-  if (!params.has_email) {
-    contextClauses.push("skip mentioning email entirely");
-  }
+  const emailRule = params.has_email
+    ? ""
+    : "\nDo not mention email or reaching them by email.";
 
-  const contextBlock =
-    contextClauses.length > 0 ? ` ${contextClauses.join(". ")}.` : "";
+  return `Act as a cold DM copywriter. Combine Akin Alabi's storytelling and trust-building style with Alex Hormozi's give-before-ask, low-pressure outreach method.
 
-  return `You are writing a single WhatsApp message as if you are a real freelancer reaching out to a business owner you have never spoken to before. The freelancer's service is ${niche}. The business is called ${params.business_name}, located in ${params.city}.${contextBlock}
+Write a cold WhatsApp message for this offer:
 
-Write like a real person typing quickly on their phone, not like a business pitch. Use casual contractions like I'm, didn't, can't. Vary your sentence length, do not make every sentence the same length. Do not start with 'Hi ${params.business_name} team' every time, vary the opening. Do not use the phrase 'I help businesses like yours.' Do not sound like a template. Reference one specific, real-sounding detail about their business or situation. End with a short, low pressure question, not a hard CTA.
+Service: ${niche}
+Target: the owner of ${params.business_name}, a business in ${params.city}
+What you noticed about them: ${noticed}
+Pain point: infer one realistic pain point this type of business would have related to ${niche}, for example a fitness coach pitching a restaurant might infer their staff or customers could use better wellness habits, a web designer pitching a business with no website would infer lost customers from people who search online first
+Proof: do not fabricate a specific case study or number, instead reference general experience naturally without overclaiming, for example 'most places I work with see a difference within a couple weeks' rather than a fake statistic
+Awareness level: assume Problem Aware, meaning they likely feel the pain but have not actively looked for a solution yet
+End goal: get a one word or short reply, not a hard sale, not a call booking, not an audit request
 
-Keep it under 35 words. No exclamation marks. No emojis. No mention of price.
+Structure to follow exactly:
 
-${opening}`;
+1. Open with the specific detail noticed about their business. Do not start with 'Hope you're doing well' or 'Hi ${params.business_name} team.'
+2. Connect that detail to the pain point in one sentence. Sound like a person who noticed something, not a script reading off a checklist.
+3. Give one small piece of free value or a quick tip related to the pain point before asking for anything. This step is mandatory and must be a real, useful suggestion, not a vague tease.
+4. Introduce the solution as a natural next step without naming a product or service formally, just imply you could help further.
+5. Close with a low commitment question they can answer in one word or a short phrase, not 'Are you interested in our service?'
+
+Rules: Keep the full message under 90 words since this is WhatsApp, not email. No links. No exclamation marks. No corporate language. No emojis. Do not use the phrase 'I help businesses like yours.' Vary sentence length naturally.${emailRule}
+
+For step 1 only, ${opening}`;
 }
 
-export function shouldRegenerateMessage(
-  message: string,
-  businessName: string
-): boolean {
-  const normalized = message.toLowerCase().trim();
-  if (normalized.includes("i help businesses like yours")) return true;
-
-  const teamOpener = `hi ${businessName.toLowerCase().trim()} team`;
-  if (normalized.startsWith(teamOpener)) return true;
-
-  return false;
+export function lacksFreeTipSuggestion(message: string): boolean {
+  return !FREE_TIP_MARKERS.test(message);
 }
 
 function sanitizeGeneratedMessage(message: string): string {
@@ -94,7 +119,7 @@ async function callDeepSeek(prompt: string): Promise<
       body: JSON.stringify({
         model: "deepseek-chat",
         messages: [{ role: "user", content: prompt }],
-        max_tokens: 120,
+        max_tokens: 220,
         temperature: 0.85,
       }),
     });
@@ -158,11 +183,11 @@ export async function generateAiWhatsappMessage(params: {
   const first = await callDeepSeek(prompt);
   if (!first.ok) return first;
 
-  if (!shouldRegenerateMessage(first.message, params.business_name)) {
+  if (!lacksFreeTipSuggestion(first.message)) {
     return first;
   }
 
-  logger.info("AI message flagged for generic phrasing, regenerating once", {
+  logger.info("AI message missing free tip heuristic, regenerating once", {
     niche: params.niche.trim(),
     business_name: params.business_name,
   });
