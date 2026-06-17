@@ -240,6 +240,7 @@ export async function runScraperJob(
       type: "phase",
       phase: "Starting scraper — this may take up to a minute on first search...",
     });
+    await pool.ensureReady();
     const ready = await pool.waitUntilReady(90_000);
     if (!ready) {
       clearTimeout(runningEmailTimer);

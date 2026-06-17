@@ -1,15 +1,27 @@
 "use client";
 
+const CREDIT_PRICING_LINE = "Search: 3 credits · AI message: 3 credits · Templates: free";
+
 interface SearchUpgradeBannerProps {
   searchesRemaining: number;
   creditsRemaining: number;
   onUpgradeClick: () => void;
+  showCreditDeduction?: boolean;
+}
+
+function CreditPricingLine() {
+  return (
+    <div style={{ fontSize: 11, color: "#6B6B80", marginTop: 6, lineHeight: 1.5 }}>
+      {CREDIT_PRICING_LINE}
+    </div>
+  );
 }
 
 export default function SearchUpgradeBanner({
   searchesRemaining,
   creditsRemaining,
   onUpgradeClick,
+  showCreditDeduction = false,
 }: SearchUpgradeBannerProps) {
   const isExhausted = searchesRemaining <= 0 && creditsRemaining < 3;
   const isLow = searchesRemaining > 0 && searchesRemaining <= 10;
@@ -33,8 +45,24 @@ export default function SearchUpgradeBanner({
           justifyContent: "space-between",
           gap: 16,
           flexWrap: "wrap",
+          position: "relative",
         }}
       >
+        {showCreditDeduction && (
+          <span
+            style={{
+              position: "absolute",
+              top: 8,
+              right: 16,
+              fontSize: 12,
+              fontWeight: 700,
+              color: "#F87171",
+              animation: "leadthur-credit-fade 2s ease-out forwards",
+            }}
+          >
+            −3 credits
+          </span>
+        )}
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div
             style={{
@@ -66,6 +94,7 @@ export default function SearchUpgradeBanner({
             <div style={{ fontSize: 12, color: "#8888A8", lineHeight: 1.5 }}>
               Top up now to keep finding clients today.
             </div>
+            <CreditPricingLine />
           </div>
         </div>
         <button
@@ -107,8 +136,24 @@ export default function SearchUpgradeBanner({
           justifyContent: "space-between",
           gap: 16,
           flexWrap: "wrap",
+          position: "relative",
         }}
       >
+        {showCreditDeduction && (
+          <span
+            style={{
+              position: "absolute",
+              top: 8,
+              right: 16,
+              fontSize: 12,
+              fontWeight: 700,
+              color: "#F87171",
+              animation: "leadthur-credit-fade 2s ease-out forwards",
+            }}
+          >
+            −3 credits
+          </span>
+        )}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ fontSize: 14 }}>💳</span>
           <div style={{ fontSize: 13, color: "#A78BFA", lineHeight: 1.5 }}>
@@ -116,6 +161,7 @@ export default function SearchUpgradeBanner({
             <strong style={{ color: "#F2F1FF" }}>{creditsRemaining} credits</strong> (
             {Math.floor(creditsRemaining / 3)} searches remaining). Each search uses 3
             credits.
+            <CreditPricingLine />
           </div>
         </div>
         <button
@@ -156,8 +202,24 @@ export default function SearchUpgradeBanner({
           justifyContent: "space-between",
           gap: 16,
           flexWrap: "wrap",
+          position: "relative",
         }}
       >
+        {showCreditDeduction && (
+          <span
+            style={{
+              position: "absolute",
+              top: 8,
+              right: 16,
+              fontSize: 12,
+              fontWeight: 700,
+              color: "#F87171",
+              animation: "leadthur-credit-fade 2s ease-out forwards",
+            }}
+          >
+            −3 credits
+          </span>
+        )}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ fontSize: 14 }}>⚠️</span>
           <div style={{ fontSize: 13, color: "#F59E0B", lineHeight: 1.5 }}>
@@ -166,6 +228,7 @@ export default function SearchUpgradeBanner({
               {searchesRemaining} free {searchesRemaining === 1 ? "search" : "searches"}
             </strong>{" "}
             remaining this month. Top up to avoid interruption.
+            <CreditPricingLine />
           </div>
         </div>
         <button

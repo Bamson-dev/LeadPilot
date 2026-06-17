@@ -1,6 +1,10 @@
 import os from "os";
 import { Router } from "express";
 import { getBrowserPool } from "../scraper/browser/browser-pool";
+import {
+  getDeepseekKeyFingerprint,
+  isDeepseekConfigured,
+} from "../utils/deepseek-config";
 import { searchQueue } from "../queues/search-queue";
 
 const router = Router();
@@ -20,6 +24,10 @@ router.get("/", (_req, res) => {
   res.status(200).json({
     status: "ok",
     browser,
+    deepseek: {
+      configured: isDeepseekConfigured(),
+      keyFingerprint: getDeepseekKeyFingerprint(),
+    },
     queue: searchQueue.getStatus(),
     memory: {
       totalGB: (totalMem / 1024 / 1024 / 1024).toFixed(1),

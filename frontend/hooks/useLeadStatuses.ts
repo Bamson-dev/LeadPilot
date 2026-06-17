@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-
-const STORAGE_KEY = "lp_lead_statuses";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { leadStatusKey, type LeadStatusValue } from "@/lib/lead-status";
+import { fetchLeadStatuses, saveLeadStatus } from "@/services/api";
+import type { Lead } from "@/types/lead";
 
 export function getStatusStyle(status: string): {
   bg: string;
@@ -34,39 +35,94 @@ export function getStatusStyle(status: string): {
         color: "#EF4444",
         border: "rgba(239,68,68,0.25)",
       };
+    case "new":
     default:
       return {
         bg: "rgba(255,255,255,0.04)",
-        color: "#555575",
+        color: "#9CA3AF",
         border: "rgba(255,255,255,0.08)",
       };
   }
 }
 
-export function useLeadStatuses() {
-  const [leadStatuses, setLeadStatuses] = useState<Record<string, string>>({});
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+type StatusRecord = {
+  id: string;
+  status: LeadStatusValue;
+};
 
-  useEffect(() => {
+export function useLeadStatuses(leads: Lead[]) {
+  const [recordsByKey, setRecordsByKey] = useState<Record<string, StatusRecord>>({});
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [loaded, setLoaded] = useState(false);
+
+  const loadStatuses = useCallback(async () => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) setLeadStatuses(JSON.parse(stored) as Record<string, string>);
+      const data = await fetchLeadStatuses();
+      const next: Record<string, StatusRecord> = {};
+      for (const row of data.statuses ?? []) {
+        const key = leadStatusKey(row.business_name, row.business_phone);
+        next[key] = { id: row.id, status: row.status };
+      }
+      setRecordsByKey(next);
     } catch {
-      /* ignore */
+      /* non-blocking */
+    } finally {
+      setLoaded(true);
     }
   }, []);
 
-  const setLeadStatus = useCallback((leadId: string, status: string) => {
-    setLeadStatuses((prev) => {
-      const updated = { ...prev, [leadId]: status };
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-      } catch {
-        /* ignore */
-      }
-      return updated;
-    });
-  }, []);
+  useEffect(() => {
+    void loadStatuses();
+  }, [loadStatuses]);
+
+  const leadStatuses = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const lead of leads) {
+      const key = leadStatusKey(lead.business_name, lead.phone);
+      map[lead.id] = recordsByKey[key]?.status ?? "new";
+    }
+    return map;
+  }, [leads, recordsByKey]);
+
+  const setLeadStatus = useCallback(
+    (leadId: string, status: string) => {
+      const lead = leads.find((l) => l.id === leadId);
+      if (!lead) return;
+
+      const key = leadStatusKey(lead.business_name, lead.phone);
+      const nextStatus = status as LeadStatusValue;
+
+      setRecordsByKey((prev) => ({
+        ...prev,
+        [key]: { id: prev[key]?.id ?? "", status: nextStatus },
+      }));
+
+      const email =
+        typeof window !== "undefined"
+          ? localStorage.getItem("leadthur_email") || ""
+          : "";
+
+      void saveLeadStatus({
+        email,
+        business_name: lead.business_name,
+        business_phone: lead.phone,
+        business_address: lead.address,
+        search_id: lead.search_id,
+        status: nextStatus,
+      })
+        .then((record) => {
+          if (!record) return;
+          setRecordsByKey((prev) => ({
+            ...prev,
+            [key]: { id: record.id, status: record.status },
+          }));
+        })
+        .catch(() => {
+          void loadStatuses();
+        });
+    },
+    [leads, loadStatuses]
+  );
 
   return {
     leadStatuses,
@@ -74,5 +130,6 @@ export function useLeadStatuses() {
     setStatusFilter,
     setLeadStatus,
     getStatusStyle,
+    statusesLoaded: loaded,
   };
 }

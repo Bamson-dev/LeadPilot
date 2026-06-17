@@ -2,17 +2,22 @@
 
 import { motion } from "framer-motion";
 import { Search, Download, RotateCcw, Trash2, Loader2 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BusinessLead } from "@leadthur/shared";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { LiveCounter } from "@/components/dashboard/live-counter";
-import { SearchHistory } from "@/components/dashboard/search-history";
+import {
+  RecentSearchesPanel,
+  recordDashboardSearchHistory,
+} from "@/components/dashboard/recent-searches-panel";
 import { AffiliateSection } from "@/components/dashboard/affiliate-section";
 import { WelcomeState } from "@/components/dashboard/welcome-state";
 import { ResultsTable } from "@/features/results/results-table";
+import { WhatsappTemplateModal } from "@/components/dashboard/whatsapp-template-modal";
 import { useSearch } from "@/hooks/useSearch";
+import { useLeadStatuses } from "@/hooks/useLeadStatuses";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { exportToCSV } from "@/features/export/csv-export";
 import SearchLimitModal from "@/components/SearchLimitModal";
@@ -22,10 +27,13 @@ import {
   getSearchSuggestions,
   getRecentActivity,
   getTotalDiscovered,
+  claimAiBonus,
   type LicenseUsage,
 } from "@/services/api";
 import { businessLeadToLead } from "@/types/lead";
 import type { Lead } from "@/types/lead";
+import { applyRatingFilter, type RatingFilterValue } from "@/lib/rating-filter";
+import { applyStatusFilter } from "@/lib/lead-status";
 
 function dedupeLeads(
   prev: BusinessLead[],
@@ -62,6 +70,10 @@ export function SearchDashboard() {
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [userEmail, setUserEmail] = useState("");
   const [userStats, setUserStats] = useState<LicenseUsage | null>(null);
+  const [ratingFilter, setRatingFilter] = useState<RatingFilterValue>("all");
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const [templateLead, setTemplateLead] = useState<Lead | null>(null);
+  const [showCreditDeduction, setShowCreditDeduction] = useState(false);
 
   const loadUserStats = useCallback(async () => {
     const usage = await getLicenseUsage();
@@ -70,7 +82,10 @@ export function SearchDashboard() {
 
   useEffect(() => {
     setUserEmail(localStorage.getItem("leadthur_email") || "");
-    void loadUserStats();
+    void (async () => {
+      await claimAiBonus();
+      await loadUserStats();
+    })();
 
     const onTopUpSuccess = () => {
       void loadUserStats();
@@ -78,6 +93,15 @@ export function SearchDashboard() {
     window.addEventListener("leadthur:topup-success", onTopUpSuccess);
     return () => window.removeEventListener("leadthur:topup-success", onTopUpSuccess);
   }, [loadUserStats]);
+
+  const handleCreditsUpdated = useCallback((balance: number) => {
+    setUserStats((prev) => (prev ? { ...prev, search_credits: balance } : prev));
+  }, []);
+
+  const handleCreditDeducted = useCallback(() => {
+    setShowCreditDeduction(true);
+    window.setTimeout(() => setShowCreditDeduction(false), 2000);
+  }, []);
 
   const onSearchCompleteRef = useRef<
     | ((
@@ -106,7 +130,6 @@ export function SearchDashboard() {
     setSuggestions,
     clearResults,
     reset,
-    loadSavedLeads,
   } = useSearch({
     onSearchComplete: (...args) => onSearchCompleteRef.current?.(...args),
     onSearchLimitReached: () => {
@@ -140,6 +163,23 @@ export function SearchDashboard() {
     setAllLeads((prev) => dedupeLeads(prev, newLeads));
     setSessionSearchCount((prev) => prev + 1);
     void fetchSuggestions(query, loc, totalFound);
+
+    if (totalFound > 0) {
+      const email =
+        typeof window !== "undefined"
+          ? localStorage.getItem("leadthur_email") || ""
+          : "";
+      if (email) {
+        void recordDashboardSearchHistory({
+          email,
+          businessType: query,
+          location: loc,
+          resultsCount: totalFound,
+        }).then(() => {
+          setHistoryRefreshKey((prev) => prev + 1);
+        });
+      }
+    }
   };
 
   useEffect(() => {
@@ -204,6 +244,23 @@ export function SearchDashboard() {
         )
       : leads;
 
+  const {
+    leadStatuses,
+    statusFilter,
+    setStatusFilter,
+    setLeadStatus,
+  } = useLeadStatuses(tableLeads);
+
+  const ratingFilteredTableLeads = useMemo(
+    () => applyRatingFilter(tableLeads, ratingFilter),
+    [tableLeads, ratingFilter]
+  );
+
+  const statusFilteredTableLeads = useMemo(
+    () => applyStatusFilter(ratingFilteredTableLeads, statusFilter, leadStatuses),
+    [ratingFilteredTableLeads, statusFilter, leadStatuses]
+  );
+
   const leadsToExport =
     sessionSearchCount > 1
       ? mergedSessionLeads.map((l) =>
@@ -215,13 +272,27 @@ export function SearchDashboard() {
         )
       : leads;
 
+  const filteredLeadsToExport = useMemo(
+    () =>
+      applyStatusFilter(
+        applyRatingFilter(leadsToExport, ratingFilter),
+        statusFilter,
+        Object.fromEntries(
+          leadsToExport.map((lead) => [lead.id, leadStatuses[lead.id] || "new"])
+        )
+      ),
+    [leadsToExport, ratingFilter, statusFilter, leadStatuses]
+  );
+
   const handleSearch = () => {
     setSavedBanner(null);
+    setRatingFilter("all");
     void runSearch(businessType, location);
   };
 
   const handleExampleSearch = (exampleQuery: string, exampleLocation: string) => {
     setSavedBanner(null);
+    setRatingFilter("all");
     setBusinessType(exampleQuery);
     setLocation(exampleLocation);
     void runSearch(exampleQuery, exampleLocation);
@@ -233,6 +304,7 @@ export function SearchDashboard() {
     label: string;
   }) => {
     setSavedBanner(null);
+    setRatingFilter("all");
     setBusinessType(s.query);
     setLocation(s.location);
     runSearchWithSuggestion(s);
@@ -243,7 +315,15 @@ export function SearchDashboard() {
   };
 
   const handleDownload = () => {
-    exportToCSV(leadsToExport, `leadthur-${query}-${loc}-${Date.now()}.csv`);
+    exportToCSV(filteredLeadsToExport, `leadthur-${query}-${loc}-${Date.now()}.csv`);
+  };
+
+  const handleSearchAgain = (businessTypeValue: string, locationValue: string) => {
+    setSavedBanner(null);
+    setRatingFilter("all");
+    setBusinessType(businessTypeValue);
+    setLocation(locationValue);
+    void runSearch(businessTypeValue, locationValue);
   };
 
   const startNewSession = () => {
@@ -254,6 +334,7 @@ export function SearchDashboard() {
     setSavedBanner(null);
     setBusinessType("");
     setLocation("");
+    setRatingFilter("all");
   };
 
   const handleNewSearch = () => {
@@ -282,7 +363,7 @@ export function SearchDashboard() {
     !isSearching &&
     !savedBanner;
 
-  const exportCount = leadsToExport.length;
+  const exportCount = filteredLeadsToExport.length;
   const exportPulse = status === "completed" && exportCount > 0;
 
   const searchesRemaining =
@@ -292,6 +373,10 @@ export function SearchDashboard() {
       (userStats?.monthly_search_limit ?? 100) - (userStats?.searches_used ?? 0)
     );
   const creditsRemaining = userStats?.search_credits ?? 0;
+  const creditBannerVisible =
+    (searchesRemaining <= 0 && creditsRemaining < 3) ||
+    (searchesRemaining > 0 && searchesRemaining <= 10) ||
+    (searchesRemaining <= 0 && creditsRemaining >= 3);
 
   return (
     <div className="space-y-6 sm:space-y-8">
@@ -300,7 +385,29 @@ export function SearchDashboard() {
           searchesRemaining={searchesRemaining}
           creditsRemaining={creditsRemaining}
           onUpgradeClick={() => setShowLimitModal(true)}
+          showCreditDeduction={showCreditDeduction}
         />
+      )}
+      {userStats && showCreditDeduction && !creditBannerVisible && (
+        <div
+          style={{
+            position: "relative",
+            marginTop: -12,
+            marginBottom: 12,
+            textAlign: "right",
+          }}
+        >
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              color: "#F87171",
+              animation: "leadthur-credit-fade 2s ease-out forwards",
+            }}
+          >
+            −3 credits
+          </span>
+        </div>
       )}
       <div className="glass rounded-2xl p-4 sm:p-6">
         <h1 className="text-xl sm:text-2xl font-bold text-[#F4F4FF]">
@@ -590,16 +697,6 @@ export function SearchDashboard() {
         )}
       </div>
 
-      <SearchHistory
-        isMobile={isMobile}
-        onViewResults={(historyLeads, meta) => {
-          loadSavedLeads(historyLeads);
-          setSavedBanner(
-            `Showing saved results from ${meta.date}. Run a new search to get fresh results.`
-          );
-        }}
-      />
-
       <AffiliateSection />
 
       {showWelcome && <WelcomeState onExampleSearch={handleExampleSearch} />}
@@ -632,12 +729,27 @@ export function SearchDashboard() {
 
       {(isSearching || tableLeads.length > 0 || savedBanner) && (
         <ResultsTable
-          leads={tableLeads}
+          leads={statusFilteredTableLeads}
           isLoading={isSearching && tableLeads.length === 0}
           isMobile={isMobile}
           hideEmptyPlaceholder={showWelcome}
+          ratingFilter={ratingFilter}
+          onRatingFilterChange={setRatingFilter}
+          totalLeadCount={tableLeads.length}
+          ratingMatchCount={ratingFilteredTableLeads.length}
+          summaryLeads={ratingFilteredTableLeads}
+          leadStatuses={leadStatuses}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
+          onLeadStatusChange={setLeadStatus}
+          onUseTemplate={setTemplateLead}
         />
       )}
+
+      <RecentSearchesPanel
+        refreshKey={historyRefreshKey}
+        onSearchAgain={handleSearchAgain}
+      />
 
       {loadingSuggestions && status === "completed" && (
         <div
@@ -795,6 +907,17 @@ export function SearchDashboard() {
       {showLimitModal && userEmail && (
         <SearchLimitModal email={userEmail} onClose={() => setShowLimitModal(false)} />
       )}
+
+      <WhatsappTemplateModal
+        lead={templateLead}
+        searchLocation={loc}
+        userEmail={userEmail}
+        creditsRemaining={creditsRemaining}
+        onClose={() => setTemplateLead(null)}
+        onCreditsUpdated={handleCreditsUpdated}
+        onCreditDeducted={handleCreditDeducted}
+        onGetMoreCredits={() => setShowLimitModal(true)}
+      />
     </div>
   );
 }

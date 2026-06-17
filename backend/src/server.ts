@@ -12,9 +12,14 @@ import { topupRouter } from "./api/topup-router";
 import healthRouter from "./api/health-router";
 import publicRouter from "./api/public-router";
 import demoRouter from "./api/demo-router";
+import searchHistoryRouter from "./routes/searchHistory";
+import leadStatusRouter from "./routes/leadStatus";
+import whatsappTemplatesRouter from "./routes/whatsappTemplates";
+import aiMessageRouter from "./routes/aiMessage";
 import { rateLimit } from "./middleware/rate-limit";
 import { getBrowserPool } from "./scraper/browser/browser-pool";
 import { logger } from "./utils/logger";
+import { getDeepseekKeyFingerprint, isDeepseekConfigured } from "./utils/deepseek-config";
 
 export const app = express();
 
@@ -94,6 +99,10 @@ function registerRoutes(): void {
 
   app.post("/freetrial", rateLimit, handleFreeTrialSearch);
   app.use("/search", rateLimit, searchRouter);
+  app.use("/search-history", rateLimit, searchHistoryRouter);
+  app.use("/lead-status", rateLimit, leadStatusRouter);
+  app.use("/whatsapp-templates", rateLimit, whatsappTemplatesRouter);
+  app.use("/ai-message", rateLimit, aiMessageRouter);
 
   app.use(
     (err: Error & { type?: string; status?: number }, _req: Request, res: Response, _next: NextFunction) => {
@@ -116,13 +125,23 @@ function registerRoutes(): void {
 
 async function initBrowserPoolSafe(): Promise<void> {
   if (!routesRegistered) return;
-  try {
-    await getBrowserPool().init();
-    logger.info("Browser pool ready");
-  } catch (err) {
-    logger.error("Browser pool init failed — server stays up, /health remains available", {
-      error: err instanceof Error ? err.message : "unknown",
-    });
+  const pool = getBrowserPool();
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const ready = await pool.ensureReady();
+      if (ready) {
+        logger.info("Browser pool ready", { attempt });
+        return;
+      }
+    } catch (err) {
+      logger.error("Browser pool init failed — server stays up, /health remains available", {
+        attempt,
+        error: err instanceof Error ? err.message : "unknown",
+      });
+    }
+    if (attempt < 3) {
+      await new Promise((r) => setTimeout(r, 10_000));
+    }
   }
 }
 
@@ -162,6 +181,8 @@ async function start(): Promise<void> {
       nodeEnv: env.NODE_ENV,
       scraperConcurrency: env.SCRAPER_CONCURRENCY,
       corsOrigins: corsOptions.origin,
+      deepseekConfigured: isDeepseekConfigured(),
+      deepseekKeyFingerprint: getDeepseekKeyFingerprint(),
     });
   } catch (err) {
     logger.error("Backend configuration failed — /health works, API routes disabled", {

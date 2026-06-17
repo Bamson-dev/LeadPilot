@@ -1,4 +1,5 @@
 import { logger } from "../utils/logger";
+import { getDeepseekApiKey } from "../utils/deepseek-config";
 
 const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions";
 
@@ -14,7 +15,7 @@ export async function generateAreaSuggestions(
   totalFound: number
 ): Promise<AreaSuggestion[]> {
   try {
-    const apiKey = process.env.DEEPSEEK_API_KEY;
+    const apiKey = getDeepseekApiKey();
 
     if (!apiKey) {
       logger.warn("DEEPSEEK_API_KEY not set — skipping suggestions");

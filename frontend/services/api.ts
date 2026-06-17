@@ -116,11 +116,7 @@ export async function startSearch(
   query: string,
   location: string
 ): Promise<SearchResponse> {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL?.trim()?.replace(/\/$/, "") ?? "";
-  const email =
-    typeof window !== "undefined" ? localStorage.getItem("leadthur_email") || "" : "";
-  const key =
-    typeof window !== "undefined" ? localStorage.getItem("leadthur_key") || "" : "";
+  const apiUrl = getApiUrl();
 
   if (!apiUrl) {
     throw new Error(
@@ -129,16 +125,32 @@ export async function startSearch(
   }
 
   const url = `${apiUrl}/search`;
+  const apiHost = (() => {
+    try {
+      return new URL(apiUrl).host;
+    } catch {
+      return apiUrl;
+    }
+  })();
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-license-key": key,
-      "x-license-email": email,
-    },
-    body: JSON.stringify({ query, location }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: getLicenseHeaders(),
+      body: JSON.stringify({ query, location }),
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "TimeoutError") {
+      throw new Error(
+        `Search server (${apiHost}) timed out. The backend may be busy or restarting — wait 30 seconds and try again.`
+      );
+    }
+    throw new Error(
+      `Cannot reach search server (${apiHost}). The backend may be restarting, or NEXT_PUBLIC_API_URL may be wrong on Vercel. Open DevTools → Network and check the failed /search request.`
+    );
+  }
 
   if (res.status === 401) {
     const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -315,6 +327,231 @@ export async function getSearchHistory(): Promise<{
       search_id: string | null;
     }>;
   }>;
+}
+
+export type RecentSearchHistoryItem = {
+  id: string;
+  business_type: string;
+  city: string;
+  country: string | null;
+  results_count: number;
+  created_at: string;
+};
+
+export async function fetchRecentSearchHistory(): Promise<{
+  history: RecentSearchHistoryItem[];
+}> {
+  try {
+    const res = await fetch(`${getApiUrl()}/search-history`, {
+      headers: getLicenseHeaders(),
+      cache: "no-store",
+    });
+    if (!res.ok) return { history: [] };
+    return res.json() as Promise<{ history: RecentSearchHistoryItem[] }>;
+  } catch {
+    return { history: [] };
+  }
+}
+
+export async function saveSearchHistory(input: {
+  email: string;
+  business_type: string;
+  city: string;
+  country?: string;
+  results_count: number;
+}): Promise<void> {
+  try {
+    await fetch(`${getApiUrl()}/search-history`, {
+      method: "POST",
+      headers: getLicenseHeaders(),
+      body: JSON.stringify(input),
+    });
+  } catch {
+    /* non-blocking */
+  }
+}
+
+export type LeadStatusRecord = {
+  id: string;
+  email: string;
+  business_name: string;
+  business_phone: string | null;
+  business_address: string | null;
+  search_id: string | null;
+  status: "new" | "contacted" | "interested" | "closed" | "not_interested";
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function fetchLeadStatuses(status?: string): Promise<{
+  statuses: LeadStatusRecord[];
+}> {
+  try {
+    const params = status ? `?status=${encodeURIComponent(status)}` : "";
+    const res = await fetch(`${getApiUrl()}/lead-status${params}`, {
+      headers: getLicenseHeaders(),
+      cache: "no-store",
+    });
+    if (!res.ok) return { statuses: [] };
+    return res.json() as Promise<{ statuses: LeadStatusRecord[] }>;
+  } catch {
+    return { statuses: [] };
+  }
+}
+
+export async function saveLeadStatus(input: {
+  email: string;
+  business_name: string;
+  business_phone?: string | null;
+  business_address?: string | null;
+  search_id?: string | null;
+  status: LeadStatusRecord["status"];
+  notes?: string | null;
+}): Promise<LeadStatusRecord | null> {
+  try {
+    const res = await fetch(`${getApiUrl()}/lead-status`, {
+      method: "POST",
+      headers: getLicenseHeaders(),
+      body: JSON.stringify(input),
+    });
+    if (!res.ok) return null;
+    return res.json() as Promise<LeadStatusRecord>;
+  } catch {
+    return null;
+  }
+}
+
+export type WhatsappTemplate = {
+  id: string;
+  niche: string;
+  title: string;
+  message: string;
+  created_at: string;
+};
+
+export async function fetchWhatsappTemplates(): Promise<{
+  templates: Record<string, WhatsappTemplate[]>;
+  ok: boolean;
+}> {
+  try {
+    const apiUrl = getApiUrl();
+    if (!apiUrl) return { templates: {}, ok: false };
+
+    const res = await fetch(`${apiUrl}/whatsapp-templates`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return { templates: {}, ok: false };
+    const data = (await res.json()) as { templates?: Record<string, WhatsappTemplate[]> };
+    return { templates: data.templates ?? {}, ok: true };
+  } catch {
+    return { templates: {}, ok: false };
+  }
+}
+
+export type GenerateAiMessageInput = {
+  email: string;
+  business_name: string;
+  city: string;
+  niche: string;
+  rating: number | null;
+  has_website: boolean;
+  has_email: boolean;
+};
+
+export type GenerateAiMessageResult =
+  | { ok: true; message: string; balance: number }
+  | { ok: false; status: number; message: string; balance?: number; code?: string };
+
+export async function claimAiBonus(): Promise<{
+  applied: boolean;
+  search_credits: number;
+} | null> {
+  try {
+    const res = await fetch(`${getApiUrl()}/ai-message/claim-bonus`, {
+      method: "POST",
+      headers: getLicenseHeaders(),
+    });
+    if (!res.ok) return null;
+    return res.json() as Promise<{ applied: boolean; search_credits: number }>;
+  } catch {
+    return null;
+  }
+}
+
+export async function generateAiMessage(
+  input: GenerateAiMessageInput
+): Promise<GenerateAiMessageResult> {
+  try {
+    const apiUrl = getApiUrl();
+    if (!apiUrl) {
+      return {
+        ok: false,
+        status: 0,
+        message: "Generation failed, credits refunded",
+      };
+    }
+
+    const res = await fetch(`${apiUrl}/ai-message/generate`, {
+      method: "POST",
+      headers: getLicenseHeaders(),
+      body: JSON.stringify(input),
+      signal: AbortSignal.timeout(45_000),
+    });
+
+    let data: {
+      message?: string;
+      balance?: number;
+      error?: string;
+      code?: string;
+    } = {};
+
+    try {
+      data = (await res.json()) as typeof data;
+    } catch {
+      return {
+        ok: false,
+        status: res.status,
+        message: "Generation failed, credits refunded",
+      };
+    }
+
+    if (res.status === 402) {
+      return {
+        ok: false,
+        status: 402,
+        message: data.message ?? data.error ?? "Insufficient credits",
+        balance: data.balance,
+      };
+    }
+
+    if (!res.ok) {
+      return {
+        ok: false,
+        status: res.status,
+        message: data.message ?? data.error ?? "Generation failed, credits refunded",
+        balance: data.balance,
+        code: data.code,
+      };
+    }
+
+    return {
+      ok: true,
+      message: data.message ?? "",
+      balance: data.balance ?? 0,
+    };
+  } catch (err) {
+    const isTimeout =
+      err instanceof Error &&
+      (err.name === "TimeoutError" || err.name === "AbortError");
+    return {
+      ok: false,
+      status: 0,
+      message: isTimeout
+        ? "Generation timed out. Please try again."
+        : "Could not reach the server. Check your connection and try again.",
+    };
+  }
 }
 
 export async function getResults(

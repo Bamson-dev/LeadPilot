@@ -11,7 +11,8 @@ import { WebsiteLink } from "@/components/dashboard/website-link";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { LeadStatusSelect } from "@/components/dashboard/lead-status-select";
 import { PipelineSummary } from "@/components/dashboard/pipeline-summary";
-import { useLeadStatuses } from "@/hooks/useLeadStatuses";
+import { RatingFilter } from "@/components/dashboard/rating-filter";
+import type { RatingFilterValue } from "@/lib/rating-filter";
 import type { Lead } from "@/types/lead";
 
 type SortKey = keyof Pick<
@@ -26,6 +27,17 @@ interface ResultsTableProps {
   isMobile?: boolean;
   /** When true, parent renders welcome — skip empty placeholder */
   hideEmptyPlaceholder?: boolean;
+  ratingFilter?: RatingFilterValue;
+  onRatingFilterChange?: (value: RatingFilterValue) => void;
+  totalLeadCount?: number;
+  ratingMatchCount?: number;
+  summaryLeads?: Lead[];
+  leadStatuses: Record<string, string>;
+  statusFilter: string;
+  onStatusFilterChange: (value: string) => void;
+  onLeadStatusChange: (leadId: string, status: string) => void;
+  onUseTemplate?: (lead: Lead) => void;
+  searchLocation?: string;
 }
 
 export function ResultsTable({
@@ -33,28 +45,35 @@ export function ResultsTable({
   isLoading,
   isMobile = false,
   hideEmptyPlaceholder = false,
+  ratingFilter = "all",
+  onRatingFilterChange,
+  totalLeadCount,
+  ratingMatchCount,
+  summaryLeads,
+  leadStatuses,
+  statusFilter,
+  onStatusFilterChange,
+  onLeadStatusChange,
+  onUseTemplate,
 }: ResultsTableProps) {
   const { copiedId, copyToClipboard } = useCopyToClipboard();
   const [sortKey, setSortKey] = useState<SortKey>("business_name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [hasWebsite, setHasWebsite] = useState<boolean | null>(null);
-  const [minRating, setMinRating] = useState(0);
   const parentRef = useRef<HTMLDivElement>(null);
-  const { leadStatuses, statusFilter, setStatusFilter, setLeadStatus } =
-    useLeadStatuses();
 
   const filtered = useMemo(() => {
     return leads.filter((lead) => {
       if (hasWebsite === true && !lead.website) return false;
       if (hasWebsite === false && lead.website) return false;
-      if (minRating > 0 && (lead.rating ?? 0) < minRating) return false;
       if (statusFilter !== "all") {
-        const leadStatus = leadStatuses[lead.id] || "none";
-        if (leadStatus !== statusFilter) return false;
+        const leadStatus = leadStatuses[lead.id] || "new";
+        const normalized = leadStatus === "none" ? "new" : leadStatus;
+        if (normalized !== statusFilter) return false;
       }
       return true;
     });
-  }, [leads, hasWebsite, minRating, statusFilter, leadStatuses]);
+  }, [leads, hasWebsite, statusFilter, leadStatuses]);
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
@@ -88,6 +107,8 @@ export function ResultsTable({
     }
   }
 
+  const pipelineLeads = summaryLeads ?? leads;
+
   if (!isLoading && leads.length === 0 && !hideEmptyPlaceholder) {
     return null;
   }
@@ -96,12 +117,21 @@ export function ResultsTable({
     return (
       <div className="space-y-3">
         <PipelineSummary
-          leads={leads}
+          leads={pipelineLeads}
           leadStatuses={leadStatuses}
           statusFilter={statusFilter}
-          onFilterChange={setStatusFilter}
+          onFilterChange={onStatusFilterChange}
         />
         <div className="flex flex-wrap gap-2 px-1">
+          {onRatingFilterChange && (
+            <RatingFilter
+              value={ratingFilter}
+              onChange={onRatingFilterChange}
+              filteredCount={ratingMatchCount ?? sorted.length}
+              totalCount={totalLeadCount ?? leads.length}
+              isMobile
+            />
+          )}
           <select
             value={hasWebsite === null ? "all" : hasWebsite ? "yes" : "no"}
             onChange={(e) =>
@@ -115,7 +145,7 @@ export function ResultsTable({
           </select>
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => onStatusFilterChange(e.target.value)}
             style={{
               background: "#111118",
               border: "1px solid rgba(255,255,255,0.08)",
@@ -131,7 +161,7 @@ export function ResultsTable({
             }}
           >
             <option value="all">All statuses</option>
-            <option value="none">Not contacted</option>
+            <option value="new">New</option>
             <option value="contacted">Contacted</option>
             <option value="interested">Interested</option>
             <option value="closed">Closed</option>
@@ -159,8 +189,9 @@ export function ResultsTable({
                 lead={lead}
                 copiedId={copiedId}
                 onCopy={copyToClipboard}
-                status={leadStatuses[lead.id] || "none"}
-                onStatusChange={setLeadStatus}
+                status={leadStatuses[lead.id] || "new"}
+                onStatusChange={onLeadStatusChange}
+                onUseTemplate={onUseTemplate}
               />
             ))}
           </div>
@@ -242,11 +273,33 @@ export function ResultsTable({
         {lead.rating != null ? `★ ${lead.rating}` : "—"}
       </td>
       <td style={{ padding: "12px 8px" }}>
-        <LeadStatusSelect
-          leadId={lead.id}
-          status={leadStatuses[lead.id] || "none"}
-          onChange={setLeadStatus}
-        />
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <LeadStatusSelect
+            leadId={lead.id}
+            status={leadStatuses[lead.id] || "new"}
+            onChange={onLeadStatusChange}
+          />
+          {onUseTemplate && (
+            <button
+              type="button"
+              onClick={() => onUseTemplate(lead)}
+              style={{
+                background: "rgba(37,211,102,0.1)",
+                border: "1px solid rgba(37,211,102,0.25)",
+                color: "#25D366",
+                borderRadius: 6,
+                padding: "4px 8px",
+                fontSize: 10,
+                fontWeight: 700,
+                cursor: "pointer",
+                fontFamily: "Inter, sans-serif",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Use Template
+            </button>
+          )}
+        </div>
       </td>
       <td className="px-4 py-3 text-[#6B6B80] align-top">
         {lead.reviews_count ?? "—"}
@@ -257,12 +310,20 @@ export function ResultsTable({
   return (
     <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0F0F14]">
       <PipelineSummary
-        leads={leads}
+        leads={pipelineLeads}
         leadStatuses={leadStatuses}
         statusFilter={statusFilter}
-        onFilterChange={setStatusFilter}
+        onFilterChange={onStatusFilterChange}
       />
-      <div className="flex flex-col gap-2 border-b border-white/[0.08] px-4 py-3 sm:flex-row sm:flex-wrap sm:gap-3">
+      <div className="flex flex-col gap-2 border-b border-white/[0.08] px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+        {onRatingFilterChange && (
+          <RatingFilter
+            value={ratingFilter}
+            onChange={onRatingFilterChange}
+            filteredCount={ratingMatchCount ?? sorted.length}
+            totalCount={totalLeadCount ?? leads.length}
+          />
+        )}
         <select
           value={hasWebsite === null ? "all" : hasWebsite ? "yes" : "no"}
           onChange={(e) =>
@@ -274,21 +335,9 @@ export function ResultsTable({
           <option value="yes">Has website</option>
           <option value="no">No website</option>
         </select>
-        <label className="flex items-center gap-2 text-xs text-[#6B6B80]">
-          Min rating
-          <input
-            type="number"
-            min={0}
-            max={5}
-            step={0.5}
-            value={minRating}
-            onChange={(e) => setMinRating(Number(e.target.value))}
-            className="w-16 rounded-md border border-white/10 bg-[#16161E] px-2 py-1 text-[#F4F4FF]"
-          />
-        </label>
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(e) => onStatusFilterChange(e.target.value)}
           style={{
             background: "#111118",
             border: "1px solid rgba(255,255,255,0.08)",
@@ -304,7 +353,7 @@ export function ResultsTable({
           }}
         >
           <option value="all">All statuses</option>
-          <option value="none">Not contacted</option>
+          <option value="new">New</option>
           <option value="contacted">Contacted</option>
           <option value="interested">Interested</option>
           <option value="closed">Closed</option>
