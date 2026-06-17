@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { activateLicense, registerDeviceForLicense } from "@/services/auth-api";
+import { activateLicense } from "@/services/auth-api";
 import { setStoredLicense, hasStoredLicense } from "@/lib/license";
 
 export default function ActivatePage() {
@@ -43,7 +43,6 @@ export default function ActivatePage() {
       const normalizedEmail = email.trim();
       const normalizedKey = key.trim();
       await activateLicense(normalizedEmail, normalizedKey);
-      await registerDeviceForLicense(normalizedEmail, normalizedKey);
       setStoredLicense(normalizedEmail, normalizedKey);
       router.push("/dashboard");
     } catch (err) {
