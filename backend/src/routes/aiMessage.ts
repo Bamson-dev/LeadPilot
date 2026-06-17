@@ -8,7 +8,6 @@ import {
   refundAiMessageCredits,
 } from "../database/ai-message-repository";
 import {
-  buildAiMessagePrompt,
   generateAiWhatsappMessage,
 } from "../services/ai-message-service";
 import { logger } from "../utils/logger";
@@ -18,14 +17,6 @@ import {
 } from "../utils/deepseek-config";
 
 const router = Router();
-
-const VALID_NICHES = new Set([
-  "web_design",
-  "social_media",
-  "seo",
-  "copywriting",
-  "general",
-]);
 
 function generationErrorCode(
   reason: "missing_key" | "api_error" | "auth_error" | "empty_response"
@@ -108,9 +99,14 @@ router.post("/generate", requireLicense, async (req: Request, res: Response) => 
       return;
     }
 
-    const normalizedNiche = (niche ?? "general").trim();
-    if (!VALID_NICHES.has(normalizedNiche)) {
-      res.status(400).json({ error: "Invalid niche" });
+    const normalizedNiche = (niche ?? "").trim();
+    if (!normalizedNiche) {
+      res.status(400).json({ error: "niche is required" });
+      return;
+    }
+
+    if (normalizedNiche.length > 120) {
+      res.status(400).json({ error: "niche is too long" });
       return;
     }
 
@@ -138,7 +134,14 @@ router.post("/generate", requireLicense, async (req: Request, res: Response) => 
 
     creditsDeducted = true;
 
-    const prompt = buildAiMessagePrompt({
+    logger.info("AI WhatsApp generation requested", {
+      email: normalizedEmail,
+      business_name: business_name.trim(),
+      niche: normalizedNiche,
+      city: city.trim(),
+    });
+
+    const generation = await generateAiWhatsappMessage({
       business_name: business_name.trim(),
       city: city.trim(),
       niche: normalizedNiche,
@@ -146,8 +149,6 @@ router.post("/generate", requireLicense, async (req: Request, res: Response) => 
       has_website: Boolean(has_website),
       has_email: Boolean(has_email),
     });
-
-    const generation = await generateAiWhatsappMessage(prompt);
 
     if (!generation.ok) {
       const restoredBalance = await refundAiMessageCredits(licenseId);

@@ -18,6 +18,7 @@ import type { Lead } from "@/types/lead";
 
 const AI_INTRO_DISMISSED_KEY = "leadthur_ai_modal_intro_dismissed";
 const AI_MODAL_OPEN_COUNT_KEY = "leadthur_ai_modal_open_count";
+const AI_USER_NICHE_KEY = "leadthur_ai_user_niche";
 
 interface WhatsappTemplateModalProps {
   lead: Lead | null;
@@ -55,6 +56,8 @@ export function WhatsappTemplateModal({
   const [aiSuccess, setAiSuccess] = useState(false);
   const [insufficientCredits, setInsufficientCredits] = useState(false);
   const [showAiIntro, setShowAiIntro] = useState(false);
+  const [userNiche, setUserNiche] = useState("");
+  const [nicheFieldError, setNicheFieldError] = useState<string | null>(null);
   const aiMessageRef = useRef<HTMLDivElement>(null);
   const modalBodyRef = useRef<HTMLDivElement>(null);
 
@@ -115,6 +118,8 @@ export function WhatsappTemplateModal({
     setAiError(null);
     setAiSuccess(false);
     setAiGenerating(false);
+    setNicheFieldError(null);
+    setUserNiche(localStorage.getItem(AI_USER_NICHE_KEY) || "");
     setInsufficientCredits(creditsRemaining < 3);
     void loadTemplates();
 
@@ -176,12 +181,24 @@ export function WhatsappTemplateModal({
     setAiSuccess(false);
   }
 
+  function persistUserNiche(value: string) {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    localStorage.setItem(AI_USER_NICHE_KEY, trimmed);
+  }
+
   async function handleGenerateAi() {
     if (!lead) return;
 
     if (insufficientCredits) {
       setAiError("You need at least 3 credits to generate. Opening top up…");
       onGetMoreCredits();
+      return;
+    }
+
+    const nicheInput = userNiche.trim();
+    if (!nicheInput) {
+      setNicheFieldError("Tell us what you do first.");
       return;
     }
 
@@ -195,13 +212,14 @@ export function WhatsappTemplateModal({
     setAiGenerating(true);
     setAiError(null);
     setAiSuccess(false);
+    setNicheFieldError(null);
 
     try {
       const result = await generateAiMessage({
         email: userEmail,
         business_name: lead.business_name,
         city: cityLabel,
-        niche: selectedNiche,
+        niche: nicheInput,
         rating: lead.rating,
         has_website: Boolean(lead.website?.trim()),
         has_email: hasAnyEmail(lead),
@@ -241,6 +259,7 @@ export function WhatsappTemplateModal({
       setMessageText(result.message);
       setIsAiMessage(true);
       setAiSuccess(true);
+      persistUserNiche(nicheInput);
       onCreditsUpdated(result.balance);
       onCreditDeducted();
       window.setTimeout(() => {
@@ -449,6 +468,58 @@ export function WhatsappTemplateModal({
                   ×
                 </button>
               </div>
+            )}
+
+            <label
+              htmlFor="whatsapp-ai-niche"
+              style={{
+                display: "block",
+                fontSize: 12,
+                fontWeight: 600,
+                color: "#A1A1B5",
+                marginBottom: 6,
+              }}
+            >
+              What do you do?
+            </label>
+            <input
+              id="whatsapp-ai-niche"
+              type="text"
+              value={userNiche}
+              onChange={(e) => {
+                setUserNiche(e.target.value);
+                if (e.target.value.trim()) setNicheFieldError(null);
+              }}
+              onBlur={() => persistUserNiche(userNiche)}
+              placeholder="e.g. fitness coaching, accounting, photography, web design"
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                background: "#0A0A10",
+                border: `1px solid ${
+                  nicheFieldError
+                    ? "rgba(239,68,68,0.4)"
+                    : "rgba(255,255,255,0.08)"
+                }`,
+                borderRadius: 10,
+                padding: "10px 12px",
+                color: "#F4F4FF",
+                fontSize: 13,
+                fontFamily: "Inter, sans-serif",
+                marginBottom: nicheFieldError ? 6 : 12,
+              }}
+            />
+            {nicheFieldError && (
+              <p
+                style={{
+                  color: "#F87171",
+                  fontSize: 12,
+                  margin: "0 0 12px",
+                  lineHeight: 1.5,
+                }}
+              >
+                {nicheFieldError}
+              </p>
             )}
 
             <button
