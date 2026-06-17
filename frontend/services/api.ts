@@ -116,11 +116,7 @@ export async function startSearch(
   query: string,
   location: string
 ): Promise<SearchResponse> {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL?.trim()?.replace(/\/$/, "") ?? "";
-  const email =
-    typeof window !== "undefined" ? localStorage.getItem("leadthur_email") || "" : "";
-  const key =
-    typeof window !== "undefined" ? localStorage.getItem("leadthur_key") || "" : "";
+  const apiUrl = getApiUrl();
 
   if (!apiUrl) {
     throw new Error(
@@ -129,16 +125,32 @@ export async function startSearch(
   }
 
   const url = `${apiUrl}/search`;
+  const apiHost = (() => {
+    try {
+      return new URL(apiUrl).host;
+    } catch {
+      return apiUrl;
+    }
+  })();
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-license-key": key,
-      "x-license-email": email,
-    },
-    body: JSON.stringify({ query, location }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: getLicenseHeaders(),
+      body: JSON.stringify({ query, location }),
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "TimeoutError") {
+      throw new Error(
+        `Search server (${apiHost}) timed out. The backend may be busy or restarting — wait 30 seconds and try again.`
+      );
+    }
+    throw new Error(
+      `Cannot reach search server (${apiHost}). The backend may be restarting, or NEXT_PUBLIC_API_URL may be wrong on Vercel. Open DevTools → Network and check the failed /search request.`
+    );
+  }
 
   if (res.status === 401) {
     const data = (await res.json().catch(() => ({}))) as { error?: string };
