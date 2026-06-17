@@ -357,8 +357,17 @@ export async function getLicenseEmailBySearchId(
   }
 }
 
+const PHANTOM_DEVICE_VALUES = new Set(["null", "undefined", "none", "n/a", "0"]);
+
 function normalizeDeviceSignature(value: string | null | undefined): string {
   return String(value ?? "").trim();
+}
+
+function effectiveDeviceSignature(value: string | null | undefined): string {
+  const normalized = normalizeDeviceSignature(value);
+  if (!normalized) return "";
+  if (PHANTOM_DEVICE_VALUES.has(normalized.toLowerCase())) return "";
+  return normalized;
 }
 
 function isLegacyFingerprintSignature(signature: string): boolean {
@@ -373,18 +382,79 @@ function isStableDeviceId(signature: string): boolean {
   );
 }
 
+function isStaleDeviceSignature(signature: string): boolean {
+  return (
+    !signature ||
+    PHANTOM_DEVICE_VALUES.has(signature.toLowerCase()) ||
+    isLegacyFingerprintSignature(signature)
+  );
+}
+
+async function writeDeviceSlot(
+  licenseId: string,
+  slotKey: "device_one" | "device_two" | "device_three" | "device_four",
+  deviceSignature: string
+): Promise<{ ok: boolean; reason?: string }> {
+  const { error } = await supabase
+    .from("license_keys")
+    .update({ [slotKey]: deviceSignature })
+    .eq("id", licenseId);
+
+  if (error) {
+    logger.error("registerDevice slot update failed", {
+      licenseId,
+      slot: slotKey,
+      error: error.message,
+    });
+    return { ok: false, reason: "Device registration failed. Try again." };
+  }
+
+  return { ok: true };
+}
+
+async function resetDevicesToSingle(
+  licenseId: string,
+  deviceSignature: string,
+  reason: string
+): Promise<{ allowed: boolean; reason?: string }> {
+  const { error: resetError } = await supabase
+    .from("license_keys")
+    .update({
+      device_one: deviceSignature,
+      device_two: null,
+      device_three: null,
+      device_four: null,
+    })
+    .eq("id", licenseId);
+
+  if (resetError) {
+    logger.error("registerDevice device reset failed", {
+      licenseId,
+      error: resetError.message,
+      reason,
+    });
+    return { allowed: false, reason: "Device registration failed. Try again." };
+  }
+
+  logger.info("registerDevice reset device slots", { licenseId, reason });
+  return { allowed: true };
+}
+
 export async function registerDevice(
   licenseId: string,
-  deviceSignature: string
+  deviceSignature: string,
+  options?: { isActivation?: boolean }
 ): Promise<{ allowed: boolean; reason?: string }> {
-  const normalizedSignature = normalizeDeviceSignature(deviceSignature);
+  const normalizedSignature = effectiveDeviceSignature(deviceSignature);
   if (!normalizedSignature) {
     return { allowed: false, reason: "Invalid device signature" };
   }
 
   const { data, error } = await supabase
     .from("license_keys")
-    .select("device_one, device_two, device_three, device_four, max_devices")
+    .select(
+      "device_one, device_two, device_three, device_four, max_devices, search_count, searches_used"
+    )
     .eq("id", licenseId)
     .single();
 
@@ -397,6 +467,10 @@ export async function registerDevice(
   }
 
   const maxDevices = Math.min(4, Math.max(1, (data.max_devices as number | null) || 4));
+  const searchesUsed = Math.max(
+    Number(data.search_count ?? 0),
+    Number(data.searches_used ?? 0)
+  );
 
   const slots = [
     { key: "device_one" as const, value: data.device_one as string | null },
@@ -406,50 +480,71 @@ export async function registerDevice(
   ];
 
   const isFilled = (value: string | null | undefined) =>
-    normalizeDeviceSignature(value) !== "";
+    effectiveDeviceSignature(value) !== "";
 
   // Recognise returning device on any slot (even if limit was lowered later)
-  if (slots.some((s) => normalizeDeviceSignature(s.value) === normalizedSignature)) {
+  if (
+    slots.some((s) => effectiveDeviceSignature(s.value) === normalizedSignature)
+  ) {
     return { allowed: true };
   }
 
   const activeSlots = slots.slice(0, maxDevices);
-  const filledActive = activeSlots.filter((s) => isFilled(s.value)).length;
+  const filledSignatures = [
+    ...new Set(
+      activeSlots
+        .map((s) => effectiveDeviceSignature(s.value))
+        .filter((signature) => signature !== "")
+    ),
+  ];
+  const filledActive = filledSignatures.length;
 
   if (filledActive >= maxDevices) {
-    const filledSignatures = slots
-      .filter((s) => isFilled(s.value))
-      .map((s) => normalizeDeviceSignature(s.value));
+    const allStoredSignatures = slots
+      .map((s) => effectiveDeviceSignature(s.value))
+      .filter((signature) => signature !== "");
 
-    // Clients used to send unstable browser fingerprints. When slots are full of
-    // those legacy ids and the client now sends a stable UUID, reset to that device.
     if (
       isStableDeviceId(normalizedSignature) &&
-      filledSignatures.length > 0 &&
-      filledSignatures.every(isLegacyFingerprintSignature)
+      allStoredSignatures.length > 0 &&
+      allStoredSignatures.every(isStaleDeviceSignature)
     ) {
-      const { error: resetError } = await supabase
-        .from("license_keys")
-        .update({
-          device_one: normalizedSignature,
-          device_two: null,
-          device_three: null,
-          device_four: null,
-        })
-        .eq("id", licenseId);
-
-      if (resetError) {
-        logger.error("registerDevice legacy migration failed", {
-          licenseId,
-          error: resetError.message,
-        });
-        return { allowed: false, reason: "Device registration failed. Try again." };
-      }
-
-      logger.info("registerDevice migrated legacy fingerprints to stable device id", {
+      return resetDevicesToSingle(
         licenseId,
-      });
-      return { allowed: true };
+        normalizedSignature,
+        "legacy_or_phantom_slots"
+      );
+    }
+
+    if (isStableDeviceId(normalizedSignature)) {
+      const legacySlot = activeSlots.find((slot) =>
+        isStaleDeviceSignature(effectiveDeviceSignature(slot.value))
+      );
+      if (legacySlot) {
+        const write = await writeDeviceSlot(
+          licenseId,
+          legacySlot.key,
+          normalizedSignature
+        );
+        if (!write.ok) return { allowed: false, reason: write.reason };
+        logger.info("registerDevice replaced legacy device slot", {
+          licenseId,
+          slot: legacySlot.key,
+        });
+        return { allowed: true };
+      }
+    }
+
+    if (
+      options?.isActivation &&
+      isStableDeviceId(normalizedSignature) &&
+      searchesUsed === 0
+    ) {
+      return resetDevicesToSingle(
+        licenseId,
+        normalizedSignature,
+        "activation_unused_license"
+      );
     }
 
     return {
@@ -462,20 +557,8 @@ export async function registerDevice(
   const emptySlot = activeSlots.find((s) => !isFilled(s.value));
 
   if (emptySlot) {
-    const { error: updateError } = await supabase
-      .from("license_keys")
-      .update({ [emptySlot.key]: normalizedSignature })
-      .eq("id", licenseId);
-
-    if (updateError) {
-      logger.error("registerDevice slot update failed", {
-        licenseId,
-        slot: emptySlot.key,
-        error: updateError.message,
-      });
-      return { allowed: false, reason: "Device registration failed. Try again." };
-    }
-
+    const write = await writeDeviceSlot(licenseId, emptySlot.key, normalizedSignature);
+    if (!write.ok) return { allowed: false, reason: write.reason };
     return { allowed: true };
   }
 

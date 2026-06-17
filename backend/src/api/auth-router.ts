@@ -14,7 +14,11 @@ export const authRouter = Router();
 
 authRouter.post("/activate", async (req: Request, res: Response) => {
   try {
-    const { email, key } = req.body as { email?: string; key?: string };
+    const { email, key, deviceSignature } = req.body as {
+      email?: string;
+      key?: string;
+      deviceSignature?: string;
+    };
 
     if (!email?.trim() || !key?.trim()) {
       res.status(400).json({ error: "Email and license key are required" });
@@ -38,6 +42,21 @@ authRouter.post("/activate", async (req: Request, res: Response) => {
 
     if (!license.activated) {
       await activateLicense(license.id);
+    }
+
+    if (deviceSignature?.trim()) {
+      const deviceResult = await registerDevice(license.id, deviceSignature, {
+        isActivation: true,
+      });
+      if (!deviceResult.allowed) {
+        res.status(403).json({
+          error: deviceResult.reason ?? "Device registration denied",
+          code: deviceResult.reason?.includes("Maximum devices")
+            ? "MAX_DEVICES"
+            : "DEVICE_DENIED",
+        });
+        return;
+      }
     }
 
     await ensureRefCodeForEmail(normalizedEmail);
@@ -168,9 +187,16 @@ authRouter.post("/register-device", async (req: Request, res: Response) => {
       return;
     }
 
-    const license = await getLicenseByKeyAndEmail(key, email);
-    if (!license) {
+    const normalizedEmail = email.toLowerCase().trim();
+    const normalizedKey = key.trim().toUpperCase();
+    const license = await getLicenseKeyByKey(normalizedKey);
+    if (!license || license.email !== normalizedEmail) {
       res.status(401).json({ error: "Invalid license" });
+      return;
+    }
+
+    if (!license.activated) {
+      res.status(401).json({ error: "Account not activated" });
       return;
     }
 
