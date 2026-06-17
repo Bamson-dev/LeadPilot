@@ -6,6 +6,7 @@ declare global {
       licenseEmail?: string;
       searchesRemaining?: number;
       creditsRemaining?: number;
+      searchAccess?: import("../database/search-repository").SearchJobAccess;
     }
   }
 }

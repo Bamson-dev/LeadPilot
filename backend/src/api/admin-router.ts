@@ -1523,7 +1523,29 @@ adminRouter.post("/blog/posts", requireAdminAuth, async (req: Request, res: Resp
 adminRouter.put("/blog/posts/:id", requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const updates = { ...req.body } as Record<string, unknown>;
+    const body = req.body as Record<string, unknown>;
+    const allowedFields = [
+      "title",
+      "slug",
+      "excerpt",
+      "content",
+      "cover_image",
+      "category",
+      "tags",
+      "meta_title",
+      "meta_description",
+      "status",
+      "featured",
+      "read_time",
+      "published_at",
+    ] as const;
+
+    const updates: Record<string, unknown> = {};
+    for (const field of allowedFields) {
+      if (body[field] !== undefined) {
+        updates[field] = body[field];
+      }
+    }
 
     const now = new Date().toISOString();
 

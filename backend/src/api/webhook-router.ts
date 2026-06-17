@@ -168,7 +168,17 @@ webhookRouter.post(
       const secretHash = config.FLUTTERWAVE_SECRET_HASH;
       const signature = req.headers["verif-hash"] as string | undefined;
 
-      if (secretHash && signature !== secretHash) {
+      if (!secretHash) {
+        logger.error(
+          "FLUTTERWAVE_SECRET_HASH is not configured, rejecting all webhook requests for security."
+        );
+        res.status(500).json({
+          error: "Flutterwave webhook verification is not configured",
+        });
+        return;
+      }
+
+      if (signature !== secretHash) {
         logger.warn("Flutterwave webhook signature mismatch");
         res.status(401).json({ error: "Invalid signature" });
         return;
