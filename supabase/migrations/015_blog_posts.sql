@@ -26,3 +26,15 @@ create index if not exists idx_blog_posts_status_published
 create index if not exists idx_blog_posts_category
   on blog_posts (category)
   where status = 'published';
+
+create or replace function update_updated_at()
+returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
+
+create trigger blog_posts_updated_at
+before update on blog_posts
+for each row execute function update_updated_at();

@@ -19,11 +19,11 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 WORKDIR /app
 
-COPY package.json ./
+COPY package.json package-lock.json ./
 COPY backend/package.json ./backend/
 COPY shared/package.json ./shared/
 
-RUN npm install --workspace=backend --workspace=shared
+RUN npm ci --workspace=backend --workspace=shared --ignore-scripts
 
 COPY shared/ ./shared/
 COPY backend/ ./backend/
