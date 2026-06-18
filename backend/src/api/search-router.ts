@@ -6,6 +6,7 @@ import {
   getSearchJob,
   getSearchJobAccess,
   getSearchResults,
+  setSearchJobLicenseEmail,
   markSearchComplete,
   markSearchFailed,
   type SearchJobAccess,
@@ -14,7 +15,10 @@ import {
   copyCachedLeadsForInsert,
   getCachedSearch,
 } from "../services/cache-service";
-import { getUserSearchHistory } from "../database/user-search-repository";
+import {
+  getUserSearchHistory,
+  userOwnsSearchJob,
+} from "../database/user-search-repository";
 import { searchQueue, getQueuePosition, enqueueSearch } from "../queues/search-queue";
 import { checkSearchLimit } from "../middleware/check-search-limit";
 import { requireLicense } from "../middleware/require-license";
@@ -74,7 +78,11 @@ async function loadSearchAccess(
   }
 }
 
-function requireSearchOwnership(req: Request, res: Response, next: NextFunction): void {
+async function requireSearchOwnership(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   const access = req.searchAccess as SearchJobAccess | undefined;
   if (!access) {
     res.status(404).json({ error: "Search not found" });
@@ -86,16 +94,34 @@ function requireSearchOwnership(req: Request, res: Response, next: NextFunction)
     return;
   }
 
-  void requireLicense(req, res, () => {
-    if (res.headersSent) return;
-
-    if (!access.licenseEmail || access.licenseEmail !== req.licenseEmail) {
-      res.status(403).json({ error: "Not authorized to access this search." });
-      return;
-    }
-
-    next();
+  await new Promise<void>((resolve) => {
+    void requireLicense(req, res, () => resolve());
   });
+  if (res.headersSent) return;
+
+  const requestEmail = req.licenseEmail!;
+  const requestKey = req.licenseKey!;
+
+  if (access.licenseEmail === requestEmail) {
+    next();
+    return;
+  }
+
+  const ownsViaHistory = await userOwnsSearchJob(access.job.id, requestKey);
+  if (ownsViaHistory) {
+    if (access.licenseEmail !== requestEmail) {
+      void setSearchJobLicenseEmail(access.job.id, requestEmail).catch((err) =>
+        logger.error("Failed to lazy-backfill license_email", {
+          searchId: access.job.id,
+          error: err instanceof Error ? err.message : "unknown",
+        })
+      );
+    }
+    next();
+    return;
+  }
+
+  res.status(403).json({ error: "Not authorized to access this search." });
 }
 
 searchRouter.get("/queue/status", (_req: Request, res: Response) => {
