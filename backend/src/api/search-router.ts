@@ -17,6 +17,8 @@ import {
 } from "../services/cache-service";
 import {
   getUserSearchHistory,
+  saveUserSearch,
+  searchJobHasOwnershipRecord,
   userOwnsSearchJob,
 } from "../database/user-search-repository";
 import { searchQueue, getQueuePosition, enqueueSearch } from "../queues/search-queue";
@@ -56,6 +58,24 @@ function licenseQueryToHeaders(req: Request, _res: Response, next: NextFunction)
   licenseCredentialsFromQuery(req);
   next();
 }
+
+function resolveLicenseEmailFromRequest(req: Request): string | undefined {
+  return (
+    req.licenseEmail ??
+    (req.headers["x-license-email"] as string | undefined)?.toLowerCase().trim() ??
+    undefined
+  );
+}
+
+function resolveLicenseKeyFromRequest(req: Request): string | undefined {
+  return (
+    req.licenseKey ??
+    (req.headers["x-license-key"] as string | undefined)?.trim().toUpperCase() ??
+    undefined
+  );
+}
+
+const ORPHAN_SEARCH_CLAIM_MS = 30 * 60 * 1000;
 
 async function loadSearchAccess(
   req: Request,
@@ -107,7 +127,11 @@ async function requireSearchOwnership(
     return;
   }
 
-  const ownsViaHistory = await userOwnsSearchJob(access.job.id, requestKey);
+  const ownsViaHistory = await userOwnsSearchJob(
+    access.job.id,
+    requestKey,
+    requestEmail
+  );
   if (ownsViaHistory) {
     if (access.licenseEmail !== requestEmail) {
       void setSearchJobLicenseEmail(access.job.id, requestEmail).catch((err) =>
@@ -132,6 +156,26 @@ async function requireSearchOwnership(
     );
     next();
     return;
+  }
+
+  const jobAgeMs = Date.now() - new Date(access.job.createdAt).getTime();
+  const isRecentOrphan =
+    !access.licenseEmail &&
+    !access.isTrial &&
+    jobAgeMs >= 0 &&
+    jobAgeMs <= ORPHAN_SEARCH_CLAIM_MS;
+  if (isRecentOrphan) {
+    const hasOwnershipRecord = await searchJobHasOwnershipRecord(access.job.id);
+    if (!hasOwnershipRecord) {
+      void setSearchJobLicenseEmail(access.job.id, requestEmail).catch((err) =>
+        logger.error("Failed to claim orphan search license_email", {
+          searchId: access.job.id,
+          error: err instanceof Error ? err.message : "unknown",
+        })
+      );
+      next();
+      return;
+    }
   }
 
   res.status(403).json({ error: "Not authorized to access this search." });
@@ -344,10 +388,13 @@ searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => 
       trackSearch(req.licenseId);
     }
 
+    const licenseEmail = resolveLicenseEmailFromRequest(req);
+    const licenseKey = resolveLicenseKeyFromRequest(req);
+
     const cached = await getCachedSearch(trimmedQuery, trimmedLocation);
     if (cached && cached.leads.length > 0) {
       const newJob = await createSearchJob(trimmedQuery, trimmedLocation, {
-        licenseEmail: req.licenseEmail,
+        licenseEmail,
       });
       const rows = copyCachedLeadsForInsert(cached.leads, newJob.id);
       const { error: insertError } = await supabase
@@ -359,6 +406,16 @@ searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => 
       }
 
       await markSearchComplete(newJob.id, cached.leads.length);
+
+      if (licenseKey) {
+        void saveUserSearch({
+          licenseKey,
+          searchId: newJob.id,
+          query: trimmedQuery,
+          location: trimmedLocation,
+          totalFound: cached.leads.length,
+        });
+      }
 
       res.status(201).json({
         searchId: newJob.id,
@@ -372,7 +429,7 @@ searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => 
     }
 
     const searchJob = await createSearchJob(trimmedQuery, trimmedLocation, {
-      licenseEmail: req.licenseEmail,
+      licenseEmail,
     });
     const queuePosition = searchQueue.getQueuePosition();
 
@@ -386,8 +443,8 @@ searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => 
 
     setImmediate(() => {
       enqueueSearch(searchJob.id, trimmedQuery, trimmedLocation, {
-        licenseKey: req.licenseKey,
-        licenseEmail: req.licenseEmail,
+        licenseKey,
+        licenseEmail,
       });
     });
   } catch (err) {
