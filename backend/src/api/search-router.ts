@@ -121,21 +121,6 @@ async function requireSearchOwnership(
     return;
   }
 
-  if (
-    !access.licenseEmail &&
-    access.job.status !== "completed" &&
-    access.job.status !== "failed"
-  ) {
-    void setSearchJobLicenseEmail(access.job.id, requestEmail).catch((err) =>
-      logger.error("Failed to claim in-flight search license_email", {
-        searchId: access.job.id,
-        error: err instanceof Error ? err.message : "unknown",
-      })
-    );
-    next();
-    return;
-  }
-
   res.status(403).json({ error: "Not authorized to access this search." });
 }
 
@@ -376,7 +361,7 @@ searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => 
     const searchJob = await createSearchJob(trimmedQuery, trimmedLocation, {
       licenseEmail: req.licenseEmail,
     });
-    const licenseEmail = req.licenseEmail;
+    const licenseEmail = (req.headers["x-license-email"] as string) || undefined;
     const queuePosition = searchQueue.getQueuePosition();
 
     res.status(201).json({

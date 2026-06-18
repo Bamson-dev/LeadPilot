@@ -61,12 +61,16 @@ export function SearchHistory({ isMobile = false, onViewResults }: SearchHistory
 
   const handleView = async (item: HistoryItem) => {
     if (!item.search_id) return;
-    const { leads } = await getResults(item.search_id);
-    onViewResults(leads, {
-      query: item.query,
-      location: item.location,
-      date: formatDate(item.created_at),
-    });
+    try {
+      const { leads } = await getResults(item.search_id);
+      onViewResults(leads, {
+        query: item.query,
+        location: item.location,
+        date: formatDate(item.created_at),
+      });
+    } catch {
+      window.alert("Could not load this search. Try running it again from the dashboard.");
+    }
   };
 
   const handleExport = async (item: HistoryItem) => {
@@ -75,6 +79,8 @@ export function SearchHistory({ isMobile = false, onViewResults }: SearchHistory
     try {
       const { leads } = await getResults(item.search_id);
       exportToCSV(leads, `leadthur-${item.query}-${item.location}-${item.id}.csv`);
+    } catch {
+      window.alert("Could not download leads for this search.");
     } finally {
       setExportingId(null);
     }
