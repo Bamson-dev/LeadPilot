@@ -221,6 +221,19 @@ export async function getSearchJob(id: string): Promise<SearchJob | null> {
   return access?.job ?? null;
 }
 
+export async function setSearchJobLicenseEmail(
+  id: string,
+  licenseEmail: string
+): Promise<void> {
+  const email = licenseEmail.toLowerCase().trim();
+  const { error } = await supabase
+    .from("search_jobs")
+    .update({ license_email: email })
+    .eq("id", id);
+
+  if (error) throw new Error(error.message);
+}
+
 export async function getSearchJobAccess(id: string): Promise<SearchJobAccess | null> {
   const { data, error } = await supabase
     .from("search_jobs")

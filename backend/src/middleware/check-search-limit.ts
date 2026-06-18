@@ -18,21 +18,25 @@ export async function checkSearchLimit(
 
     if (!licenseKey || !email) {
       res.status(401).json({
-        error: "License key required. Please activate your account at /activate",
+        error: "License key and email required",
         code: "NO_LICENSE",
       });
       return;
     }
 
+    const normalizedKey = licenseKey.trim().toUpperCase();
+    const normalizedEmail = email.toLowerCase().trim();
+
     let license = null;
     try {
-      license = await getLicenseByKeyAndEmail(licenseKey, email);
+      license = await getLicenseByKeyAndEmail(normalizedKey, normalizedEmail);
     } catch (dbErr) {
       logger.error("License lookup DB error — allowing search", {
         error: dbErr instanceof Error ? dbErr.message : "unknown",
       });
       req.licenseId = "unknown";
-      req.licenseKey = licenseKey;
+      req.licenseKey = normalizedKey;
+      req.licenseEmail = normalizedEmail;
       req.searchesRemaining = 99;
       return next();
     }
@@ -118,7 +122,8 @@ export async function checkSearchLimit(
     }
 
     req.licenseId = license.id;
-    req.licenseKey = licenseKey;
+    req.licenseKey = normalizedKey;
+    req.licenseEmail = normalizedEmail;
     req.searchesRemaining = limitCheck.remaining;
     req.creditsRemaining = limitCheck.creditsRemaining;
     next();
