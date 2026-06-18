@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { AreaSuggestion, BusinessLead } from "@leadthur/shared";
-import { getResults, getSearch, SearchLimitError, startSearch } from "@/services/api";
+import { getResults, getSearch, probeSearchAccess, SearchLimitError, startSearch } from "@/services/api";
 import { getApiUrl } from "@/utils/env";
 import { getLicenseQueryString } from "@/services/api";
 import {
@@ -31,6 +31,8 @@ const SEARCH_FAILED_MESSAGE =
   "Search did not complete. Please try a broader location or business type.";
 const CONNECTION_LOST_MESSAGE =
   "Connection lost. Please try your search again.";
+const SEARCH_ACCESS_DENIED_MESSAGE =
+  "Unable to load this search. Please refresh the page and try again.";
 
 function mergePendingIntoLeads(
   current: BusinessLead[],
@@ -637,33 +639,39 @@ export function useSearch(options?: UseSearchOptions) {
           return;
         }
 
-        setState((prev) => {
-          const pending = pendingLeadsRef.current.splice(0);
-          const merged = mergePendingIntoLeads(prev.leads, pending);
-          if (merged.length > 0) {
+        void (async () => {
+          const activeId = searchIdRef.current;
+          const access = activeId ? await probeSearchAccess(activeId) : "unknown";
+          const errorMessage =
+            access === "auth" ? SEARCH_ACCESS_DENIED_MESSAGE : CONNECTION_LOST_MESSAGE;
+
+          setState((prev) => {
+            const pending = pendingLeadsRef.current.splice(0);
+            const merged = mergePendingIntoLeads(prev.leads, pending);
+            if (merged.length > 0) {
+              return {
+                ...prev,
+                leads: merged,
+                totalFound: merged.length,
+                status: "completed",
+                error: null,
+                message: `Search complete. Found ${merged.length} businesses.`,
+              };
+            }
+            completedRef.current = true;
+            closeStream();
             return {
               ...prev,
-              leads: merged,
-              totalFound: merged.length,
-              status: "completed",
-              error: null,
-              message: `Search complete. Found ${merged.length} businesses.`,
+              status: "error",
+              error: errorMessage,
+              message: errorMessage,
             };
-          }
-          completedRef.current = true;
-          closeStream();
-          return {
-            ...prev,
-            status: "error",
-            error: CONNECTION_LOST_MESSAGE,
-            message: CONNECTION_LOST_MESSAGE,
-          };
-        });
+          });
 
-        const reconnectSearchId = searchIdRef.current;
-        if (reconnectSearchId) {
-          scheduleFinalResultsFetch(reconnectSearchId, 3000);
-        }
+          if (activeId) {
+            scheduleFinalResultsFetch(activeId, 3000);
+          }
+        })();
       };
     },
     [
