@@ -251,6 +251,22 @@ export async function getSearch(id: string): Promise<SearchJob> {
   return parseJson<SearchJob>(res);
 }
 
+export async function probeSearchAccess(
+  searchId: string
+): Promise<"ok" | "auth" | "unknown"> {
+  try {
+    const res = await fetch(`${getApiUrl()}/search/${searchId}`, {
+      headers: getLicenseHeaders(),
+      cache: "no-store",
+    });
+    if (res.status === 401 || res.status === 403) return "auth";
+    if (res.ok) return "ok";
+    return "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
 export async function getSearchSuggestions(
   query: string,
   location: string,

@@ -13,30 +13,27 @@ export async function checkSearchLimit(
   next: NextFunction
 ): Promise<void> {
   try {
-    const licenseKey = req.headers["x-license-key"] as string;
-    const email = req.headers["x-license-email"] as string;
+    const licenseKey = (req.headers["x-license-key"] as string)?.trim().toUpperCase();
+    const email = (req.headers["x-license-email"] as string)?.toLowerCase().trim();
 
     if (!licenseKey || !email) {
       res.status(401).json({
-        error: "License key and email required",
+        error: "License key required. Please activate your account at /activate",
         code: "NO_LICENSE",
       });
       return;
     }
 
-    const normalizedKey = licenseKey.trim().toUpperCase();
-    const normalizedEmail = email.toLowerCase().trim();
-
     let license = null;
     try {
-      license = await getLicenseByKeyAndEmail(normalizedKey, normalizedEmail);
+      license = await getLicenseByKeyAndEmail(licenseKey, email);
     } catch (dbErr) {
       logger.error("License lookup DB error — allowing search", {
         error: dbErr instanceof Error ? dbErr.message : "unknown",
       });
       req.licenseId = "unknown";
-      req.licenseKey = normalizedKey;
-      req.licenseEmail = normalizedEmail;
+      req.licenseKey = licenseKey;
+      req.licenseEmail = email;
       req.searchesRemaining = 99;
       return next();
     }
@@ -122,8 +119,8 @@ export async function checkSearchLimit(
     }
 
     req.licenseId = license.id;
-    req.licenseKey = normalizedKey;
-    req.licenseEmail = normalizedEmail;
+    req.licenseKey = licenseKey;
+    req.licenseEmail = email;
     req.searchesRemaining = limitCheck.remaining;
     req.creditsRemaining = limitCheck.creditsRemaining;
     next();
@@ -131,6 +128,12 @@ export async function checkSearchLimit(
     logger.error("Search limit middleware error — allowing search", {
       error: err instanceof Error ? err.message : "unknown",
     });
+    const licenseKey = (req.headers["x-license-key"] as string)?.trim().toUpperCase();
+    const email = (req.headers["x-license-email"] as string)?.toLowerCase().trim();
+    if (licenseKey && email) {
+      req.licenseKey = licenseKey;
+      req.licenseEmail = email;
+    }
     next();
   }
 }
