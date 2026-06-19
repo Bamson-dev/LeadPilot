@@ -466,7 +466,8 @@ export async function registerDevice(
     return { allowed: false, reason: "License not found" };
   }
 
-  const maxDevices = Math.min(4, Math.max(1, (data.max_devices as number | null) || 4));
+  const storedMax = (data.max_devices as number | null) || 4;
+  const maxDevices = Math.min(4, Math.max(4, storedMax));
   const searchesUsed = Math.max(
     Number(data.search_count ?? 0),
     Number(data.searches_used ?? 0)
@@ -530,6 +531,37 @@ export async function registerDevice(
         logger.info("registerDevice replaced legacy device slot", {
           licenseId,
           slot: legacySlot.key,
+        });
+        return { allowed: true };
+      }
+    }
+
+    if (
+      options?.isActivation &&
+      isStableDeviceId(normalizedSignature)
+    ) {
+      const emptySlot = activeSlots.find((s) => !isFilled(s.value));
+      if (emptySlot) {
+        const write = await writeDeviceSlot(
+          licenseId,
+          emptySlot.key,
+          normalizedSignature
+        );
+        if (write.ok) return { allowed: true };
+        return { allowed: false, reason: write.reason };
+      }
+
+      const slotToEvict = [...activeSlots].reverse().find((s) => isFilled(s.value));
+      if (slotToEvict) {
+        const write = await writeDeviceSlot(
+          licenseId,
+          slotToEvict.key,
+          normalizedSignature
+        );
+        if (!write.ok) return { allowed: false, reason: write.reason };
+        logger.info("registerDevice activation evicted slot for re-login", {
+          licenseId,
+          slot: slotToEvict.key,
         });
         return { allowed: true };
       }

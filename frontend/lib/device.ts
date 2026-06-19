@@ -3,6 +3,19 @@ const SESSION_DEVICE_ID_KEY = "leadthur_device_id";
 
 let memoryDeviceId = "";
 
+function readCookieDeviceId(): string {
+  if (typeof document === "undefined") return "";
+  const match = document.cookie.match(/(?:^|;\s*)leadthur_did=([^;]+)/);
+  return match ? decodeURIComponent(match[1]).trim() : "";
+}
+
+function persistCookieDeviceId(id: string): void {
+  if (typeof document === "undefined") return;
+  const maxAge = 60 * 60 * 24 * 400;
+  const secure = window.location.protocol === "https:" ? ";Secure" : "";
+  document.cookie = `leadthur_did=${encodeURIComponent(id)};path=/;max-age=${maxAge};SameSite=Lax${secure}`;
+}
+
 function readStoredDeviceId(): string {
   if (typeof window === "undefined") return "";
 
@@ -12,6 +25,9 @@ function readStoredDeviceId(): string {
   } catch {
     /* localStorage may be blocked */
   }
+
+  const fromCookie = readCookieDeviceId();
+  if (fromCookie) return fromCookie;
 
   try {
     const fromSession = sessionStorage.getItem(SESSION_DEVICE_ID_KEY);
@@ -32,6 +48,8 @@ function persistDeviceId(id: string): void {
     /* ignore */
   }
 
+  persistCookieDeviceId(id);
+
   try {
     sessionStorage.setItem(SESSION_DEVICE_ID_KEY, id);
   } catch {
@@ -45,6 +63,7 @@ export function getDeviceId(): string {
 
   const existing = readStoredDeviceId();
   if (existing) {
+    persistDeviceId(existing);
     return existing;
   }
 
