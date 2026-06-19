@@ -54,27 +54,9 @@ export function DashboardRouter({ skipAccessCheck = false }: { skipAccessCheck?:
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, key, deviceSignature }),
-    })
-      .then(async (res) => {
-        if (res.status === 403) {
-          const data = (await res.json().catch(() => ({}))) as {
-            error?: string;
-            code?: string;
-          };
-          if (data.code === "MAX_DEVICES") {
-            localStorage.removeItem("leadthur_email");
-            localStorage.removeItem("leadthur_key");
-            const msg = encodeURIComponent(
-              data.error ||
-                "Maximum devices reached. Contact support on WhatsApp 09067285890."
-            );
-            window.location.href = `/activate?error=max_devices&message=${msg}`;
-          }
-        }
-      })
-      .catch(() => {
-        /* silent — do not block dashboard */
-      });
+    }).catch(() => {
+      /* best-effort — never block dashboard access */
+    });
   }, [ready, searchParams]);
 
   if (!ready) {
