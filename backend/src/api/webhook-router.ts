@@ -14,6 +14,10 @@ import {
   fulfillFlutterwaveCharge,
   fulfillPaystackCharge,
 } from "../services/payment-fulfillment";
+import {
+  handleMailthurPaystackForward,
+  isMailthurPaystackEvent,
+} from "../services/paystack-webhook-forward";
 import { logger } from "../utils/logger";
 
 export const webhookRouter = Router();
@@ -65,9 +69,29 @@ webhookRouter.post(
           customer?: { email?: string };
           reference?: string;
           amount?: number;
-          metadata?: Record<string, unknown>;
+          metadata?: Record<string, unknown> | string;
         };
       };
+
+      if (isMailthurPaystackEvent(event.data?.metadata)) {
+        const forwardResult = await handleMailthurPaystackForward({
+          rawBody,
+          signature,
+          reference: event.data?.reference,
+          eventType: event.event,
+        });
+
+        if (forwardResult.forwarded) {
+          if (forwardResult.contentType) {
+            res.setHeader("Content-Type", forwardResult.contentType);
+          }
+          res.status(forwardResult.status).send(forwardResult.body);
+          return;
+        }
+
+        res.status(200).send("ok");
+        return;
+      }
 
       if (event.event !== "charge.success") {
         res.status(200).send("ok");
@@ -142,7 +166,7 @@ webhookRouter.post(
               email,
               reference: ref,
               amount,
-              metadata: event.data?.metadata,
+              metadata: meta,
             });
           } catch (err) {
             logger.error("Webhook processing failed", {
