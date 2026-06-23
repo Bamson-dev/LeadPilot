@@ -10,6 +10,7 @@ import {
   updateSearchJob,
 } from "../database/search-repository";
 import { saveUserSearch } from "../database/user-search-repository";
+import { recordSearchHistorySafe } from "../database/search-history-repository";
 import { getLicenseEmailBySearchId } from "../database/license-repository";
 import {
   sendSearchCompleteEmail,
@@ -427,7 +428,18 @@ export async function runScraperJob(
       });
     }
 
-    const licenseEmail = await resolveLicenseEmail();
+    const licenseEmail =
+      options?.licenseEmail?.toLowerCase().trim() ||
+      (await resolveLicenseEmail());
+    if (licenseEmail && totalFound > 0) {
+      void recordSearchHistorySafe({
+        email: licenseEmail,
+        business_type: query,
+        location,
+        results_count: totalFound,
+      });
+    }
+
     if (licenseEmail) {
       if (totalFound > 0) {
         void sendSearchCompleteEmail(licenseEmail, query, location, totalFound).catch(

@@ -1,4 +1,6 @@
 import { supabase } from "./client";
+import { logger } from "../utils/logger";
+import { parseSearchLocation } from "../utils/search-location";
 
 export type SearchHistoryRow = {
   id: string;
@@ -46,4 +48,33 @@ export async function getSearchHistoryByEmail(
 
   if (error) throw error;
   return (data ?? []) as SearchHistoryRow[];
+}
+
+export async function recordSearchHistorySafe(input: {
+  email: string;
+  business_type: string;
+  location: string;
+  results_count: number;
+}): Promise<void> {
+  if (!input.email?.trim() || !input.business_type?.trim() || !input.location?.trim()) {
+    return;
+  }
+  if (input.results_count <= 0) return;
+
+  try {
+    const { city, country } = parseSearchLocation(input.location);
+    await insertSearchHistory({
+      email: input.email,
+      business_type: input.business_type.trim(),
+      city: city || input.location.trim(),
+      country: country ?? null,
+      results_count: input.results_count,
+    });
+  } catch (err) {
+    logger.error("Failed to record search history", {
+      email: input.email,
+      business_type: input.business_type,
+      error: err instanceof Error ? err.message : "unknown",
+    });
+  }
 }

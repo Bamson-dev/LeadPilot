@@ -12,6 +12,7 @@ import {
   RecentSearchesPanel,
   recordDashboardSearchHistory,
 } from "@/components/dashboard/recent-searches-panel";
+import { SearchHistory } from "@/components/dashboard/search-history";
 import { AffiliateSection } from "@/components/dashboard/affiliate-section";
 import { WelcomeState } from "@/components/dashboard/welcome-state";
 import { ResultsTable } from "@/features/results/results-table";
@@ -130,6 +131,7 @@ export function SearchDashboard() {
     setSuggestions,
     clearResults,
     reset,
+    loadSavedLeads,
   } = useSearch({
     onSearchComplete: (...args) => onSearchCompleteRef.current?.(...args),
     onSearchLimitReached: () => {
@@ -189,6 +191,12 @@ export function SearchDashboard() {
       return () => clearTimeout(t);
     }
   }, [status]);
+
+  useEffect(() => {
+    if (status === "completed" && totalFound > 0) {
+      setHistoryRefreshKey((prev) => prev + 1);
+    }
+  }, [status, totalFound]);
 
   useEffect(() => {
     if (status !== "completed" || suggestions.length > 0) return;
@@ -325,6 +333,19 @@ export function SearchDashboard() {
     setLocation(locationValue);
     void runSearch(businessTypeValue, locationValue);
   };
+
+  const handleViewSavedResults = useCallback(
+    (savedLeads: Lead[], meta: { query: string; location: string; date: string }) => {
+      loadSavedLeads(savedLeads);
+      setBusinessType(meta.query);
+      setLocation(meta.location);
+      setSavedBanner(`Showing saved results from ${meta.date}`);
+      setRatingFilter("all");
+      setAllLeads([]);
+      setSessionSearchCount(0);
+    },
+    [loadSavedLeads]
+  );
 
   const startNewSession = () => {
     reset();
@@ -749,6 +770,12 @@ export function SearchDashboard() {
       <RecentSearchesPanel
         refreshKey={historyRefreshKey}
         onSearchAgain={handleSearchAgain}
+      />
+
+      <SearchHistory
+        isMobile={isMobile}
+        refreshKey={historyRefreshKey}
+        onViewResults={handleViewSavedResults}
       />
 
       {loadingSuggestions && status === "completed" && (
