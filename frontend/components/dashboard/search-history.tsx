@@ -17,10 +17,15 @@ export interface HistoryItem {
 
 interface SearchHistoryProps {
   isMobile?: boolean;
+  refreshKey?: number;
   onViewResults: (leads: Lead[], meta: { query: string; location: string; date: string }) => void;
 }
 
-export function SearchHistory({ isMobile = false, onViewResults }: SearchHistoryProps) {
+export function SearchHistory({
+  isMobile = false,
+  refreshKey = 0,
+  onViewResults,
+}: SearchHistoryProps) {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [exportingId, setExportingId] = useState<string | null>(null);
@@ -40,7 +45,7 @@ export function SearchHistory({ isMobile = false, onViewResults }: SearchHistory
         setLoading(false);
       }
     })();
-  }, []);
+  }, [refreshKey]);
 
   function toggleHistory() {
     const newVal = !historyExpanded;

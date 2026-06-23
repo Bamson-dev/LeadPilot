@@ -390,15 +390,19 @@ export async function saveSearchHistory(input: {
   city: string;
   country?: string;
   results_count: number;
-}): Promise<void> {
+}): Promise<boolean> {
   try {
-    await fetch(`${getApiUrl()}/search-history`, {
+    const res = await fetch(`${getApiUrl()}/search-history`, {
       method: "POST",
       headers: getLicenseHeaders(),
-      body: JSON.stringify(input),
+      body: JSON.stringify({
+        ...input,
+        email: input.email.toLowerCase().trim(),
+      }),
     });
+    return res.ok;
   } catch {
-    /* non-blocking */
+    return false;
   }
 }
 

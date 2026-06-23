@@ -15,6 +15,7 @@ import {
   copyCachedLeadsForInsert,
   getCachedSearch,
 } from "../services/cache-service";
+import { recordSearchHistorySafe } from "../database/search-history-repository";
 import {
   getUserSearchHistory,
   saveUserSearch,
@@ -414,6 +415,15 @@ searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => 
           query: trimmedQuery,
           location: trimmedLocation,
           totalFound: cached.leads.length,
+        });
+      }
+
+      if (licenseEmail && cached.leads.length > 0) {
+        void recordSearchHistorySafe({
+          email: licenseEmail,
+          business_type: trimmedQuery,
+          location: trimmedLocation,
+          results_count: cached.leads.length,
         });
       }
 
