@@ -1,9 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { COMPARE_AT_PRICE_USD, SALE_PRICE_USD } from "@/constants/pricing";
-import { CHECKOUT, C, FONT, FREETRIAL } from "./theme";
+import { CHECKOUT, C, FONT } from "./theme";
 
 const CHECKLIST = [
   "1,000+ businesses per search in any city worldwide",
@@ -46,94 +45,74 @@ export function AssuranceBlock() {
   );
 }
 
-function BankTransferToggle() {
-  const [open, setOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const accountNumber = "0126247556";
-
-  async function copyAccount() {
-    try {
-      await navigator.clipboard.writeText(accountNumber);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      /* ignore */
-    }
-  }
-
+function PaymentTrustRow() {
   return (
-    <div style={{ marginTop: 12 }}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
+    <div style={{ marginTop: 14, textAlign: "center" }}>
+      <p
         style={{
-          width: "100%",
-          padding: "14px 20px",
-          borderRadius: 12,
-          border: `1px solid ${C.border}`,
-          background: C.bgSecondary,
-          color: C.text,
-          fontSize: 14,
-          fontWeight: 600,
-          cursor: "pointer",
-          fontFamily: FONT,
+          margin: "0 0 12px",
+          fontSize: 12,
+          color: C.muted,
+          lineHeight: 1.5,
         }}
       >
-        {open ? "Hide Bank Transfer Details" : "Pay via Bank Transfer"}
-      </button>
-      {open && (
-        <div
-          style={{
-            marginTop: 12,
-            padding: "20px",
-            borderRadius: 12,
-            background: C.bgCard,
-            border: `1px solid ${C.border}`,
-            fontSize: 14,
-            color: C.text,
-            lineHeight: 1.7,
-          }}
-        >
-          <div>
-            <strong>Bank:</strong> Wema Bank
-          </div>
-          <div>
-            <strong>Account Name:</strong> Pdigital Marketstore Ltd
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <span>
-              <strong>Account Number:</strong> {accountNumber}
-            </span>
-            <button
-              type="button"
-              onClick={() => void copyAccount()}
-              style={{
-                padding: "6px 12px",
-                borderRadius: 8,
-                border: `1px solid ${C.border}`,
-                background: C.bgSecondary,
-                color: C.purpleLight,
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: "pointer",
-                fontFamily: FONT,
-              }}
-            >
-              {copied ? "Copied!" : "Copy"}
-            </button>
-          </div>
-          <p style={{ margin: "12px 0 0", color: C.muted, fontSize: 13 }}>
-            After payment send proof to WhatsApp{" "}
-            <a href="https://wa.me/2349067285890" style={{ color: C.green }}>
-              09067285890
-            </a>
-            . Access granted within minutes.
-          </p>
-          <p style={{ margin: "8px 0 0", fontSize: 12, color: C.muted }}>
-            🔒 Secure manual verification. Same-day access.
-          </p>
-        </div>
-      )}
+        Secure payment. Instant access. Cancel anytime.
+      </p>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 14,
+          opacity: 0.55,
+        }}
+        aria-label="Accepted payment methods"
+      >
+        <svg width="36" height="14" viewBox="0 0 36 14" fill="none" aria-hidden>
+          <text
+            x="0"
+            y="11"
+            fill={C.muted}
+            fontSize="11"
+            fontWeight="700"
+            fontFamily="Arial, sans-serif"
+            letterSpacing="0.5"
+          >
+            VISA
+          </text>
+        </svg>
+        <svg width="44" height="14" viewBox="0 0 44 14" fill="none" aria-hidden>
+          <circle cx="14" cy="7" r="5" fill="#7878A0" opacity="0.7" />
+          <circle cx="20" cy="7" r="5" fill="#7878A0" opacity="0.45" />
+          <text
+            x="28"
+            y="11"
+            fill={C.muted}
+            fontSize="9"
+            fontWeight="600"
+            fontFamily="Arial, sans-serif"
+          >
+            MC
+          </text>
+        </svg>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+          <rect
+            x="5"
+            y="11"
+            width="14"
+            height="10"
+            rx="2"
+            stroke={C.muted}
+            strokeWidth="1.5"
+          />
+          <path
+            d="M8 11V8a4 4 0 0 1 8 0v3"
+            stroke={C.muted}
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
+        </svg>
+      </div>
     </div>
   );
 }
@@ -270,22 +249,7 @@ export function PricingCard() {
           Get Lifetime Access Now →
         </Link>
 
-        <BankTransferToggle />
-
-        <Link
-          href={FREETRIAL}
-          style={{
-            display: "block",
-            marginTop: 16,
-            textAlign: "center",
-            fontSize: 14,
-            fontWeight: 600,
-            color: C.purpleLight,
-            textDecoration: "none",
-          }}
-        >
-          Try free first. No card needed →
-        </Link>
+        <PaymentTrustRow />
       </div>
     </div>
   );
