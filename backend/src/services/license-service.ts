@@ -8,7 +8,7 @@ import {
   SALE_PRICE_NGN,
   SALE_PRICE_USD,
 } from "../constants/pricing";
-import { sendCommissionNotification } from "./brevo-service";
+import { sendCommissionNotification } from "./email";
 import { logger } from "../utils/logger";
 
 export function generateRefCode(): string {

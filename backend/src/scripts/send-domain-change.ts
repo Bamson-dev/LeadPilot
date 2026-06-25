@@ -1,6 +1,6 @@
 import { loadEnv } from "../config/env";
 import { supabase } from "../database/client";
-import { sendDomainChangeEmail } from "../services/brevo-service";
+import { sendDomainChangeEmail } from "../services/email";
 
 async function main() {
   loadEnv();

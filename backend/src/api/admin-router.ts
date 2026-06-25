@@ -12,11 +12,11 @@ import {
 } from "../database/license-repository";
 import { supabase } from "../database/client";
 import {
-  sendActivationEmail,
+  sendAccessEmail,
   sendDirectEmailHtml,
   sendDirectMessageEmail,
   sendPayoutPaidEmail,
-} from "../services/brevo-service";
+} from "../services/email";
 import { SALE_PRICE_NGN } from "../constants/pricing";
 import { logger } from "../utils/logger";
 
@@ -742,7 +742,7 @@ adminRouter.post("/generate-access", requireAdminAuth, async (req: Request, res:
       paymentReference: `manual-${Date.now()}`,
     });
 
-    await sendActivationEmail(email, licenseKey.key);
+    await sendAccessEmail(email, licenseKey.key);
 
     res.json({
       success: true,
@@ -773,7 +773,7 @@ adminRouter.post("/resend-access", requireAdminAuth, async (req: Request, res: R
       return;
     }
 
-    await sendActivationEmail(email.toLowerCase().trim(), data.key as string);
+    await sendAccessEmail(email.toLowerCase().trim(), data.key as string);
 
     res.json({
       success: true,
