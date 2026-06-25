@@ -1,0 +1,62 @@
+@keyframes marketing-shimmer {
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
+}
+
+@keyframes marketing-glow-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 40px rgba(124, 58, 237, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 70px rgba(124, 58, 237, 0.55);
+  }
+}
+
+@keyframes marketing-dot-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.85);
+  }
+}
+
+@keyframes marketing-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.marketing-announcement-bar {
+  background: linear-gradient(
+    90deg,
+    #1a1030 0%,
+    #2d1b69 25%,
+    #4c1d95 50%,
+    #2d1b69 75%,
+    #1a1030 100%
+  );
+  background-size: 200% auto;
+  animation: marketing-shimmer 4s linear infinite;
+}
+
+.marketing-cta-glow {
+  animation: marketing-glow-pulse 2.5s ease-in-out infinite;
+}
+
+.marketing-pulse-dot {
+  animation: marketing-dot-pulse 1.8s ease-in-out infinite;
+}
