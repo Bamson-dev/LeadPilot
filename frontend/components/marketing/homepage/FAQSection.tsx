@@ -39,6 +39,7 @@ export function FAQSection() {
 
   return (
     <section
+      id="faq"
       style={{
         backgroundColor: C.bgSecondary,
         padding: "72px 24px",

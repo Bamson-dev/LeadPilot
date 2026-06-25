@@ -9,7 +9,7 @@ import {
   paystackAsync,
   resolveBankAccount,
 } from "../services/paystack-client";
-import { sendPayoutRequestedEmail } from "../services/brevo-service";
+import { sendPayoutRequestedEmail } from "../services/email";
 import { logger } from "../utils/logger";
 
 const router = Router();

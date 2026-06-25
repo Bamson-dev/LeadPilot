@@ -7,7 +7,7 @@ import {
   SALE_PRICE_USD,
 } from "../constants/pricing";
 import { createCommissionForReferral } from "./license-service";
-import { sendActivationEmail } from "./brevo-service";
+import { sendAccessEmail, sendPaymentConfirmationEmail } from "./email";
 import { logger } from "../utils/logger";
 
 export type PaymentGateway = "paystack" | "flutterwave";
@@ -70,6 +70,17 @@ function validatePaymentAmount(
   }
 }
 
+function formatPaymentAmount(
+  gateway: PaymentGateway,
+  amount: number,
+  currency: string
+): string {
+  if (gateway === "paystack") {
+    return `₦${Math.round(amount / 100).toLocaleString()}`;
+  }
+  return `$${amount.toFixed(2)} ${currency.toUpperCase()}`;
+}
+
 /** Idempotent: create license, send activation email, record affiliate commission. */
 export async function fulfillPayment(params: {
   email: string;
@@ -110,15 +121,21 @@ export async function fulfillPayment(params: {
 
   let emailSent = false;
   try {
-    await sendActivationEmail(email, license.key);
+    const paymentAmount = formatPaymentAmount(
+      params.gateway,
+      params.amount,
+      params.currency
+    );
+    await sendAccessEmail(email, license.key);
+    await sendPaymentConfirmationEmail(email, paymentAmount);
     emailSent = true;
-  } catch (err) {
-    logger.error("Activation email failed after license created", {
-      email,
+  } catch (error) {
+    logger.error("Email send failed", {
+      userEmail: email,
       reference,
       gateway: params.gateway,
       keyPrefix: license.key.slice(0, 12),
-      error: err instanceof Error ? err.message : "unknown",
+      error,
     });
   }
 

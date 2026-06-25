@@ -16,7 +16,7 @@ import {
   sendSearchCompleteEmail,
   sendSearchFailedEmail,
   sendSearchRunningEmail,
-} from "../services/brevo-service";
+} from "../services/email";
 import { formatScraperError } from "../scraper/utils/scraper-errors";
 import { logger } from "../utils/logger";
 import {

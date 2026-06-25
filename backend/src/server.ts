@@ -175,6 +175,9 @@ async function start(): Promise<void> {
 
   try {
     loadEnv();
+    if (!process.env.RESEND_API_KEY) {
+      console.warn("WARNING: RESEND_API_KEY is not set. Emails will not be sent.");
+    }
     registerRoutes();
     const env = getEnv();
     logger.info("Backend routes ready", {

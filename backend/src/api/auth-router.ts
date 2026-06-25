@@ -7,6 +7,7 @@ import {
 } from "../database/license-repository";
 import { ensureRefCodeForEmail } from "../services/license-service";
 import { getLicenseUsage } from "../services/topup-service";
+import { sendWelcomeEmail } from "../services/email";
 import { supabase } from "../database/client";
 import { logger } from "../utils/logger";
 
@@ -42,6 +43,11 @@ authRouter.post("/activate", async (req: Request, res: Response) => {
 
     if (!license.activated) {
       await activateLicense(license.id);
+      try {
+        await sendWelcomeEmail(normalizedEmail);
+      } catch (error) {
+        console.error("Email send failed:", { userEmail: normalizedEmail, error });
+      }
     }
 
     if (deviceSignature?.trim()) {

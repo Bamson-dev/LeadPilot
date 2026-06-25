@@ -1,24 +1,62 @@
 import Image from "next/image";
 import { C, FONT } from "./theme";
 
-const IMAGES = [
-  "https://pdigitalhq.com/wp-content/uploads/2026/06/leadthur-trustpilot-1-.png",
-  "https://pdigitalhq.com/wp-content/uploads/2026/06/leadthur-trustpilot-2.png",
-  "https://pdigitalhq.com/wp-content/uploads/2026/06/leadthur-trustpilot-3.png",
-  "https://pdigitalhq.com/wp-content/uploads/2026/06/leadthur-trustpilot-4.png",
-  "https://pdigitalhq.com/wp-content/uploads/2026/06/leadthur-trustpilot-5.png",
-];
+const REVIEWS = [
+  { src: "/trustpilot/1.png", width: 1024, height: 619 },
+  { src: "/trustpilot/2.png", width: 1024, height: 559 },
+  { src: "/trustpilot/3.png", width: 1024, height: 584 },
+  { src: "/trustpilot/4.png", width: 1024, height: 575 },
+  { src: "/trustpilot/5.png", width: 1024, height: 590 },
+] as const;
+
+function ReviewCard({
+  src,
+  width,
+  height,
+  alt,
+}: {
+  src: string;
+  width: number;
+  height: number;
+  alt: string;
+}) {
+  return (
+    <div
+      style={{
+        borderRadius: 12,
+        border: `1px solid ${C.border}`,
+        background: C.bgCard,
+        padding: 8,
+        overflow: "hidden",
+      }}
+    >
+      <Image
+        src={src}
+        alt={alt}
+        width={width}
+        height={height}
+        style={{
+          width: "100%",
+          height: "auto",
+          display: "block",
+          borderRadius: 8,
+        }}
+      />
+    </div>
+  );
+}
 
 export function TrustpilotSection() {
   return (
     <section
+      id="reviews"
       style={{
         backgroundColor: C.bgSecondary,
         padding: "72px 24px",
         fontFamily: FONT,
       }}
     >
-      <div style={{ maxWidth: 1000, margin: "0 auto", textAlign: "center" }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto", textAlign: "center" }}>
         <div
           style={{
             display: "inline-flex",
@@ -58,25 +96,14 @@ export function TrustpilotSection() {
           }}
           className="trustpilot-grid-top"
         >
-          {IMAGES.slice(0, 3).map((src, i) => (
-            <div
-              key={src}
-              style={{
-                position: "relative",
-                borderRadius: 12,
-                overflow: "hidden",
-                border: `1px solid ${C.border}`,
-                aspectRatio: "4/3",
-              }}
-            >
-              <Image
-                src={src}
-                alt={`Trustpilot review ${i + 1}`}
-                fill
-                unoptimized
-                style={{ objectFit: "cover" }}
-              />
-            </div>
+          {REVIEWS.slice(0, 3).map((review, i) => (
+            <ReviewCard
+              key={review.src}
+              src={review.src}
+              width={review.width}
+              height={review.height}
+              alt={`Trustpilot review ${i + 1}`}
+            />
           ))}
         </div>
         <div
@@ -84,30 +111,19 @@ export function TrustpilotSection() {
             display: "grid",
             gridTemplateColumns: "repeat(2, 1fr)",
             gap: 16,
-            maxWidth: 680,
+            maxWidth: 720,
             margin: "0 auto",
           }}
           className="trustpilot-grid-bottom"
         >
-          {IMAGES.slice(3).map((src, i) => (
-            <div
-              key={src}
-              style={{
-                position: "relative",
-                borderRadius: 12,
-                overflow: "hidden",
-                border: `1px solid ${C.border}`,
-                aspectRatio: "4/3",
-              }}
-            >
-              <Image
-                src={src}
-                alt={`Trustpilot review ${i + 4}`}
-                fill
-                unoptimized
-                style={{ objectFit: "cover" }}
-              />
-            </div>
+          {REVIEWS.slice(3).map((review, i) => (
+            <ReviewCard
+              key={review.src}
+              src={review.src}
+              width={review.width}
+              height={review.height}
+              alt={`Trustpilot review ${i + 4}`}
+            />
           ))}
         </div>
       </div>

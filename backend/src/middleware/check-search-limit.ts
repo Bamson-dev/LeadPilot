@@ -4,7 +4,7 @@ import {
   getLicenseByKeyAndEmail,
 } from "../database/license-repository";
 import { supabase } from "../database/client";
-import { sendLimitReachedEmail } from "../services/brevo-service";
+import { sendLimitReachedEmail } from "../services/email";
 import { logger } from "../utils/logger";
 
 export async function checkSearchLimit(

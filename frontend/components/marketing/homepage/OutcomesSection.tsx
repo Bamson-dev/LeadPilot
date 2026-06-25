@@ -39,6 +39,7 @@ const CARDS = [
 export function OutcomesSection() {
   return (
     <section
+      id="features"
       style={{
         backgroundColor: C.bg,
         padding: "72px 24px",

@@ -2,7 +2,7 @@
 // Settings → API Keys & Webhooks
 // Webhook URL: https://backend.leadthur.com/webhooks/paystack
 // Success Redirect: https://www.leadthur.com/checkout/success
-// Paystack sends its own receipt email; LeadThur sends the license key via Brevo when this webhook runs.
+// Paystack sends its own receipt email; LeadThur sends the license key via Resend when this webhook runs.
 
 import { Router, type Request, type Response } from "express";
 import express from "express";

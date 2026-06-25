@@ -1,5 +1,5 @@
 import { supabase } from "../database/client";
-import { sendTopUpConfirmationEmail } from "./brevo-service";
+import { sendTopUpConfirmationEmail } from "./email";
 import { logger } from "../utils/logger";
 
 export const TOPUP_TIERS = [
