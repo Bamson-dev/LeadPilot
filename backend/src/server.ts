@@ -5,6 +5,8 @@ import { getEnv, loadEnv } from "./config/env";
 import { searchRouter, handleFreeTrialSearch } from "./api/search-router";
 import { adminRouter } from "./api/admin-router";
 import { authRouter } from "./api/auth-router";
+import { trialRouter } from "./api/trial-router";
+import { unsubscribeRouter } from "./api/unsubscribe-router";
 import { webhookRouter } from "./api/webhook-router";
 import affiliateRouter from "./api/affiliate-router";
 import checkoutRouter from "./api/checkout-router";
@@ -20,6 +22,7 @@ import { rateLimit } from "./middleware/rate-limit";
 import { getBrowserPool } from "./scraper/browser/browser-pool";
 import { logger } from "./utils/logger";
 import { getDeepseekKeyFingerprint, isDeepseekConfigured } from "./utils/deepseek-config";
+import { startTrialSequenceScheduler } from "./services/trial-sequence";
 
 export const app = express();
 
@@ -82,10 +85,12 @@ function registerRoutes(): void {
   });
 
   app.use("/webhooks", webhookRouter);
+  app.use("/unsubscribe", unsubscribeRouter);
   // Admin blog posts may include base64 cover images and rich HTML — allow larger payloads.
   app.use("/admin", express.json({ limit: "15mb" }));
   app.use(express.json({ limit: "1mb" }));
   app.use("/auth", authRouter);
+  app.use("/trial", trialRouter);
   app.use("/admin", adminRouter);
   app.use("/affiliate", affiliateRouter);
   app.use("/checkout", checkoutRouter);
@@ -187,6 +192,7 @@ async function start(): Promise<void> {
       deepseekConfigured: isDeepseekConfigured(),
       deepseekKeyFingerprint: getDeepseekKeyFingerprint(),
     });
+    startTrialSequenceScheduler();
   } catch (err) {
     logger.error("Backend configuration failed — /health works, API routes disabled", {
       error: err instanceof Error ? err.message : "unknown",

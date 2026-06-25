@@ -312,6 +312,27 @@ export async function getTrialActivity(): Promise<TrialActivity> {
   return res.json();
 }
 
+export interface TrialSignupRow {
+  email: string;
+  signed_up_at: string;
+  searches_used: number;
+  converted: boolean;
+  converted_at: string | null;
+  sequence_step: number;
+}
+
+export async function getTrialSignups(): Promise<{
+  total: number;
+  signups: TrialSignupRow[];
+}> {
+  const res = await fetch(`${getApiUrl()}/admin/trial-signups`, {
+    headers: getAdminHeaders(),
+  });
+  if (res.status === 401) throw new Error("SESSION_EXPIRED");
+  if (!res.ok) throw new Error("Failed to fetch trial signups");
+  return res.json();
+}
+
 export async function resetDevices(
   email: string
 ): Promise<{ success: boolean; message?: string; error?: string }> {

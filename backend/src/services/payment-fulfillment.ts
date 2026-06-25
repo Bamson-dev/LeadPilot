@@ -8,6 +8,7 @@ import {
 } from "../constants/pricing";
 import { createCommissionForReferral } from "./license-service";
 import { sendAccessEmail, sendPaymentConfirmationEmail } from "./email";
+import { markTrialSignupConverted } from "../database/free-trial-repository";
 import { logger } from "../utils/logger";
 
 export type PaymentGateway = "paystack" | "flutterwave";
@@ -137,6 +138,12 @@ export async function fulfillPayment(params: {
       keyPrefix: license.key.slice(0, 12),
       error,
     });
+  }
+
+  try {
+    await markTrialSignupConverted(email);
+  } catch (error) {
+    logger.error("Failed to mark trial signup as converted", { userEmail: email, error });
   }
 
   const refCode = extractRefCodeFromMetadata(params.metadata);

@@ -11,6 +11,8 @@ const MAX_TRIAL_LEADS = 15;
 const PAYSTACK_URL = "/checkout";
 const SITE_URL = "https://www.leadthur.com";
 const LEARN_MORE_URL = "https://pdigitalhq.com/lp/";
+const TRIAL_EMAIL_KEY = "lp_trial_email";
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type TrialStatus = "idle" | "searching" | "complete" | "limit";
 
@@ -23,6 +25,29 @@ interface TrialLead {
   website: string | null;
   rating: number | null;
   reviews_count: number | null;
+}
+
+function getTrialEmail(): string {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem(TRIAL_EMAIL_KEY) || "";
+}
+
+function setTrialEmail(email: string): void {
+  localStorage.setItem(TRIAL_EMAIL_KEY, email);
+}
+
+async function recordSearchUsed(email: string): Promise<void> {
+  const apiUrl = getApiUrl();
+  if (!apiUrl || !email) return;
+  try {
+    await fetch(`${apiUrl}/trial/search-used`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+  } catch {
+    /* non-blocking */
+  }
 }
 
 function getVisitorId(): string {
@@ -134,7 +159,19 @@ export default function FreeTrialPage() {
   const [trialCount, setTrialCount] = useState(0);
   const [message, setMessage] = useState("");
   const [showPaywall, setShowPaywall] = useState(false);
+  const [gatePassed, setGatePassed] = useState(false);
+  const [gateEmail, setGateEmail] = useState("");
+  const [gateLoading, setGateLoading] = useState(false);
+  const [gateError, setGateError] = useState("");
   const isMobile = useIsMobile();
+
+  useEffect(() => {
+    const savedEmail = getTrialEmail();
+    if (savedEmail) {
+      setGateEmail(savedEmail);
+      setGatePassed(true);
+    }
+  }, []);
 
   useEffect(() => {
     const count = getTrialCount();
@@ -160,6 +197,40 @@ export default function FreeTrialPage() {
 
     return () => clearInterval(interval);
   }, [status, query, location]);
+
+  async function handleGateSubmit() {
+    const email = gateEmail.toLowerCase().trim();
+    if (!EMAIL_RE.test(email)) {
+      setGateError("Enter a valid email address.");
+      return;
+    }
+
+    const apiUrl = getApiUrl();
+    if (!apiUrl) {
+      setGateError("Service is not configured. Please try again later.");
+      return;
+    }
+
+    setGateLoading(true);
+    setGateError("");
+    try {
+      const res = await fetch(`${apiUrl}/trial/signup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error || "Signup failed");
+      }
+      setTrialEmail(email);
+      setGatePassed(true);
+    } catch (err) {
+      setGateError(err instanceof Error ? err.message : "Signup failed. Please try again.");
+    } finally {
+      setGateLoading(false);
+    }
+  }
 
   const connectToStream = useCallback((searchId: string) => {
     const apiUrl = getApiUrl();
@@ -318,6 +389,7 @@ export default function FreeTrialPage() {
         incrementTrialCount();
         setTrialCount(2);
         setStatus("limit");
+        void recordSearchUsed(getTrialEmail());
         return;
       }
 
@@ -329,6 +401,7 @@ export default function FreeTrialPage() {
       const data = (await res.json()) as { searchId: string };
       incrementTrialCount();
       setTrialCount((prev) => prev + 1);
+      void recordSearchUsed(getTrialEmail());
       connectToStream(data.searchId);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Search failed. Please try again.");
@@ -369,6 +442,56 @@ export default function FreeTrialPage() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 sm:px-8 py-10 sm:py-14">
+        {!gatePassed ? (
+          <section
+            className="mx-auto max-w-md rounded-2xl p-8 text-center"
+            style={{
+              background: "#111118",
+              border: "1px solid rgba(124,58,237,0.25)",
+            }}
+          >
+            <h1
+              className="text-2xl sm:text-3xl font-black mb-3"
+              style={{ fontFamily: "Bricolage Grotesque, Inter, sans-serif", letterSpacing: -0.5 }}
+            >
+              Start your free trial. No card needed.
+            </h1>
+            <p className="text-[#7878A0] text-sm sm:text-base mb-6 leading-relaxed">
+              Enter your email and get 2 free searches immediately. See exactly what LeadThur
+              returns before deciding anything.
+            </p>
+            <input
+              type="email"
+              placeholder="your@email.com"
+              value={gateEmail}
+              onChange={(e) => setGateEmail(e.target.value)}
+              disabled={gateLoading}
+              className="w-full rounded-lg px-4 py-3.5 text-base outline-none mb-3"
+              style={{
+                background: "#0D0D16",
+                border: "1px solid rgba(255,255,255,0.08)",
+                color: "#F0EFFF",
+              }}
+              onKeyDown={(e) => e.key === "Enter" && void handleGateSubmit()}
+            />
+            {gateError && <p className="text-sm text-red-400 mb-3">{gateError}</p>}
+            <button
+              type="button"
+              onClick={() => void handleGateSubmit()}
+              disabled={gateLoading || !gateEmail.trim()}
+              className="w-full font-extrabold py-4 rounded-lg"
+              style={{
+                background: gateLoading ? "#4C1D95" : "#7C3AED",
+                color: "white",
+                cursor: gateLoading ? "not-allowed" : "pointer",
+              }}
+            >
+              {gateLoading ? "Starting..." : "Start my free trial →"}
+            </button>
+            <p className="text-xs text-[#555575] mt-4">No spam. No card. Just 2 free searches.</p>
+          </section>
+        ) : (
+          <>
         <section className="text-center mb-10">
           <h1
             className="text-3xl sm:text-4xl font-black mb-3"
@@ -377,7 +500,7 @@ export default function FreeTrialPage() {
             See it work before you pay.
           </h1>
           <p className="text-[#7878A0] text-sm sm:text-base max-w-md mx-auto">
-            Run a real search. Get real results. No signup needed.
+            Run a real search. Get real results. Your 2 free searches are ready.
           </p>
           <p className="text-[#555575] text-xs mt-3">Free preview — 2 searches allowed</p>
         </section>
@@ -558,7 +681,7 @@ export default function FreeTrialPage() {
           </>
         )}
 
-        {leads.length > 0 && (
+        {leads.length > 0 && gatePassed && (
           <section className="mt-10">
             {isMobile ? (
               <div>
@@ -745,6 +868,8 @@ export default function FreeTrialPage() {
               </div>
             )}
           </section>
+        )}
+          </>
         )}
       </main>
 

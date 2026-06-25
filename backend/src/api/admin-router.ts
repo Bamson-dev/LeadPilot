@@ -18,6 +18,7 @@ import {
   sendPayoutPaidEmail,
 } from "../services/email";
 import { SALE_PRICE_NGN } from "../constants/pricing";
+import { listTrialSignups } from "../database/free-trial-repository";
 import { logger } from "../utils/logger";
 
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
@@ -1625,6 +1626,28 @@ adminRouter.delete("/blog/posts/:id", requireAdminAuth, async (req: Request, res
       error: err instanceof Error ? err.message : "unknown",
     });
     res.status(500).json({ error: "Failed to delete blog post" });
+  }
+});
+
+adminRouter.get("/trial-signups", requireAdminAuth, async (_req: Request, res: Response) => {
+  try {
+    const signups = await listTrialSignups();
+    res.json({
+      total: signups.length,
+      signups: signups.map((row) => ({
+        email: row.email,
+        signed_up_at: row.signed_up_at,
+        searches_used: row.searches_used,
+        converted: row.converted,
+        converted_at: row.converted_at,
+        sequence_step: row.sequence_step,
+      })),
+    });
+  } catch (err) {
+    logger.error("Failed to fetch trial signups", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to fetch trial signups" });
   }
 });
 

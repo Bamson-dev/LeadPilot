@@ -6,6 +6,7 @@ import { SALE_PRICE_NGN } from "@/constants/pricing";
 import { AccountLookup } from "@/components/admin/account-lookup";
 import { BlogManager } from "@/components/admin/blog-manager";
 import { DirectMessaging } from "@/components/admin/direct-messaging";
+import { TrialSignupsPanel } from "@/components/admin/trial-signups-panel";
 import {
   adminLogin,
   clearAdminToken,
@@ -2050,6 +2051,7 @@ export default function AdminPage() {
       )}
 
       <div className="mx-auto mt-8 max-w-6xl">
+        <TrialSignupsPanel onSessionExpired={handleLogout} />
         <AccountLookup
           onSessionExpired={handleLogout}
           prefillEmail={prefillLookupEmail}

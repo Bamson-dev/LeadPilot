@@ -436,3 +436,66 @@ export async function sendTopUpConfirmationEmail({
     html,
   });
 }
+
+function getUnsubscribeUrl(email: string): string {
+  const frontend = getFrontendUrl();
+  const backend = frontend.includes("staging.leadthur")
+    ? "https://staging-backend.leadthur.com"
+    : "https://backend.leadthur.com";
+  return `${backend}/unsubscribe?email=${encodeURIComponent(email)}`;
+}
+
+function trialEmailWrapper(body: string, email: string): string {
+  const unsubscribeUrl = getUnsubscribeUrl(email);
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body { margin: 0; padding: 0; background: #f4f4f5; font-family: -apple-system, 'Segoe UI', Inter, sans-serif; }
+    .wrap { max-width: 560px; margin: 32px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+    .header { padding: 28px 40px 20px; border-bottom: 1px solid #f0f0f0; }
+    .logo { font-size: 18px; font-weight: 800; color: #09090b; letter-spacing: -0.5px; }
+    .logo span { color: #7C3AED; }
+    .body { padding: 36px 40px; }
+    h1 { font-size: 22px; font-weight: 800; color: #09090b; margin: 0 0 16px; line-height: 1.3; letter-spacing: -0.3px; }
+    p { font-size: 15px; color: #3f3f46; line-height: 1.75; margin: 0 0 16px; }
+    .highlight { background: #faf5ff; border-left: 3px solid #7C3AED; padding: 14px 18px; border-radius: 0 8px 8px 0; margin: 20px 0; font-size: 14px; color: #3f3f46; line-height: 1.7; }
+    .btn { display: block; background: #7C3AED; color: #ffffff !important; text-align: center; padding: 15px 24px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 15px; margin: 28px 0 8px; }
+    .btn-ghost { display: block; text-align: center; padding: 12px 24px; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px; color: #7C3AED !important; border: 1.5px solid #7C3AED; margin-bottom: 24px; }
+    .footer { padding: 20px 40px 28px; border-top: 1px solid #f0f0f0; }
+    .footer p { font-size: 12px; color: #a1a1aa; line-height: 1.6; margin: 0; }
+    .footer a { color: #7C3AED; text-decoration: none; }
+    .sig { margin-top: 24px; padding-top: 20px; border-top: 1px solid #f4f4f5; font-size: 14px; color: #3f3f46; }
+    .sig strong { color: #09090b; display: block; margin-bottom: 2px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div class="logo">Lead<span>Thur</span></div>
+    </div>
+    <div class="body">
+      ${body}
+    </div>
+    <div class="footer">
+      <p>You are receiving this because you signed up for a LeadThur free trial.<br>
+      <a href="${unsubscribeUrl}">Unsubscribe</a> · LeadThur by Pdigital Marketstore Ltd</p>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+export async function sendTrialEmail(email: string, step: number): Promise<void> {
+  const { getTrialEmailBody, TRIAL_EMAIL_SUBJECTS } = await import("./trial-email-content");
+  const subject = TRIAL_EMAIL_SUBJECTS[step];
+  const body = getTrialEmailBody(step);
+  if (!subject || !body) {
+    throw new Error(`Invalid trial email step: ${step}`);
+  }
+
+  const html = trialEmailWrapper(body, email);
+  await deliver({ to: email, subject, html });
+}
