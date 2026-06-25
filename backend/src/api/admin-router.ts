@@ -12,11 +12,11 @@ import {
 } from "../database/license-repository";
 import { supabase } from "../database/client";
 import {
-  sendActivationEmail,
+  sendAccessEmail,
   sendDirectEmailHtml,
   sendDirectMessageEmail,
   sendPayoutPaidEmail,
-} from "../services/brevo-service";
+} from "../services/email";
 import { SALE_PRICE_NGN } from "../constants/pricing";
 import { logger } from "../utils/logger";
 
@@ -742,7 +742,7 @@ adminRouter.post("/generate-access", requireAdminAuth, async (req: Request, res:
       paymentReference: `manual-${Date.now()}`,
     });
 
-    await sendActivationEmail(email, licenseKey.key);
+    await sendAccessEmail(email, licenseKey.key);
 
     res.json({
       success: true,
@@ -773,7 +773,7 @@ adminRouter.post("/resend-access", requireAdminAuth, async (req: Request, res: R
       return;
     }
 
-    await sendActivationEmail(email.toLowerCase().trim(), data.key as string);
+    await sendAccessEmail(email.toLowerCase().trim(), data.key as string);
 
     res.json({
       success: true,
@@ -1627,3 +1627,21 @@ adminRouter.delete("/blog/posts/:id", requireAdminAuth, async (req: Request, res
     res.status(500).json({ error: "Failed to delete blog post" });
   }
 });
+
+// Staging/local only — set ENABLE_TEST_EMAIL=true to expose POST /admin/test-email
+if (process.env.ENABLE_TEST_EMAIL === "true") {
+  adminRouter.post("/test-email", async (req: Request, res: Response) => {
+    try {
+      const to =
+        typeof req.body?.to === "string" && req.body.to.trim()
+          ? req.body.to.trim()
+          : "bamzonline01@gmail.com";
+      const { sendAccessEmail } = await import("../services/email");
+      await sendAccessEmail(to, "TEST-KEY-12345");
+      res.json({ success: true, message: `Test email sent to ${to}` });
+    } catch (error) {
+      console.error("Test email error:", error);
+      res.status(500).json({ success: false, error: String(error) });
+    }
+  });
+}
