@@ -53,7 +53,7 @@ export function Hero() {
               display: "inline-block",
             }}
           />
-          Freelancers and agencies in 40+ countries use this to find clients daily
+          Freelancers and agencies worldwide are landing clients with this every single day.
         </div>
 
         <h1
