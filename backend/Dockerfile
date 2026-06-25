@@ -4,8 +4,10 @@
 # Port:               3000
 # Health Check Path:  /health
 #
-# Secrets (SUPABASE_SERVICE_KEY, PAYSTACK_SECRET_KEY, etc.) must be set
-# in Coolify runtime environment only — never use ARG or ENV for them here.
+# Runtime secrets (SUPABASE_SERVICE_KEY, PAYSTACK_SECRET_KEY, RESEND_API_KEY, etc.)
+# must be set in Coolify environment — not baked into the image.
+ARG RESEND_API_KEY
+ARG EMAIL_FROM
 
 FROM mcr.microsoft.com/playwright:v1.60.0-jammy
 
