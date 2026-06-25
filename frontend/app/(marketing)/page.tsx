@@ -1,6 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import {
+  COMPARE_AT_PRICE_USD,
+  COMMISSION_USD,
+  SALE_PRICE_USD,
+} from "@/constants/pricing";
 
 const FONT = "Inter, sans-serif";
 
@@ -134,7 +139,7 @@ const testimonials = [
   },
   {
     stars: 5,
-    text: '"Searched gyms in Nairobi. Got 80 contacts with phone numbers in about 45 seconds. Two responded. One became a paying client that same week. $15 well spent."',
+    text: `"Searched gyms in Nairobi. Got 80 contacts with phone numbers in about 45 seconds. Two responded. One became a paying client that same week. $${SALE_PRICE_USD} well spent."`,
     result: "✓ Paying client from first day of outreach",
     initials: "WK",
     name: "Wanjiru K.",
@@ -170,7 +175,7 @@ const faqs = [
   },
   {
     q: "Is there really no monthly fee?",
-    a: "Right now there is no monthly fee. $15 once and LeadThur is yours for life. But this is a limited lifetime deal. LeadThur is moving to a subscription model very soon. These 20 slots are the last chance to pay once and own it forever. Once slots are gone new users pay monthly. Existing lifetime users are protected forever regardless of when the subscription launches.",
+    a: `Right now there is no monthly fee. $${SALE_PRICE_USD} once and LeadThur is yours for life. But this is a limited lifetime deal. LeadThur is moving to a subscription model very soon. These 20 slots are the last chance to pay once and own it forever. Once slots are gone new users pay monthly. Existing lifetime users are protected forever regardless of when the subscription launches.`,
   },
   {
     q: "How many businesses can I find per search?",
@@ -182,7 +187,7 @@ const faqs = [
   },
   {
     q: "How does the affiliate programme work?",
-    a: "Every LeadThur user gets a unique referral link in their dashboard after activation. Share it anywhere. When someone buys through your link you earn 50% of the sale which is $7.50 per referral. Earnings are paid directly to your bank account with no cap on how much you can earn. You must be an active LeadThur user to access your affiliate link.",
+    a: `Every LeadThur user gets a unique referral link in their dashboard after activation. Share it anywhere. When someone buys through your link you earn 50% of the sale which is $${COMMISSION_USD} per referral. Earnings are paid directly to your bank account with no cap on how much you can earn. You must be an active LeadThur user to access your affiliate link.`,
   },
   {
     q: "Is this difficult to use?",
@@ -204,7 +209,7 @@ const affiliateSteps = [
   {
     n: "3",
     title: "Get paid",
-    body: "Earn $7.50 for every person who buys through your link. Paid to your bank.",
+    body: `Earn $${COMMISSION_USD} for every person who buys through your link. Paid to your bank.`,
   },
 ];
 
@@ -325,7 +330,7 @@ export default function HomePage() {
         <strong style={{ color: colors.text }}>
           Lifetime deal ends soon.
         </strong>{" "}
-        Only 20 slots at $15. After that LeadThur becomes a monthly subscription.
+        {`Only 20 slots at $${SALE_PRICE_USD}. After that LeadThur becomes a monthly subscription.`}
       </div>
 
       {/* 2 — Navigation */}
@@ -648,7 +653,7 @@ export default function HomePage() {
               fontFamily: FONT,
             }}
           >
-            Get Lifetime Access — $15
+            {`Get Lifetime Access — $${SALE_PRICE_USD}`}
           </a>
           <a
             href="/freetrial"
@@ -1365,7 +1370,7 @@ export default function HomePage() {
                   fontFamily: FONT,
                 }}
               >
-                $45
+                {`$${COMPARE_AT_PRICE_USD}`}
               </span>
               <span
                 style={{
@@ -1376,7 +1381,7 @@ export default function HomePage() {
                   fontFamily: FONT,
                 }}
               >
-                $15
+                {`$${SALE_PRICE_USD}`}
               </span>
               <div
                 style={{
@@ -1432,7 +1437,7 @@ export default function HomePage() {
                 fontFamily: FONT,
               }}
             >
-              Pay with Card — $15
+              {`Pay with Card — $${SALE_PRICE_USD}`}
             </a>
 
             <button
@@ -1495,7 +1500,7 @@ export default function HomePage() {
                   </button>
                 </div>
                 <div>
-                  <strong>Amount:</strong> $15
+                  <strong>Amount:</strong> {`$${SALE_PRICE_USD}`}
                 </div>
                 <div style={{ fontSize: 12, color: colors.text2, marginTop: 8 }}>
                   After payment send proof to WhatsApp{" "}
@@ -1610,7 +1615,7 @@ export default function HomePage() {
               fontFamily: FONT,
             }}
           >
-            Earn $7.50 for every person you refer.
+            {`Earn $${COMMISSION_USD} for every person you refer.`}
           </h2>
           <p
             style={{
@@ -1623,7 +1628,7 @@ export default function HomePage() {
             }}
           >
             Share your unique referral link. When someone buys LeadThur through your
-            link you earn 50% of every sale. That is $7.50 per referral paid directly
+            {`link you earn 50% of every sale. That is $${COMMISSION_USD} per referral paid directly`}
             to your account. No cap on earnings.
           </p>
           <div
@@ -1635,8 +1640,8 @@ export default function HomePage() {
             }}
           >
             {[
-              { n: "$15", l: "Sale price" },
-              { n: "$7.50", l: "Your commission" },
+              { n: `$${SALE_PRICE_USD}`, l: "Sale price" },
+              { n: `$${COMMISSION_USD}`, l: "Your commission" },
               { n: "∞", l: "No earnings cap" },
             ].map((s) => (
               <div
@@ -1892,7 +1897,7 @@ export default function HomePage() {
               fontFamily: FONT,
             }}
           >
-            Get Lifetime Access — $15
+            {`Get Lifetime Access — $${SALE_PRICE_USD}`}
           </a>
           <a
             href="/freetrial"

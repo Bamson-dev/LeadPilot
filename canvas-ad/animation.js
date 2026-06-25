@@ -127,7 +127,7 @@
       color: "#14B8A6",
       name: "Rotimi M.",
       role: "Social Media Manager",
-      quote: "Closed 2 clients from one search. Best ₦15k I spent.",
+      quote: "Closed 2 clients from one search. Best ₦30k I spent.",
     },
   ];
 
@@ -907,9 +907,9 @@
     if (step(2) > 0) {
       const strikeP = smoothstep(1600, 2200, local);
       if (strikeP < 1) {
-        drawText(ctx, "₦45,000", W / 2, y, 68, "rgba(244,244,255,0.3)", FONT_HEAD);
+        drawText(ctx, "₦90,000", W / 2, y, 68, "rgba(244,244,255,0.3)", FONT_HEAD);
         setFont(ctx, 68, FONT_HEAD, "700");
-        const sw = ctx.measureText("₦45,000").width;
+        const sw = ctx.measureText("₦90,000").width;
         ctx.strokeStyle = C.red;
         ctx.lineWidth = 4;
         ctx.beginPath();
@@ -918,7 +918,7 @@
         ctx.stroke();
       }
       if (smoothstep(2000, 2500, local) > 0) {
-        drawText(ctx, "₦15,000", W / 2, y, 96, C.white, FONT_HEAD);
+        drawText(ctx, "₦30,000", W / 2, y, 96, C.white, FONT_HEAD);
       }
       y += 108;
     }
@@ -959,7 +959,7 @@
       sg.addColorStop(1, "rgba(255,255,255,0)");
       ctx.fillStyle = sg;
       ctx.fill();
-      drawText(ctx, "Get Lifetime Access — ₦15,000", W / 2, btnY + 34, 24, C.white, FONT_BODY, "center", "700");
+      drawText(ctx, "Get Lifetime Access — ₦30,000", W / 2, btnY + 34, 24, C.white, FONT_BODY, "center", "700");
     }
     ctx.globalAlpha = 1;
   }
