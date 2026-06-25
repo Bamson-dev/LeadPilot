@@ -1628,8 +1628,12 @@ adminRouter.delete("/blog/posts/:id", requireAdminAuth, async (req: Request, res
   }
 });
 
-// Staging/local only — set ENABLE_TEST_EMAIL=true to expose POST /admin/test-email
-if (process.env.ENABLE_TEST_EMAIL === "true") {
+// Staging/local only — auto-enabled when FRONTEND_URL is staging, or set ENABLE_TEST_EMAIL=true
+const testEmailEnabled =
+  process.env.ENABLE_TEST_EMAIL === "true" ||
+  process.env.FRONTEND_URL?.includes("staging.leadthur.com") === true;
+
+if (testEmailEnabled) {
   adminRouter.post("/test-email", async (req: Request, res: Response) => {
     try {
       const to =
