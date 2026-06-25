@@ -149,7 +149,7 @@ router.post("/request-payout", requireLicense, async (req: Request, res: Respons
 
     if (pendingNgn < MIN_PAYOUT_NGN) {
       res.status(400).json({
-        error: `Minimum payout is ₦7,500. You have ₦${pendingNgn.toLocaleString()} pending.`,
+        error: `Minimum payout is ₦${MIN_PAYOUT_NGN.toLocaleString()}. You have ₦${pendingNgn.toLocaleString()} pending.`,
       });
       return;
     }

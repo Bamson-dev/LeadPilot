@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useFlutterwave, closePaymentModal } from "flutterwave-react-v3";
 import { detectCountry } from "@/lib/geolocation";
-import { SALE_PRICE_USD } from "@/constants/pricing";
+import { COMPARE_AT_PRICE_USD, SALE_PRICE_USD } from "@/constants/pricing";
 import { getApiUrl } from "@/utils/env";
 
 const FLW_PUBLIC_KEY = process.env.NEXT_PUBLIC_FLUTTERWAVE_PUBLIC_KEY ?? "";
@@ -224,7 +224,7 @@ export default function CheckoutPage() {
             }}
           >
             One payment of{" "}
-            <strong style={{ color: "#F2F1FF" }}>{detecting ? "…" : "$15"}</strong>. No monthly
+            <strong style={{ color: "#F2F1FF" }}>{detecting ? "…" : `$${SALE_PRICE_USD}`}</strong>. No monthly
             fee. No renewal. Ever.
           </p>
 
@@ -279,7 +279,7 @@ export default function CheckoutPage() {
                 textDecoration: "line-through",
               }}
             >
-              $30
+              {`$${COMPARE_AT_PRICE_USD}`}
             </span>
             <span
               style={{
@@ -289,7 +289,7 @@ export default function CheckoutPage() {
                 letterSpacing: -1,
               }}
             >
-              {detecting ? "…" : "$15"}
+              {detecting ? "…" : `$${SALE_PRICE_USD}`}
             </span>
             <span
               style={{
@@ -377,7 +377,7 @@ export default function CheckoutPage() {
               ? "Loading..."
               : loading
                 ? "Opening payment..."
-                : "🔒 Pay $15 — Get Access Now"}
+                : `🔒 Pay $${SALE_PRICE_USD} — Get Access Now`}
           </button>
 
           <p

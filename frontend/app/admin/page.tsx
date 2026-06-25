@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Bricolage_Grotesque } from "next/font/google";
+import { SALE_PRICE_NGN } from "@/constants/pricing";
 import { AccountLookup } from "@/components/admin/account-lookup";
 import { BlogManager } from "@/components/admin/blog-manager";
 import { DirectMessaging } from "@/components/admin/direct-messaging";
@@ -1204,9 +1205,9 @@ export default function AdminPage() {
               {
                 label: "Est. Revenue",
                 value: isDemoMode
-                  ? "₦5,145,000"
+                  ? `₦${(343 * SALE_PRICE_NGN).toLocaleString()}`
                   : `₦${overview.estimatedRevenue.toLocaleString()}`,
-                sub: "at ₦15,000 per user",
+                sub: `at ₦${SALE_PRICE_NGN.toLocaleString()} per user`,
                 color: "#F59E0B",
               },
               {

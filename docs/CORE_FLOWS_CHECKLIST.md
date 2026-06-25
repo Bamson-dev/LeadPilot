@@ -26,13 +26,13 @@ FRONTEND_URL=https://www.leadthur.com
 
 ## 2. Paystack webhook
 
-**Coolify:** `PAYSTACK_SECRET_KEY=sk_live_...`, `LIFETIME_ACCESS_PRICE=1500000`
+**Coolify:** `PAYSTACK_SECRET_KEY=sk_live_...`, `LIFETIME_ACCESS_PRICE=3000000`
 
 **Paystack dashboard:**
 - Webhook: `https://backend.leadthur.com/webhooks/paystack`
 - Success URL: `https://www.leadthur.com/payment-success`
 
-**Test:** Real ₦15,000 payment → license row in Supabase → activation email
+**Test:** Real ₦30,000 payment → license row in Supabase → activation email
 
 ---
 

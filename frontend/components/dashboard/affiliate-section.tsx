@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getApiUrl } from "@/utils/env";
 import { getLicenseHeaders } from "@/services/api";
 import { useIsMobile } from "@/hooks/useIsMobile";
-import { MIN_PAYOUT_NGN } from "@/constants/pricing";
+import { MIN_PAYOUT_NGN, COMMISSION_USD, COMMISSION_NGN } from "@/constants/pricing";
 
 interface Commission {
   referred_email: string;
@@ -239,7 +239,7 @@ export function AffiliateSection() {
                   fontWeight: 600,
                 }}
               >
-                Earn $7.50 per referral
+                {`Earn $${COMMISSION_USD} per referral`}
               </span>
             ) : (
               <span
@@ -500,7 +500,7 @@ export function AffiliateSection() {
             </div>
 
             <p style={{ fontSize: 11, color: "#7878A0", marginTop: 8, lineHeight: 1.5 }}>
-              Share anywhere. Earn $7.50 (₦7,500) for every person who buys through your link. No
+              {`Share anywhere. Earn $${COMMISSION_USD} (₦${COMMISSION_NGN.toLocaleString()}) for every person who buys through your link. No`}
               cap.
             </p>
           </div>
@@ -740,7 +740,7 @@ export function AffiliateSection() {
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <div style={{ color: "#10B981", fontWeight: 800, fontSize: 13 }}>
-                      +$7.50
+                      {`+$${COMMISSION_USD}`}
                     </div>
                     <div style={{ color: "#7878A0", fontSize: 10 }}>
                       {new Date(c.created_at).toLocaleDateString("en-GB", {
@@ -777,7 +777,7 @@ export function AffiliateSection() {
                 Share your link and start earning
               </p>
               <p style={{ fontSize: 12, color: "#8888A8", lineHeight: 1.6, margin: 0 }}>
-                Every person who buys LeadThur through your link earns you $7.50. Share on
+                {`Every person who buys LeadThur through your link earns you $${COMMISSION_USD}. Share on`}
                 WhatsApp, Twitter, or anywhere your audience is.
               </p>
             </div>

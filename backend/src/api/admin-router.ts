@@ -17,6 +17,7 @@ import {
   sendDirectMessageEmail,
   sendPayoutPaidEmail,
 } from "../services/brevo-service";
+import { SALE_PRICE_NGN } from "../constants/pricing";
 import { logger } from "../utils/logger";
 
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
@@ -888,7 +889,7 @@ adminRouter.get("/overview", requireAdminAuth, async (_req: Request, res: Respon
     ]);
 
     const totalUsers = totalUsersResult.count ?? 0;
-    const estimatedRevenue = totalUsers * 15000;
+    const estimatedRevenue = totalUsers * SALE_PRICE_NGN;
 
     res.json({
       totalUsers,

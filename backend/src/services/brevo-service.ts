@@ -1,4 +1,5 @@
 import { config } from "../config/env";
+import { COMMISSION_NGN, COMMISSION_USD, MIN_PAYOUT_NGN } from "../constants/pricing";
 import { logger } from "../utils/logger";
 
 function getFrontendUrl(): string {
@@ -307,7 +308,7 @@ export async function sendCommissionNotification(
         color: "#7C3AED",
       },
     ]),
-    pendingNgn >= 7500
+    pendingNgn >= MIN_PAYOUT_NGN
       ? emailHighlightBox(
           `&#10003; You have &#8358;${pendingNgn.toLocaleString()} pending. You can request a payout from your dashboard now.`,
           "success"
@@ -317,7 +318,7 @@ export async function sendCommissionNotification(
           "purple"
         ),
     emailP(
-      "Every person who buys through your link earns you <strong>$7.50 (&#8358;7,500)</strong>. No cap on how much you can earn."
+      `Every person who buys through your link earns you <strong>$${COMMISSION_USD.toFixed(2)} (&#8358;${COMMISSION_NGN.toLocaleString()})</strong>. No cap on how much you can earn.`
     ),
     emailButton("View My Earnings", `${getFrontendUrl()}/dashboard`),
   ].join("");
@@ -412,7 +413,7 @@ export async function sendPayoutPaidEmail(
       "#D1FAE5"
     ),
     emailP(
-      "Thank you for promoting LeadThur. Keep sharing your referral link and you can request your next payout anytime your balance reaches &#8358;7,500."
+      `Thank you for promoting LeadThur. Keep sharing your referral link and you can request your next payout anytime your balance reaches &#8358;${MIN_PAYOUT_NGN.toLocaleString()}.`
     ),
     emailButton("View My Dashboard", `${getFrontendUrl()}/dashboard`, "#10B981"),
   ].join("");

@@ -5,6 +5,8 @@ import type { BusinessLead } from "@leadthur/shared";
 import { getApiUrl } from "@/utils/env";
 import { useIsMobile } from "@/hooks/useIsMobile";
 
+import { SALE_PRICE_USD } from "@/constants/pricing";
+
 const MAX_TRIAL_LEADS = 15;
 const PAYSTACK_URL = "/checkout";
 const SITE_URL = "https://www.leadthur.com";
@@ -405,7 +407,7 @@ export default function FreeTrialPage() {
                 boxShadow: "0 0 40px rgba(124,58,237,0.4)",
               }}
             >
-              Get Full Access — $15 Lifetime
+              {`Get Full Access — $${SALE_PRICE_USD} Lifetime`}
             </a>
             <a href={SITE_URL} className="text-xs text-[#555575] hover:underline">
               Back to leadthur.com
@@ -829,7 +831,7 @@ export default function FreeTrialPage() {
                 boxShadow: "0 0 40px rgba(124,58,237,0.4)",
               }}
             >
-              Get Full Access — $15 Lifetime
+              {`Get Full Access — $${SALE_PRICE_USD} Lifetime`}
             </a>
             <p style={{ fontSize: 11, color: "#555575", marginTop: 10 }}>
               ⚡ Instant access · One payment · No monthly fee
