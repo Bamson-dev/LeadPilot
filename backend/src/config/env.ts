@@ -14,7 +14,7 @@ const envSchema = z
     ADMIN_EMAIL: z.string().email(),
     ADMIN_PASSWORD: z.string().min(8),
     JWT_SECRET: z.string().min(32),
-    LIFETIME_ACCESS_PRICE: z.coerce.number().int().positive().default(3_000_000),
+    LIFETIME_ACCESS_PRICE: z.coerce.number().int().positive().default(2_500_000),
     PAYSTACK_SECRET_KEY: z.string().optional(),
     FLUTTERWAVE_SECRET_KEY: z.string().optional(),
     FLUTTERWAVE_SECRET_HASH: z.string().optional(),

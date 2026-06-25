@@ -32,10 +32,10 @@ create table if not exists commissions (
   referrer_email text not null,
   referrer_ref_code text not null,
   referred_email text not null,
-  sale_amount_ngn integer not null default 30000,
-  commission_ngn integer not null default 15000,
-  sale_amount_usd numeric(10,2) not null default 30.00,
-  commission_usd numeric(10,2) not null default 15.00,
+  sale_amount_ngn integer not null default 25000,
+  commission_ngn integer not null default 12500,
+  sale_amount_usd numeric(10,2) not null default 25.00,
+  commission_usd numeric(10,2) not null default 12.50,
   status text not null default 'pending',
   created_at timestamptz default now()
 );
