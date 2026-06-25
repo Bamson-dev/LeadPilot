@@ -12,6 +12,7 @@ const IMAGES = [
 export function TrustpilotSection() {
   return (
     <section
+      id="reviews"
       style={{
         backgroundColor: C.bgSecondary,
         padding: "72px 24px",

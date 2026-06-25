@@ -28,6 +28,7 @@ const STEPS = [
 export function HowItWorksSection() {
   return (
     <section
+      id="how-it-works"
       style={{
         backgroundColor: C.bg,
         padding: "72px 24px",

@@ -264,7 +264,7 @@ export function PricingSection({ variant = "primary" }: PricingSectionProps) {
 
   return (
     <section
-      id={isPrimary ? "offer" : undefined}
+      id={isPrimary ? "pricing" : undefined}
       style={{
         backgroundColor: C.bg,
         padding: "72px 24px",
@@ -276,7 +276,6 @@ export function PricingSection({ variant = "primary" }: PricingSectionProps) {
           <>
             <div style={{ textAlign: "center", marginBottom: 40 }}>
               <span
-                id="pricing"
                 style={{
                   display: "inline-block",
                   padding: "6px 14px",
