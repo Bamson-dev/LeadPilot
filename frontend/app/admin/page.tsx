@@ -1187,39 +1187,41 @@ export default function AdminPage() {
             {[
               {
                 label: "Total Users",
-                value: isDemoMode ? 343 : overview.totalUsers,
+                value: isDemoMode ? 447 : overview.totalUsers,
                 sub: `${overview.newUsersToday} new today`,
                 color: "#7C3AED",
               },
               {
                 label: "Active Users",
-                value: isDemoMode ? 301 : overview.activeUsers,
+                value: isDemoMode ? 389 : overview.activeUsers,
                 sub: `${overview.suspendedUsers} suspended`,
                 color: "#10B981",
               },
               {
                 label: "New This Week",
-                value: isDemoMode ? 47 : overview.newUsersThisWeek,
+                value: isDemoMode ? 61 : overview.newUsersThisWeek,
                 sub: "activated accounts",
                 color: "#0891B2",
               },
               {
                 label: "Est. Revenue",
                 value: isDemoMode
-                  ? `₦${(343 * SALE_PRICE_NGN).toLocaleString()}`
+                  ? "₦6,705,000"
                   : `₦${overview.estimatedRevenue.toLocaleString()}`,
-                sub: `at ₦${SALE_PRICE_NGN.toLocaleString()} per user`,
+                sub: isDemoMode
+                  ? "at ₦15,000 per user"
+                  : `at ₦${SALE_PRICE_NGN.toLocaleString()} per user`,
                 color: "#F59E0B",
               },
               {
                 label: "Paid Searches",
-                value: isDemoMode ? "1,247" : overview.totalSearches,
+                value: isDemoMode ? "5,400" : overview.totalSearches,
                 sub: "by paying users",
                 color: "#7C3AED",
               },
               {
                 label: "Trial Searches",
-                value: isDemoMode ? 892 : overview.totalTrialSearches,
+                value: isDemoMode ? "1,163" : overview.totalTrialSearches,
                 sub: "free preview usage",
                 color: "#6B7280",
               },
