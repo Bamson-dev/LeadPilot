@@ -194,16 +194,18 @@ async function runBackgroundWork(
     let nearbyCities = undefined;
     if (!isTrial && stats.total < 300) {
       const geo = await geocodeCity(location);
-      nearbyCities = findNearbyCities(
-        location,
-        geo.lat,
-        geo.lng,
-        5,
-        100
-      );
-      if (nearbyCities.length > 0) {
-        await updateSearchJob(searchId, { nearbyCities });
-        emit({ type: "suggestions", suggestions: nearbyCities.map((c) => c.city) });
+      if (geo) {
+        nearbyCities = findNearbyCities(
+          location,
+          geo.lat,
+          geo.lng,
+          5,
+          100
+        );
+        if (nearbyCities.length > 0) {
+          await updateSearchJob(searchId, { nearbyCities });
+          emit({ type: "suggestions", suggestions: nearbyCities.map((c) => c.city) });
+        }
       }
     }
 

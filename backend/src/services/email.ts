@@ -1,7 +1,7 @@
 import { Resend } from "resend";
 import { COMMISSION_NGN, COMMISSION_USD, MIN_PAYOUT_NGN } from "../constants/pricing";
 import { config } from "../config/env";
-import { extractCityForGeocoding } from "../scraper/googleMaps/grid-search";
+import { displayCityFromLocation } from "../scraper/googleMaps/grid-search";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -408,7 +408,7 @@ export async function sendSearchResultsReadyEmail(
   _options?: { timedOut?: boolean }
 ): Promise<void> {
   const resultsUrl = `${getFrontendUrl()}/dashboard/search/${searchId}`;
-  const city = extractCityForGeocoding(location);
+  const city = displayCityFromLocation(location);
   const countLabel = stats.total.toLocaleString("en-US");
 
   const body = `

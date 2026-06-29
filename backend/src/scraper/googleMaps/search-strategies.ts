@@ -3,7 +3,10 @@
  * Grid points, keyword variations, and sub-areas increase unique place URLs.
  */
 
-import { buildGridSearchUrls } from "./grid-search";
+import {
+  buildGridSearchUrls,
+  type GeoCenter,
+} from "./grid-search";
 
 const NIGERIA_CITIES = [
   "abuja",
@@ -152,15 +155,16 @@ export function buildSearchStrategyUrls(
   return [...urls];
 }
 
-/** Grid-based URLs — async because geocoding may call Nominatim. */
+/** Grid-based URLs — uses pre-resolved geo when provided. */
 export async function buildGridStrategyUrls(
   query: string,
   location: string,
-  expanded = false
+  expanded = false,
+  geo?: GeoCenter | null
 ): Promise<string[]> {
   const keywords = getKeywordVariations(query);
   try {
-    return await buildGridSearchUrls(keywords, location, expanded);
+    return await buildGridSearchUrls(keywords, location, expanded, geo);
   } catch {
     return [];
   }

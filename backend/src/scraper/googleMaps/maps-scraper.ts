@@ -20,6 +20,14 @@ import {
   buildSearchStrategyUrls,
 } from "./search-strategies";
 import {
+  cleanLocationInput,
+  geocodeGoogle,
+  geocodeNominatimFull,
+  geocodeNominatimShortened,
+  hasGoogleGeocodingApiKey,
+  type GeoCenter,
+} from "./grid-search";
+import {
   DETAIL_PANEL_WAIT_MS,
   MAX_LEADS_PER_SEARCH,
   PHASE1_DEADLINE_MS,
@@ -491,6 +499,7 @@ async function tryLoadMoreAndScroll(page: Page): Promise<void> {
 }
 
 const STRATEGY_TIMEOUT_MS = 18_000;
+const MIN_URLS_BEFORE_NEXT_FALLBACK = 10;
 
 async function scrapeUrlsFromPage(
   context: BrowserContext,
@@ -604,6 +613,104 @@ async function collectUrlsFromStrategies(
   return { added: allUrls.size - before, failed };
 }
 
+async function collectClassicAndGridParallel(
+  context: BrowserContext,
+  query: string,
+  location: string,
+  geo: GeoCenter | null,
+  allUrls: Set<string>,
+  urlCap: number,
+  deadline: number | null,
+  expanded: boolean,
+  isTrial: boolean
+): Promise<{ classicAdded: number; gridAdded: number }> {
+  const classicUrls = buildSearchStrategyUrls(query, location, isTrial);
+  const finalClassic = isTrial
+    ? classicUrls.slice(0, TRIAL_STRATEGY_LIMIT)
+    : classicUrls;
+
+  const gridUrls =
+    !isTrial && geo
+      ? await buildGridStrategyUrls(query, location, expanded, geo)
+      : [];
+
+  const [classicResult, gridResult] = await Promise.all([
+    collectUrlsFromStrategies(
+      context,
+      finalClassic,
+      query,
+      location,
+      allUrls,
+      urlCap,
+      deadline
+    ),
+    gridUrls.length > 0
+      ? collectUrlsFromStrategies(
+          context,
+          gridUrls,
+          query,
+          location,
+          allUrls,
+          urlCap,
+          deadline
+        )
+      : Promise.resolve({ added: 0, failed: 0 }),
+  ]);
+
+  const gridAdded = gridResult.added;
+
+  if (gridUrls.length > 0) {
+    logger.info("[search-diag] Grid strategies complete", {
+      query,
+      location,
+      gridUrlsRun: gridUrls.length,
+      urlsAdded: gridResult.added,
+      strategiesFailed: gridResult.failed,
+      totalUrls: allUrls.size,
+      sampleGridUrls: gridUrls.slice(0, 3),
+    });
+  }
+
+  return {
+    classicAdded: classicResult.added,
+    gridAdded,
+  };
+}
+
+async function runSinglePointFallback(
+  context: BrowserContext,
+  query: string,
+  location: string,
+  allUrls: Set<string>
+): Promise<number> {
+  const singleUrl = `https://www.google.com/maps/search/${encodeURIComponent(`${query} in ${location}`)}`;
+  try {
+    const fallbackUrls = await scrapeUrlsFromPage(
+      context,
+      singleUrl,
+      query,
+      location
+    );
+    logger.info("[search-diag] Single-point fallback raw results", {
+      query,
+      location,
+      singleUrl,
+      rawCount: fallbackUrls.length,
+    });
+    for (const url of fallbackUrls) {
+      allUrls.add(url);
+    }
+    return fallbackUrls.length;
+  } catch (err) {
+    logger.warn("[search-diag] Single-point fallback failed", {
+      query,
+      location,
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    return 0;
+  }
+}
+
 async function getBusinessUrls(
   context: BrowserContext,
   query: string,
@@ -614,133 +721,139 @@ async function getBusinessUrls(
 ): Promise<string[]> {
   const allUrls = new Set<string>();
   const deadline = phase1DeadlineMs ?? null;
-
   const timedOut = () => deadline !== null && Date.now() >= deadline;
   const urlCap = isTrial ? TRIAL_URL_CAP : MAX_LEADS_PER_SEARCH;
 
-  const classicUrls = buildSearchStrategyUrls(query, location, isTrial);
-  const finalClassic = isTrial
-    ? classicUrls.slice(0, TRIAL_STRATEGY_LIMIT)
-    : classicUrls;
+  const searchLocation =
+    cleanLocationInput(location, query) || location.trim();
 
   logger.info("[search-diag] Starting URL collection", {
     query,
-    location,
+    location: searchLocation,
+    rawLocation: location,
     isTrial: isTrial || false,
     expanded,
-    classicStrategyCount: finalClassic.length,
     phase1DeadlineMs: deadline,
+    googleGeocodingAvailable: hasGoogleGeocodingApiKey(),
   });
 
+  const countUrls = () => deduplicateByPlaceId([...allUrls]).length;
+
   if (isTrial) {
-    for (const strategyUrl of finalClassic) {
+    const classicUrls = buildSearchStrategyUrls(query, searchLocation, true);
+    for (const strategyUrl of classicUrls.slice(0, TRIAL_STRATEGY_LIMIT)) {
       if (timedOut()) break;
-      const urls = await scrapeUrlsFromPage(context, strategyUrl, query, location);
+      const urls = await scrapeUrlsFromPage(
+        context,
+        strategyUrl,
+        query,
+        searchLocation
+      );
       for (const url of urls) {
         allUrls.add(url);
       }
       if (allUrls.size >= TRIAL_URL_CAP) break;
     }
   } else {
-    const classicResult = await collectUrlsFromStrategies(
+    // Attempt 1: Nominatim full + classic + grid in parallel
+    const fullGeo = await geocodeNominatimFull(searchLocation);
+    const attempt1 = await collectClassicAndGridParallel(
       context,
-      finalClassic,
       query,
-      location,
+      searchLocation,
+      fullGeo?.geo ?? null,
       allUrls,
       urlCap,
-      deadline
+      deadline,
+      expanded,
+      false
     );
-
-    logger.info("[search-diag] Classic strategies complete", {
+    logger.info("[search-diag] Fallback attempt nominatim-full", {
       query,
-      location,
-      classicUrlsRun: finalClassic.length,
-      urlsAdded: classicResult.added,
-      strategiesFailed: classicResult.failed,
-      totalUrls: allUrls.size,
-      sampleClassicUrls: finalClassic.slice(0, 3),
+      location: searchLocation,
+      geocodeSource: fullGeo?.source ?? "none",
+      geocodeQuery: fullGeo?.queryUsed,
+      geo: fullGeo?.geo,
+      classicAdded: attempt1.classicAdded,
+      gridAdded: attempt1.gridAdded,
+      totalUrls: countUrls(),
     });
 
-    let gridUrlsAdded = 0;
-    if (!timedOut() && allUrls.size < urlCap) {
-      let gridUrls: string[] = [];
-      try {
-        gridUrls = await buildGridStrategyUrls(query, location, expanded);
-      } catch (err) {
-        logger.warn("[search-diag] Grid URL generation failed", {
-          query,
-          location,
-          error: err instanceof Error ? err.message : "unknown",
-        });
-      }
-
-      if (gridUrls.length > 0) {
-        const beforeGrid = allUrls.size;
-        const gridResult = await collectUrlsFromStrategies(
-          context,
-          gridUrls,
-          query,
-          location,
-          allUrls,
-          urlCap,
-          deadline
-        );
-        gridUrlsAdded = allUrls.size - beforeGrid;
-
-        logger.info("[search-diag] Grid strategies complete", {
-          query,
-          location,
-          gridUrlsRun: gridUrls.length,
-          urlsAdded: gridResult.added,
-          uniqueFromGrid: gridUrlsAdded,
-          strategiesFailed: gridResult.failed,
-          totalUrls: allUrls.size,
-          sampleGridUrls: gridUrls.slice(0, 3),
-        });
-      }
+    // Attempt 2: Nominatim shortened + classic + grid
+    if (countUrls() < MIN_URLS_BEFORE_NEXT_FALLBACK && !timedOut()) {
+      const shortGeo = await geocodeNominatimShortened(searchLocation);
+      const attempt2 = await collectClassicAndGridParallel(
+        context,
+        query,
+        searchLocation,
+        shortGeo?.geo ?? null,
+        allUrls,
+        urlCap,
+        deadline,
+        expanded,
+        false
+      );
+      logger.info("[search-diag] Fallback attempt nominatim-short", {
+        query,
+        location: searchLocation,
+        geocodeSource: shortGeo?.source ?? "none",
+        geocodeQuery: shortGeo?.queryUsed,
+        geo: shortGeo?.geo,
+        classicAdded: attempt2.classicAdded,
+        gridAdded: attempt2.gridAdded,
+        totalUrls: countUrls(),
+      });
     }
 
-    let merged = deduplicateByPlaceId([...allUrls]);
+    // Attempt 3: Google Geocoding + classic + grid
+    if (
+      countUrls() < MIN_URLS_BEFORE_NEXT_FALLBACK &&
+      !timedOut() &&
+      hasGoogleGeocodingApiKey()
+    ) {
+      const googleGeo = await geocodeGoogle(searchLocation);
+      const attempt3 = await collectClassicAndGridParallel(
+        context,
+        query,
+        searchLocation,
+        googleGeo?.geo ?? null,
+        allUrls,
+        urlCap,
+        deadline,
+        expanded,
+        false
+      );
+      logger.info("[search-diag] Fallback attempt google-geocoding", {
+        query,
+        location: searchLocation,
+        geocodeSource: googleGeo?.source ?? "none",
+        geocodeQuery: googleGeo?.queryUsed,
+        geo: googleGeo?.geo,
+        classicAdded: attempt3.classicAdded,
+        gridAdded: attempt3.gridAdded,
+        totalUrls: countUrls(),
+      });
+    }
 
-    if ((gridUrlsAdded < 10 || merged.length < 10) && !timedOut()) {
+    // Attempt 4: original single-point Maps search (final safety net)
+    if (countUrls() < MIN_URLS_BEFORE_NEXT_FALLBACK && !timedOut()) {
       logger.info("[search-diag] Triggering single-point fallback", {
         query,
-        location,
-        gridUrlsAdded,
-        totalBeforeFallback: merged.length,
+        location: searchLocation,
+        totalBeforeFallback: countUrls(),
       });
-
-      const singleUrl = `https://www.google.com/maps/search/${encodeURIComponent(`${query} in ${location}`)}`;
-      try {
-        const fallbackUrls = await scrapeUrlsFromPage(
-          context,
-          singleUrl,
-          query,
-          location
-        );
-        logger.info("[search-diag] Single-point fallback raw results", {
-          query,
-          location,
-          singleUrl,
-          rawCount: fallbackUrls.length,
-        });
-        for (const url of fallbackUrls) {
-          allUrls.add(url);
-        }
-        merged = deduplicateByPlaceId([...allUrls]);
-        logger.info("[search-diag] Single-point fallback complete", {
-          query,
-          location,
-          totalAfterFallback: merged.length,
-        });
-      } catch (err) {
-        logger.warn("[search-diag] Single-point fallback failed", {
-          query,
-          location,
-          error: err instanceof Error ? err.message : "unknown",
-        });
-      }
+      const added = await runSinglePointFallback(
+        context,
+        query,
+        searchLocation,
+        allUrls
+      );
+      logger.info("[search-diag] Single-point fallback complete", {
+        query,
+        location: searchLocation,
+        rawAdded: added,
+        totalAfterFallback: countUrls(),
+      });
     }
   }
 
@@ -748,7 +861,7 @@ async function getBusinessUrls(
 
   logger.info("URL collection complete — starting extraction", {
     query,
-    location,
+    location: searchLocation,
     urlsCollected: merged.length,
     isTrial: isTrial || false,
   });
@@ -1178,4 +1291,54 @@ export async function* scrapeGoogleMapsStream(
   }
 
   await scrapePromise;
+}
+
+/** Staging QA — Phase 1 unique place URL count (no detail extraction). */
+export async function countCollectedBusinessUrls(
+  browser: Browser,
+  query: string,
+  location: string,
+  phase1DeadlineMs = 45_000
+): Promise<number> {
+  const context = await browser.newContext({
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    viewport: { width: 1400, height: 900 },
+    locale: "en-US",
+    timezoneId: "America/Los_Angeles",
+    extraHTTPHeaders: {
+      "Accept-Language": "en-US,en;q=0.9",
+    },
+  });
+
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+  });
+  await seedGoogleConsentCookies(context);
+
+  try {
+    const deadline = Date.now() + phase1DeadlineMs;
+    let urls = await getBusinessUrls(
+      context,
+      query,
+      location,
+      false,
+      deadline,
+      false
+    );
+    if (urls.length < 300 && Date.now() < deadline) {
+      const expanded = await getBusinessUrls(
+        context,
+        query,
+        location,
+        false,
+        deadline,
+        true
+      );
+      urls = deduplicateByPlaceId([...urls, ...expanded]);
+    }
+    return urls.length;
+  } finally {
+    await context.close().catch(() => undefined);
+  }
 }

@@ -1,6 +1,6 @@
 /**
- * Geocoded grid search for Google Maps URL generation.
- * Divides a city into a 3×3 or 5×5 grid to collect more unique place URLs.
+ * Universal geocoding for grid-based Google Maps URL generation.
+ * No hardcoded city lists — Nominatim → shortened Nominatim → Google Geocoding → null.
  */
 
 import { logger } from "../../utils/logger";
@@ -17,136 +17,157 @@ export interface GridPoint {
   lng: number;
 }
 
+export type GeocodeSource = "nominatim-full" | "nominatim-short" | "google" | "none";
+
+export interface GeocodeResult {
+  geo: GeoCenter | null;
+  source: GeocodeSource;
+  queryUsed: string;
+}
+
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
+const NOMINATIM_TIMEOUT_MS = 3000;
+const GOOGLE_GEOCODE_TIMEOUT_MS = 5000;
 
-const COUNTRY_SUFFIXES = [
-  "united kingdom",
-  "united states",
-  "united arab emirates",
-  "south africa",
-  "new zealand",
-  "saudi arabia",
-  "south korea",
-  "north korea",
-  "united states of america",
-  "uk",
-  "usa",
-  "uae",
-  "kenya",
-  "nigeria",
-  "ghana",
-  "canada",
-  "australia",
-  "india",
-  "france",
-  "germany",
-  "spain",
-  "italy",
-  "brazil",
-  "mexico",
-  "japan",
-  "china",
-  "egypt",
-  "morocco",
-  "ethiopia",
-  "tanzania",
-  "uganda",
-  "rwanda",
-  "zimbabwe",
-  "zambia",
-  "namibia",
-  "botswana",
-  "mozambique",
-  "angola",
-  "cameroon",
-  "senegal",
-  "ivory coast",
-  "côte d'ivoire",
-  "dubai",
-];
+/** Strip business type if it leaked into the location field. */
+export function cleanLocationInput(
+  location: string,
+  businessType?: string
+): string {
+  let cleaned = location.trim().replace(/\s+/g, " ");
+  if (!cleaned) return cleaned;
 
-/** Approximate centers for common search locations (fallback when geocoding fails). */
-const CITY_FALLBACKS: Record<string, GeoCenter> = {
-  lagos: { lat: 6.5244, lng: 3.3792, radiusKm: 25, isLargeCity: true },
-  london: { lat: 51.5074, lng: -0.1278, radiusKm: 20, isLargeCity: true },
-  "new york": { lat: 40.7128, lng: -74.006, radiusKm: 18, isLargeCity: true },
-  abuja: { lat: 9.0765, lng: 7.3986, radiusKm: 15, isLargeCity: false },
-  ibadan: { lat: 7.3775, lng: 3.947, radiusKm: 12, isLargeCity: false },
-  manchester: { lat: 53.4808, lng: -2.2426, radiusKm: 12, isLargeCity: false },
-  birmingham: { lat: 52.4862, lng: -1.8904, radiusKm: 12, isLargeCity: false },
-  nairobi: { lat: -1.2921, lng: 36.8219, radiusKm: 18, isLargeCity: true },
-  dubai: { lat: 25.2048, lng: 55.2708, radiusKm: 20, isLargeCity: true },
-  kenya: { lat: -1.2921, lng: 36.8219, radiusKm: 18, isLargeCity: true },
-};
+  const bt = businessType?.trim();
+  if (!bt) return cleaned;
 
-function normalizeLocationKey(location: string): string {
-  return location.toLowerCase().trim();
-}
+  const btLower = bt.toLowerCase();
+  const lower = cleaned.toLowerCase();
 
-function fallbackGeo(location: string): GeoCenter {
-  const lower = normalizeLocationKey(location);
-  for (const [key, geo] of Object.entries(CITY_FALLBACKS)) {
-    if (lower.includes(key)) return geo;
+  if (lower.startsWith(`${btLower} in `)) {
+    return cleaned.slice(bt.length + 4).trim();
   }
-  return { lat: 0, lng: 0, radiusKm: 12, isLargeCity: false };
+  if (lower.endsWith(` ${btLower}`)) {
+    return cleaned.slice(0, cleaned.length - bt.length - 1).trim();
+  }
+  if (lower === btLower) return "";
+
+  return cleaned;
 }
 
-/**
- * Nominatim works best with city names only — strip trailing country from
- * inputs like "Nairobi Kenya" or "Abuja, Nigeria".
- */
-export function extractCityForGeocoding(location: string): string {
-  const trimmed = location.trim();
-  if (!trimmed) return trimmed;
+/** Shortened queries to retry when the full free-form string fails. */
+export function shortenLocationQueries(fullLocation: string): string[] {
+  const trimmed = fullLocation.trim();
+  const seen = new Set<string>();
+  const queries: string[] = [];
+
+  const add = (q: string) => {
+    const t = q.trim();
+    if (!t || t === trimmed || seen.has(t.toLowerCase())) return;
+    seen.add(t.toLowerCase());
+    queries.push(t);
+  };
 
   if (trimmed.includes(",")) {
-    return trimmed.split(",")[0]?.trim() || trimmed;
-  }
-
-  const lower = trimmed.toLowerCase();
-  for (const country of COUNTRY_SUFFIXES) {
-    const suffix = ` ${country}`;
-    if (lower.endsWith(suffix)) {
-      return trimmed.slice(0, -suffix.length).trim();
+    const parts = trimmed.split(",").map((p) => p.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      add(parts.slice(0, -1).join(", "));
+      add(parts[0]);
     }
   }
 
-  const words = trimmed.split(/\s+/);
-  if (words.length >= 2) {
-    const lastWord = words[words.length - 1]?.toLowerCase() ?? "";
-    if (COUNTRY_SUFFIXES.includes(lastWord)) {
-      return words.slice(0, -1).join(" ").trim();
-    }
+  const words = trimmed.split(/\s+/).filter(Boolean);
+  // Prefer shorter city names first (e.g. "Seoul" before "Seoul South" from "Seoul South Korea").
+  for (let keep = 1; keep < words.length; keep++) {
+    add(words.slice(0, keep).join(" "));
   }
 
-  return trimmed;
+  return queries;
 }
 
-export async function geocodeCity(location: string): Promise<GeoCenter> {
-  const trimmed = location.trim();
-  const geocodeQuery = extractCityForGeocoding(trimmed);
+/** City label for emails — first meaningful segment of the location string. */
+export function displayCityFromLocation(location: string): string {
+  const cleaned = cleanLocationInput(location);
+  if (!cleaned) return location.trim();
 
-  logger.info("[search-diag] Geocoding city", {
-    fullLocation: trimmed,
-    geocodeQuery,
-  });
-
-  if (!trimmed) {
-    const fb = fallbackGeo(location);
-    logger.info("[search-diag] Nominatim skipped — empty location, using fallback", {
-      geo: fb,
-    });
-    return fb;
+  if (cleaned.includes(",")) {
+    return cleaned.split(",")[0]?.trim() || cleaned;
   }
+
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length >= 2) {
+    return words.slice(0, 2).join(" ");
+  }
+  return words[0] ?? cleaned;
+}
+
+/** @deprecated Use displayCityFromLocation — kept for email import compatibility. */
+export function extractCityForGeocoding(location: string): string {
+  return displayCityFromLocation(location);
+}
+
+export function getGoogleMapsApiKey(): string | undefined {
+  const key =
+    process.env.GOOGLE_MAPS_API_KEY?.trim() ||
+    process.env.GOOGLE_API_KEY?.trim() ||
+    undefined;
+  return key || undefined;
+}
+
+export function hasGoogleGeocodingApiKey(): boolean {
+  return Boolean(getGoogleMapsApiKey());
+}
+
+function parseNominatimHit(hit: {
+  lat: string;
+  lon: string;
+  boundingbox?: string[];
+  type?: string;
+  class?: string;
+  display_name?: string;
+}): GeoCenter | null {
+  const lat = parseFloat(hit.lat);
+  const lng = parseFloat(hit.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat === 0 && lng === 0) return null;
+
+  let radiusKm = 12;
+  if (hit.boundingbox?.length === 4) {
+    const south = parseFloat(hit.boundingbox[0]);
+    const north = parseFloat(hit.boundingbox[1]);
+    const west = parseFloat(hit.boundingbox[2]);
+    const east = parseFloat(hit.boundingbox[3]);
+    if ([south, north, west, east].every(Number.isFinite)) {
+      const latSpan = Math.abs(north - south);
+      const lngSpan = Math.abs(east - west);
+      radiusKm = Math.max(8, Math.min(35, ((latSpan + lngSpan) / 2) * 111 * 0.5));
+    }
+  }
+
+  const isLargeCity =
+    radiusKm >= 15 ||
+    hit.type === "city" ||
+    hit.type === "administrative" ||
+    hit.class === "place";
+
+  return { lat, lng, radiusKm, isLargeCity };
+}
+
+async function geocodeNominatimQuery(
+  query: string,
+  source: GeocodeSource
+): Promise<GeocodeResult | null> {
+  const q = query.trim();
+  if (!q) return null;
 
   try {
     const params = new URLSearchParams({
-      q: geocodeQuery,
+      q,
       format: "json",
       limit: "1",
     });
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 4000);
+    const timeout = setTimeout(() => controller.abort(), NOMINATIM_TIMEOUT_MS);
+
     const res = await fetch(`${NOMINATIM_URL}?${params}`, {
       signal: controller.signal,
       headers: { "User-Agent": "LeadThur/1.0 (staging search)" },
@@ -154,13 +175,12 @@ export async function geocodeCity(location: string): Promise<GeoCenter> {
     clearTimeout(timeout);
 
     if (!res.ok) {
-      const fb = fallbackGeo(location);
-      logger.warn("[search-diag] Nominatim HTTP error — using fallback", {
+      logger.warn("[search-diag] Nominatim HTTP error", {
+        query: q,
         status: res.status,
-        geocodeQuery,
-        fallback: fb,
+        source,
       });
-      return fb;
+      return null;
     }
 
     const data = (await res.json()) as Array<{
@@ -173,63 +193,168 @@ export async function geocodeCity(location: string): Promise<GeoCenter> {
     }>;
 
     if (!data.length) {
-      const fb = fallbackGeo(location);
-      logger.warn("[search-diag] Nominatim returned zero results — using fallback", {
-        geocodeQuery,
-        fullLocation: trimmed,
-        fallback: fb,
-      });
-      return fb;
+      logger.info("[search-diag] Nominatim zero results", { query: q, source });
+      return null;
     }
 
-    const hit = data[0];
-    const lat = parseFloat(hit.lat);
-    const lng = parseFloat(hit.lon);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      const fb = fallbackGeo(location);
-      logger.warn("[search-diag] Nominatim invalid coordinates — using fallback", {
-        geocodeQuery,
-        hit,
-        fallback: fb,
-      });
-      return fb;
+    const geo = parseNominatimHit(data[0]);
+    if (!geo) {
+      logger.warn("[search-diag] Nominatim invalid hit", { query: q, source });
+      return null;
     }
 
-    let radiusKm = 12;
-    if (hit.boundingbox?.length === 4) {
-      const south = parseFloat(hit.boundingbox[0]);
-      const north = parseFloat(hit.boundingbox[1]);
-      const west = parseFloat(hit.boundingbox[2]);
-      const east = parseFloat(hit.boundingbox[3]);
-      if ([south, north, west, east].every(Number.isFinite)) {
-        const latSpan = Math.abs(north - south);
-        const lngSpan = Math.abs(east - west);
-        radiusKm = Math.max(8, Math.min(35, ((latSpan + lngSpan) / 2) * 111 * 0.5));
-      }
-    }
-
-    const isLargeCity =
-      radiusKm >= 15 ||
-      hit.type === "city" ||
-      hit.type === "administrative" ||
-      hit.class === "place";
-
-    const geo = { lat, lng, radiusKm, isLargeCity };
     logger.info("[search-diag] Nominatim geocode success", {
-      geocodeQuery,
-      displayName: hit.display_name,
+      query: q,
+      source,
+      displayName: data[0].display_name,
       geo,
     });
-    return geo;
+
+    return { geo, source, queryUsed: q };
   } catch (err) {
-    const fb = fallbackGeo(location);
-    logger.warn("[search-diag] Nominatim geocode failed — using fallback", {
-      geocodeQuery,
+    const isTimeout =
+      err instanceof Error &&
+      (err.name === "AbortError" || err.message.includes("abort"));
+    logger.warn("[search-diag] Nominatim request failed", {
+      query: q,
+      source,
+      timedOut: isTimeout,
       error: err instanceof Error ? err.message : "unknown",
-      fallback: fb,
     });
-    return fb;
+    return null;
   }
+}
+
+export async function geocodeNominatimFull(
+  location: string
+): Promise<GeocodeResult | null> {
+  return geocodeNominatimQuery(location, "nominatim-full");
+}
+
+export async function geocodeNominatimShortened(
+  location: string
+): Promise<GeocodeResult | null> {
+  const trimmed = location.trim();
+  for (const query of shortenLocationQueries(trimmed)) {
+    const result = await geocodeNominatimQuery(query, "nominatim-short");
+    if (result) return result;
+  }
+  return null;
+}
+
+async function geocodeGoogleQuery(
+  address: string
+): Promise<GeocodeResult | null> {
+  const key = getGoogleMapsApiKey();
+  if (!key) return null;
+
+  const q = address.trim();
+  if (!q) return null;
+
+  try {
+    const params = new URLSearchParams({ address: q, key });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), GOOGLE_GEOCODE_TIMEOUT_MS);
+
+    const res = await fetch(
+      `https://maps.googleapis.com/maps/api/geocode/json?${params}`,
+      { signal: controller.signal }
+    );
+    clearTimeout(timeout);
+
+    if (!res.ok) {
+      logger.warn("[search-diag] Google Geocoding HTTP error", {
+        query: q,
+        status: res.status,
+      });
+      return null;
+    }
+
+    const data = (await res.json()) as {
+      status: string;
+      results?: Array<{
+        geometry: {
+          location: { lat: number; lng: number };
+          bounds?: {
+            northeast: { lat: number; lng: number };
+            southwest: { lat: number; lng: number };
+          };
+          viewport?: {
+            northeast: { lat: number; lng: number };
+            southwest: { lat: number; lng: number };
+          };
+        };
+        types?: string[];
+        formatted_address?: string;
+      }>;
+    };
+
+    if (data.status !== "OK" || !data.results?.length) {
+      logger.info("[search-diag] Google Geocoding no results", {
+        query: q,
+        status: data.status,
+      });
+      return null;
+    }
+
+    const hit = data.results[0];
+    const lat = hit.geometry.location.lat;
+    const lng = hit.geometry.location.lng;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+    let radiusKm = 12;
+    const bounds = hit.geometry.bounds ?? hit.geometry.viewport;
+    if (bounds) {
+      const latSpan = Math.abs(bounds.northeast.lat - bounds.southwest.lat);
+      const lngSpan = Math.abs(bounds.northeast.lng - bounds.southwest.lng);
+      radiusKm = Math.max(8, Math.min(35, ((latSpan + lngSpan) / 2) * 111 * 0.5));
+    }
+
+    const types = hit.types ?? [];
+    const isLargeCity =
+      radiusKm >= 15 ||
+      types.includes("locality") ||
+      types.includes("administrative_area_level_1");
+
+    const geo: GeoCenter = { lat, lng, radiusKm, isLargeCity };
+    logger.info("[search-diag] Google Geocoding success", {
+      query: q,
+      formattedAddress: hit.formatted_address,
+      geo,
+    });
+
+    return { geo, source: "google", queryUsed: q };
+  } catch (err) {
+    logger.warn("[search-diag] Google Geocoding failed", {
+      query: q,
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    return null;
+  }
+}
+
+export async function geocodeGoogle(location: string): Promise<GeocodeResult | null> {
+  return geocodeGoogleQuery(location);
+}
+
+/** Best available coordinates for nearby-city suggestions (null if all providers fail). */
+export async function geocodeCity(
+  location: string,
+  businessType?: string
+): Promise<GeoCenter | null> {
+  const cleaned = cleanLocationInput(location, businessType) || location.trim();
+  if (!cleaned) return null;
+
+  const full = await geocodeNominatimFull(cleaned);
+  if (full?.geo) return full.geo;
+
+  const short = await geocodeNominatimShortened(cleaned);
+  if (short?.geo) return short.geo;
+
+  const google = await geocodeGoogle(cleaned);
+  if (google?.geo) return google.geo;
+
+  return null;
 }
 
 export function buildGridPoints(geo: GeoCenter, expanded = false): GridPoint[] {
@@ -237,7 +362,8 @@ export function buildGridPoints(geo: GeoCenter, expanded = false): GridPoint[] {
   const radius = expanded ? geo.radiusKm * 1.5 : geo.radiusKm;
   const cellRadiusKm = radius / gridSize;
   const latStep = cellRadiusKm / 111;
-  const lngStep = cellRadiusKm / (111 * Math.cos((geo.lat * Math.PI) / 180));
+  const lngStep =
+    cellRadiusKm / (111 * Math.cos((geo.lat * Math.PI) / 180) || 1);
 
   const points: GridPoint[] = [];
   const half = (gridSize - 1) / 2;
@@ -254,7 +380,6 @@ export function buildGridPoints(geo: GeoCenter, expanded = false): GridPoint[] {
   return points;
 }
 
-/** Google Maps search URL centered on a grid point with full location context. */
 export function buildGridSearchUrl(
   keyword: string,
   point: GridPoint,
@@ -266,12 +391,12 @@ export function buildGridSearchUrl(
   return `https://www.google.com/maps/search/${q}/@${point.lat},${point.lng},${zoom}z`;
 }
 
-export async function buildGridSearchUrls(
+export function buildGridSearchUrlsFromGeo(
   keywords: string[],
   location: string,
+  geo: GeoCenter,
   expanded = false
-): Promise<string[]> {
-  const geo = await geocodeCity(location);
+): string[] {
   const points = buildGridPoints(geo, expanded);
   const urls = new Set<string>();
 
@@ -281,13 +406,41 @@ export async function buildGridSearchUrls(
     }
   }
 
-  const urlList = [...urls];
+  return [...urls];
+}
+
+export async function buildGridSearchUrls(
+  keywords: string[],
+  location: string,
+  expanded = false,
+  geo?: GeoCenter | null
+): Promise<string[]> {
+  let resolvedGeo = geo ?? null;
+
+  if (!resolvedGeo) {
+    resolvedGeo = await geocodeCity(location);
+  }
+
+  if (!resolvedGeo) {
+    logger.info("[search-diag] Grid URLs skipped — geocoding unavailable", {
+      location,
+    });
+    return [];
+  }
+
+  const urlList = buildGridSearchUrlsFromGeo(
+    keywords,
+    location,
+    resolvedGeo,
+    expanded
+  );
+
   logger.info("[search-diag] Grid URLs generated", {
     location,
     keywordCount: keywords.length,
-    gridPoints: points.length,
+    gridPoints: buildGridPoints(resolvedGeo, expanded).length,
     totalUrls: urlList.length,
-    geo,
+    geo: resolvedGeo,
     sampleUrls: urlList.slice(0, 3),
   });
 
