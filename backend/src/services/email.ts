@@ -405,14 +405,19 @@ export async function sendSearchResultsReadyEmail(
   _query: string,
   location: string,
   stats: SearchResultsEmailStats,
-  _options?: { timedOut?: boolean }
+  options?: { timedOut?: boolean; skipEmailScraping?: boolean }
 ): Promise<void> {
   const resultsUrl = `${getFrontendUrl()}/dashboard/search/${searchId}`;
   const city = displayCityFromLocation(location);
   const countLabel = stats.total.toLocaleString("en-US");
 
+  const skipEmailNote = options?.skipEmailScraping
+    ? `<p style="color:#7878A0;margin:0 0 20px;line-height:1.7">Email addresses were not scraped for this search because server resources were limited. Phone numbers, websites, and addresses are ready now. Run this search again later for email coverage.</p>`
+    : "";
+
   const body = `
     <p>Good news. We just finished searching ${escapeHtml(city)} for you and found ${countLabel} potential clients ready for you to reach out to.</p>
+    ${skipEmailNote}
     <p>These are real businesses with direct contact details. The sooner you reach out the better your chances of landing them before anyone else does.</p>
     <a href="${resultsUrl}" class="btn">View my ${countLabel} potential clients</a>
   `;

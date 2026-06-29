@@ -8,9 +8,9 @@ import { geocodeCity } from "../scraper/googleMaps/grid-search";
 import {
   getSearchJob,
   getAllSearchLeads,
+  countSearchLeads,
   insertBusinessLead,
   markSearchComplete,
-  markSearchFailed,
   tryClaimResultsEmailSend,
   updateSearchJob,
 } from "../database/search-repository";
@@ -30,10 +30,44 @@ import { generateAreaSuggestions } from "./suggestion-service";
 import { runBatchEmailScraping } from "./email-batch-scraper";
 import { computeSearchStats } from "./search-stats";
 import { findNearbyCities } from "./nearby-cities";
-import { PHASE1_DEADLINE_MS } from "../scraper/utils/constants";
+import { PHASE1_DEADLINE_MS, MEMORY_SKIP_SCRAPE_PERCENT } from "../scraper/utils/constants";
 import type { RawLeadInput } from "../types/scraper";
+import { isMemoryPressureHigh, getMemoryUsagePercent } from "../utils/memory";
 
 export type ScrapeEmitter = (event: StreamEvent) => void;
+
+type SearchJobStep =
+  | "init"
+  | "browser_acquire"
+  | "phase1_maps_scrape"
+  | "phase1_persist"
+  | "background_extraction"
+  | "email_scraping"
+  | "finalize"
+  | "nearby_cities";
+
+function logSearchStep(
+  searchId: string,
+  step: SearchJobStep,
+  extra?: Record<string, unknown>
+): void {
+  logger.info("[search-job] step", { searchId, step, ...extra });
+}
+
+function logSearchFailure(
+  searchId: string,
+  step: SearchJobStep,
+  err: unknown,
+  leadsCollected: number
+): void {
+  logger.error("[search-job] step failed", {
+    searchId,
+    step,
+    leadsCollected,
+    error: err instanceof Error ? err.message : String(err),
+    stack: err instanceof Error ? err.stack : undefined,
+  });
+}
 
 function emitLead(emit: ScrapeEmitter, lead: BusinessLead): void {
   emit({ type: "lead", lead, data: lead });
@@ -61,14 +95,49 @@ async function resolveNotificationEmail(
   return getLicenseEmailBySearchId(searchId);
 }
 
+export async function commitPartialSearchResults(
+  searchId: string,
+  query: string,
+  location: string,
+  licenseEmail: string | null,
+  options?: { skipEmailScraping?: boolean; emailTimedOut?: boolean }
+): Promise<number> {
+  const count = await countSearchLeads(searchId);
+  if (count <= 0) return 0;
+
+  logSearchStep(searchId, "finalize", {
+    reason: "partial_commit",
+    leadsCollected: count,
+  });
+
+  await finalizeSearchAndNotify(
+    searchId,
+    query,
+    location,
+    licenseEmail,
+    options?.emailTimedOut ?? true,
+    { skipEmailScraping: options?.skipEmailScraping }
+  );
+
+  return count;
+}
+
 export async function forceFinalizeSearchJob(
   searchId: string,
   query: string,
   location: string,
   licenseEmail: string | null,
-  emailTimedOut: boolean
+  emailTimedOut: boolean,
+  options?: { skipEmailScraping?: boolean }
 ): Promise<void> {
-  await finalizeSearchAndNotify(searchId, query, location, licenseEmail, emailTimedOut);
+  await finalizeSearchAndNotify(
+    searchId,
+    query,
+    location,
+    licenseEmail,
+    emailTimedOut,
+    options
+  );
 }
 
 async function finalizeSearchAndNotify(
@@ -76,7 +145,8 @@ async function finalizeSearchAndNotify(
   query: string,
   location: string,
   licenseEmail: string | null,
-  emailTimedOut: boolean
+  emailTimedOut: boolean,
+  notifyOptions?: { skipEmailScraping?: boolean }
 ): Promise<void> {
   const leads = await getAllSearchLeads(searchId);
   const uniqueLeads = deduplicateLeads(leads);
@@ -89,9 +159,17 @@ async function finalizeSearchAndNotify(
     status: "completed",
     scrapingInProgress: false,
     statsSummary: stats,
+    error: null,
   });
 
   if (licenseEmail && totalFound > 0) {
+    void recordSearchHistorySafe({
+      email: licenseEmail,
+      business_type: query,
+      location,
+      results_count: totalFound,
+    });
+
     const claimed = await tryClaimResultsEmailSend(searchId);
     if (claimed) {
       const jobStats = (await getSearchJob(searchId))?.statsSummary ?? stats;
@@ -106,7 +184,10 @@ async function finalizeSearchAndNotify(
           withEmail: jobStats.withEmail,
           withWebsite: jobStats.withWebsite,
         },
-        { timedOut: emailTimedOut }
+        {
+          timedOut: emailTimedOut,
+          skipEmailScraping: notifyOptions?.skipEmailScraping,
+        }
       ).catch((err) =>
         logger.error("Failed to send results ready email", {
           searchId,
@@ -128,9 +209,13 @@ async function runBackgroundWork(
 ): Promise<void> {
   const pool = getBrowserPool();
   let emailTimedOut = false;
+  let skipEmailScraping = false;
 
   try {
     if (remainingUrls.length > 0 && pool.isReady()) {
+      logSearchStep(searchId, "background_extraction", {
+        remainingUrls: remainingUrls.length,
+      });
       const browser = await pool.acquire(60_000);
       const seenKeys = new Set<string>();
       const existing = await getAllSearchLeads(searchId);
@@ -173,9 +258,33 @@ async function runBackgroundWork(
     }
 
     if (!isTrial) {
-      const emailStart = Date.now();
-      await runBatchEmailScraping(searchId, emit);
-      emailTimedOut = Date.now() - emailStart >= 3 * 60 * 1000 - 1000;
+      const leadCount = await countSearchLeads(searchId);
+      const memoryPercent = Math.round(getMemoryUsagePercent());
+
+      if (isMemoryPressureHigh(MEMORY_SKIP_SCRAPE_PERCENT)) {
+        skipEmailScraping = true;
+        logger.warn("[search-job] Skipping Playwright email scrape — high memory", {
+          searchId,
+          memoryPercent,
+          leadCount,
+        });
+        const { markBusinessLeadEmailScraped } = await import(
+          "../database/search-repository"
+        );
+        const pending = (await getAllSearchLeads(searchId)).filter(
+          (lead) => lead.website && !lead.emailScraped
+        );
+        for (const lead of pending) {
+          await markBusinessLeadEmailScraped(lead.id, []).catch(() => undefined);
+        }
+      } else {
+        logSearchStep(searchId, "email_scraping", { leadCount, memoryPercent });
+        const emailStart = Date.now();
+        await runBatchEmailScraping(searchId, emit, undefined, {
+          totalResultCount: leadCount,
+        });
+        emailTimedOut = Date.now() - emailStart >= 3 * 60 * 1000 - 1000;
+      }
     } else {
       const trialLeads = await getAllSearchLeads(searchId);
       for (const lead of trialLeads) {
@@ -225,7 +334,8 @@ async function runBackgroundWork(
       query,
       location,
       licenseEmail,
-      emailTimedOut
+      emailTimedOut,
+      { skipEmailScraping }
     );
 
     emit({
@@ -244,21 +354,29 @@ async function runBackgroundWork(
         .catch(() => undefined);
     }
   } catch (err) {
-    logger.error("Background scrape failed", {
-      searchId,
-      error: err instanceof Error ? err.message : "unknown",
-    });
+    const leadsCollected = await countSearchLeads(searchId);
+    logSearchFailure(searchId, "background_extraction", err, leadsCollected);
     const licenseEmail = await resolveNotificationEmail(
       searchId,
       options?.licenseEmail
     );
-    await finalizeSearchAndNotify(
-      searchId,
-      query,
-      location,
-      licenseEmail,
-      true
-    ).catch(() => undefined);
+    if (leadsCollected > 0) {
+      await finalizeSearchAndNotify(
+        searchId,
+        query,
+        location,
+        licenseEmail,
+        true,
+        { skipEmailScraping }
+      ).catch(() => undefined);
+      emit({
+        type: "complete",
+        total: leadsCollected,
+        message: `Search complete. Found ${leadsCollected} businesses in ${location}.`,
+      });
+      return;
+    }
+    throw err;
   }
 }
 
@@ -318,16 +436,13 @@ export async function runScraperJob(
   const seenLeadKeys = new Set<string>();
   const collectedLeads: BusinessLead[] = [];
   const phase1DeadlineMs = Date.now() + PHASE1_DEADLINE_MS;
+  let step: SearchJobStep = "init";
 
-  logger.info("Search started", {
-    searchId,
-    query,
-    location,
-    isTrial,
-    phase1DeadlineMs,
-  });
+  logSearchStep(searchId, "init", { query, location, isTrial });
 
   try {
+    step = "browser_acquire";
+    logSearchStep(searchId, step);
     await updateSearchJob(searchId, {
       status: "running",
       scrapingInProgress: !isTrial,
@@ -381,6 +496,9 @@ export async function runScraperJob(
       }
     };
 
+    step = "phase1_maps_scrape";
+    logSearchStep(searchId, step, { phase1DeadlineMs });
+
     const scrapeResult = await scrapeGoogleMaps(browser, {
       query,
       location,
@@ -422,6 +540,9 @@ export async function runScraperJob(
       });
       return;
     }
+
+    step = "phase1_persist";
+    logSearchStep(searchId, step, { phase1Total });
 
     await updateSearchJob(searchId, {
       status: "completed",
@@ -478,10 +599,32 @@ export async function runScraperJob(
     searchComplete = true;
     clearTimeout(runningEmailTimer);
 
+    const leadsCollected = await countSearchLeads(searchId);
+    logSearchFailure(searchId, step, err, leadsCollected);
+
+    if (leadsCollected > 0) {
+      const licenseEmail = await resolveLicenseEmail();
+      const committed = await commitPartialSearchResults(
+        searchId,
+        query,
+        location,
+        licenseEmail,
+        { emailTimedOut: true }
+      );
+      emit({
+        type: "complete",
+        total: committed,
+        message: `We found ${committed.toLocaleString()} potential clients for you.`,
+      });
+      return;
+    }
+
     const message = formatScraperError(err);
-    logger.error("Scraper job failed", { searchId, message });
-    await markSearchFailed(searchId, message);
-    await updateSearchJob(searchId, { scrapingInProgress: false });
+    await updateSearchJob(searchId, {
+      status: "failed",
+      error: message,
+      scrapingInProgress: false,
+    });
 
     const licenseEmail = await resolveLicenseEmail();
     if (licenseEmail) {

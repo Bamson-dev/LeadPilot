@@ -359,6 +359,16 @@ export async function getLeadsNeedingEmailScrape(
   return (data ?? []).map((row) => mapBusinessLead(row as DbBusinessLead));
 }
 
+export async function countSearchLeads(searchId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from("business_leads")
+    .select("*", { count: "exact", head: true })
+    .eq("search_id", searchId);
+
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
 export async function getAllSearchLeads(searchId: string): Promise<BusinessLead[]> {
   const { data, error } = await supabase
     .from("business_leads")

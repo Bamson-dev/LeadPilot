@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { requireLicense } from "../middleware/require-license";
 import {
   getSearchHistoryByEmail,
-  insertSearchHistory,
+  upsertSearchHistory,
 } from "../database/search-history-repository";
 import { logger } from "../utils/logger";
 
@@ -43,7 +43,7 @@ router.post("/", requireLicense, async (req: Request, res: Response) => {
       return;
     }
 
-    const record = await insertSearchHistory({
+    const record = await upsertSearchHistory({
       email: normalizedEmail,
       business_type: business_type.trim(),
       city: city.trim(),
@@ -51,7 +51,7 @@ router.post("/", requireLicense, async (req: Request, res: Response) => {
       results_count: count,
     });
 
-    res.status(201).json(record);
+    res.status(200).json(record);
   } catch (err) {
     logger.error("POST /search-history failed", {
       error: err instanceof Error ? err.message : "unknown",
