@@ -35,23 +35,9 @@ import {
   claimAiBonus,
   type LicenseUsage,
 } from "@/services/api";
-import { businessLeadToLead } from "@/types/lead";
 import type { Lead } from "@/types/lead";
 import { applyRatingFilter, type RatingFilterValue } from "@/lib/rating-filter";
 import { applyStatusFilter } from "@/lib/lead-status";
-
-function dedupeLeads(
-  prev: BusinessLead[],
-  incoming: BusinessLead[]
-): BusinessLead[] {
-  const existingKeys = new Set(
-    prev.map((l) => `${l.name?.toLowerCase() ?? ""}-${l.phone ?? ""}`)
-  );
-  const unique = incoming.filter(
-    (l) => !existingKeys.has(`${l.name?.toLowerCase() ?? ""}-${l.phone ?? ""}`)
-  );
-  return [...prev, ...unique];
-}
 
 interface ActivityItem {
   query: string;
@@ -65,8 +51,6 @@ export function SearchDashboard() {
   const [businessType, setBusinessType] = useState("");
   const [location, setLocation] = useState("");
   const [savedBanner, setSavedBanner] = useState<string | null>(null);
-  const [allLeads, setAllLeads] = useState<BusinessLead[]>([]);
-  const [sessionSearchCount, setSessionSearchCount] = useState(0);
   const [suggestionsMessage, setSuggestionsMessage] = useState("");
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -120,7 +104,6 @@ export function SearchDashboard() {
 
   const {
     leads,
-    rawLeads,
     isSearching,
     progress,
     error,
@@ -138,7 +121,6 @@ export function SearchDashboard() {
     reset,
     loadSavedLeads,
     scrapingInProgress,
-    summary,
     nearbyCities,
     queuePosition,
   } = useSearch({
@@ -166,13 +148,11 @@ export function SearchDashboard() {
   );
 
   onSearchCompleteRef.current = (
-    newLeads: BusinessLead[],
+    _newLeads: BusinessLead[],
     query: string,
     loc: string,
     totalFound: number
   ) => {
-    setAllLeads((prev) => dedupeLeads(prev, newLeads));
-    setSessionSearchCount((prev) => prev + 1);
     void fetchSuggestions(query, loc, totalFound);
 
     if (totalFound > 0) {
@@ -247,19 +227,7 @@ export function SearchDashboard() {
   const query = searchMeta.business || businessType;
   const loc = searchMeta.location || location;
 
-  const mergedSessionLeads =
-    sessionSearchCount > 1 ? dedupeLeads(allLeads, rawLeads) : rawLeads;
-
-  const tableLeads: Lead[] =
-    sessionSearchCount > 1
-      ? mergedSessionLeads.map((l) =>
-          businessLeadToLead({
-            ...l,
-            searchId: l.searchId ?? "",
-            createdAt: l.createdAt ?? new Date().toISOString(),
-          })
-        )
-      : leads;
+  const tableLeads = leads;
 
   const {
     leadStatuses,
@@ -278,16 +246,7 @@ export function SearchDashboard() {
     [ratingFilteredTableLeads, statusFilter, leadStatuses]
   );
 
-  const leadsToExport =
-    sessionSearchCount > 1
-      ? mergedSessionLeads.map((l) =>
-          businessLeadToLead({
-            ...l,
-            searchId: l.searchId ?? "",
-            createdAt: l.createdAt ?? new Date().toISOString(),
-          })
-        )
-      : leads;
+  const leadsToExport = leads;
 
   const filteredLeadsToExport = useMemo(
     () =>
@@ -350,16 +309,12 @@ export function SearchDashboard() {
       setLocation(meta.location);
       setSavedBanner(`Showing saved results from ${meta.date}`);
       setRatingFilter("all");
-      setAllLeads([]);
-      setSessionSearchCount(0);
     },
     [loadSavedLeads]
   );
 
   const startNewSession = () => {
     reset();
-    setAllLeads([]);
-    setSessionSearchCount(0);
     setSuggestionsMessage("");
     setSavedBanner(null);
     setBusinessType("");
@@ -373,25 +328,17 @@ export function SearchDashboard() {
 
   const handleClearResults = () => {
     clearResults();
-    setAllLeads([]);
-    setSessionSearchCount(0);
     setSuggestionsMessage("");
     setSavedBanner(null);
   };
 
-  const displayCount =
-    sessionSearchCount > 1
-      ? mergedSessionLeads.length
-      : isSearching
-        ? rawLeads.length
-        : Math.max(totalFound, tableLeads.length);
+  const displayCount = tableLeads.length;
 
   const isQueuedWaiting =
     queuePosition > 0 && tableLeads.length === 0 && !scrapingInProgress;
 
   const showWelcome =
     status === "idle" &&
-    allLeads.length === 0 &&
     tableLeads.length === 0 &&
     !isSearching &&
     !savedBanner;
@@ -570,37 +517,6 @@ export function SearchDashboard() {
           </div>
         )}
 
-        {sessionSearchCount > 1 && (
-          <div className="flex flex-wrap items-center gap-3 mt-4">
-            <p
-              style={{
-                color: "#A855F7",
-                fontSize: 13,
-                fontWeight: 600,
-                margin: 0,
-              }}
-            >
-              {allLeads.length} total businesses across {sessionSearchCount} searches
-            </p>
-            <button
-              type="button"
-              onClick={startNewSession}
-              style={{
-                background: "transparent",
-                border: "1px solid rgba(255,255,255,0.1)",
-                color: "#6B6B80",
-                padding: "4px 12px",
-                borderRadius: 6,
-                fontSize: 11,
-                cursor: "pointer",
-                fontFamily: "Figtree, sans-serif",
-              }}
-            >
-              Clear all and start fresh
-            </button>
-          </div>
-        )}
-
         <div
           className="mt-4 gap-2.5"
           style={{
@@ -742,15 +658,14 @@ export function SearchDashboard() {
             )}
           </div>
           {isSearching && !isQueuedWaiting && <Progress value={progress} className="h-2" />}
-          <ResultsSummaryBar summary={summary} totalFound={totalFound} />
+          <ResultsSummaryBar leads={tableLeads} />
           <ScrapingProgressBanner
             scrapingInProgress={scrapingInProgress}
-            summary={summary}
-            totalFound={totalFound}
+            leads={tableLeads}
           />
           <NearbyCityChips
             cities={nearbyCities}
-            totalFound={totalFound}
+            totalFound={tableLeads.length}
             onSelectCity={(city) => {
               setLocation(city);
               void runSearchWithNearbyCity(city);

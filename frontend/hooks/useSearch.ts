@@ -40,14 +40,27 @@ const SEARCH_ACCESS_DENIED_MESSAGE =
 
 function mergePendingIntoLeads(
   current: BusinessLead[],
-  pending: BusinessLead[]
+  pending: BusinessLead[],
+  activeSearchId: string | null
 ): BusinessLead[] {
   if (pending.length === 0) return current;
+  const filtered = activeSearchId
+    ? pending.filter((l) => !l.searchId || l.searchId === activeSearchId)
+    : pending;
+  if (filtered.length === 0) return current;
   const byId = new Map(current.map((l) => [l.id, l]));
-  for (const lead of pending) {
+  for (const lead of filtered) {
     if (lead.id) byId.set(lead.id, lead);
   }
   return [...byId.values()];
+}
+
+function filterLeadsForSearch(
+  leads: BusinessLead[],
+  searchId: string | null
+): BusinessLead[] {
+  if (!searchId) return [];
+  return leads.filter((l) => !l.searchId || l.searchId === searchId);
 }
 
 function normalizeSuggestions(
@@ -170,12 +183,15 @@ export function useSearch(options?: UseSearchOptions) {
   );
 
   const mergeLeads = useCallback((incoming: BusinessLead[]) => {
-    if (incoming.length === 0) return;
+    const activeId = searchIdRef.current;
+    const filtered = filterLeadsForSearch(incoming, activeId);
+    if (filtered.length === 0) return;
     setState((prev) => {
+      if (activeId && prev.searchId && prev.searchId !== activeId) return prev;
       const byId = new Map(prev.leads.map((l) => [l.id, l]));
       let changed = false;
 
-      for (const lead of incoming) {
+      for (const lead of filtered) {
         if (!lead.id) continue;
         const existing = byId.get(lead.id);
         if (
@@ -205,25 +221,38 @@ export function useSearch(options?: UseSearchOptions) {
   }, [progressMessage]);
 
   const replaceLeads = useCallback(
-    (incoming: BusinessLead[]) => {
-      const count = incoming.length;
-      setState((prev) => ({
-        ...prev,
-        leads: incoming,
-        totalFound: count,
-        message: progressMessage(count, prev.status === "completed" ? "completed" : "running", prev.queuePosition),
-      }));
+    (incoming: BusinessLead[], searchId?: string | null) => {
+      const activeId = searchId ?? searchIdRef.current;
+      if (!activeId || activeId !== searchIdRef.current) return;
+      const filtered = filterLeadsForSearch(incoming, activeId);
+      const count = filtered.length;
+      setState((prev) => {
+        if (prev.searchId && prev.searchId !== activeId) return prev;
+        return {
+          ...prev,
+          leads: filtered,
+          totalFound: count,
+          searchId: activeId,
+          message: progressMessage(
+            count,
+            prev.status === "completed" ? "completed" : "running",
+            prev.queuePosition
+          ),
+        };
+      });
     },
     [progressMessage]
   );
 
   const syncFromApi = useCallback(
     async (searchId: string, replace = false) => {
+      if (searchId !== searchIdRef.current) return;
       const { leads: fetched } = await getResults(searchId, 1, 250);
+      if (searchId !== searchIdRef.current) return;
       if (fetched.length === 0) return;
       const mapped = fetched.map((l) => leadRowToBusinessLead(l));
       if (replace) {
-        replaceLeads(mapped);
+        replaceLeads(mapped, searchId);
       } else {
         mergeLeads(mapped);
       }
@@ -233,6 +262,7 @@ export function useSearch(options?: UseSearchOptions) {
 
   const fetchFinalResults = useCallback(
     async (searchId: string) => {
+      if (searchId !== searchIdRef.current) return;
       const pending = pendingLeadsRef.current.splice(0);
 
       try {
@@ -243,6 +273,7 @@ export function useSearch(options?: UseSearchOptions) {
 
         while (true) {
           const batch = await getResults(searchId, page, limit);
+          if (searchId !== searchIdRef.current) return;
           if (page === 1) dbCount = batch.total;
           fetched = fetched.concat(batch.leads);
           if (batch.leads.length < limit || fetched.length >= batch.total) break;
@@ -250,30 +281,31 @@ export function useSearch(options?: UseSearchOptions) {
         }
 
         const job = await getSearch(searchId).catch(() => null);
+        if (searchId !== searchIdRef.current) return;
         const mapped = fetched.map((l) => leadRowToBusinessLead(l));
         const merged =
           pending.length > 0
             ? mergePendingIntoLeads(
                 mapped.length > 0 ? mapped : [],
-                pending
+                pending,
+                searchId
               )
             : mapped;
 
-        const totalFound = Math.max(
-          job?.totalFound ?? 0,
-          dbCount,
-          merged.length
-        );
+        const totalFound = merged.length;
 
         if (merged.length > 0) {
-          replaceLeads(merged);
+          replaceLeads(merged, searchId);
         } else if (pending.length > 0) {
           mergeLeads(pending);
         }
 
         setState((prev) => {
+          if (searchId !== searchIdRef.current || prev.searchId !== searchId) {
+            return prev;
+          }
           const leads = merged.length > 0 ? merged : prev.leads;
-          const count = Math.max(totalFound, leads.length);
+          const count = leads.length;
           onCompleteRef.current?.(
             leads,
             queryRef.current,
@@ -294,6 +326,7 @@ export function useSearch(options?: UseSearchOptions) {
           };
         });
       } catch {
+        if (searchId !== searchIdRef.current) return;
         if (pending.length > 0) {
           mergeLeads(pending);
         }
@@ -315,6 +348,8 @@ export function useSearch(options?: UseSearchOptions) {
 
   const finishSearch = useCallback(
     (total: number, message?: string) => {
+      const activeId = searchIdRef.current;
+      if (!activeId) return;
       completedRef.current = true;
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
@@ -325,11 +360,11 @@ export function useSearch(options?: UseSearchOptions) {
       stopScrapingPoll();
 
       const pending = pendingLeadsRef.current.splice(0);
-      const searchId = searchIdRef.current;
 
       setState((prev) => {
-        const merged = mergePendingIntoLeads(prev.leads, pending);
-        const totalFound = Math.max(total || 0, merged.length);
+        if (prev.searchId && prev.searchId !== activeId) return prev;
+        const merged = mergePendingIntoLeads(prev.leads, pending, activeId);
+        const totalFound = merged.length;
         queueMicrotask(() => {
           onCompleteRef.current?.(
             merged,
@@ -346,15 +381,17 @@ export function useSearch(options?: UseSearchOptions) {
           queuePosition: 0,
           error: null,
           scrapingInProgress: false,
-          message: message ?? progressMessage(totalFound, "completed", 0),
+          message:
+            message ??
+            (totalFound === 0
+              ? "No potential clients found in this area. Try a nearby city."
+              : `We found ${totalFound.toLocaleString()} potential clients for you.`),
         };
       });
 
-      if (searchId) {
-        scheduleFinalResultsFetch(searchId, 3000);
-      }
+      scheduleFinalResultsFetch(activeId, 3000);
     },
-    [stopPolling, stopTimeout, stopScrapingPoll, progressMessage, scheduleFinalResultsFetch]
+    [stopPolling, stopTimeout, stopScrapingPoll, scheduleFinalResultsFetch]
   );
 
   const startResultsPoll = useCallback(
@@ -362,28 +399,38 @@ export function useSearch(options?: UseSearchOptions) {
       stopScrapingPoll();
       scrapingPollRef.current = setInterval(() => {
         void (async () => {
+          if (searchId !== searchIdRef.current) return;
           try {
             const payload = await pollSearchResults(searchId);
+            if (searchId !== searchIdRef.current) return;
             if (payload.leads.length > 0) {
-              replaceLeads(payload.leads);
+              replaceLeads(payload.leads, searchId);
             }
-            setState((prev) => ({
-              ...prev,
-              totalFound: Math.max(payload.totalFound, prev.totalFound),
-              queuePosition: payload.queuePosition,
-              summary: payload.summary ?? prev.summary,
-              nearbyCities: payload.nearbyCities ?? prev.nearbyCities,
-              scrapingInProgress: payload.scrapingInProgress,
-            }));
+            setState((prev) => {
+              if (prev.searchId !== searchId) return prev;
+              const count = prev.leads.length;
+              return {
+                ...prev,
+                totalFound: count,
+                queuePosition: payload.queuePosition,
+                summary: payload.summary ?? prev.summary,
+                nearbyCities: payload.nearbyCities ?? prev.nearbyCities,
+                scrapingInProgress: payload.scrapingInProgress,
+              };
+            });
             if (
               !payload.scrapingInProgress &&
-              (payload.status === "completed" || payload.totalFound > 0)
+              (payload.status === "completed" || payload.leads.length > 0)
             ) {
+              const count =
+                payload.leads.length > 0
+                  ? payload.leads.length
+                  : payload.totalFound;
               finishSearch(
-                payload.totalFound,
-                payload.totalFound === 0
+                count,
+                count === 0
                   ? "No potential clients found in this area. Try a nearby city."
-                  : `We found ${payload.totalFound.toLocaleString()} potential clients for you.`
+                  : `We found ${count.toLocaleString()} potential clients for you.`
               );
             }
           } catch {
@@ -396,16 +443,18 @@ export function useSearch(options?: UseSearchOptions) {
   );
 
   const phase1Complete = useCallback(
-    (total: number, message?: string) => {
+    (_total: number, message?: string) => {
+      const activeId = searchIdRef.current;
+      if (!activeId) return;
       const pending = pendingLeadsRef.current.splice(0);
-      const searchId = searchIdRef.current;
 
       setState((prev) => {
-        const merged = mergePendingIntoLeads(prev.leads, pending);
-        const totalFound = Math.max(total || 0, merged.length);
+        if (prev.searchId && prev.searchId !== activeId) return prev;
+        const merged = mergePendingIntoLeads(prev.leads, pending, activeId);
+        const totalFound = merged.length;
         return {
           ...prev,
-          leads: merged.length > 0 ? merged : prev.leads,
+          leads: merged,
           status: "completed",
           totalFound,
           queuePosition: 0,
@@ -417,39 +466,43 @@ export function useSearch(options?: UseSearchOptions) {
         };
       });
 
-      if (searchId) {
-        void pollSearchResults(searchId)
-          .then((payload) => {
-            if (payload.leads.length > 0) replaceLeads(payload.leads);
-            setState((prev) => ({
+      void pollSearchResults(activeId)
+        .then((payload) => {
+          if (activeId !== searchIdRef.current) return;
+          if (payload.leads.length > 0) replaceLeads(payload.leads, activeId);
+          setState((prev) => {
+            if (prev.searchId !== activeId) return prev;
+            return {
               ...prev,
+              totalFound: prev.leads.length,
               summary: payload.summary,
               nearbyCities: payload.nearbyCities ?? [],
               scrapingInProgress: payload.scrapingInProgress,
               queuePosition: payload.queuePosition,
-            }));
-          })
-          .catch(() => undefined);
+            };
+          });
+        })
+        .catch(() => undefined);
 
-        startResultsPoll(searchId);
-      }
+      startResultsPoll(activeId);
     },
-    [finishSearch, replaceLeads, startResultsPoll]
+    [replaceLeads, startResultsPoll]
   );
 
   const pollForResults = useCallback(
     async (searchId: string) => {
-      if (completedRef.current) return;
+      if (completedRef.current || searchId !== searchIdRef.current) return;
       try {
         const { leads: fetched } = await getResults(searchId, 1, 250);
+        if (searchId !== searchIdRef.current) return;
         if (fetched.length > 0) {
           const mapped = fetched.map((l) => leadRowToBusinessLead(l));
-          replaceLeads(mapped);
+          replaceLeads(mapped, searchId);
           finishSearch(
-            fetched.length,
-            fetched.length === 0
+            mapped.length,
+            mapped.length === 0
               ? "No potential clients found in this area. Try a nearby city."
-              : `We found ${fetched.length.toLocaleString()} potential clients for you.`
+              : `We found ${mapped.length.toLocaleString()} potential clients for you.`
           );
         }
       } catch {
@@ -463,34 +516,43 @@ export function useSearch(options?: UseSearchOptions) {
     (searchId: string) => {
       stopPolling();
       pollRef.current = setInterval(() => {
-        if (completedRef.current) return;
+        if (completedRef.current || searchId !== searchIdRef.current) return;
         void (async () => {
           try {
             const job = await getSearch(searchId);
+            if (searchId !== searchIdRef.current) return;
             await syncFromApi(searchId);
 
             if (job.status === "completed") {
-              finishSearch(
-                job.totalFound,
-                progressMessage(job.totalFound, "completed", 0)
-              );
+              setState((prev) => {
+                if (prev.searchId !== searchId) return prev;
+                const count = prev.leads.length;
+                queueMicrotask(() =>
+                  finishSearch(
+                    count,
+                    count === 0
+                      ? "No potential clients found in this area. Try a nearby city."
+                      : `We found ${count.toLocaleString()} potential clients for you.`
+                  )
+                );
+                return prev;
+              });
             } else if (job.status === "failed") {
               setState((prev) => {
+                if (prev.searchId !== searchId) return prev;
                 const pending = pendingLeadsRef.current.splice(0);
-                const merged = mergePendingIntoLeads(prev.leads, pending);
-                const count = Math.max(merged.length, job.totalFound ?? 0);
+                const merged = mergePendingIntoLeads(prev.leads, pending, searchId);
+                const count = merged.length;
                 if (count > 0) {
                   queueMicrotask(() =>
                     finishSearch(
                       count,
-                      count === 0
-                        ? "No potential clients found in this area. Try a nearby city."
-                        : `We found ${count.toLocaleString()} potential clients for you.`
+                      `We found ${count.toLocaleString()} potential clients for you.`
                     )
                   );
                   return {
                     ...prev,
-                    leads: merged.length > 0 ? merged : prev.leads,
+                    leads: merged,
                     totalFound: count,
                     error: null,
                   };
@@ -511,7 +573,7 @@ export function useSearch(options?: UseSearchOptions) {
         })();
       }, POLL_INTERVAL_MS);
     },
-    [stopPolling, syncFromApi, finishSearch, closeStream, progressMessage]
+    [stopPolling, syncFromApi, finishSearch, closeStream]
   );
 
   useEffect(() => {
@@ -540,6 +602,7 @@ export function useSearch(options?: UseSearchOptions) {
       };
 
       es.onmessage = (event) => {
+        if (searchId !== searchIdRef.current) return;
         try {
           const data = JSON.parse(event.data) as {
             type: string;
@@ -567,7 +630,12 @@ export function useSearch(options?: UseSearchOptions) {
 
             case "lead": {
               const lead = data.data ?? data.lead;
-              if (lead) pendingLeadsRef.current.push(lead);
+              if (lead) {
+                pendingLeadsRef.current.push({
+                  ...lead,
+                  searchId: lead.searchId ?? searchId,
+                });
+              }
               break;
             }
 
@@ -666,13 +734,14 @@ export function useSearch(options?: UseSearchOptions) {
 
             case "error":
               setState((prev) => {
+                if (prev.searchId !== searchId) return prev;
                 const pending = pendingLeadsRef.current.splice(0);
-                const merged = mergePendingIntoLeads(prev.leads, pending);
+                const merged = mergePendingIntoLeads(prev.leads, pending, searchId);
                 if (merged.length > 0) {
                   queueMicrotask(() =>
                     finishSearch(
                       merged.length,
-                      `Found ${merged.length.toLocaleString()} potential clients.`
+                      `We found ${merged.length.toLocaleString()} potential clients for you.`
                     )
                   );
                   return {
@@ -712,8 +781,9 @@ export function useSearch(options?: UseSearchOptions) {
 
         let hadResults = false;
         setState((prev) => {
+          if (prev.searchId !== searchId) return prev;
           const pending = pendingLeadsRef.current.splice(0);
-          const merged = mergePendingIntoLeads(prev.leads, pending);
+          const merged = mergePendingIntoLeads(prev.leads, pending, searchId);
           if (merged.length > 0) {
             hadResults = true;
             return {
@@ -762,8 +832,9 @@ export function useSearch(options?: UseSearchOptions) {
             access === "auth" ? SEARCH_ACCESS_DENIED_MESSAGE : CONNECTION_LOST_MESSAGE;
 
           setState((prev) => {
+            if (prev.searchId !== activeId) return prev;
             const pending = pendingLeadsRef.current.splice(0);
-            const merged = mergePendingIntoLeads(prev.leads, pending);
+            const merged = mergePendingIntoLeads(prev.leads, pending, activeId);
             if (merged.length > 0) {
               return {
                 ...prev,
@@ -860,12 +931,21 @@ export function useSearch(options?: UseSearchOptions) {
 
         if (result.cached && result.status === "completed") {
           const { leads: cached } = await getResults(result.searchId);
-          const mapped = cached.map((l) => leadRowToBusinessLead(l));
+          if (result.searchId !== searchIdRef.current) return;
+          const mapped = cached
+            .map((l) => leadRowToBusinessLead(l))
+            .map((l) => ({ ...l, searchId: l.searchId ?? result.searchId }));
+          const filtered = filterLeadsForSearch(mapped, result.searchId);
           setState((prev) => {
             const merged = accumulate
-              ? [...prev.leads, ...mapped.filter((l) => !prev.leads.some((p) => p.id === l.id))]
-              : mapped;
-            const totalFound = result.totalFound ?? merged.length;
+              ? [
+                  ...prev.leads,
+                  ...filtered.filter(
+                    (l) => !prev.leads.some((p) => p.id === l.id)
+                  ),
+                ]
+              : filtered;
+            const totalFound = merged.length;
             onCompleteRef.current?.(
               merged,
               queryRef.current,
@@ -876,7 +956,7 @@ export function useSearch(options?: UseSearchOptions) {
               status: "completed",
               leads: merged,
               searchId: result.searchId,
-              message: `Found ${(result.totalFound ?? mapped.length).toLocaleString()} potential clients instantly from recent search`,
+              message: `Found ${totalFound.toLocaleString()} potential clients instantly from recent search`,
               totalFound,
               searchesRemaining: result.searchesRemaining ?? null,
               queuePosition: 0,
@@ -906,11 +986,13 @@ export function useSearch(options?: UseSearchOptions) {
 
         stopTimeout();
         timeoutRef.current = setTimeout(() => {
-          if (completedRef.current) return;
+          if (completedRef.current || result.searchId !== searchIdRef.current) return;
           void (async () => {
             try {
               await syncFromApi(result.searchId);
+              if (result.searchId !== searchIdRef.current) return;
               const { leads: saved } = await getResults(result.searchId);
+              if (result.searchId !== searchIdRef.current) return;
               if (saved.length > 0) {
                 finishSearch(
                   saved.length,
@@ -921,9 +1003,15 @@ export function useSearch(options?: UseSearchOptions) {
             } catch {
               /* fall through */
             }
+            if (result.searchId !== searchIdRef.current) return;
             setState((prev) => {
+              if (prev.searchId !== result.searchId) return prev;
               const pending = pendingLeadsRef.current.splice(0);
-              const merged = mergePendingIntoLeads(prev.leads, pending);
+              const merged = mergePendingIntoLeads(
+                prev.leads,
+                pending,
+                result.searchId
+              );
               if (merged.length > 0) {
                 queueMicrotask(() =>
                   finishSearch(

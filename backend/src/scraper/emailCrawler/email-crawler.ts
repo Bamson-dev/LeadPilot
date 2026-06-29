@@ -316,15 +316,35 @@ function parseEmailsFromHtml(html: string, pageUrl?: string): string[] {
       pageUrl: pageUrl.substring(0, 50),
       count: unique.length,
     });
+  } else if (unique.length === 0 && html.includes("@") && pageUrl) {
+    const rawMatches = html.match(EMAIL_REGEX) || [];
+    logger.info("[email-diag] @ in HTML but no valid emails after filtering", {
+      pageUrl: pageUrl.substring(0, 80),
+      rawMatchCount: rawMatches.length,
+      sampleRaw: rawMatches.slice(0, 5).map((e) => e.substring(0, 60)),
+      mailtoCount: (html.match(/mailto:/gi) || []).length,
+    });
   }
 
   return unique;
 }
 
 async function extractEmailsFromPage(pageUrl: string): Promise<string[]> {
-  const html = await fetchPageHtml(pageUrl);
-  if (!html) return [];
-  return parseEmailsFromHtml(html, pageUrl);
+  const html = await fetchPageHtmlBestEffort(pageUrl, EMAIL_FETCH_TIMEOUT_MS);
+  if (!html) {
+    logger.warn("[email-diag] No HTML retrieved for email extraction", {
+      pageUrl: pageUrl.substring(0, 80),
+    });
+    return [];
+  }
+  const emails = parseEmailsFromHtml(html, pageUrl);
+  if (emails.length === 0) {
+    logger.info("[email-diag] Email extraction returned empty", {
+      pageUrl: pageUrl.substring(0, 80),
+      htmlLength: html.length,
+    });
+  }
+  return emails;
 }
 
 function resolveInternalUrl(baseUrl: string, contactPath: string): string {

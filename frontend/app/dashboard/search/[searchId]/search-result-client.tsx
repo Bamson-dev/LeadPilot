@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import type { SearchStatsSummary } from "@leadthur/shared";
 import { ResultsTable } from "@/features/results/results-table";
 import { ResultsSummaryBar } from "@/components/dashboard/results-summary-bar";
 import { ScrapingProgressBanner } from "@/components/dashboard/scraping-progress-banner";
@@ -25,11 +24,9 @@ export default function SearchResultPage() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [scrapingInProgress, setScrapingInProgress] = useState(false);
-  const [summary, setSummary] = useState<SearchStatsSummary | null>(null);
   const [nearbyCities, setNearbyCities] = useState<
     Awaited<ReturnType<typeof pollSearchResults>>["nearbyCities"]
   >([]);
-  const [totalFound, setTotalFound] = useState(0);
 
   const { leadStatuses, setLeadStatus, statusFilter, setStatusFilter } =
     useLeadStatuses(leads);
@@ -53,9 +50,7 @@ export default function SearchResultPage() {
         const payload = await pollSearchResults(searchId);
         if (cancelled) return;
         setLeads(payload.leads.map(businessLeadToLead));
-        setTotalFound(payload.totalFound);
         setScrapingInProgress(payload.scrapingInProgress);
-        setSummary(payload.summary);
         setNearbyCities(payload.nearbyCities ?? []);
         setNotFound(false);
         setLoading(false);
@@ -101,15 +96,14 @@ export default function SearchResultPage() {
         <h1 className="text-lg font-bold text-white">Your search results</h1>
       </div>
 
-      <ResultsSummaryBar summary={summary} totalFound={totalFound} />
+      <ResultsSummaryBar leads={leads} />
       <ScrapingProgressBanner
         scrapingInProgress={scrapingInProgress}
-        summary={summary}
-        totalFound={totalFound}
+        leads={leads}
       />
       <NearbyCityChips
         cities={nearbyCities}
-        totalFound={totalFound}
+        totalFound={leads.length}
         onSelectCity={(city) =>
           router.push(`/dashboard?location=${encodeURIComponent(city)}`)
         }
@@ -123,7 +117,7 @@ export default function SearchResultPage() {
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
         onLeadStatusChange={setLeadStatus}
-        totalLeadCount={totalFound}
+        totalLeadCount={leads.length}
       />
     </div>
   );
