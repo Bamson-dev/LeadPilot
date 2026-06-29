@@ -21,6 +21,7 @@ import {
 } from "../services/email";
 import { SALE_PRICE_NGN } from "../constants/pricing";
 import { listTrialSignups } from "../database/free-trial-repository";
+import { getAdminQueueMetrics } from "../queue/search-queue";
 import { logger } from "../utils/logger";
 
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
@@ -131,6 +132,18 @@ adminRouter.post("/login", async (req: Request, res: Response) => {
       error: err instanceof Error ? err.message : "unknown",
     });
     res.status(500).json({ error: "Login failed" });
+  }
+});
+
+adminRouter.get("/queue-status", requireAdminAuth, async (_req: Request, res: Response) => {
+  try {
+    const metrics = await getAdminQueueMetrics();
+    res.json(metrics);
+  } catch (err) {
+    logger.error("GET /admin/queue-status failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to fetch queue status" });
   }
 });
 

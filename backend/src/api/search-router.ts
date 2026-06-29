@@ -25,7 +25,12 @@ import {
   searchJobHasOwnershipRecord,
   userOwnsSearchJob,
 } from "../database/user-search-repository";
-import { searchQueue, getQueuePosition, enqueueSearch } from "../queues/search-queue";
+import {
+  enqueueSearch,
+  enqueueSearchJob,
+  refreshSearchQueueStatus,
+  resolveQueuePosition,
+} from "../queue/search-queue";
 import { checkSearchLimit } from "../middleware/check-search-limit";
 import { requireLicense } from "../middleware/require-license";
 import { trackSearch } from "../services/abuse-detection";
@@ -185,8 +190,8 @@ async function requireSearchOwnership(
   res.status(403).json({ error: "Not authorized to access this search." });
 }
 
-searchRouter.get("/queue/status", (_req: Request, res: Response) => {
-  res.json(searchQueue.getStatus());
+searchRouter.get("/queue/status", async (_req: Request, res: Response) => {
+  res.json(await refreshSearchQueueStatus());
 });
 
 async function buildSearchResultsPayload(
@@ -204,6 +209,8 @@ async function buildSearchResultsPayload(
         : await getAllSearchLeads(searchId)
     );
 
+  const queuePosition = await resolveQueuePosition(searchId);
+
   return {
     searchId,
     status: job?.status ?? "unknown",
@@ -211,6 +218,7 @@ async function buildSearchResultsPayload(
     total,
     totalFound: job?.totalFound ?? total,
     scrapingInProgress: Boolean(job?.scrapingInProgress),
+    queuePosition,
     summary,
     nearbyCities: job?.nearbyCities ?? [],
     page,
@@ -374,7 +382,7 @@ export async function handleFreeTrialSearch(
       return;
     }
 
-    const queueStatus = searchQueue.getStatus();
+    const queueStatus = await refreshSearchQueueStatus();
     if (queueStatus.queued >= 10) {
       res.status(503).json({
         error: "Search queue is full. Please try again in a few minutes.",
@@ -389,16 +397,24 @@ export async function handleFreeTrialSearch(
       isTrial: true,
     });
 
+    await enqueueSearchJob({
+      searchId: searchJob.id,
+      query: trimmedQuery,
+      location: trimmedLocation,
+      isTrial: true,
+    });
+    const queuePosition = await resolveQueuePosition(searchJob.id);
+
     res.status(201).json({
       searchId: searchJob.id,
-      status: "queued",
+      status: queuePosition > 0 ? "queued" : "running",
+      queuePosition,
       isTrial: true,
       maxResults: 15,
-      message: `Searching for ${trimmedQuery} in ${trimmedLocation}`,
-    });
-
-    setImmediate(() => {
-      enqueueSearch(searchJob.id, trimmedQuery, trimmedLocation);
+      message:
+        queuePosition > 0
+          ? `Your search is queued. You are number ${queuePosition} in line.`
+          : `Searching for ${trimmedQuery} in ${trimmedLocation}`,
     });
   } catch (err) {
     logger.error("Free trial search failed", {
@@ -436,7 +452,7 @@ searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => 
       return;
     }
 
-    const queueStatus = searchQueue.getStatus();
+    const queueStatus = await refreshSearchQueueStatus();
     if (queueStatus.queued >= 10) {
       res.status(503).json({
         error: "Search queue is full. Please try again in a few minutes.",
@@ -507,23 +523,28 @@ searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => 
     const searchJob = await createSearchJob(trimmedQuery, trimmedLocation, {
       licenseEmail,
     });
-    const queuePosition = searchQueue.getQueuePosition();
+
+    await enqueueSearchJob({
+      searchId: searchJob.id,
+      query: trimmedQuery,
+      location: trimmedLocation,
+      licenseKey,
+      licenseEmail,
+      isTrial: false,
+    });
+    const queuePosition = await resolveQueuePosition(searchJob.id);
 
     res.status(201).json({
       searchId: searchJob.id,
-      status: "queued",
+      status: queuePosition > 0 ? "queued" : "running",
       queuePosition,
-      scrapingInProgress: true,
+      scrapingInProgress: queuePosition === 0,
       searchesRemaining: req.searchesRemaining ?? null,
-      message: `Searching for ${trimmedQuery} in ${trimmedLocation}`,
+      message:
+        queuePosition > 0
+          ? `Your search is queued. You are number ${queuePosition} in line.`
+          : `Searching for ${trimmedQuery} in ${trimmedLocation}`,
     } satisfies SearchResponse);
-
-    setImmediate(() => {
-      enqueueSearch(searchJob.id, trimmedQuery, trimmedLocation, {
-        licenseKey,
-        licenseEmail,
-      });
-    });
   } catch (err) {
     logger.error("POST /search failed", {
       error: err instanceof Error ? err.message : "unknown",
@@ -547,7 +568,7 @@ searchRouter.get(
       res.status(404).json({ error: "Search not found" });
       return;
     }
-    const position = getQueuePosition(id);
+    const position = await resolveQueuePosition(id);
     res.json({
       ...job,
       queuePosition: position,
@@ -675,12 +696,12 @@ searchRouter.get(
       });
     }
 
-    const position = getQueuePosition(searchId);
-    if (position != null && position > 0) {
+    const position = await resolveQueuePosition(searchId);
+    if (position > 0) {
       res.write(
         `data: ${JSON.stringify({
           type: "progress",
-          message: `Your search is queued. Position ${position} in line.`,
+          message: `Your search is queued. You are number ${position} in line.`,
           processed: 0,
         })}\n\n`
       );
@@ -691,6 +712,18 @@ searchRouter.get(
         try {
           const current = await getSearchJob(searchId);
           if (!current || res.writableEnded) return;
+
+          const queuePos = await resolveQueuePosition(searchId);
+          if (queuePos > 0) {
+            res.write(
+              `data: ${JSON.stringify({
+                type: "progress",
+                message: `Your search is queued. You are number ${queuePos} in line.`,
+                processed: 0,
+              })}\n\n`
+            );
+          }
+
           if (current.status === "failed") {
             res.write(
               `data: ${JSON.stringify({

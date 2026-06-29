@@ -15,6 +15,7 @@ import {
 import { SearchHistory } from "@/components/dashboard/search-history";
 import { AffiliateSection } from "@/components/dashboard/affiliate-section";
 import { WelcomeState } from "@/components/dashboard/welcome-state";
+import { SearchQueueCard } from "@/components/dashboard/search-queue-card";
 import { ResultsSummaryBar } from "@/components/dashboard/results-summary-bar";
 import { ScrapingProgressBanner } from "@/components/dashboard/scraping-progress-banner";
 import { NearbyCityChips } from "@/components/dashboard/nearby-city-chips";
@@ -139,6 +140,7 @@ export function SearchDashboard() {
     scrapingInProgress,
     summary,
     nearbyCities,
+    queuePosition,
   } = useSearch({
     onSearchComplete: (...args) => onSearchCompleteRef.current?.(...args),
     onSearchLimitReached: () => {
@@ -383,6 +385,9 @@ export function SearchDashboard() {
       : isSearching
         ? rawLeads.length
         : Math.max(totalFound, tableLeads.length);
+
+  const isQueuedWaiting =
+    queuePosition > 0 && tableLeads.length === 0 && !scrapingInProgress;
 
   const showWelcome =
     status === "idle" &&
@@ -729,12 +734,13 @@ export function SearchDashboard() {
 
       {showWelcome && <WelcomeState onExampleSearch={handleExampleSearch} />}
 
-      {(isSearching || tableLeads.length > 0) && (
+      {(isSearching || tableLeads.length > 0 || isQueuedWaiting) && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           className="space-y-4"
         >
+          {isQueuedWaiting && <SearchQueueCard queuePosition={queuePosition} />}
           {savedBanner && (
             <div className="rounded-lg border border-violet-500/30 bg-violet-500/10 px-4 py-3 text-sm text-[#A1A1B5]">
               {savedBanner}
@@ -742,16 +748,16 @@ export function SearchDashboard() {
           )}
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <LiveCounter count={displayCount} isSearching={isSearching} />
-            {(isSearching || phaseMessage) && (
+            {(isSearching || phaseMessage) && !isQueuedWaiting && (
               <span className="flex items-center gap-2 text-sm text-[#A1A1B5] sm:max-w-[65%]">
-                {isSearching && (
+                {isSearching && !isQueuedWaiting && (
                   <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#A855F7]" />
                 )}
                 {phaseMessage}
               </span>
             )}
           </div>
-          {isSearching && <Progress value={progress} className="h-2" />}
+          {isSearching && !isQueuedWaiting && <Progress value={progress} className="h-2" />}
           <ResultsSummaryBar summary={summary} totalFound={totalFound} />
           <ScrapingProgressBanner
             scrapingInProgress={scrapingInProgress}

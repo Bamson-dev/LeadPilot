@@ -5,11 +5,11 @@ import {
   getDeepseekKeyFingerprint,
   isDeepseekConfigured,
 } from "../utils/deepseek-config";
-import { searchQueue } from "../queues/search-queue";
+import { refreshSearchQueueStatus } from "../queue/search-queue";
 
 const router = Router();
 
-router.get("/", (_req, res) => {
+router.get("/", async (_req, res) => {
   let browser: "ready" | "initializing" = "initializing";
   try {
     browser = getBrowserPool().isReady() ? "ready" : "initializing";
@@ -28,7 +28,7 @@ router.get("/", (_req, res) => {
       configured: isDeepseekConfigured(),
       keyFingerprint: getDeepseekKeyFingerprint(),
     },
-    queue: searchQueue.getStatus(),
+    queue: await refreshSearchQueueStatus(),
     memory: {
       totalGB: (totalMem / 1024 / 1024 / 1024).toFixed(1),
       usedPercent,
@@ -39,7 +39,7 @@ router.get("/", (_req, res) => {
   });
 });
 
-router.get("/ready", (_req, res) => {
+router.get("/ready", async (_req, res) => {
   const totalMem = os.totalmem();
   const freeMem = os.freemem();
   const usedPercent = Math.round(((totalMem - freeMem) / totalMem) * 100);
@@ -47,7 +47,7 @@ router.get("/ready", (_req, res) => {
   res.status(200).json({
     status: "ready",
     browser: getBrowserPool().isReady() ? "ready" : "initializing",
-    queue: searchQueue.getStatus(),
+    queue: await refreshSearchQueueStatus(),
     memory: {
       totalGB: (totalMem / 1024 / 1024 / 1024).toFixed(1),
       usedPercent,

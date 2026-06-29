@@ -472,6 +472,25 @@ export async function sendSearchFailedEmail(
   });
 }
 
+export async function sendSearchQueueFailureEmail(
+  email: string,
+  query: string,
+  location: string
+): Promise<void> {
+  const html = resultsEmailWrapper(`
+    <h1>Your search ran into a problem</h1>
+    <p>We could not finish your search for <strong>${escapeHtml(query)}</strong> in <strong>${escapeHtml(location)}</strong> this time.</p>
+    <p>Please try again in a few minutes. If the problem continues, try a broader city or business type.</p>
+    <a href="${getFrontendUrl()}/dashboard" class="btn">Try another search →</a>
+  `);
+
+  await deliver({
+    to: email,
+    subject: "your search ran into a problem, please try again",
+    html,
+  });
+}
+
 export async function sendLimitReachedEmail(email: string, resetDate: string): Promise<void> {
   const html = wrapper(`
     <h1 style="font-size:26px;font-weight:900;letter-spacing:-0.5px;margin:0 0 8px">Search limit reached</h1>

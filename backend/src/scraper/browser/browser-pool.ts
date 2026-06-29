@@ -2,6 +2,7 @@ import { chromium, type Browser } from "playwright";
 import { getEnv } from "../../config/env";
 import { logger } from "../../utils/logger";
 import { getChromiumLaunchOptions } from "./chromium-options";
+import { acquirePlaywrightSlot } from "./playwright-semaphore";
 
 export class BrowserPool {
   private browsers: Browser[] = [];
@@ -77,10 +78,36 @@ export class BrowserPool {
     return this.browsers.length > 0 && this.browsers.some((b) => b.isConnected());
   }
 
+  private slotReleases = new Map<Browser, () => void>();
+
   async acquire(timeoutMs = 90_000): Promise<Browser> {
     const deadline = Date.now() + timeoutMs;
+
+    let releaseSlot: (() => void) | null = null;
+    while (!releaseSlot) {
+      if (Date.now() >= deadline) {
+        throw new Error(
+          "Scraper is busy or still starting. Please wait a moment and try again."
+        );
+      }
+      try {
+        releaseSlot = await Promise.race([
+          acquirePlaywrightSlot(),
+          new Promise<never>((_, reject) => {
+            setTimeout(
+              () => reject(new Error("Playwright capacity wait timed out")),
+              Math.max(500, deadline - Date.now())
+            );
+          }),
+        ]);
+      } catch {
+        await new Promise((r) => setTimeout(r, 200));
+      }
+    }
+
     while (this.available.length === 0) {
       if (Date.now() >= deadline) {
+        releaseSlot();
         throw new Error(
           "Scraper is busy or still starting. Please wait a moment and try again."
         );
@@ -88,10 +115,10 @@ export class BrowserPool {
       await new Promise((r) => setTimeout(r, 200));
     }
     const browser = this.available.pop();
-    if (!browser || !browser.isConnected()) {
-      return this.launchBrowser();
-    }
-    return browser;
+    const resolved =
+      !browser || !browser.isConnected() ? await this.launchBrowser() : browser;
+    this.slotReleases.set(resolved, releaseSlot);
+    return resolved;
   }
 
   async waitUntilReady(timeoutMs = 60_000): Promise<boolean> {
@@ -106,6 +133,11 @@ export class BrowserPool {
   release(browser: Browser): void {
     if (browser.isConnected() && !this.available.includes(browser)) {
       this.available.push(browser);
+    }
+    const releaseSlot = this.slotReleases.get(browser);
+    if (releaseSlot) {
+      releaseSlot();
+      this.slotReleases.delete(browser);
     }
   }
 

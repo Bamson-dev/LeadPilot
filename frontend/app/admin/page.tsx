@@ -8,6 +8,7 @@ import { BlogManager } from "@/components/admin/blog-manager";
 import { DirectMessaging } from "@/components/admin/direct-messaging";
 import { TrialInsightsTabs } from "@/components/admin/trial-insights-tabs";
 import { TrialBroadcastPanel } from "@/components/admin/trial-broadcast-panel";
+import { AdminQueueStatusBar } from "@/components/admin/queue-status-bar";
 import {
   adminLogin,
   clearAdminToken,
@@ -577,6 +578,10 @@ export default function AdminPage() {
           Logout
         </button>
       </header>
+
+      <div className="mx-auto max-w-6xl">
+        <AdminQueueStatusBar enabled={Boolean(token)} />
+      </div>
 
       {/* ACTIVATION TRACKER */}
       <div

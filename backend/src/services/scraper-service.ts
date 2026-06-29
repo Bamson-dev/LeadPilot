@@ -61,6 +61,16 @@ async function resolveNotificationEmail(
   return getLicenseEmailBySearchId(searchId);
 }
 
+export async function forceFinalizeSearchJob(
+  searchId: string,
+  query: string,
+  location: string,
+  licenseEmail: string | null,
+  emailTimedOut: boolean
+): Promise<void> {
+  await finalizeSearchAndNotify(searchId, query, location, licenseEmail, emailTimedOut);
+}
+
 async function finalizeSearchAndNotify(
   searchId: string,
   query: string,
@@ -450,20 +460,18 @@ export async function runScraperJob(
     pool.release(browser);
     browserReleased = true;
 
-    setImmediate(() => {
-      void runBackgroundWork(
-        searchId,
-        query,
-        location,
-        scrapeResult.remainingUrls,
-        isTrial,
-        emit,
-        {
-          licenseKey: options?.licenseKey,
-          licenseEmail: licenseEmail ?? options?.licenseEmail,
-        }
-      );
-    });
+    await runBackgroundWork(
+      searchId,
+      query,
+      location,
+      scrapeResult.remainingUrls,
+      isTrial,
+      emit,
+      {
+        licenseKey: options?.licenseKey,
+        licenseEmail: licenseEmail ?? options?.licenseEmail,
+      }
+    );
   } catch (err) {
     searchComplete = true;
     clearTimeout(runningEmailTimer);

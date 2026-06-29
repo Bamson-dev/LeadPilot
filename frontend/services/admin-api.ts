@@ -27,6 +27,23 @@ async function handleAdminResponse(res: Response): Promise<void> {
   if (res.status === 401) throw new Error("SESSION_EXPIRED");
 }
 
+export interface AdminQueueStatus {
+  active: number;
+  waiting: number;
+  failedLast24h: number;
+  mode: "bullmq" | "inline";
+}
+
+export async function getAdminQueueStatus(): Promise<AdminQueueStatus> {
+  const res = await fetch(`${getApiUrl()}/admin/queue-status`, {
+    headers: getAdminHeaders(),
+    cache: "no-store",
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to load queue status");
+  return (await res.json()) as AdminQueueStatus;
+}
+
 export async function adminLogin(email: string, password: string) {
   const res = await fetch(`${getApiUrl()}/admin/login`, {
     method: "POST",

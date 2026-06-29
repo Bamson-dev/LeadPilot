@@ -23,6 +23,7 @@ import { getBrowserPool } from "./scraper/browser/browser-pool";
 import { logger } from "./utils/logger";
 import { getDeepseekKeyFingerprint, isDeepseekConfigured } from "./utils/deepseek-config";
 import { startTrialSequenceScheduler } from "./services/trial-sequence";
+import { initSearchQueue, shutdownSearchQueue } from "./queue/search-queue";
 
 export const app = express();
 
@@ -193,6 +194,7 @@ async function start(): Promise<void> {
       deepseekKeyFingerprint: getDeepseekKeyFingerprint(),
     });
     startTrialSequenceScheduler();
+    await initSearchQueue();
   } catch (err) {
     logger.error("Backend configuration failed — /health works, API routes disabled", {
       error: err instanceof Error ? err.message : "unknown",
@@ -218,6 +220,7 @@ async function start(): Promise<void> {
 
     if (routesRegistered) {
       try {
+        await shutdownSearchQueue();
         await getBrowserPool().shutdown();
       } catch (err) {
         logger.error("Browser pool shutdown error", {

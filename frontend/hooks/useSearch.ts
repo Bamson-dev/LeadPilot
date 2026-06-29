@@ -354,6 +354,42 @@ export function useSearch(options?: UseSearchOptions) {
     [stopPolling, stopTimeout, stopScrapingPoll, progressMessage, scheduleFinalResultsFetch]
   );
 
+  const startResultsPoll = useCallback(
+    (searchId: string) => {
+      stopScrapingPoll();
+      scrapingPollRef.current = setInterval(() => {
+        void (async () => {
+          try {
+            const payload = await pollSearchResults(searchId);
+            if (payload.leads.length > 0) {
+              replaceLeads(payload.leads);
+            }
+            setState((prev) => ({
+              ...prev,
+              totalFound: Math.max(payload.totalFound, prev.totalFound),
+              queuePosition: payload.queuePosition,
+              summary: payload.summary ?? prev.summary,
+              nearbyCities: payload.nearbyCities ?? prev.nearbyCities,
+              scrapingInProgress: payload.scrapingInProgress,
+            }));
+            if (
+              !payload.scrapingInProgress &&
+              (payload.status === "completed" || payload.totalFound > 0)
+            ) {
+              finishSearch(
+                payload.totalFound,
+                `Search complete. Found ${payload.totalFound} businesses.`
+              );
+            }
+          } catch {
+            /* best-effort */
+          }
+        })();
+      }, SCRAPING_POLL_INTERVAL_MS);
+    },
+    [finishSearch, replaceLeads, stopScrapingPoll]
+  );
+
   const phase1Complete = useCallback(
     (total: number, message?: string) => {
       const pending = pendingLeadsRef.current.splice(0);
@@ -379,46 +415,21 @@ export function useSearch(options?: UseSearchOptions) {
       if (searchId) {
         void pollSearchResults(searchId)
           .then((payload) => {
-            const mapped = payload.leads.map((l) => l);
-            if (mapped.length > 0) replaceLeads(mapped);
+            if (payload.leads.length > 0) replaceLeads(payload.leads);
             setState((prev) => ({
               ...prev,
               summary: payload.summary,
               nearbyCities: payload.nearbyCities ?? [],
               scrapingInProgress: payload.scrapingInProgress,
+              queuePosition: payload.queuePosition,
             }));
           })
           .catch(() => undefined);
 
-        stopScrapingPoll();
-        scrapingPollRef.current = setInterval(() => {
-          void (async () => {
-            try {
-              const payload = await pollSearchResults(searchId);
-              if (payload.leads.length > 0) {
-                replaceLeads(payload.leads);
-              }
-              setState((prev) => ({
-                ...prev,
-                totalFound: payload.totalFound,
-                summary: payload.summary,
-                nearbyCities: payload.nearbyCities ?? prev.nearbyCities,
-                scrapingInProgress: payload.scrapingInProgress,
-              }));
-              if (!payload.scrapingInProgress) {
-                finishSearch(
-                  payload.totalFound,
-                  `Search complete. Found ${payload.totalFound} businesses.`
-                );
-              }
-            } catch {
-              /* best-effort */
-            }
-          })();
-        }, SCRAPING_POLL_INTERVAL_MS);
+        startResultsPoll(searchId);
       }
     },
-    [finishSearch, replaceLeads, stopScrapingPoll]
+    [finishSearch, replaceLeads, startResultsPoll]
   );
 
   const pollForResults = useCallback(
@@ -874,6 +885,9 @@ export function useSearch(options?: UseSearchOptions) {
 
         connectToStream(result.searchId);
         startPolling(result.searchId);
+        if (queuePosition > 0) {
+          startResultsPoll(result.searchId);
+        }
 
         stopTimeout();
         timeoutRef.current = setTimeout(() => {
@@ -935,7 +949,7 @@ export function useSearch(options?: UseSearchOptions) {
         }));
       }
     },
-    [closeStream, connectToStream, startPolling, stopTimeout, syncFromApi, finishSearch, progressMessage]
+    [closeStream, connectToStream, startPolling, startResultsPoll, stopTimeout, syncFromApi, finishSearch, progressMessage]
   );
 
   const runSearchWithNearbyCity = useCallback(

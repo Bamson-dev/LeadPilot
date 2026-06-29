@@ -23,6 +23,7 @@ export interface SearchResultsResponse {
   total: number;
   totalFound: number;
   scrapingInProgress: boolean;
+  queuePosition: number;
   summary: SearchStatsSummary;
   nearbyCities: NearbyCitySuggestion[];
   page?: number;
