@@ -1,7 +1,9 @@
 /**
  * Build Maps search URL variants for a query/location pair.
- * Multiple phrasings and sub-areas increase unique place URLs past the ~120 Maps viewport cap.
+ * Grid points, keyword variations, and sub-areas increase unique place URLs.
  */
+
+import { buildGridSearchUrls } from "./grid-search";
 
 const NIGERIA_CITIES = [
   "abuja",
@@ -18,12 +20,39 @@ const NIGERIA_CITIES = [
   "warri",
 ];
 
+const KEYWORD_SYNONYMS: Record<string, string[]> = {
+  restaurant: ["restaurants", "dining", "food", "eatery"],
+  restaurants: ["restaurant", "dining", "food", "eatery"],
+  cafe: ["cafes", "coffee shop", "coffee"],
+  hotel: ["hotels", "lodging", "accommodation"],
+  salon: ["salons", "hair salon", "beauty salon"],
+  gym: ["gyms", "fitness", "fitness center"],
+  dentist: ["dentists", "dental clinic", "dental"],
+  lawyer: ["lawyers", "law firm", "attorney"],
+  plumber: ["plumbers", "plumbing"],
+  electrician: ["electricians", "electrical"],
+};
+
 export function isNigeriaLocation(location: string): boolean {
   const lower = location.toLowerCase();
   return (
     lower.includes("nigeria") ||
     NIGERIA_CITIES.some((city) => lower.includes(city))
   );
+}
+
+export function getKeywordVariations(query: string): string[] {
+  const q = query.trim().toLowerCase();
+  const variants = new Set<string>([query.trim()]);
+
+  for (const [key, synonyms] of Object.entries(KEYWORD_SYNONYMS)) {
+    if (q === key || q.includes(key)) {
+      synonyms.forEach((s) => variants.add(s));
+      variants.add(key);
+    }
+  }
+
+  return [...variants];
 }
 
 export function getLocationVariants(location: string): string[] {
@@ -80,12 +109,7 @@ export function getLocationVariants(location: string): string[] {
 
 function phrasesForQueryLocation(query: string, loc: string): string[] {
   const q = query.trim();
-  const phrases = [
-    `${q} in ${loc}`,
-    `${loc} ${q}`,
-    `best ${q} ${loc}`,
-  ];
-  return phrases;
+  return [`${q} in ${loc}`, `${loc} ${q}`, `best ${q} ${loc}`];
 }
 
 export function buildSearchStrategyUrls(
@@ -93,32 +117,65 @@ export function buildSearchStrategyUrls(
   location: string,
   isTrial = false
 ): string[] {
-  const q = query.trim();
   const locTrimmed = location.trim();
+  const keywords = getKeywordVariations(query);
 
   if (isTrial) {
+    const q = query.trim();
     return [
       `https://www.google.com/maps/search/${encodeURIComponent(`${q} in ${locTrimmed}`)}`,
       `https://www.google.com/maps/search/${encodeURIComponent(`${locTrimmed} ${q}`)}`,
     ];
   }
 
-  const locations = getLocationVariants(locTrimmed);
   const urls = new Set<string>();
+  const locations = getLocationVariants(locTrimmed);
 
   for (const loc of locations) {
-    for (const phrase of phrasesForQueryLocation(q, loc)) {
-      urls.add(
-        `https://www.google.com/maps/search/${encodeURIComponent(phrase)}`
-      );
+    for (const keyword of keywords) {
+      for (const phrase of phrasesForQueryLocation(keyword, loc)) {
+        urls.add(
+          `https://www.google.com/maps/search/${encodeURIComponent(phrase)}`
+        );
+      }
     }
   }
 
   if (isNigeriaLocation(locTrimmed)) {
-    urls.add(
-      `https://www.google.com/maps/search/${encodeURIComponent(`${q} ${locTrimmed} Nigeria`)}`
-    );
+    for (const keyword of keywords) {
+      urls.add(
+        `https://www.google.com/maps/search/${encodeURIComponent(`${keyword} ${locTrimmed} Nigeria`)}`
+      );
+    }
   }
 
   return [...urls];
+}
+
+/** Grid-based URLs — async because geocoding may call Nominatim. */
+export async function buildGridStrategyUrls(
+  query: string,
+  location: string,
+  expanded = false
+): Promise<string[]> {
+  const keywords = getKeywordVariations(query);
+  try {
+    return await buildGridSearchUrls(keywords, location, expanded);
+  } catch {
+    return [];
+  }
+}
+
+/** Combined strategy list: classic phrases first, then grid (for deduped collection). */
+export async function buildAllSearchStrategyUrls(
+  query: string,
+  location: string,
+  isTrial = false,
+  expanded = false
+): Promise<string[]> {
+  const classic = buildSearchStrategyUrls(query, location, isTrial);
+  if (isTrial) return classic;
+
+  const grid = await buildGridStrategyUrls(query, location, expanded);
+  return [...new Set([...classic, ...grid])];
 }

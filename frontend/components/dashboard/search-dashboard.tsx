@@ -15,6 +15,9 @@ import {
 import { SearchHistory } from "@/components/dashboard/search-history";
 import { AffiliateSection } from "@/components/dashboard/affiliate-section";
 import { WelcomeState } from "@/components/dashboard/welcome-state";
+import { ResultsSummaryBar } from "@/components/dashboard/results-summary-bar";
+import { ScrapingProgressBanner } from "@/components/dashboard/scraping-progress-banner";
+import { NearbyCityChips } from "@/components/dashboard/nearby-city-chips";
 import { ResultsTable } from "@/features/results/results-table";
 import { WhatsappTemplateModal } from "@/components/dashboard/whatsapp-template-modal";
 import { useSearch } from "@/hooks/useSearch";
@@ -127,11 +130,15 @@ export function SearchDashboard() {
     totalFound,
     runSearch,
     runSearchWithSuggestion,
+    runSearchWithNearbyCity,
     suggestions,
     setSuggestions,
     clearResults,
     reset,
     loadSavedLeads,
+    scrapingInProgress,
+    summary,
+    nearbyCities,
   } = useSearch({
     onSearchComplete: (...args) => onSearchCompleteRef.current?.(...args),
     onSearchLimitReached: () => {
@@ -745,6 +752,20 @@ export function SearchDashboard() {
             )}
           </div>
           {isSearching && <Progress value={progress} className="h-2" />}
+          <ResultsSummaryBar summary={summary} totalFound={totalFound} />
+          <ScrapingProgressBanner
+            scrapingInProgress={scrapingInProgress}
+            summary={summary}
+            totalFound={totalFound}
+          />
+          <NearbyCityChips
+            cities={nearbyCities}
+            totalFound={totalFound}
+            onSelectCity={(city) => {
+              setLocation(city);
+              void runSearchWithNearbyCity(city);
+            }}
+          />
         </motion.div>
       )}
 

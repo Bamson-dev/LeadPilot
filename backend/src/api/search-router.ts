@@ -1,16 +1,19 @@
 import os from "os";
 import { Router, type NextFunction, type Request, type Response } from "express";
-import type { SearchResponse } from "@leadthur/shared";
+import type { SearchResponse, SearchResultsResponse } from "@leadthur/shared";
 import {
   createSearchJob,
   getSearchJob,
   getSearchJobAccess,
   getSearchResults,
+  getAllSearchLeads,
   setSearchJobLicenseEmail,
   markSearchComplete,
   markSearchFailed,
+  updateSearchJob,
   type SearchJobAccess,
 } from "../database/search-repository";
+import { computeSearchStats } from "../services/search-stats";
 import {
   copyCachedLeadsForInsert,
   getCachedSearch,
@@ -185,6 +188,63 @@ async function requireSearchOwnership(
 searchRouter.get("/queue/status", (_req: Request, res: Response) => {
   res.json(searchQueue.getStatus());
 });
+
+async function buildSearchResultsPayload(
+  searchId: string,
+  page: number,
+  limit: number
+): Promise<SearchResultsResponse> {
+  const job = await getSearchJob(searchId);
+  const { leads, total } = await getSearchResults(searchId, page, limit);
+  const summary =
+    job?.statsSummary ??
+    computeSearchStats(
+      page === 1 && leads.length >= total
+        ? leads
+        : await getAllSearchLeads(searchId)
+    );
+
+  return {
+    searchId,
+    status: job?.status ?? "unknown",
+    leads,
+    total,
+    totalFound: job?.totalFound ?? total,
+    scrapingInProgress: Boolean(job?.scrapingInProgress),
+    summary,
+    nearbyCities: job?.nearbyCities ?? [],
+    page,
+    limit,
+  };
+}
+
+searchRouter.get(
+  "/results/:searchId",
+  licenseQueryToHeaders,
+  async (req: Request, res: Response, next: NextFunction) => {
+    req.params.id = req.params.searchId;
+    next();
+  },
+  loadSearchAccess,
+  requireSearchOwnership,
+  async (req: Request, res: Response) => {
+    try {
+      const searchId = String(req.params.searchId);
+      const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
+      const limit = Math.min(
+        1000,
+        Math.max(1, parseInt(String(req.query.limit ?? "1000"), 10) || 1000)
+      );
+      const payload = await buildSearchResultsPayload(searchId, page, limit);
+      res.json(payload);
+    } catch (err) {
+      logger.error("GET /search/results/:searchId failed", {
+        error: err instanceof Error ? err.message : "unknown",
+      });
+      res.status(500).json({ error: "Failed to fetch results" });
+    }
+  }
+);
 
 searchRouter.get("/suggestions", async (req: Request, res: Response) => {
   // DeepSeek area suggestions — paid dashboard only; trial searches never call this endpoint
@@ -407,6 +467,11 @@ searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => 
       }
 
       await markSearchComplete(newJob.id, cached.leads.length);
+      const cachedStats = computeSearchStats(cached.leads.map((l) => ({ ...l, searchId: newJob.id })));
+      await updateSearchJob(newJob.id, {
+        scrapingInProgress: false,
+        statsSummary: cachedStats,
+      });
 
       if (licenseKey) {
         void saveUserSearch({
@@ -432,6 +497,7 @@ searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => 
         status: "completed",
         cached: true,
         totalFound: cached.leads.length,
+        scrapingInProgress: false,
         searchesRemaining: req.searchesRemaining ?? null,
         message: `Found ${cached.leads.length} businesses instantly`,
       } satisfies SearchResponse);
@@ -447,6 +513,7 @@ searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => 
       searchId: searchJob.id,
       status: "queued",
       queuePosition,
+      scrapingInProgress: true,
       searchesRemaining: req.searchesRemaining ?? null,
       message: `Searching for ${trimmedQuery} in ${trimmedLocation}`,
     } satisfies SearchResponse);
@@ -504,19 +571,14 @@ searchRouter.get(
     const id = String(req.params.id);
     const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
     const limit = Math.min(
-      250,
-      Math.max(1, parseInt(String(req.query.limit ?? "250"), 10) || 250)
+      1000,
+      Math.max(1, parseInt(String(req.query.limit ?? "1000"), 10) || 1000)
     );
     const job = req.searchAccess?.job ?? (await getSearchJob(id));
-    const { leads, total } = await getSearchResults(id, page, limit);
+    const payload = await buildSearchResultsPayload(id, page, limit);
     res.json({
-      searchId: id,
-      status: job?.status ?? "unknown",
-      leads,
-      total,
-      totalFound: job?.totalFound ?? total,
-      page,
-      limit,
+      ...payload,
+      status: job?.status ?? payload.status,
     });
   } catch (err) {
     logger.error("GET /search/:id/results failed", {

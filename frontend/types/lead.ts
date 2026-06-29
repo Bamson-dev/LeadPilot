@@ -20,6 +20,7 @@ export interface Lead {
   category: string | null;
   google_maps_url: string | null;
   created_at: string;
+  email_scraped?: boolean;
 }
 
 export function businessLeadToLead(lead: BusinessLead): Lead {
@@ -65,6 +66,7 @@ export function businessLeadToLead(lead: BusinessLead): Lead {
     category: lead.category,
     google_maps_url: lead.googleMapsUrl,
     created_at: lead.createdAt,
+    email_scraped: lead.emailScraped ?? false,
   };
 }
 

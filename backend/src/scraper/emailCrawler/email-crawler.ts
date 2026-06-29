@@ -1,6 +1,7 @@
+import { EMAIL_FETCH_TIMEOUT_MS } from "../utils/constants";
 import { isValidEmail } from "../parsers/email-validation";
-import { resolveEffectiveBusinessWebsite } from "../utils/effective-website";
 import { logger } from "../../utils/logger";
+import { resolveEffectiveBusinessWebsite } from "../utils/effective-website";
 
 export interface EmailCrawlResult {
   emails: string[];
@@ -168,10 +169,10 @@ export async function crawlEmailsFromWebsite(
   }
 }
 
-async function fetchPageHtml(pageUrl: string): Promise<string | null> {
+async function fetchPageHtml(pageUrl: string, timeoutMs = EMAIL_FETCH_TIMEOUT_MS): Promise<string | null> {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     const response = await fetch(pageUrl, {
       signal: controller.signal,
@@ -338,4 +339,126 @@ export async function crawlEmailForWebsite(
     };
   }
   return { emails: [], email: null, emailSource: "none" };
+}
+
+const GENERIC_EMAIL_LOCALS = new Set([
+  "noreply",
+  "no-reply",
+  "donotreply",
+  "example",
+  "test",
+  "admin",
+  "webmaster",
+  "postmaster",
+  "mailer-daemon",
+  "placeholder",
+  "sample",
+]);
+
+function isGenericPlaceholderEmail(email: string): boolean {
+  const local = email.split("@")[0]?.toLowerCase() ?? "";
+  return GENERIC_EMAIL_LOCALS.has(local) || local.startsWith("noreply");
+}
+
+function filterScrapedEmails(emails: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const raw of emails) {
+    const email = raw.toLowerCase().trim();
+    if (!isValidEmail(email)) continue;
+    if (isGenericPlaceholderEmail(email)) continue;
+    if (seen.has(email)) continue;
+    seen.add(email);
+    result.push(email);
+  }
+  return result;
+}
+
+function extractEmailsFromHtmlStrict(html: string): string[] {
+  const found: string[] = [];
+
+  let match: RegExpExecArray | null;
+  while ((match = MAILTO_REGEX.exec(html)) !== null) {
+    const email = match[1].toLowerCase().trim();
+    if (isValidEmail(email)) found.push(email);
+  }
+  MAILTO_REGEX.lastIndex = 0;
+
+  const allMatches = html.match(EMAIL_REGEX) || [];
+  for (const email of allMatches) {
+    const normalized = email.toLowerCase().trim();
+    if (isValidEmail(normalized)) found.push(normalized);
+  }
+
+  return filterScrapedEmails([...new Set(found)]);
+}
+
+function findContactLinkFromHtml(html: string, baseUrl: string): string | null {
+  const anchorRegex =
+    /<a[^>]+href=["']([^"']+)["'][^>]*>([^<]*(?:contact|about|reach us)[^<]*)<\/a>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = anchorRegex.exec(html)) !== null) {
+    const href = match[1];
+    const text = match[2]?.toLowerCase() ?? "";
+    if (
+      /contact|about|reach us/i.test(text) ||
+      /contact|about|reach/i.test(href)
+    ) {
+      return resolveInternalUrl(baseUrl, href);
+    }
+  }
+  return findContactPageUrlFromHtml(html, baseUrl);
+}
+
+/**
+ * Strict website email scrape for background enrichment:
+ * mailto → regex → contact page. 5s total timeout per site. No predictions.
+ */
+export async function scrapeBusinessEmailStrict(
+  websiteUrl: string | null | undefined
+): Promise<string[]> {
+  if (!websiteUrl?.trim()) return [];
+
+  const deadline = Date.now() + EMAIL_FETCH_TIMEOUT_MS;
+
+  const timedOut = () => Date.now() >= deadline;
+
+  try {
+    const resolved = await resolveEffectiveBusinessWebsite(websiteUrl);
+    if (!resolved) return [];
+
+    let baseUrl = resolved.trim();
+    if (!baseUrl.startsWith("http")) baseUrl = `https://${baseUrl}`;
+    baseUrl = baseUrl.replace(/\/$/, "");
+
+    const homepageHtml = await fetchPageHtml(
+      baseUrl,
+      Math.max(500, deadline - Date.now())
+    );
+    if (timedOut()) return [];
+
+    if (homepageHtml) {
+      const fromHome = extractEmailsFromHtmlStrict(homepageHtml);
+      if (fromHome.length > 0) return fromHome.slice(0, 3);
+    }
+
+    const contactUrl = homepageHtml
+      ? findContactLinkFromHtml(homepageHtml, baseUrl)
+      : await findContactPageUrl(baseUrl);
+
+    if (contactUrl && !timedOut()) {
+      const contactHtml = await fetchPageHtml(
+        contactUrl,
+        Math.max(500, deadline - Date.now())
+      );
+      if (contactHtml) {
+        const fromContact = extractEmailsFromHtmlStrict(contactHtml);
+        if (fromContact.length > 0) return fromContact.slice(0, 3);
+      }
+    }
+
+    return [];
+  } catch {
+    return [];
+  }
 }

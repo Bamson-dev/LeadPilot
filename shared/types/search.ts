@@ -1,4 +1,4 @@
-import type { BusinessLead } from "./business";
+import type { BusinessLead, NearbyCitySuggestion, SearchStatsSummary } from "./business";
 
 export interface SearchJob {
   id: string;
@@ -8,9 +8,25 @@ export interface SearchJob {
   totalFound: number;
   processed: number;
   isTrial?: boolean;
+  scrapingInProgress?: boolean;
+  nearbyCities?: NearbyCitySuggestion[];
+  statsSummary?: SearchStatsSummary | null;
   createdAt: string;
   updatedAt: string;
   error: string | null;
+}
+
+export interface SearchResultsResponse {
+  searchId: string;
+  status: string;
+  leads: BusinessLead[];
+  total: number;
+  totalFound: number;
+  scrapingInProgress: boolean;
+  summary: SearchStatsSummary;
+  nearbyCities: NearbyCitySuggestion[];
+  page?: number;
+  limit?: number;
 }
 
 export interface SearchRequest {
@@ -23,6 +39,7 @@ export interface SearchResponse {
   status: string;
   cached?: boolean;
   totalFound?: number;
+  scrapingInProgress?: boolean;
   queuePosition?: number;
   searchesRemaining?: number | null;
   message?: string;

@@ -1,4 +1,4 @@
-import type { BusinessLead, SearchJob } from "@leadthur/shared";
+import type { BusinessLead, NearbyCitySuggestion, SearchJob, SearchStatsSummary } from "@leadthur/shared";
 import {
   predictionsFromDb,
   predictionStorageFields,
@@ -15,6 +15,10 @@ interface DbSearchJob {
   processed: number;
   is_trial?: boolean | null;
   license_email?: string | null;
+  scraping_in_progress?: boolean | null;
+  nearby_cities?: NearbyCitySuggestion[] | null;
+  stats_summary?: SearchStatsSummary | null;
+  results_email_sent?: boolean | null;
   error: string | null;
   created_at: string;
   updated_at: string;
@@ -46,6 +50,7 @@ interface DbBusinessLead {
   google_maps_url: string | null;
   has_website: boolean;
   has_instagram: boolean;
+  email_scraped?: boolean | null;
   created_at: string;
 }
 
@@ -92,6 +97,7 @@ function leadToDbInsert(lead: BusinessLead): Record<string, unknown> {
     google_maps_url: lead.googleMapsUrl,
     has_website: lead.hasWebsite,
     has_instagram: lead.hasInstagram,
+    email_scraped: lead.emailScraped ?? false,
   };
 }
 
@@ -107,6 +113,9 @@ function mapSearchJob(row: DbSearchJob): SearchJob {
     updatedAt: row.updated_at,
     error: row.error,
     isTrial: Boolean(row.is_trial),
+    scrapingInProgress: Boolean(row.scraping_in_progress),
+    nearbyCities: (row.nearby_cities as NearbyCitySuggestion[] | null) ?? undefined,
+    statsSummary: (row.stats_summary as SearchStatsSummary | null) ?? undefined,
   };
 }
 
@@ -165,6 +174,7 @@ function mapBusinessLead(row: DbBusinessLead): BusinessLead {
     googleMapsUrl: row.google_maps_url,
     hasWebsite: row.has_website,
     hasInstagram: row.has_instagram,
+    emailScraped: Boolean(row.email_scraped),
     createdAt: row.created_at,
   };
 }
@@ -204,6 +214,10 @@ export async function updateSearchJob(
     totalFound: number;
     processed: number;
     error: string | null;
+    scrapingInProgress: boolean;
+    nearbyCities: NearbyCitySuggestion[] | null;
+    statsSummary: SearchStatsSummary | null;
+    resultsEmailSent: boolean;
   }>
 ): Promise<void> {
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -211,6 +225,14 @@ export async function updateSearchJob(
   if (patch.totalFound != null) update.total_found = patch.totalFound;
   if (patch.processed != null) update.processed = patch.processed;
   if (patch.error !== undefined) update.error = patch.error;
+  if (patch.scrapingInProgress !== undefined) {
+    update.scraping_in_progress = patch.scrapingInProgress;
+  }
+  if (patch.nearbyCities !== undefined) update.nearby_cities = patch.nearbyCities;
+  if (patch.statsSummary !== undefined) update.stats_summary = patch.statsSummary;
+  if (patch.resultsEmailSent !== undefined) {
+    update.results_email_sent = patch.resultsEmailSent;
+  }
 
   const { error } = await supabase.from("search_jobs").update(update).eq("id", id);
   if (error) throw new Error(error.message);
@@ -283,6 +305,7 @@ export async function updateBusinessLeadEmails(
           prediction_confidence: null,
           prediction_confidence_secondary: null,
           email_source: "predicted",
+          email_scraped: true,
         }
       : {
           email: primary,
@@ -292,6 +315,7 @@ export async function updateBusinessLeadEmails(
           prediction_confidence: null,
           prediction_confidence_secondary: null,
           email_source: verified.length > 0 ? "extracted" : "none",
+          email_scraped: true,
         };
 
   const { error } = await supabase
@@ -300,6 +324,63 @@ export async function updateBusinessLeadEmails(
     .eq("id", businessId);
 
   if (error) throw new Error(error.message);
+}
+
+export async function markBusinessLeadEmailScraped(
+  businessId: string,
+  emails: string[] = []
+): Promise<void> {
+  const verified = emails.filter(Boolean);
+  const primary = verified.length > 0 ? verified.join(", ") : null;
+  const { error } = await supabase
+    .from("business_leads")
+    .update({
+      email: primary,
+      verified_email: primary,
+      email_source: verified.length > 0 ? "extracted" : "none",
+      email_scraped: true,
+    })
+    .eq("id", businessId);
+
+  if (error) throw new Error(error.message);
+}
+
+export async function getLeadsNeedingEmailScrape(
+  searchId: string
+): Promise<BusinessLead[]> {
+  const { data, error } = await supabase
+    .from("business_leads")
+    .select("*")
+    .eq("search_id", searchId)
+    .eq("email_scraped", false)
+    .not("website", "is", null);
+
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row) => mapBusinessLead(row as DbBusinessLead));
+}
+
+export async function getAllSearchLeads(searchId: string): Promise<BusinessLead[]> {
+  const { data, error } = await supabase
+    .from("business_leads")
+    .select("*")
+    .eq("search_id", searchId)
+    .order("created_at", { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row) => mapBusinessLead(row as DbBusinessLead));
+}
+
+export async function tryClaimResultsEmailSend(searchId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("search_jobs")
+    .update({ results_email_sent: true })
+    .eq("id", searchId)
+    .eq("results_email_sent", false)
+    .select("id")
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return Boolean(data);
 }
 
 export async function insertBusinessLeads(leads: BusinessLead[]): Promise<void> {

@@ -20,5 +20,21 @@ export interface BusinessLead {
   googleMapsUrl: string | null;
   hasWebsite: boolean;
   hasInstagram: boolean;
+  /** True when website email scrape was attempted (even if no email found). */
+  emailScraped?: boolean;
   createdAt: string;
+}
+
+export interface SearchStatsSummary {
+  total: number;
+  withPhone: number;
+  withEmail: number;
+  withWebsite: number;
+  emailsFoundFor?: number;
+  emailsScrapedFor?: number;
+}
+
+export interface NearbyCitySuggestion {
+  city: string;
+  distanceKm: number;
 }

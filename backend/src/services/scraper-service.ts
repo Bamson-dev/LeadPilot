@@ -1,188 +1,42 @@
 import type { BusinessLead, StreamEvent } from "@leadthur/shared";
 import { getBrowserPool } from "../scraper/browser/browser-pool";
-import { scrapeGoogleMaps } from "../scraper/googleMaps/maps-scraper";
+import {
+  continueMapsExtraction,
+  scrapeGoogleMaps,
+} from "../scraper/googleMaps/maps-scraper";
+import { geocodeCity } from "../scraper/googleMaps/grid-search";
 import {
   getSearchJob,
+  getAllSearchLeads,
   insertBusinessLead,
   markSearchComplete,
   markSearchFailed,
-  updateBusinessLeadEmails,
+  tryClaimResultsEmailSend,
   updateSearchJob,
 } from "../database/search-repository";
 import { saveUserSearch } from "../database/user-search-repository";
 import { recordSearchHistorySafe } from "../database/search-history-repository";
 import { getLicenseEmailBySearchId } from "../database/license-repository";
 import {
-  sendSearchCompleteEmail,
   sendSearchFailedEmail,
+  sendSearchResultsReadyEmail,
   sendSearchRunningEmail,
 } from "../services/email";
 import { formatScraperError } from "../scraper/utils/scraper-errors";
 import { logger } from "../utils/logger";
-import {
-  enrichLeadEmail,
-  applyWebsiteEmailsToLead,
-  applyPredictedEmailsToLead,
-  rawLeadToBusinessLead,
-} from "../utils/lead-mapper";
-import { crawlEmailsFromWebsite } from "../scraper/emailCrawler/email-crawler";
+import { rawLeadToBusinessLead } from "../utils/lead-mapper";
 import { formatSearchMessage } from "../utils/search-messages";
 import { generateAreaSuggestions } from "./suggestion-service";
+import { runBatchEmailScraping } from "./email-batch-scraper";
+import { computeSearchStats } from "./search-stats";
+import { findNearbyCities } from "./nearby-cities";
+import { PHASE1_DEADLINE_MS } from "../scraper/utils/constants";
 import type { RawLeadInput } from "../types/scraper";
 
 export type ScrapeEmitter = (event: StreamEvent) => void;
 
 function emitLead(emit: ScrapeEmitter, lead: BusinessLead): void {
   emit({ type: "lead", lead, data: lead });
-}
-
-function emitEmailUpdate(
-  emit: ScrapeEmitter,
-  lead: BusinessLead,
-  emailSource: "website" | "predicted"
-): void {
-  const emails =
-    lead.emails.length > 0
-      ? lead.emails
-      : emailSource === "predicted"
-        ? lead.predictedEmails.map((p) => p.email)
-        : lead.verifiedEmails;
-
-  emit({
-    type: "email_update",
-    businessId: lead.id,
-    email: lead.email,
-    emails,
-    emailSource,
-    lead,
-    data: lead,
-  });
-}
-
-function hasVerifiedEmail(lead: BusinessLead): boolean {
-  return (
-    (lead.emails?.length ?? 0) > 0 ||
-    (lead.verifiedEmails?.length ?? 0) > 0 ||
-    Boolean(lead.email?.trim())
-  );
-}
-
-function runBackgroundEmailEnrichment(
-  basic: BusinessLead,
-  emit: ScrapeEmitter,
-  searchId: string,
-  enrichedLeads: BusinessLead[],
-  onComplete: () => void
-): void {
-  if (hasVerifiedEmail(basic)) {
-    enrichedLeads.push(basic);
-    onComplete();
-    return;
-  }
-
-  if (basic.website) {
-    crawlEmailsFromWebsite(basic.website)
-      .then(async (crawlResult) => {
-        const { emails, predicted } = crawlResult;
-
-        if (emails.length > 0) {
-          const enriched = predicted
-            ? applyPredictedEmailsToLead(basic, emails)
-            : applyWebsiteEmailsToLead(basic, emails);
-          const source = predicted ? "predicted" : "website";
-
-          enrichedLeads.push(enriched);
-          emitEmailUpdate(emit, enriched, source);
-          await updateBusinessLeadEmails(
-            enriched.id,
-            emails,
-            predicted ? "predicted" : "extracted"
-          ).catch((err) => {
-            logger.warn("Failed to update crawled emails", {
-              searchId,
-              businessId: enriched.id,
-              error: err instanceof Error ? err.message : "unknown",
-            });
-          });
-          await insertBusinessLead(enriched).catch((err) => {
-            logger.warn("Failed to upsert enriched lead", {
-              searchId,
-              name: enriched.name,
-              error: err instanceof Error ? err.message : "unknown",
-            });
-          });
-
-          logger.info("Email enrichment complete", {
-            businessId: enriched.id,
-            businessName: enriched.name,
-            website: basic.website?.substring(0, 40),
-            emailsFound: emails.length,
-            source: predicted ? "predicted" : "crawled",
-          });
-          return;
-        }
-
-        enrichedLeads.push(basic);
-      })
-      .catch((err) => {
-        logger.warn("Email enrich failed", {
-          searchId,
-          name: basic.name,
-          error: err instanceof Error ? err.message : "unknown",
-        });
-      })
-      .finally(() => {
-        onComplete();
-      });
-    return;
-  }
-
-  enrichLeadEmail(basic, { skipWebsiteCrawl: true })
-    .then(async (enriched) => {
-      enrichedLeads.push(enriched);
-
-      const verifiedEmails =
-        enriched.emails?.length > 0
-          ? enriched.emails
-          : enriched.verifiedEmails?.length > 0
-            ? enriched.verifiedEmails
-            : enriched.predictedEmails.map((p) => p.email);
-
-      if (verifiedEmails.length > 0) {
-        const source =
-          enriched.emailSource === "predicted" ? "predicted" : "website";
-        emitEmailUpdate(emit, enriched, source);
-      }
-
-      await insertBusinessLead(enriched).catch((err) => {
-        logger.warn("Failed to upsert enriched lead", {
-          searchId,
-          name: enriched.name,
-          error: err instanceof Error ? err.message : "unknown",
-        });
-      });
-
-      if (verifiedEmails.length > 0) {
-        logger.info("Email enrichment complete", {
-          businessId: enriched.id,
-          businessName: enriched.name,
-          website: basic.website?.substring(0, 40),
-          emailsFound: verifiedEmails.length,
-          source:
-            enriched.emailSource === "predicted" ? "predicted" : "crawled",
-        });
-      }
-    })
-    .catch((err) => {
-      logger.warn("Email enrich failed", {
-        searchId,
-        name: basic.name,
-        error: err instanceof Error ? err.message : "unknown",
-      });
-    })
-    .finally(() => {
-      onComplete();
-    });
 }
 
 function leadDedupeKey(lead: BusinessLead): string {
@@ -192,11 +46,208 @@ function leadDedupeKey(lead: BusinessLead): string {
 function deduplicateLeads(leads: BusinessLead[]): BusinessLead[] {
   const seen = new Set<string>();
   return leads.filter((lead) => {
-    const key = `${lead.name?.toLowerCase().trim()}-${lead.phone?.replace(/\s/g, "") || "nophone"}`;
+    const key = leadDedupeKey(lead);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+}
+
+async function resolveNotificationEmail(
+  searchId: string,
+  licenseEmail?: string | null
+): Promise<string | null> {
+  if (licenseEmail?.trim()) return licenseEmail.toLowerCase().trim();
+  return getLicenseEmailBySearchId(searchId);
+}
+
+async function finalizeSearchAndNotify(
+  searchId: string,
+  query: string,
+  location: string,
+  licenseEmail: string | null,
+  emailTimedOut: boolean
+): Promise<void> {
+  const leads = await getAllSearchLeads(searchId);
+  const uniqueLeads = deduplicateLeads(leads);
+  const stats = computeSearchStats(uniqueLeads);
+  const totalFound = stats.total;
+
+  await updateSearchJob(searchId, {
+    totalFound,
+    processed: totalFound,
+    status: "completed",
+    scrapingInProgress: false,
+    statsSummary: stats,
+  });
+
+  if (licenseEmail && totalFound > 0) {
+    const claimed = await tryClaimResultsEmailSend(searchId);
+    if (claimed) {
+      const jobStats = (await getSearchJob(searchId))?.statsSummary ?? stats;
+      void sendSearchResultsReadyEmail(
+        licenseEmail,
+        searchId,
+        query,
+        location,
+        {
+          total: jobStats.total,
+          withPhone: jobStats.withPhone,
+          withEmail: jobStats.withEmail,
+          withWebsite: jobStats.withWebsite,
+        },
+        { timedOut: emailTimedOut }
+      ).catch((err) =>
+        logger.error("Failed to send results ready email", {
+          searchId,
+          error: err instanceof Error ? err.message : "unknown",
+        })
+      );
+    }
+  }
+}
+
+async function runBackgroundWork(
+  searchId: string,
+  query: string,
+  location: string,
+  remainingUrls: string[],
+  isTrial: boolean,
+  emit: ScrapeEmitter,
+  options?: { licenseKey?: string; licenseEmail?: string | null }
+): Promise<void> {
+  const pool = getBrowserPool();
+  let emailTimedOut = false;
+
+  try {
+    if (remainingUrls.length > 0 && pool.isReady()) {
+      const browser = await pool.acquire(60_000);
+      const seenKeys = new Set<string>();
+      const existing = await getAllSearchLeads(searchId);
+      for (const lead of existing) {
+        seenKeys.add(leadDedupeKey(lead));
+      }
+
+      try {
+        await continueMapsExtraction(browser, {
+          query,
+          location,
+          isTrial,
+          placeUrls: remainingUrls,
+          startCount: existing.length,
+          onProgress: (count, max) => {
+            emit({
+              type: "progress",
+              message: `Found ${count} of ${max} businesses...`,
+              processed: count,
+              count,
+              max,
+            });
+          },
+          onLead: (raw: RawLeadInput) => {
+            const basic = rawLeadToBusinessLead(raw, searchId);
+            const key = leadDedupeKey(basic);
+            if (seenKeys.has(key)) return;
+            seenKeys.add(key);
+            emitLead(emit, basic);
+            void insertBusinessLead(basic).catch(() => undefined);
+            void updateSearchJob(searchId, {
+              processed: seenKeys.size,
+              totalFound: seenKeys.size,
+            }).catch(() => undefined);
+          },
+        });
+      } finally {
+        pool.release(browser);
+      }
+    }
+
+    if (!isTrial) {
+      const emailStart = Date.now();
+      await runBatchEmailScraping(searchId, emit);
+      emailTimedOut = Date.now() - emailStart >= 3 * 60 * 1000 - 1000;
+    } else {
+      const trialLeads = await getAllSearchLeads(searchId);
+      for (const lead of trialLeads) {
+        if (lead.website && !lead.emailScraped) {
+          const { markBusinessLeadEmailScraped } = await import(
+            "../database/search-repository"
+          );
+          await markBusinessLeadEmailScraped(lead.id, []).catch(() => undefined);
+        }
+      }
+    }
+
+    const leads = deduplicateLeads(await getAllSearchLeads(searchId));
+    const stats = computeSearchStats(leads);
+
+    let nearbyCities = undefined;
+    if (!isTrial && stats.total < 500) {
+      const geo = await geocodeCity(location);
+      nearbyCities = findNearbyCities(
+        location,
+        geo.lat,
+        geo.lng,
+        5,
+        100
+      );
+      if (nearbyCities.length > 0) {
+        await updateSearchJob(searchId, { nearbyCities });
+        emit({ type: "suggestions", suggestions: nearbyCities.map((c) => c.city) });
+      }
+    }
+
+    await updateSearchJob(searchId, {
+      totalFound: stats.total,
+      processed: stats.total,
+      statsSummary: stats,
+    });
+
+    const licenseEmail = await resolveNotificationEmail(
+      searchId,
+      options?.licenseEmail
+    );
+
+    await finalizeSearchAndNotify(
+      searchId,
+      query,
+      location,
+      licenseEmail,
+      emailTimedOut
+    );
+
+    emit({
+      type: "complete",
+      total: stats.total,
+      message: `Search complete. Found ${stats.total} businesses in ${location}.`,
+    });
+
+    if (!isTrial) {
+      void generateAreaSuggestions(query, location, stats.total)
+        .then((suggestions) => {
+          if (suggestions.length > 0) {
+            emit({ type: "suggestions", suggestions });
+          }
+        })
+        .catch(() => undefined);
+    }
+  } catch (err) {
+    logger.error("Background scrape failed", {
+      searchId,
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    const licenseEmail = await resolveNotificationEmail(
+      searchId,
+      options?.licenseEmail
+    );
+    await finalizeSearchAndNotify(
+      searchId,
+      query,
+      location,
+      licenseEmail,
+      true
+    ).catch(() => undefined);
+  }
 }
 
 export async function runScraperJob(
@@ -250,21 +301,25 @@ export async function runScraperJob(
   }
 
   const browser = await pool.acquire(90_000);
-  let progress = 0;
+  let browserReleased = false;
   let progressMax = 100;
   const seenLeadKeys = new Set<string>();
   const collectedLeads: BusinessLead[] = [];
+  const phase1DeadlineMs = Date.now() + PHASE1_DEADLINE_MS;
 
   logger.info("Search started", {
     searchId,
     query,
     location,
     isTrial,
-    strategiesUsed: isTrial ? 2 : undefined,
+    phase1DeadlineMs,
   });
 
   try {
-    await updateSearchJob(searchId, { status: "running" });
+    await updateSearchJob(searchId, {
+      status: "running",
+      scrapingInProgress: !isTrial,
+    });
 
     const startMessage = formatSearchMessage(query, location);
     if (!isTrial) {
@@ -278,26 +333,23 @@ export async function runScraperJob(
       });
     }
 
-    let pendingEnrich = 0;
-
     const onBusinessFound = (raw: RawLeadInput) => {
       const basic = rawLeadToBusinessLead(raw, searchId);
       const key = leadDedupeKey(basic);
       if (seenLeadKeys.has(key)) return;
       seenLeadKeys.add(key);
 
-      progress++;
-      leadsFoundSoFar = progress;
+      leadsFoundSoFar = seenLeadKeys.size;
       collectedLeads.push(basic);
       emitLead(emit, basic);
       emit({
         type: "progress",
         ...(isTrial
-          ? { processed: progress, count: progress }
+          ? { processed: leadsFoundSoFar, count: leadsFoundSoFar }
           : {
-              message: `Found ${progress} businesses so far...`,
-              processed: progress,
-              count: progress,
+              message: `Found ${leadsFoundSoFar} businesses so far...`,
+              processed: leadsFoundSoFar,
+              count: leadsFoundSoFar,
               max: progressMax,
             }),
       });
@@ -309,41 +361,19 @@ export async function runScraperJob(
         });
       });
 
-      if (isTrial) {
-        if (progress % 3 === 0) {
-          void updateSearchJob(searchId, {
-            processed: progress,
-            totalFound: progress,
-          }).catch(() => undefined);
-        }
-        return;
-      }
-
-      pendingEnrich++;
-      runBackgroundEmailEnrichment(
-        basic,
-        emit,
-        searchId,
-        enrichedLeads,
-        () => {
-          pendingEnrich--;
-        }
-      );
-
-      if (progress % 3 === 0) {
+      if (leadsFoundSoFar % 3 === 0) {
         void updateSearchJob(searchId, {
-          processed: progress,
-          totalFound: progress,
+          processed: leadsFoundSoFar,
+          totalFound: leadsFoundSoFar,
         }).catch(() => undefined);
       }
     };
 
-    const enrichedLeads: BusinessLead[] = [];
-
-    const total = await scrapeGoogleMaps(browser, {
+    const scrapeResult = await scrapeGoogleMaps(browser, {
       query,
       location,
       isTrial,
+      phase1DeadlineMs: isTrial ? undefined : phase1DeadlineMs,
       onPhase: (phase) => {
         if (!isTrial) emit({ type: "phase", phase });
       },
@@ -361,61 +391,38 @@ export async function runScraperJob(
           });
         }
       },
-      onLead: (raw) => {
-        onBusinessFound(raw);
-      },
+      onLead: onBusinessFound,
     });
 
     searchComplete = true;
     clearTimeout(runningEmailTimer);
 
-    if (!isTrial) {
-      const enrichDeadline = Date.now() + 120_000;
-      while (pendingEnrich > 0 && Date.now() < enrichDeadline) {
-        await new Promise((r) => setTimeout(r, 400));
-      }
+    const uniqueCount = deduplicateLeads(collectedLeads).length;
+    const phase1Total = uniqueCount > 0 ? uniqueCount : scrapeResult.count;
+    const stats = computeSearchStats(deduplicateLeads(collectedLeads));
+
+    if (isTrial) {
+      await markSearchComplete(searchId, phase1Total);
+      emit({
+        type: "complete",
+        total: phase1Total,
+        message: `Search complete. Found ${phase1Total} businesses in ${location}.`,
+      });
+      return;
     }
 
-    const uniqueCount = deduplicateLeads(collectedLeads).length;
-    const totalFound = uniqueCount > 0 ? uniqueCount : total;
-
-    await updateSearchJob(searchId, { processed: totalFound, totalFound });
-    await markSearchComplete(searchId, totalFound);
-
-    const statsLeads = isTrial ? collectedLeads : enrichedLeads;
-    const withPhone = statsLeads.filter((l) => l.phone).length;
-    const withEmail = statsLeads.filter(
-      (l) => (l.emails?.length ?? 0) > 0 || (l.verifiedEmails?.length ?? 0) > 0
-    ).length;
-    const withWebsite = statsLeads.filter((l) => l.website).length;
-
-    logger.info("Search completion stats", {
-      searchId,
-      totalFound,
-      withPhone,
-      withEmail,
-      withWebsite,
-      phoneRate:
-        totalFound > 0 ? `${Math.round((withPhone / totalFound) * 100)}%` : "0%",
-      emailRate:
-        totalFound > 0 ? `${Math.round((withEmail / totalFound) * 100)}%` : "0%",
+    await updateSearchJob(searchId, {
+      status: "completed",
+      totalFound: phase1Total,
+      processed: phase1Total,
+      scrapingInProgress: true,
+      statsSummary: stats,
     });
 
-    logger.info("Search completion stats with email breakdown", {
-      searchId,
-      totalFound,
-      withCrawledEmail: statsLeads.filter((l) => l.emailSource === "website")
-        .length,
-      withPredictedEmail: statsLeads.filter(
-        (l) => l.emailSource === "predicted"
-      ).length,
-      withNoEmail: statsLeads.filter(
-        (l) =>
-          !l.email?.trim() &&
-          (l.emails?.length ?? 0) === 0 &&
-          (l.verifiedEmails?.length ?? 0) === 0 &&
-          (l.predictedEmails?.length ?? 0) === 0
-      ).length,
+    emit({
+      type: "complete",
+      total: phase1Total,
+      message: `Found ${phase1Total} businesses. Finding email addresses in the background...`,
     });
 
     if (options?.licenseKey) {
@@ -424,54 +431,39 @@ export async function runScraperJob(
         searchId,
         query,
         location,
-        totalFound,
+        totalFound: phase1Total,
       });
     }
 
     const licenseEmail =
       options?.licenseEmail?.toLowerCase().trim() ||
       (await resolveLicenseEmail());
-    if (licenseEmail && totalFound > 0) {
+    if (licenseEmail && phase1Total > 0) {
       void recordSearchHistorySafe({
         email: licenseEmail,
         business_type: query,
         location,
-        results_count: totalFound,
+        results_count: phase1Total,
       });
     }
 
-    if (licenseEmail) {
-      if (totalFound > 0) {
-        void sendSearchCompleteEmail(licenseEmail, query, location, totalFound).catch(
-          (err) =>
-            logger.error("Failed to send complete email", {
-              error: err instanceof Error ? err.message : "unknown",
-            })
-        );
-      } else {
-        void sendSearchFailedEmail(licenseEmail, query, location).catch((err) =>
-          logger.error("Failed to send failed email", {
-            error: err instanceof Error ? err.message : "unknown",
-          })
-        );
-      }
-    }
+    pool.release(browser);
+    browserReleased = true;
 
-    emit({
-      type: "complete",
-      total: totalFound,
-      message: `Search complete. Found ${totalFound} businesses in ${location}.`,
+    setImmediate(() => {
+      void runBackgroundWork(
+        searchId,
+        query,
+        location,
+        scrapeResult.remainingUrls,
+        isTrial,
+        emit,
+        {
+          licenseKey: options?.licenseKey,
+          licenseEmail: licenseEmail ?? options?.licenseEmail,
+        }
+      );
     });
-
-    if (!isTrial) {
-      void generateAreaSuggestions(query, location, totalFound)
-        .then((suggestions) => {
-          if (suggestions.length > 0) {
-            emit({ type: "suggestions", suggestions });
-          }
-        })
-        .catch(() => undefined);
-    }
   } catch (err) {
     searchComplete = true;
     clearTimeout(runningEmailTimer);
@@ -479,6 +471,7 @@ export async function runScraperJob(
     const message = formatScraperError(err);
     logger.error("Scraper job failed", { searchId, message });
     await markSearchFailed(searchId, message);
+    await updateSearchJob(searchId, { scrapingInProgress: false });
 
     const licenseEmail = await resolveLicenseEmail();
     if (licenseEmail) {
@@ -495,7 +488,13 @@ export async function runScraperJob(
     });
     throw err;
   } finally {
-    pool.release(browser);
+    if (!browserReleased) {
+      try {
+        pool.release(browser);
+      } catch {
+        /* ignore */
+      }
+    }
   }
 }
 

@@ -67,6 +67,7 @@ export function rawLeadToBusinessLead(
     googleMapsUrl: raw.google_maps_url,
     hasWebsite: Boolean(website),
     hasInstagram,
+    emailScraped: false,
     createdAt: new Date().toISOString(),
   };
 

@@ -353,6 +353,87 @@ export async function sendSearchCompleteEmail(
   });
 }
 
+function resultsEmailWrapper(body: string): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body { margin: 0; padding: 0; background: #f4f4f5; font-family: -apple-system, 'Segoe UI', Inter, sans-serif; }
+    .wrap { max-width: 560px; margin: 32px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+    .header { padding: 28px 40px 20px; border-bottom: 1px solid #f0f0f0; }
+    .logo { font-size: 18px; font-weight: 800; color: #09090b; letter-spacing: -0.5px; }
+    .logo span { color: #7C3AED; }
+    .body { padding: 36px 40px; }
+    h1 { font-size: 22px; font-weight: 800; color: #09090b; margin: 0 0 16px; line-height: 1.3; letter-spacing: -0.3px; }
+    p { font-size: 15px; color: #3f3f46; line-height: 1.75; margin: 0 0 16px; }
+    .stats { background: #faf5ff; border-radius: 10px; padding: 20px 24px; margin: 20px 0; }
+    .stats-row { display: flex; justify-content: space-between; font-size: 14px; color: #3f3f46; padding: 6px 0; border-bottom: 1px solid #ede9fe; }
+    .stats-row:last-child { border-bottom: none; }
+    .stats-row strong { color: #09090b; }
+    .btn { display: block; background: #7C3AED; color: #ffffff !important; text-align: center; padding: 15px 24px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 15px; margin: 28px 0 8px; }
+    .note { font-size: 13px; color: #71717a; line-height: 1.6; margin-top: 16px; }
+    .footer { padding: 20px 40px 28px; border-top: 1px solid #f0f0f0; }
+    .footer p { font-size: 12px; color: #a1a1aa; line-height: 1.6; margin: 0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div class="logo">Lead<span>Thur</span></div>
+    </div>
+    <div class="body">
+      ${body}
+    </div>
+    <div class="footer">
+      <p>LeadThur by Pdigital Marketstore Ltd</p>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+export interface SearchResultsEmailStats {
+  total: number;
+  withPhone: number;
+  withEmail: number;
+  withWebsite: number;
+}
+
+export async function sendSearchResultsReadyEmail(
+  email: string,
+  searchId: string,
+  query: string,
+  location: string,
+  stats: SearchResultsEmailStats,
+  options?: { timedOut?: boolean }
+): Promise<void> {
+  const resultsUrl = `${getFrontendUrl()}/dashboard/search/${searchId}`;
+  const timeoutNote = options?.timedOut
+    ? `<p class="note">Email addresses were found for ${stats.withEmail} businesses. Some business websites did not respond in time, but all other contact details are included.</p>`
+    : "";
+
+  const body = `
+    <h1>Your results are ready</h1>
+    <p>Your LeadThur search for <strong>${escapeHtml(query)}</strong> in <strong>${escapeHtml(location)}</strong> is complete.</p>
+    <div class="stats">
+      <div class="stats-row"><span>Businesses found</span><strong>${stats.total}</strong></div>
+      <div class="stats-row"><span>With phone numbers</span><strong>${stats.withPhone}</strong></div>
+      <div class="stats-row"><span>With email addresses</span><strong>${stats.withEmail}</strong></div>
+      <div class="stats-row"><span>With websites</span><strong>${stats.withWebsite}</strong></div>
+    </div>
+    ${timeoutNote}
+    <a href="${resultsUrl}" class="btn">View my results →</a>
+  `;
+
+  await deliver({
+    to: email,
+    subject: `your results are ready, ${stats.total} potential clients found`,
+    html: resultsEmailWrapper(body),
+  });
+}
+
 export async function sendSearchRunningEmail(
   email: string,
   query: string,

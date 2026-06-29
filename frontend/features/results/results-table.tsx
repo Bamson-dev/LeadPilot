@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import { ContactDots } from "@/components/dashboard/contact-dots";
 import { CopyButton } from "@/components/dashboard/copy-button";
 import { EmailCell } from "@/components/dashboard/email-cell";
 import { MobileLeadCard } from "@/components/dashboard/mobile-lead-card";
@@ -234,6 +235,9 @@ export function ResultsTable({
             {lead.category}
           </div>
         )}
+        <div className="mt-1.5">
+          <ContactDots lead={lead} />
+        </div>
       </td>
       <td className="px-4 py-3 text-[#6B6B80] max-w-[180px] truncate align-top">
         {lead.address ?? "—"}

@@ -1,4 +1,4 @@
-import type { BusinessLead, SearchJob, SearchResponse } from "@leadthur/shared";
+import type { BusinessLead, SearchJob, SearchResponse, SearchResultsResponse } from "@leadthur/shared";
 import type { Lead } from "@/types/lead";
 import { businessLeadToLead } from "@/types/lead";
 import { getApiUrl } from "@/utils/env";
@@ -587,6 +587,21 @@ export async function generateAiMessage(
         : "Could not reach the server. Check your connection and try again.",
     };
   }
+}
+
+export async function pollSearchResults(
+  id: string,
+  page = 1,
+  limit = 1000
+): Promise<SearchResultsResponse> {
+  const res = await fetch(
+    `${getApiUrl()}/search/results/${id}?page=${page}&limit=${limit}`,
+    { headers: getLicenseHeaders(), cache: "no-store" }
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to poll results (${res.status})`);
+  }
+  return (await res.json()) as SearchResultsResponse;
 }
 
 export async function getResults(

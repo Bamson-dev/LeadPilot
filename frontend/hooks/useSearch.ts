@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { AreaSuggestion, BusinessLead } from "@leadthur/shared";
-import { getResults, getSearch, probeSearchAccess, SearchLimitError, startSearch } from "@/services/api";
+import type { AreaSuggestion, BusinessLead, NearbyCitySuggestion, SearchStatsSummary } from "@leadthur/shared";
+import { getResults, getSearch, pollSearchResults, probeSearchAccess, SearchLimitError, startSearch } from "@/services/api";
 import { getApiUrl } from "@/utils/env";
 import { getLicenseQueryString } from "@/services/api";
 import {
@@ -23,9 +23,13 @@ interface SearchState {
   searchesRemaining: number | null;
   queuePosition: number;
   error: string | null;
+  scrapingInProgress: boolean;
+  summary: SearchStatsSummary | null;
+  nearbyCities: NearbyCitySuggestion[];
 }
 
-const POLL_INTERVAL_MS = 5000;
+const POLL_INTERVAL_MS = 3000;
+const SCRAPING_POLL_INTERVAL_MS = 3000;
 const SEARCH_TIMEOUT_MS = 10 * 60 * 1000;
 const SEARCH_FAILED_MESSAGE =
   "Search did not complete. Please try a broader location or business type.";
@@ -90,6 +94,9 @@ export function useSearch(options?: UseSearchOptions) {
     searchesRemaining: null,
     queuePosition: 0,
     error: null,
+    scrapingInProgress: false,
+    summary: null,
+    nearbyCities: [],
   });
 
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -104,6 +111,14 @@ export function useSearch(options?: UseSearchOptions) {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const finalFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [suggestions, setSuggestions] = useState<AreaSuggestion[]>([]);
+  const scrapingPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopScrapingPoll = useCallback(() => {
+    if (scrapingPollRef.current) {
+      clearInterval(scrapingPollRef.current);
+      scrapingPollRef.current = null;
+    }
+  }, []);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -135,7 +150,8 @@ export function useSearch(options?: UseSearchOptions) {
     stopPolling();
     stopTimeout();
     stopFinalFetchTimer();
-  }, [stopPolling, stopTimeout, stopFinalFetchTimer]);
+    stopScrapingPoll();
+  }, [stopPolling, stopTimeout, stopFinalFetchTimer, stopScrapingPoll]);
 
   const progressMessage = useCallback(
     (
@@ -303,6 +319,7 @@ export function useSearch(options?: UseSearchOptions) {
       }
       stopPolling();
       stopTimeout();
+      stopScrapingPoll();
 
       const pending = pendingLeadsRef.current.splice(0);
       const searchId = searchIdRef.current;
@@ -325,6 +342,7 @@ export function useSearch(options?: UseSearchOptions) {
           totalFound,
           queuePosition: 0,
           error: null,
+          scrapingInProgress: false,
           message: message ?? progressMessage(totalFound, "completed", 0),
         };
       });
@@ -333,7 +351,74 @@ export function useSearch(options?: UseSearchOptions) {
         scheduleFinalResultsFetch(searchId, 3000);
       }
     },
-    [stopPolling, stopTimeout, progressMessage, scheduleFinalResultsFetch]
+    [stopPolling, stopTimeout, stopScrapingPoll, progressMessage, scheduleFinalResultsFetch]
+  );
+
+  const phase1Complete = useCallback(
+    (total: number, message?: string) => {
+      const pending = pendingLeadsRef.current.splice(0);
+      const searchId = searchIdRef.current;
+
+      setState((prev) => {
+        const merged = mergePendingIntoLeads(prev.leads, pending);
+        const totalFound = Math.max(total || 0, merged.length);
+        return {
+          ...prev,
+          leads: merged.length > 0 ? merged : prev.leads,
+          status: "completed",
+          totalFound,
+          queuePosition: 0,
+          error: null,
+          scrapingInProgress: true,
+          message:
+            message ??
+            `Found ${totalFound} businesses. Finding email addresses in the background...`,
+        };
+      });
+
+      if (searchId) {
+        void pollSearchResults(searchId)
+          .then((payload) => {
+            const mapped = payload.leads.map((l) => l);
+            if (mapped.length > 0) replaceLeads(mapped);
+            setState((prev) => ({
+              ...prev,
+              summary: payload.summary,
+              nearbyCities: payload.nearbyCities ?? [],
+              scrapingInProgress: payload.scrapingInProgress,
+            }));
+          })
+          .catch(() => undefined);
+
+        stopScrapingPoll();
+        scrapingPollRef.current = setInterval(() => {
+          void (async () => {
+            try {
+              const payload = await pollSearchResults(searchId);
+              if (payload.leads.length > 0) {
+                replaceLeads(payload.leads);
+              }
+              setState((prev) => ({
+                ...prev,
+                totalFound: payload.totalFound,
+                summary: payload.summary,
+                nearbyCities: payload.nearbyCities ?? prev.nearbyCities,
+                scrapingInProgress: payload.scrapingInProgress,
+              }));
+              if (!payload.scrapingInProgress) {
+                finishSearch(
+                  payload.totalFound,
+                  `Search complete. Found ${payload.totalFound} businesses.`
+                );
+              }
+            } catch {
+              /* best-effort */
+            }
+          })();
+        }, SCRAPING_POLL_INTERVAL_MS);
+      }
+    },
+    [finishSearch, replaceLeads, stopScrapingPoll]
   );
 
   const pollForResults = useCallback(
@@ -533,13 +618,21 @@ export function useSearch(options?: UseSearchOptions) {
               break;
             }
 
-            case "complete":
-              finishSearch(
-                data.total ?? 0,
-                data.message ??
-                  progressMessage(data.total ?? 0, "completed", 0)
-              );
+            case "complete": {
+              const total = data.total ?? 0;
+              const isPhase1 =
+                data.message?.toLowerCase().includes("background") ||
+                data.message?.toLowerCase().includes("email");
+              if (isPhase1) {
+                phase1Complete(total, data.message);
+              } else {
+                finishSearch(
+                  total,
+                  data.message ?? progressMessage(total, "completed", 0)
+                );
+              }
               break;
+            }
 
             case "suggestions": {
               const raw = data.suggestions ?? [];
@@ -677,6 +770,7 @@ export function useSearch(options?: UseSearchOptions) {
     [
       closeStream,
       finishSearch,
+      phase1Complete,
       progressMessage,
       pollForResults,
       mergeLeads,
@@ -728,6 +822,9 @@ export function useSearch(options?: UseSearchOptions) {
         searchesRemaining: prev.searchesRemaining,
         queuePosition: 0,
         error: null,
+        scrapingInProgress: false,
+        summary: null,
+        nearbyCities: [],
       }));
 
       try {
@@ -758,6 +855,9 @@ export function useSearch(options?: UseSearchOptions) {
               searchesRemaining: result.searchesRemaining ?? null,
               queuePosition: 0,
               error: null,
+              scrapingInProgress: false,
+              summary: null,
+              nearbyCities: [],
             };
           });
           return;
@@ -838,6 +938,15 @@ export function useSearch(options?: UseSearchOptions) {
     [closeStream, connectToStream, startPolling, stopTimeout, syncFromApi, finishSearch, progressMessage]
   );
 
+  const runSearchWithNearbyCity = useCallback(
+    (city: string) => {
+      void search(queryRef.current || "businesses", city, {
+        accumulate: false,
+      });
+    },
+    [search]
+  );
+
   const runSearchWithSuggestion = useCallback(
     (suggestion: string | AreaSuggestion) => {
       const label = typeof suggestion === "string" ? suggestion : suggestion.label;
@@ -871,6 +980,9 @@ export function useSearch(options?: UseSearchOptions) {
       searchesRemaining: null,
       queuePosition: 0,
       error: null,
+      scrapingInProgress: false,
+      summary: null,
+      nearbyCities: [],
     });
   }, [closeStream]);
 
@@ -888,6 +1000,9 @@ export function useSearch(options?: UseSearchOptions) {
       totalFound: 0,
       queuePosition: 0,
       error: null,
+      scrapingInProgress: false,
+      summary: null,
+      nearbyCities: [],
     }));
   }, [closeStream]);
 
@@ -903,6 +1018,9 @@ export function useSearch(options?: UseSearchOptions) {
       searchesRemaining: state.searchesRemaining,
       queuePosition: 0,
       error: null,
+      scrapingInProgress: false,
+      summary: null,
+      nearbyCities: [],
     });
   }, [closeStream, progressMessage, state.searchesRemaining]);
 
@@ -931,6 +1049,7 @@ export function useSearch(options?: UseSearchOptions) {
     searchMeta: { business: queryRef.current, location: locationRef.current },
     runSearch: search,
     runSearchWithSuggestion,
+    runSearchWithNearbyCity,
     suggestions,
     setSuggestions,
     clearSuggestions: () => setSuggestions([]),
@@ -971,6 +1090,7 @@ function leadRowToBusinessLead(lead: Lead): BusinessLead {
     googleMapsUrl: lead.google_maps_url,
     hasWebsite: Boolean(lead.website),
     hasInstagram: false,
+    emailScraped: lead.email_scraped ?? false,
     createdAt: lead.created_at,
   };
 }
