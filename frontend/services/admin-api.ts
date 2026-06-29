@@ -294,6 +294,20 @@ export interface TrialActivity {
   dailyActivity: Array<{ date: string; count: number }>;
 }
 
+export interface BroadcastCountResponse {
+  audience: "unconverted" | "all";
+  recipients: number;
+}
+
+export interface BroadcastHistoryRow {
+  id: string;
+  subject: string;
+  audience: "unconverted" | "all";
+  recipient_count: number;
+  sent_at: string;
+  sent_by: string;
+}
+
 export async function getTrialStats(): Promise<TrialStats> {
   const res = await fetch(`${getApiUrl()}/admin/trial-stats`, {
     headers: getAdminHeaders(),
@@ -309,6 +323,44 @@ export async function getTrialActivity(): Promise<TrialActivity> {
   });
   if (res.status === 401) throw new Error("SESSION_EXPIRED");
   if (!res.ok) throw new Error("Failed to fetch trial activity");
+  return res.json();
+}
+
+export async function getBroadcastCount(
+  audience: "unconverted" | "all"
+): Promise<BroadcastCountResponse> {
+  const res = await fetch(`${getApiUrl()}/admin/broadcast-count?audience=${audience}`, {
+    headers: getAdminHeaders(),
+  });
+  if (res.status === 401) throw new Error("SESSION_EXPIRED");
+  if (!res.ok) throw new Error("Failed to fetch broadcast count");
+  return res.json();
+}
+
+export async function sendTrialBroadcast(payload: {
+  subject: string;
+  body: string;
+  audience: "unconverted" | "all";
+}): Promise<{ success: boolean; recipients: number; message: string }> {
+  const res = await fetch(`${getApiUrl()}/admin/broadcast`, {
+    method: "POST",
+    headers: getAdminHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (res.status === 401) throw new Error("SESSION_EXPIRED");
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error ?? "Failed to send broadcast");
+  }
+  return res.json();
+}
+
+export async function getBroadcastHistory(): Promise<{ broadcasts: BroadcastHistoryRow[] }> {
+  const res = await fetch(`${getApiUrl()}/admin/broadcast-history`, {
+    headers: getAdminHeaders(),
+  });
+  if (res.status === 401) throw new Error("SESSION_EXPIRED");
+  if (!res.ok) throw new Error("Failed to fetch broadcast history");
   return res.json();
 }
 

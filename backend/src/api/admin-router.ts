@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import multer from "multer";
 import bcrypt from "bcryptjs";
+import { z } from "zod";
 import { config } from "../config/env";
 import { requireAdminAuth } from "../middleware/admin-auth";
 import { signAdminToken } from "../utils/jwt";
@@ -16,6 +17,7 @@ import {
   sendDirectEmailHtml,
   sendDirectMessageEmail,
   sendPayoutPaidEmail,
+  sendTrialBroadcastEmail,
 } from "../services/email";
 import { SALE_PRICE_NGN } from "../constants/pricing";
 import { listTrialSignups } from "../database/free-trial-repository";
@@ -26,6 +28,16 @@ const loginAttempts = new Map<string, { count: number; resetAt: number }>();
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 2 * 1024 * 1024 },
+});
+
+const broadcastRequestSchema = z.object({
+  subject: z.string().trim().min(1, "Subject is required"),
+  body: z.string().trim().min(1, "Body is required"),
+  audience: z.enum(["unconverted", "all"]),
+});
+
+const broadcastCountSchema = z.object({
+  audience: z.enum(["unconverted", "all"]),
 });
 
 function checkRateLimit(ip: string): boolean {
@@ -671,61 +683,138 @@ adminRouter.post(
 
 adminRouter.post("/broadcast", requireAdminAuth, async (req: Request, res: Response) => {
   try {
-    const { subject, message } = req.body as { subject?: string; message?: string };
-
-    if (!subject || !message) {
-      res.status(400).json({ error: "Subject and message required" });
+    const parsed = broadcastRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.issues.map((i) => i.message).join(", ") });
       return;
     }
+    const { subject, body, audience } = parsed.data;
 
-    const { data: licenses, error } = await supabase
-      .from("license_keys")
+    let query = supabase
+      .from("free_trial_signups")
       .select("email")
-      .eq("activated", true)
-      .eq("is_suspended", false);
+      .eq("sequence_paused", false);
 
+    if (audience === "unconverted") {
+      query = query.eq("converted", false);
+    }
+
+    const { data: signups, error } = await query;
     if (error) throw error;
 
-    if (!licenses || licenses.length === 0) {
-      res.status(404).json({ error: "No active users found" });
-      return;
-    }
-
-    const uniqueEmails = [
+    const recipients = [
       ...new Set(
-        licenses
-          .map((l) => (l.email as string)?.toLowerCase().trim())
+        (signups ?? [])
+          .map((row) => (row.email as string)?.toLowerCase().trim())
           .filter(Boolean)
       ),
     ];
 
+    if (recipients.length === 0) {
+      res.json({
+        success: true,
+        recipients: 0,
+        message: "No eligible recipients found",
+      });
+      return;
+    }
+
+    const recipientCount = recipients.length;
+
+    const { error: logError } = await supabase.from("broadcast_log").insert({
+      subject,
+      audience,
+      recipient_count: recipientCount,
+      sent_by: "admin",
+    });
+    if (logError) {
+      logger.error("Failed to insert broadcast log", {
+        error: logError.message,
+        audience,
+        recipientCount,
+      });
+    }
+
     res.json({
       success: true,
-      message: `Broadcast queued for ${uniqueEmails.length} users`,
-      count: uniqueEmails.length,
+      recipients: recipientCount,
+      message: `Broadcast queued for ${recipientCount} recipients`,
     });
 
     setImmediate(() => {
       void (async () => {
-        for (const userEmail of uniqueEmails) {
-          try {
-            await sendDirectMessageEmail(userEmail, subject, message);
-            await new Promise((resolve) => setTimeout(resolve, 300));
-          } catch (err) {
-            logger.error("Failed to send broadcast to user", {
-              email: userEmail,
-              error: err instanceof Error ? err.message : "unknown",
-            });
+        const batchSize = 50;
+        for (let i = 0; i < recipients.length; i += batchSize) {
+          const batch = recipients.slice(i, i + batchSize);
+          for (const userEmail of batch) {
+            try {
+              await sendTrialBroadcastEmail(userEmail, subject, body);
+            } catch (err) {
+              logger.error("Failed to send trial broadcast email", {
+                email: userEmail,
+                error: err instanceof Error ? err.message : "unknown",
+              });
+            }
+          }
+          if (i + batchSize < recipients.length) {
+            await new Promise((resolve) => setTimeout(resolve, 1000));
           }
         }
-        logger.info("Broadcast complete", { count: uniqueEmails.length });
+        logger.info("Trial broadcast complete", { recipients: recipientCount, audience });
       })();
     });
   } catch (err) {
-    logger.error("Broadcast failed", {
+    logger.error("Trial broadcast failed", {
       error: err instanceof Error ? err.message : "unknown",
     });
     res.status(500).json({ error: "Failed to send broadcast" });
+  }
+});
+
+adminRouter.get("/broadcast-count", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const parsed = broadcastCountSchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.issues.map((i) => i.message).join(", ") });
+      return;
+    }
+    const { audience } = parsed.data;
+
+    let query = supabase
+      .from("free_trial_signups")
+      .select("*", { count: "exact", head: true })
+      .eq("sequence_paused", false);
+
+    if (audience === "unconverted") {
+      query = query.eq("converted", false);
+    }
+
+    const { count, error } = await query;
+    if (error) throw error;
+
+    res.json({ audience, recipients: count ?? 0 });
+  } catch (err) {
+    logger.error("Broadcast count failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to fetch broadcast count" });
+  }
+});
+
+adminRouter.get("/broadcast-history", requireAdminAuth, async (_req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabase
+      .from("broadcast_log")
+      .select("id, subject, audience, recipient_count, sent_at, sent_by")
+      .order("sent_at", { ascending: false })
+      .limit(10);
+    if (error) throw error;
+    res.json({ broadcasts: data ?? [] });
+  } catch (err) {
+    logger.error("Broadcast history failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to fetch broadcast history" });
   }
 });
 

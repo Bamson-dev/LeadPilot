@@ -7,6 +7,7 @@ import { AccountLookup } from "@/components/admin/account-lookup";
 import { BlogManager } from "@/components/admin/blog-manager";
 import { DirectMessaging } from "@/components/admin/direct-messaging";
 import { TrialInsightsTabs } from "@/components/admin/trial-insights-tabs";
+import { TrialBroadcastPanel } from "@/components/admin/trial-broadcast-panel";
 import {
   adminLogin,
   clearAdminToken,
@@ -2054,6 +2055,7 @@ export default function AdminPage() {
 
       <div className="mx-auto mt-8 max-w-6xl">
         <TrialInsightsTabs onSessionExpired={handleLogout} />
+        <TrialBroadcastPanel onSessionExpired={handleLogout} />
         <AccountLookup
           onSessionExpired={handleLogout}
           prefillEmail={prefillLookupEmail}

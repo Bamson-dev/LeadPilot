@@ -453,9 +453,9 @@ function getTrialEmailOpenedUrl(email: string, step: number): string {
   return `${backend}/trial/email-opened?email=${encodeURIComponent(email)}&step=${step}`;
 }
 
-function trialEmailWrapper(body: string, email: string, step: number): string {
+function trialEmailWrapper(body: string, email: string, step?: number): string {
   const unsubscribeUrl = getUnsubscribeUrl(email);
-  const openedUrl = getTrialEmailOpenedUrl(email, step);
+  const openedUrl = step ? getTrialEmailOpenedUrl(email, step) : null;
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -491,7 +491,7 @@ function trialEmailWrapper(body: string, email: string, step: number): string {
     <div class="footer">
       <p>You are receiving this because you signed up for a LeadThur free trial.<br>
       <a href="${unsubscribeUrl}">Unsubscribe</a> · LeadThur by Pdigital Marketstore Ltd</p>
-      <img src="${openedUrl}" alt="" width="1" height="1" style="display:block;opacity:0;width:1px;height:1px;border:0;margin-top:4px" />
+      ${openedUrl ? `<img src="${openedUrl}" alt="" width="1" height="1" style="display:block;opacity:0;width:1px;height:1px;border:0;margin-top:4px" />` : ""}
     </div>
   </div>
 </body>
@@ -507,5 +507,23 @@ export async function sendTrialEmail(email: string, step: number): Promise<void>
   }
 
   const html = trialEmailWrapper(body, email, step);
+  await deliver({ to: email, subject, html });
+}
+
+function formatBroadcastBody(body: string): string {
+  const lines = body
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const htmlLines = lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("");
+  return `${htmlLines}<a href="https://leadthur.com" class="btn">Open LeadThur</a><div class="sig"><strong>Bamidele</strong>Founder, LeadThur</div>`;
+}
+
+export async function sendTrialBroadcastEmail(
+  email: string,
+  subject: string,
+  body: string
+): Promise<void> {
+  const html = trialEmailWrapper(formatBroadcastBody(body), email);
   await deliver({ to: email, subject, html });
 }
