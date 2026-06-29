@@ -16,7 +16,7 @@ function hoursSinceSignup(signedUpAt: string): number {
 }
 
 function nextStepForUser(user: FreeTrialSignup): number | null {
-  if (user.converted || user.sequence_paused || user.sequence_step >= 10) {
+  if (user.converted || user.sequence_paused || user.sequence_step >= 15) {
     return null;
   }
   return user.sequence_step + 1;

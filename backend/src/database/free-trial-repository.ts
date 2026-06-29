@@ -113,7 +113,7 @@ export async function listTrialSignupsDueForSequence(): Promise<FreeTrialSignup[
     .select("*")
     .eq("converted", false)
     .eq("sequence_paused", false)
-    .lt("sequence_step", 10);
+    .lt("sequence_step", 15);
 
   if (error) throw new Error(error.message);
   return (data ?? []) as FreeTrialSignup[];

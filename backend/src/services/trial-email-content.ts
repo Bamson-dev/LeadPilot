@@ -7,141 +7,167 @@ export const TRIAL_STEP_HOURS_FROM_SIGNUP: Record<number, number> = {
   6: 120,
   7: 144,
   8: 168,
-  9: 192,
-  10: 216,
+  9: 216,
+  10: 264,
+  11: 288,
+  12: 312,
+  13: 336,
+  14: 348,
+  15: 360,
 };
 
 export const TRIAL_EMAIL_SUBJECTS: Record<number, string> = {
-  1: "Your 2 free searches are ready",
-  2: "Did you run your first search?",
+  1: "Your free trial is live. Go get your first client.",
+  2: "Did you find your first potential client yet?",
   3: "She closed a client in her first week",
-  4: "You have used your free searches. Here is what comes next.",
-  5: "The real reason you have not upgraded yet",
-  6: "What 5 star reviews actually say",
-  7: "6 slots left. This is not a marketing line.",
-  8: "Can I ask you one question?",
-  9: "The math that makes this a no-brainer",
-  10: "Last email. I mean it.",
+  4: "This is what your pipeline could look like.",
+  5: "The real reason you are still hesitating.",
+  6: "Talented people stay broke for one reason.",
+  7: "What people are saying after they switched.",
+  8: "Your first week is almost up.",
+  9: "One client. That is all it takes.",
+  10: "The freelancers who win do this one thing.",
+  11: "Imagine waking up to 1,000 clients to pitch.",
+  12: "The lifetime deal is closing.",
+  13: "A quick and honest question.",
+  14: "Tomorrow this offer changes.",
+  15: "Last email from me.",
 };
 
 export function getTrialEmailBody(step: number): string {
   const bodies: Record<number, string> = {
     1: `
-<h1>You are in. Go find your first clients.</h1>
-<p>I am Bamidele, the person who built LeadThur.</p>
-<p>You just unlocked 2 free searches. No card. No catch. I want you to see exactly what this does before you decide anything.</p>
-<p>Here is what to do right now. Go to your dashboard, type any business type, type any city in the world, and hit search. Watch what happens in the next 60 seconds.</p>
-<div class="highlight">Try something specific. "Salons in London." "Restaurants in Dubai." "Law firms in Nairobi." The more specific the city, the more useful the results.</div>
-<p>I built LeadThur because I was spending 3 hours every morning just trying to find businesses to pitch. By the time I had 20 contacts my whole morning was gone. This fixes that. I want you to feel that difference yourself.</p>
-<a href="https://leadthur.com/freetrial" class="btn">Run my first search now →</a>
-<div class="sig"><strong>Bamidele</strong>Founder, LeadThur<br><span style="color:#a1a1aa;font-size:13px">Reply to this email if you need anything. I read every message.</span></div>`,
+<h1>Your free trial is live. Go get your first client.</h1>
+<p>Hi, I am Bamidele, the founder of LeadThur.</p>
+<p>You just unlocked your free searches, and I want you to run your first one right now while this email is still open.</p>
+<p>Search the type of potential client you want, choose your city, and click search. In about 60 seconds you will have a list of real potential clients you can reach out to today.</p>
+<div class="highlight">You are not here to collect business data. You are here to close clients and get paid. LeadThur helps you start that process immediately.</div>
+<a href="https://leadthur.com" class="btn">Run my first search</a>
+<div class="sig"><strong>Bamidele</strong>Founder, LeadThur</div>`,
 
     2: `
-<h1>What did you find?</h1>
-<p>Yesterday you signed up for a free trial on LeadThur. I am curious, did you get a chance to run a search?</p>
-<p>If you did, you already know. Watching 1,000+ businesses load onto your screen with direct phone numbers and emails in under 60 seconds is a different feeling from anything else out there.</p>
-<p>If you have not tried it yet, I want to be honest with you about something.</p>
-<p>Most people who sign up for a free trial and do not use it within 24 hours never come back. Not because the product does not work. Because life gets in the way and the tab gets closed.</p>
-<p>Do not let that happen. You signed up for a reason. You need clients. LeadThur can get you in front of 1,000 of them in the time it takes to drink a cup of tea.</p>
-<a href="https://leadthur.com/freetrial" class="btn">Run my search right now →</a>
-<a href="https://paystack.shop/pay/Leadthur" class="btn-ghost">Get lifetime access — ₦25,000 once →</a>
+<h1>Did you find your first potential client yet?</h1>
+<p>Yesterday you started your free trial, so I wanted to check in personally.</p>
+<p>Most people who do not run a search in the first day never come back. It is not because the tool does not work. It is because life gets busy and they postpone the one action that can change their pipeline.</p>
+<p>You signed up because you need clients, and this is the fastest way to find them. Take one minute now and run a search before the day gets away from you.</p>
+<a href="https://leadthur.com" class="btn">Find potential clients now</a>
 <div class="sig"><strong>Bamidele</strong>Founder, LeadThur</div>`,
 
     3: `
-<h1>This came in on WhatsApp last week.</h1>
-<p>I do not share testimonials much because most of them sound fake. But this one I want you to read because it is exactly the kind of thing I built LeadThur for.</p>
-<p>One of our users, a freelancer who does social media management, signed up and ran her first search on a Tuesday. By Friday she had sent pitches to 40 businesses from her LeadThur list. By the following Tuesday she had closed her first client from that list. A beauty spa that had a 3.2 star rating on Google and was clearly losing customers.</p>
-<div class="highlight">"I used to spend hours every day just trying to find businesses to contact. LeadThur changed everything. I found my client in the first search." — WhatsApp message from a LeadThur user</div>
-<p>That 3.2 star rating was her opening. She reached out and told them she could help fix their online reputation. They said yes the same day.</p>
-<p>LeadThur shows you the Google rating of every business in your search results. The ones with low ratings are your warmest leads. They are already losing customers and they know it. That is your opening.</p>
-<p>You have 2 free searches. Use one to find businesses like that in your city or any city in the world.</p>
-<a href="https://leadthur.com/freetrial" class="btn">Find my first warm lead →</a>
+<h1>She closed a client in her first week.</h1>
+<p>A freelancer in our community ran her first LeadThur search and found a beauty spa with a low Google rating. She pitched them, showed them what to improve, and closed them within a week.</p>
+<p>The lesson is simple. Low rated businesses already know they have a problem, so they are often easier to close than businesses that think everything is fine.</p>
+<p>When you search inside LeadThur, you are not looking at random records. You are looking at potential clients with clear signals you can use in your outreach.</p>
+<a href="https://leadthur.com" class="btn">Find my first easy to close client</a>
 <div class="sig"><strong>Bamidele</strong>Founder, LeadThur</div>`,
 
     4: `
-<h1>You have seen what LeadThur can do.</h1>
-<p>Your 2 free searches showed you exactly what LeadThur returns. Real businesses. Real phone numbers. Real emails. Real Google ratings. In 60 seconds.</p>
-<p>The question now is simple. How many more businesses do you want to pitch?</p>
-<p>With lifetime access you get unlimited searches. Any business. Any city. 195 countries. Export everything to a spreadsheet in one click and start pitching the same day.</p>
+<h1>This is what your pipeline could look like.</h1>
+<p>Imagine opening your laptop and never wondering where your next client will come from.</p>
+<p>With full LeadThur access, you can pull potential clients in any city, see the details you need to reach out, and build a steady pipeline instead of waiting for referrals to save the month.</p>
 <div class="highlight">
-  <strong style="color:#09090b;display:block;margin-bottom:8px">What you get for ₦25,000 once:</strong>
-  Unlimited searches in 195 countries<br>
-  1,000+ businesses per search<br>
-  Direct phone numbers, emails, websites<br>
-  Google ratings to find easy pitches<br>
-  One-click CSV export<br>
-  All future updates included<br>
-  Zero monthly fees. Ever.
+  <strong style="color:#09090b;display:block;margin-bottom:8px">What this unlocks for you:</strong>
+  Unlimited potential client searches<br>
+  Any city whenever you need fresh leads<br>
+  Contact details ready for outreach<br>
+  Fast export so your team can pitch same day<br>
+  No more dry spells between projects
 </div>
-<p>One client from your first search pays for LeadThur 10 times over. That is not a marketing line. That is just the math.</p>
-<a href="https://paystack.shop/pay/Leadthur" class="btn">Get lifetime access — ₦25,000 once →</a>
-<a href="https://leadthur.com/freetrial" class="btn-ghost">Run another search first →</a>
+<a href="https://leadthur.com" class="btn">Build my client pipeline</a>
+<p style="margin-top:14px;font-size:13px;color:#71717a">You can also follow us on <a href="https://www.instagram.com/leadthur" style="color:#7c3aed">Instagram</a> and on Twitter at LeadThur to see real people landing clients with this every day.</p>
 <div class="sig"><strong>Bamidele</strong>Founder, LeadThur</div>`,
 
     5: `
-<h1>I want to ask you something directly.</h1>
-<p>You signed up for the free trial a few days ago. You have not upgraded yet. I am not going to pretend I do not notice that.</p>
-<p>In my experience there are usually three reasons someone does not upgrade after a free trial.</p>
-<p><strong style="color:#09090b">One. They tried it and it did not work for their city.</strong> If that is you, reply to this email right now and tell me which city you searched. I will personally check what the results look like and help you find the right search that works.</p>
-<p><strong style="color:#09090b">Two. The price feels like a risk.</strong> I understand that. ₦25,000 is real money. But consider this. You are not buying software. You are buying a list of 1,000+ businesses to pitch every single time you search. If one of them becomes a client and pays you even ₦30,000, you have already made your money back. And you can do that search again tomorrow. And the day after.</p>
-<p><strong style="color:#09090b">Three. It is just not the right time.</strong> That is fine. But the lifetime deal closes when the remaining slots run out. After that it moves to a yearly plan. The people who waited and paid yearly will pay more in the first year alone than you would pay today for lifetime access.</p>
-<a href="https://paystack.shop/pay/Leadthur" class="btn">Get lifetime access — ₦25,000 once →</a>
-<div class="sig"><strong>Bamidele</strong>Founder, LeadThur<br><span style="color:#a1a1aa;font-size:13px">Genuinely, reply to this if something is not working. I will fix it.</span></div>`,
+<h1>The real reason you are still hesitating.</h1>
+<p>If you have not upgraded yet, it usually comes down to three honest reasons.</p>
+<p><strong style="color:#09090b">Price.</strong> I understand that every naira matters. But one closed client can pay for LeadThur many times over.</p>
+<p><strong style="color:#09090b">Trust.</strong> You might still be wondering if this can work for your niche or city. That is a fair question.</p>
+<p><strong style="color:#09090b">Timing.</strong> You may feel like you should wait until things are calmer before you commit.</p>
+<p>If something is not working for your city, reply to this email and I will help you directly. A real human will answer you.</p>
+<a href="https://leadthur.com" class="btn">See how people are using LeadThur</a>
+<div class="sig"><strong>Bamidele</strong>Founder, LeadThur</div>`,
 
     6: `
-<h1>People leave reviews when something surprises them.</h1>
-<p>Nobody goes to Trustpilot to leave a review for something average. They go when something genuinely changed how they work.</p>
-<p>LeadThur has a 5 star rating on Trustpilot. I am not going to paste the reviews here and ask you to trust me. I want you to go read them yourself.</p>
-<p>What you will notice is that almost every review mentions the same two things. How fast the results come back. And how different it feels to have a real list of businesses to pitch instead of spending the morning on Google.</p>
-<div class="highlight">The most common thing people say after their first search is that they wish they had found LeadThur sooner. Not because the product is complicated. Because the problem it solves is one they have been living with for months or years.</div>
-<p>You have been living with it too. That is why you signed up.</p>
-<a href="https://paystack.shop/pay/Leadthur" class="btn">Get lifetime access — ₦25,000 once →</a>
-<a href="https://leadthur.com/freetrial" class="btn-ghost">Read the Trustpilot reviews first →</a>
+<h1>Talented people stay broke for one reason.</h1>
+<p>Your challenge is not talent. Your challenge is pipeline.</p>
+<p>The freelancers who stay booked are not always better than you. They are usually just speaking to more potential clients every week, so they have more chances to close work.</p>
+<p>LeadThur fixes that numbers problem. Instead of spending hours hunting for who to pitch, you spend your time pitching and closing.</p>
+<a href="https://leadthur.com" class="btn">Fix my pipeline this week</a>
 <div class="sig"><strong>Bamidele</strong>Founder, LeadThur</div>`,
 
     7: `
-<h1>I want to be straight with you about something.</h1>
-<p>We opened 20 lifetime slots at ₦25,000. 14 have been taken. 6 are left.</p>
-<p>I know every product says "limited slots" and it means nothing. So let me tell you exactly what happens when these 6 are gone.</p>
-<p>LeadThur moves to a yearly plan. The price goes up permanently. People who get in today pay once and never again. People who wait pay every single year.</p>
-<p>I am not adding a countdown timer. I am not sending you fake urgency emails every hour. I am just telling you the truth because you deserve to know before the decision is made for you by someone else taking the last slot.</p>
-<div class="highlight">₦25,000 once vs ₦100,000 every year. That is the only choice on the table right now.</div>
-<p>If you are going to upgrade, today is the day to do it.</p>
-<a href="https://paystack.shop/pay/Leadthur" class="btn">Claim one of the 6 remaining slots →</a>
+<h1>What people are saying after they switched.</h1>
+<p>If you read our Trustpilot reviews, the same thing comes up again and again.</p>
+<p>People say they finally stopped wasting hours on Google and started each day with a real list of potential clients to pitch.</p>
+<p>Speed matters, but confidence matters too. It is easier to send outreach when you know exactly who you are contacting and why they are a fit.</p>
+<a href="https://leadthur.com" class="btn">Read reviews and get started</a>
 <div class="sig"><strong>Bamidele</strong>Founder, LeadThur</div>`,
 
     8: `
-<h1>What would change if you had 1,000 businesses to pitch tomorrow?</h1>
-<p>Genuinely think about that for a second.</p>
-<p>Not 10. Not 50. One thousand businesses with direct phone numbers, emails, and websites. In any city you choose. In 60 seconds.</p>
-<p>How many pitches would you send? How many would reply? How many would turn into clients?</p>
-<p>I built LeadThur because I asked myself that exact question. I was spending my mornings searching for businesses one by one and I knew there had to be a better way. There was. And now you have it sitting right in front of you.</p>
-<p>The free trial showed you two searches worth of results. Lifetime access gives you unlimited searches. The same tool. No limits. No monthly fees. Just a one-time payment and a list of businesses to pitch every single day for the rest of your career.</p>
-<a href="https://paystack.shop/pay/Leadthur" class="btn">Get lifetime access — ₦25,000 once →</a>
-<div class="sig"><strong>Bamidele</strong>Founder, LeadThur<br><span style="color:#a1a1aa;font-size:13px">This is email 8 of 10. Two more coming if you need them.</span></div>`,
+<h1>Your first week is almost up.</h1>
+<p>You have now seen what LeadThur does in real use, not in a sales video.</p>
+<p>So this decision is simple. Do you want another month of hunting for clients manually, or do you want potential clients on demand whenever you need to fill your pipeline?</p>
+<p>You are already good at your work. What changes your income is how many opportunities you can create each week.</p>
+<a href="https://leadthur.com" class="btn">Choose the faster path to clients</a>
+<div class="sig"><strong>Bamidele</strong>Founder, LeadThur</div>`,
 
     9: `
-<h1>Let me show you the numbers.</h1>
-<p>I want to break down exactly what ₦25,000 means in the context of what you actually do for a living.</p>
-<p>If you are a web designer and you charge ₦150,000 for a website, you need one client from LeadThur to make back 6x your investment.</p>
-<p>If you do social media management at ₦50,000 a month, one client covers LeadThur twice over in the first month alone.</p>
-<p>If you do cold email outreach and your average deal is ₦200,000, one close pays for LeadThur 8 times over.</p>
-<div class="highlight">The question is not whether ₦25,000 is worth it. The question is how fast you will make it back. Based on what most people charge for their services, the answer is usually the first client.</div>
-<p>And after that first client, every search is pure profit. You paid once. The tool keeps working. The clients keep coming.</p>
-<a href="https://paystack.shop/pay/Leadthur" class="btn">Make my investment back with the first client →</a>
+<h1>One client. That is all it takes.</h1>
+<p>Let us do the real math.</p>
+<p>One web design client can cover the cost easily. One social media retainer can cover it. One copywriting project can cover it.</p>
+<div class="highlight">If one closed client can pay for lifetime access many times over, every client after that is pure profit.</div>
+<p>This is why LeadThur is not an expense. It is a client acquisition asset you can use every week.</p>
+<a href="https://leadthur.com" class="btn">Make the numbers work for me</a>
 <div class="sig"><strong>Bamidele</strong>Founder, LeadThur</div>`,
 
     10: `
-<h1>This is the last email I am sending you.</h1>
-<p>I have sent you 9 emails over the past 9 days. I am not going to send a 10th. I do not believe in flooding your inbox.</p>
-<p>I just want to leave you with one thought.</p>
-<p>Every morning you spend searching for clients manually is a morning you could have spent pitching them. The searching is the part that kills momentum. It is the reason most freelancers and agency owners never reach the level of clients they are capable of serving.</p>
-<p>LeadThur removes that part completely. You wake up, run one search, have 1,000 businesses to pitch before breakfast, and spend the rest of your morning actually selling.</p>
-<p>If you decide to upgrade, the link is below. Lifetime access. One payment. No monthly fees. No renewal. Yours forever.</p>
-<p>If you decide not to, I hope you find another way to solve the problem. Genuinely.</p>
-<p>Either way, good luck. I mean that.</p>
-<a href="https://paystack.shop/pay/Leadthur" class="btn">Get lifetime access — ₦25,000 once →</a>
-<div class="sig"><strong>Bamidele</strong>Founder, LeadThur<br><span style="color:#a1a1aa;font-size:13px">This is my last email to you. No more after this one.</span></div>`,
+<h1>The freelancers who win do this one thing.</h1>
+<p>They build a repeatable system to find potential clients every week.</p>
+<p>That is the difference between feast and famine freelancing. With a system, you build momentum. Without one, you keep starting from zero.</p>
+<p>LeadThur is built to be that system for you, so client flow does not depend on luck.</p>
+<a href="https://leadthur.com" class="btn">Build my repeatable client system</a>
+<div class="sig"><strong>Bamidele</strong>Founder, LeadThur</div>`,
+
+    11: `
+<h1>Imagine waking up to 1,000 clients to pitch.</h1>
+<p>Picture tomorrow morning. You open your laptop and you already have a thousand potential clients ready, with phone numbers and emails, in any city you choose.</p>
+<p>What would that change for your month? How much calmer would your work feel if you were choosing opportunities instead of chasing them?</p>
+<p>That is what LeadThur is designed to give you consistently.</p>
+<a href="https://leadthur.com" class="btn">Get access to 1,000 potential clients</a>
+<p style="margin-top:14px;font-size:13px;color:#71717a">If you want to see real people landing clients with this every day, follow us on <a href="https://www.instagram.com/leadthur" style="color:#7c3aed">Instagram</a> and on Twitter at LeadThur.</p>
+<div class="sig"><strong>Bamidele</strong>Founder, LeadThur</div>`,
+
+    12: `
+<h1>The lifetime deal is closing.</h1>
+<p>I want to be transparent with you.</p>
+<p>The lifetime slots are running out, and after that the offer moves to a yearly plan. You can pay once and own it forever, or wait and pay every year.</p>
+<p>I am not sending fake countdowns. I am simply making sure you know before the change happens.</p>
+<a href="https://leadthur.com" class="btn">Lock in lifetime access</a>
+<div class="sig"><strong>Bamidele</strong>Founder, LeadThur</div>`,
+
+    13: `
+<h1>A quick and honest question.</h1>
+<p>You signed up for a reason, and that reason was not software. It was getting more clients and creating steady income.</p>
+<p>What is holding you back from upgrading right now?</p>
+<p>If you reply and tell me, I will answer personally. No assistant, no template, just me trying to help you move forward.</p>
+<a href="https://leadthur.com" class="btn">I am ready to move forward</a>
+<div class="sig"><strong>Bamidele</strong>Founder, LeadThur</div>`,
+
+    14: `
+<h1>Tomorrow this offer changes.</h1>
+<p>This is your last clear window to lock in the current lifetime price.</p>
+<p>I am not trying to pressure you. I just want you to decide with full information before it moves to yearly pricing.</p>
+<p>If you know LeadThur can help you close more clients, this is the right time to secure it.</p>
+<a href="https://leadthur.com" class="btn">Lock in my lifetime access today</a>
+<div class="sig"><strong>Bamidele</strong>Founder, LeadThur</div>`,
+
+    15: `
+<h1>Last email from me.</h1>
+<p>I have shared everything I can to help you make a clear decision, and I will not keep flooding your inbox.</p>
+<p>I will leave you with one thought. Every week spent hunting for clients is a week you could have spent closing them.</p>
+<p>If you want in, the link is below. If now is not the time, I genuinely wish you success and steady work.</p>
+<a href="https://leadthur.com" class="btn">Join LeadThur</a>
+<div class="sig"><strong>Bamidele</strong>Founder, LeadThur</div>`,
   };
 
   const body = bodies[step];
