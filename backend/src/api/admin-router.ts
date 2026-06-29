@@ -1651,6 +1651,84 @@ adminRouter.get("/trial-signups", requireAdminAuth, async (_req: Request, res: R
   }
 });
 
+adminRouter.get("/email-performance", requireAdminAuth, async (_req: Request, res: Response) => {
+  try {
+    const [signupsResult, opensResult] = await Promise.all([
+      supabase
+        .from("free_trial_signups")
+        .select("sequence_step", { count: "exact" }),
+      supabase
+        .from("trial_email_opens")
+        .select("step, open_count, last_opened_at"),
+    ]);
+
+    if (signupsResult.error) throw signupsResult.error;
+    if (opensResult.error) throw opensResult.error;
+
+    const sequenceSteps = (signupsResult.data ?? []) as Array<{ sequence_step: number }>;
+    const opensRows = (opensResult.data ?? []) as Array<{
+      step: number;
+      open_count: number;
+      last_opened_at: string | null;
+    }>;
+
+    const totalSignups = signupsResult.count ?? sequenceSteps.length;
+    const sendsByStep = new Map<number, number>();
+    const opensByStep = new Map<number, { opens: number; lastOpenedAt: string | null }>();
+
+    for (let step = 1; step <= 15; step++) {
+      const sends = sequenceSteps.reduce(
+        (count, row) => count + (row.sequence_step >= step ? 1 : 0),
+        0
+      );
+      sendsByStep.set(step, sends);
+      opensByStep.set(step, { opens: 0, lastOpenedAt: null });
+    }
+
+    for (const row of opensRows) {
+      if (!Number.isInteger(row.step) || row.step < 1 || row.step > 15) continue;
+      const current = opensByStep.get(row.step) ?? { opens: 0, lastOpenedAt: null };
+      const nextLastOpened =
+        current.lastOpenedAt && row.last_opened_at
+          ? new Date(current.lastOpenedAt) > new Date(row.last_opened_at)
+            ? current.lastOpenedAt
+            : row.last_opened_at
+          : current.lastOpenedAt ?? row.last_opened_at;
+      opensByStep.set(row.step, {
+        opens: current.opens + (row.open_count || 0),
+        lastOpenedAt: nextLastOpened,
+      });
+    }
+
+    const rows = Array.from({ length: 15 }, (_, idx) => {
+      const step = idx + 1;
+      const sends = sendsByStep.get(step) ?? 0;
+      const opens = opensByStep.get(step)?.opens ?? 0;
+      const openRate = sends > 0 ? Math.round((opens / sends) * 1000) / 10 : null;
+      return {
+        step,
+        sends,
+        opens,
+        open_rate: openRate,
+        last_opened_at: opensByStep.get(step)?.lastOpenedAt ?? null,
+      };
+    });
+
+    res.json({
+      total_signups: totalSignups,
+      rows,
+    });
+  } catch (err) {
+    logger.error("Failed to fetch email performance", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.json({
+      total_signups: 0,
+      rows: [],
+    });
+  }
+});
+
 // Staging/local only — auto-enabled when FRONTEND_URL is staging, or set ENABLE_TEST_EMAIL=true
 const testEmailEnabled =
   process.env.ENABLE_TEST_EMAIL === "true" ||

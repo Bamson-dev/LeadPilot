@@ -321,6 +321,19 @@ export interface TrialSignupRow {
   sequence_step: number;
 }
 
+export interface EmailPerformanceRow {
+  step: number;
+  sends: number;
+  opens: number;
+  open_rate: number | null;
+  last_opened_at: string | null;
+}
+
+export interface EmailPerformanceResponse {
+  total_signups: number;
+  rows: EmailPerformanceRow[];
+}
+
 export async function getTrialSignups(): Promise<{
   total: number;
   signups: TrialSignupRow[];
@@ -330,6 +343,15 @@ export async function getTrialSignups(): Promise<{
   });
   if (res.status === 401) throw new Error("SESSION_EXPIRED");
   if (!res.ok) throw new Error("Failed to fetch trial signups");
+  return res.json();
+}
+
+export async function getEmailPerformance(): Promise<EmailPerformanceResponse> {
+  const res = await fetch(`${getApiUrl()}/admin/email-performance`, {
+    headers: getAdminHeaders(),
+  });
+  if (res.status === 401) throw new Error("SESSION_EXPIRED");
+  if (!res.ok) throw new Error("Failed to fetch email performance");
   return res.json();
 }
 
