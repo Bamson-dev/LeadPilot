@@ -102,8 +102,8 @@ export default function SearchResultPage() {
         leads={leads}
       />
       <NearbyCityChips
+        show={!scrapingInProgress && !loading}
         cities={nearbyCities}
-        totalFound={leads.length}
         onSelectCity={(city) =>
           router.push(`/dashboard?location=${encodeURIComponent(city)}`)
         }

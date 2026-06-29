@@ -609,6 +609,10 @@ async function scrapeUrlsFromPage(
   }
 }
 
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function collectUrlsFromStrategies(
   context: BrowserContext,
   strategyUrls: string[],
@@ -616,7 +620,8 @@ async function collectUrlsFromStrategies(
   location: string,
   allUrls: Set<string>,
   urlCap: number,
-  deadline: number | null
+  deadline: number | null,
+  onPlacesFound?: (urls: string[]) => void
 ): Promise<{ added: number; failed: number }> {
   const timedOut = () => deadline !== null && Date.now() >= deadline;
   if (timedOut() || strategyUrls.length === 0) {
@@ -647,10 +652,14 @@ async function collectUrlsFromStrategies(
 
     for (const result of results) {
       if (result.status === "fulfilled") {
+        const batchNew: string[] = [];
         for (const url of result.value) {
+          if (allUrls.has(url)) continue;
           allUrls.add(url);
+          batchNew.push(url);
           if (allUrls.size >= urlCap) break;
         }
+        if (batchNew.length > 0) onPlacesFound?.(batchNew);
       } else {
         failed++;
       }
@@ -673,13 +682,16 @@ async function collectClassicGridAndNeighbourhood(
   urlCap: number,
   deadline: number | null,
   expanded: boolean,
-  isTrial: boolean
+  isTrial: boolean,
+  onPlacesFound?: (urls: string[]) => void
 ): Promise<{
   classicAdded: number;
   gridAdded: number;
   neighbourhoodAdded: number;
   areasDiscovered: number;
+  neighbourhoodStrategyUrls: number;
 }> {
+  const timedOut = () => deadline !== null && Date.now() >= deadline;
   const classicUrls = buildSearchStrategyUrls(query, location, isTrial);
   const finalClassic = isTrial
     ? classicUrls.slice(0, TRIAL_STRATEGY_LIMIT)
@@ -690,71 +702,109 @@ async function collectClassicGridAndNeighbourhood(
       ? buildGridStrategyUrls(getKeywordVariations(query), location, geo, expanded)
       : [];
 
-  const neighbourhoodPromise = !isTrial
-    ? discoverNeighbourhoodAreas(location, query)
-    : Promise.resolve([]);
+  const strategyQueue = shuffleArray([...finalClassic, ...gridUrls]);
+  let neighbourhoodDone = isTrial;
+  let areasDiscovered = 0;
+  let neighbourhoodStrategyUrls = 0;
+  let urlsWhenNeighbourhoodQueued = allUrls.size;
 
-  const classicResult = await collectUrlsFromStrategies(
-    context,
-    finalClassic,
-    query,
-    location,
-    allUrls,
-    urlCap,
-    deadline
-  );
+  if (!isTrial) {
+    void discoverNeighbourhoodAreas(location, query)
+      .then((areas) => {
+        areasDiscovered = areas.length;
+        if (areas.length === 0) return;
+        urlsWhenNeighbourhoodQueued = allUrls.size;
+        const neighbourhoodUrls = buildNeighbourhoodSearchUrls(
+          query,
+          location,
+          areas
+        );
+        neighbourhoodStrategyUrls = neighbourhoodUrls.length;
+        strategyQueue.push(...neighbourhoodUrls);
+        logger.info("[search-diag] Neighbourhood expansion URLs added to pool", {
+          query,
+          location,
+          areasDiscovered: areas.length,
+          strategyUrlsAdded: neighbourhoodUrls.length,
+          sampleAreas: areas.slice(0, 5),
+        });
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        neighbourhoodDone = true;
+      });
+  }
 
-  let gridResult = { added: 0, failed: 0 };
-  if (gridUrls.length > 0 && !(deadline !== null && Date.now() >= deadline)) {
-    gridResult = await collectUrlsFromStrategies(
-      context,
-      gridUrls,
-      query,
-      location,
-      allUrls,
-      urlCap,
-      deadline
+  const urlsBeforeStrategies = allUrls.size;
+  let failed = 0;
+  let index = 0;
+
+  while (index < strategyQueue.length || !neighbourhoodDone) {
+    if (timedOut() || allUrls.size >= urlCap) break;
+    if (index >= strategyQueue.length) {
+      if (neighbourhoodDone) break;
+      await sleepMs(100);
+      continue;
+    }
+
+    const batchEnd = Math.min(index + MAPS_URL_BATCH_SIZE, strategyQueue.length);
+    const batch = strategyQueue.slice(index, batchEnd);
+    index = batchEnd;
+
+    const results = await Promise.allSettled(
+      batch.map((strategyUrl) =>
+        Promise.race([
+          scrapeUrlsFromPage(context, strategyUrl, query, location),
+          new Promise<string[]>((_, reject) =>
+            setTimeout(
+              () => reject(new Error("Strategy timeout")),
+              STRATEGY_TIMEOUT_MS
+            )
+          ),
+        ])
+      )
     );
 
+    for (const result of results) {
+      if (result.status === "fulfilled") {
+        const batchNew: string[] = [];
+        for (const url of result.value) {
+          if (allUrls.has(url)) continue;
+          allUrls.add(url);
+          batchNew.push(url);
+          if (allUrls.size >= urlCap) break;
+        }
+        if (batchNew.length > 0) onPlacesFound?.(batchNew);
+      } else {
+        failed++;
+      }
+    }
+
+    if (index < strategyQueue.length && !timedOut()) {
+      await randomDelay(MAPS_BATCH_DELAY_MIN_MS, MAPS_BATCH_DELAY_MAX_MS);
+    }
+  }
+
+  const totalAdded = allUrls.size - urlsBeforeStrategies;
+  const neighbourhoodAdded =
+    areasDiscovered > 0 ? Math.max(0, allUrls.size - urlsWhenNeighbourhoodQueued) : 0;
+
+  if (gridUrls.length > 0) {
     logger.info("[search-diag] Grid strategies complete", {
       query,
       location,
       gridUrlsRun: gridUrls.length,
-      urlsAdded: gridResult.added,
-      strategiesFailed: gridResult.failed,
       totalUrls: allUrls.size,
       sampleGridUrls: gridUrls.slice(0, 3),
     });
   }
 
-  const areas = await neighbourhoodPromise;
-  let neighbourhoodAdded = 0;
-  if (
-    areas.length > 0 &&
-    !(deadline !== null && Date.now() >= deadline)
-  ) {
-    const neighbourhoodUrls = buildNeighbourhoodSearchUrls(
-      query,
-      location,
-      areas
-    );
-    const neighbourhoodResult = await collectUrlsFromStrategies(
-      context,
-      neighbourhoodUrls,
-      query,
-      location,
-      allUrls,
-      urlCap,
-      deadline
-    );
-    neighbourhoodAdded = neighbourhoodResult.added;
-  }
-
   return {
-    classicAdded: classicResult.added,
-    gridAdded: gridResult.added,
+    classicAdded: totalAdded,
+    gridAdded: gridUrls.length > 0 ? totalAdded : 0,
     neighbourhoodAdded,
-    areasDiscovered: areas.length,
+    areasDiscovered,
+    neighbourhoodStrategyUrls,
   };
 }
 
@@ -762,7 +812,8 @@ async function runSinglePointFallback(
   context: BrowserContext,
   query: string,
   location: string,
-  allUrls: Set<string>
+  allUrls: Set<string>,
+  onPlacesFound?: (urls: string[]) => void
 ): Promise<number> {
   const singleUrl = `https://www.google.com/maps/search/${encodeURIComponent(`${query} in ${location}`)}`;
   try {
@@ -778,9 +829,13 @@ async function runSinglePointFallback(
       singleUrl,
       rawCount: fallbackUrls.length,
     });
+    const batchNew: string[] = [];
     for (const url of fallbackUrls) {
+      if (allUrls.has(url)) continue;
       allUrls.add(url);
+      batchNew.push(url);
     }
+    if (batchNew.length > 0) onPlacesFound?.(batchNew);
     return fallbackUrls.length;
   } catch (err) {
     logger.warn("[search-diag] Single-point fallback failed", {
@@ -798,7 +853,8 @@ async function getBusinessUrls(
   location: string,
   isTrial = false,
   phase1DeadlineMs?: number,
-  expanded = false
+  expanded = false,
+  onPlacesFound?: (urls: string[]) => void
 ): Promise<string[]> {
   const allUrls = new Set<string>();
   const deadline = phase1DeadlineMs ?? null;
@@ -831,7 +887,9 @@ async function getBusinessUrls(
         searchLocation
       );
       for (const url of urls) {
+        if (allUrls.has(url)) continue;
         allUrls.add(url);
+        onPlacesFound?.([url]);
       }
       if (allUrls.size >= TRIAL_URL_CAP) break;
     }
@@ -847,7 +905,8 @@ async function getBusinessUrls(
       urlCap,
       deadline,
       expanded,
-      false
+      false,
+      onPlacesFound
     );
     logger.info("[search-diag] Fallback attempt nominatim-full", {
       query,
@@ -859,6 +918,7 @@ async function getBusinessUrls(
       gridAdded: attempt1.gridAdded,
       neighbourhoodAdded: attempt1.neighbourhoodAdded,
       areasDiscovered: attempt1.areasDiscovered,
+      neighbourhoodStrategyUrls: attempt1.neighbourhoodStrategyUrls,
       totalUrls: countUrls(),
     });
 
@@ -874,7 +934,8 @@ async function getBusinessUrls(
         urlCap,
         deadline,
         expanded,
-        false
+        false,
+        onPlacesFound
       );
       logger.info("[search-diag] Fallback attempt nominatim-short", {
         query,
@@ -906,7 +967,8 @@ async function getBusinessUrls(
         urlCap,
         deadline,
         expanded,
-        false
+        false,
+        onPlacesFound
       );
       logger.info("[search-diag] Fallback attempt google-geocoding", {
         query,
@@ -933,7 +995,8 @@ async function getBusinessUrls(
         context,
         query,
         searchLocation,
-        allUrls
+        allUrls,
+        onPlacesFound
       );
       logger.info("[search-diag] Single-point fallback complete", {
         query,
@@ -1152,83 +1215,39 @@ export async function scrapeGoogleMaps(
   const isPastDeadline = () =>
     deadline !== undefined && Date.now() >= deadline;
 
-  try {
+  const placeQueue: string[] = [];
+  const placeIdSeen = new Set<string>();
+  let collectionDone = false;
+
+  const enqueuePlaceUrls = (urls: string[]) => {
+    for (const url of deduplicateByPlaceId(urls)) {
+      const match = url.match(/\/maps\/place\/([^/?]+)/);
+      if (!match || placeIdSeen.has(match[1])) continue;
+      placeIdSeen.add(match[1]);
+      placeQueue.push(url);
+    }
+  };
+
+  const extractTimeoutMs = isTrial ? EXTRACT_RACE_TIMEOUT_MS : PLACE_TIMEOUT_MS;
+
+  const extractLoop = async (): Promise<void> => {
+    const urlCap = isTrial ? TRIAL_URL_CAP : MAX_LEADS_PER_SEARCH;
+    onProgress?.(0, urlCap);
     onPhase?.(formatSearchMessage(query, location));
-    let businessUrls = await getBusinessUrls(
-      context,
-      query,
-      location,
-      isTrial,
-      deadline,
-      false
-    );
 
-    if (!isTrial && businessUrls.length < 300 && !isPastDeadline()) {
-      const expandedUrls = await getBusinessUrls(
-        context,
-        query,
-        location,
-        false,
-        deadline,
-        true
-      );
-      businessUrls = deduplicateByPlaceId([...businessUrls, ...expandedUrls]).slice(
-        0,
-        MAX_LEADS_PER_SEARCH
-      );
-    }
-
-    if (businessUrls.length === 0) {
-      onPhase?.(formatSearchMessage(query, location));
-      const fallbackUrl = `https://www.google.com/maps/search/${encodeURIComponent(`${query} in ${location}`)}`;
-      await loadMapsSearchPage(searchPage, fallbackUrl);
-      await scrollResults(searchPage, query, location, onPhase);
-      const collected = await collectPlaceUrls(searchPage);
-      const urlCap = isTrial ? TRIAL_URL_CAP : MAX_LEADS_PER_SEARCH;
-      businessUrls = deduplicateByPlaceId(collected).slice(0, urlCap);
-    }
-
-    if (businessUrls.length === 0) {
-      const feedCount = await extractLeadsViaFeedClicks(
-        searchPage,
-        query,
-        location,
-        seen,
-        onProgress,
-        onLead
-      );
-      if (feedCount > 0) {
-        return { count: feedCount, remainingUrls: [], phase1TimedOut: false };
-      }
-    }
-
-    if (businessUrls.length === 0) {
-      const blockedAgain = await detectBlockedPage(searchPage);
-      if (blockedAgain) throw new Error(blockedAgain);
-      await logMapsDiagnostics(searchPage, query, location);
-      throw new Error(
-        "No businesses found on Google Maps for this search. Try different wording or location."
-      );
-    }
-
-    const max = businessUrls.length;
-    const extractTimeoutMs = isTrial ? EXTRACT_RACE_TIMEOUT_MS : PLACE_TIMEOUT_MS;
-    onProgress?.(0, max);
-    onPhase?.(
-      isTrial
-        ? `Scanning ${query} in ${location}. Extracting preview details...`
-        : `Found ${businessUrls.length} businesses for ${query} in ${location}. Extracting details...`
-    );
-
-    let startIndex = 0;
-    for (let i = 0; i < businessUrls.length; i += BATCH_SIZE) {
+    while (true) {
       if (isPastDeadline()) {
         phase1TimedOut = true;
-        startIndex = i;
-        break;
+        return;
       }
 
-      const batch = businessUrls.slice(i, i + BATCH_SIZE);
+      if (placeQueue.length === 0) {
+        if (collectionDone) return;
+        await sleepMs(150);
+        continue;
+      }
+
+      const batch = placeQueue.splice(0, BATCH_SIZE);
       const results = await Promise.allSettled(
         batch.map((url, batchIndex) =>
           extractWithRetry(
@@ -1240,8 +1259,8 @@ export async function scrapeGoogleMaps(
                     url,
                     query,
                     location,
-                    i + batchIndex + 1,
-                    businessUrls.length
+                    count + batchIndex + 1,
+                    count + placeQueue.length + batch.length
                   ),
             extractTimeoutMs
           )
@@ -1255,20 +1274,104 @@ export async function scrapeGoogleMaps(
         if (seen.has(key)) continue;
         seen.add(key);
         count++;
-        onProgress?.(count, max);
+        const maxEstimate = Math.max(count + placeQueue.length, urlCap);
+        onProgress?.(count, maxEstimate);
         if (onLead) onLead(lead);
       }
 
-      startIndex = i + BATCH_SIZE;
-      if (i + BATCH_SIZE < businessUrls.length && !isPastDeadline()) {
+      if (placeQueue.length > 0 && !isPastDeadline()) {
         await randomDelay(MAPS_BATCH_DELAY_MIN_MS, MAPS_BATCH_DELAY_MAX_MS);
       }
     }
+  };
 
-    const remainingUrls =
-      phase1TimedOut && startIndex < businessUrls.length
-        ? businessUrls.slice(startIndex)
-        : [];
+  let feedExtracted = false;
+
+  const collectLoop = async (): Promise<void> => {
+    try {
+      onPhase?.(formatSearchMessage(query, location));
+      let businessUrls = await getBusinessUrls(
+        context,
+        query,
+        location,
+        isTrial,
+        deadline,
+        false,
+        enqueuePlaceUrls
+      );
+
+      if (!isTrial && businessUrls.length < 300 && !isPastDeadline()) {
+        const expandedUrls = await getBusinessUrls(
+          context,
+          query,
+          location,
+          false,
+          deadline,
+          true,
+          enqueuePlaceUrls
+        );
+        businessUrls = deduplicateByPlaceId([
+          ...businessUrls,
+          ...expandedUrls,
+        ]).slice(0, MAX_LEADS_PER_SEARCH);
+      }
+
+      if (businessUrls.length === 0 && placeQueue.length === 0) {
+        onPhase?.(formatSearchMessage(query, location));
+        const fallbackUrl = `https://www.google.com/maps/search/${encodeURIComponent(`${query} in ${location}`)}`;
+        await loadMapsSearchPage(searchPage, fallbackUrl);
+        await scrollResults(searchPage, query, location, onPhase);
+        const collected = await collectPlaceUrls(searchPage);
+        const urlCap = isTrial ? TRIAL_URL_CAP : MAX_LEADS_PER_SEARCH;
+        const fallbackPlaces = deduplicateByPlaceId(collected).slice(0, urlCap);
+        enqueuePlaceUrls(fallbackPlaces);
+        businessUrls = fallbackPlaces;
+      }
+
+      if (businessUrls.length === 0 && placeQueue.length === 0 && count === 0) {
+        const feedCount = await extractLeadsViaFeedClicks(
+          searchPage,
+          query,
+          location,
+          seen,
+          onProgress,
+          onLead
+        );
+        if (feedCount > 0) {
+          count = feedCount;
+          feedExtracted = true;
+        }
+      }
+    } finally {
+      collectionDone = true;
+    }
+  };
+
+  try {
+    await Promise.all([collectLoop(), extractLoop()]);
+
+    if (feedExtracted) {
+      return { count, remainingUrls: [], phase1TimedOut: false };
+    }
+
+    if (count === 0 && placeQueue.length === 0) {
+      const blockedAgain = await detectBlockedPage(searchPage);
+      if (blockedAgain) throw new Error(blockedAgain);
+      if (!isTrial) {
+        await logMapsDiagnostics(searchPage, query, location);
+      }
+      throw new Error(
+        "No businesses found on Google Maps for this search. Try different wording or location."
+      );
+    }
+
+    const remainingUrls = phase1TimedOut ? [...placeQueue] : [];
+
+    if (!isTrial && count > 0) {
+      onPhase?.(
+        `Found ${count} businesses for ${query} in ${location}. Extracting details...`
+      );
+    }
 
     return { count, remainingUrls, phase1TimedOut };
   } finally {

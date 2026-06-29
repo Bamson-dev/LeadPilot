@@ -284,7 +284,15 @@ export async function insertBusinessLead(lead: BusinessLead): Promise<BusinessLe
   if (error || !data) {
     throw new Error(error?.message ?? "Failed to upsert lead");
   }
-  return mapBusinessLead(data as DbBusinessLead);
+
+  const saved = mapBusinessLead(data as DbBusinessLead);
+  const totalFound = await countSearchLeads(lead.searchId);
+  await updateSearchJob(lead.searchId, {
+    totalFound,
+    processed: totalFound,
+  }).catch(() => undefined);
+
+  return saved;
 }
 
 export async function updateBusinessLeadEmails(

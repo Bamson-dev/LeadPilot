@@ -4,22 +4,21 @@ import type { NearbyCitySuggestion } from "@leadthur/shared";
 
 interface NearbyCityChipsProps {
   cities: NearbyCitySuggestion[];
-  totalFound: number;
+  show: boolean;
   onSelectCity: (city: string) => void;
 }
 
 export function NearbyCityChips({
   cities,
-  totalFound,
+  show,
   onSelectCity,
 }: NearbyCityChipsProps) {
-  if (cities.length === 0) return null;
+  if (!show || cities.length === 0) return null;
 
   return (
     <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-4 space-y-3">
       <p className="text-sm text-amber-100/90 leading-relaxed">
-        We only found {totalFound.toLocaleString()} potential clients in this city.
-        Here are nearby cities that might have more.
+        Search a specific area of the city for more results.
       </p>
       <div className="flex flex-wrap gap-2.5">
         {cities.map((item) => (

@@ -1,11 +1,10 @@
 export function getSearchProgressMessage(
   count: number,
-  query: string,
+  _query: string,
   location: string,
   status: "running" | "completed" | "failed" | "queued",
   queuePosition?: number
 ): string {
-  const q = query.trim();
   const loc = location.trim();
 
   if (status === "failed") {
@@ -23,25 +22,18 @@ export function getSearchProgressMessage(
     return `Your search is queued. Position ${queuePosition} in line. Results will start appearing shortly.`;
   }
 
-  if (count === 0) {
-    if (status === "running") {
-      return "Searching for potential clients across the city. This takes about a minute to get the best results.";
+  if (status === "running") {
+    if (count === 0) {
+      return `Finding potential clients in ${loc}...`;
     }
+    return `Finding potential clients in ${loc}... ${count.toLocaleString()} found so far`;
+  }
+
+  if (count === 0) {
     return "Starting your search...";
   }
-  if (count <= 5) {
-    return "Found first potential clients. Extracting contact details...";
-  }
-  if (count <= 15) {
-    return `Found ${count} potential clients for ${q} in ${loc}. Still searching...`;
-  }
-  if (count <= 30) {
-    return `Found ${count} potential clients. Collecting phone numbers and details...`;
-  }
-  if (count <= 50) {
-    return `Found ${count} potential clients. Almost done...`;
-  }
-  return `Found ${count} potential clients. Wrapping up...`;
+
+  return `Finding potential clients in ${loc}... ${count.toLocaleString()} found so far`;
 }
 
 /** Progress bar: leads found / 250, capped at 99% until complete. */

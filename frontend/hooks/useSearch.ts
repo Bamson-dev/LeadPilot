@@ -38,6 +38,44 @@ const CONNECTION_LOST_MESSAGE =
 const SEARCH_ACCESS_DENIED_MESSAGE =
   "Unable to load this search. Please refresh the page and try again.";
 
+function placeIdFromLead(lead: BusinessLead): string {
+  const url = lead.googleMapsUrl ?? "";
+  const match = url.match(/\/maps\/place\/([^/?]+)/);
+  if (match) {
+    try {
+      return decodeURIComponent(match[1]);
+    } catch {
+      return match[1];
+    }
+  }
+  return lead.id;
+}
+
+function mergePollLeads(
+  existing: BusinessLead[],
+  incoming: BusinessLead[]
+): BusinessLead[] {
+  const byPlace = new Map<string, BusinessLead>();
+  for (const lead of existing) {
+    byPlace.set(placeIdFromLead(lead), lead);
+  }
+  for (const lead of incoming) {
+    const key = placeIdFromLead(lead);
+    const prev = byPlace.get(key);
+    byPlace.set(
+      key,
+      prev
+        ? {
+            ...prev,
+            ...lead,
+            id: prev.id || lead.id,
+          }
+        : lead
+    );
+  }
+  return [...byPlace.values()];
+}
+
 function mergePendingIntoLeads(
   current: BusinessLead[],
   pending: BusinessLead[],
@@ -444,29 +482,37 @@ export function useSearch(options?: UseSearchOptions) {
           try {
             const payload = await pollSearchResults(searchId);
             if (searchId !== searchIdRef.current) return;
-            if (payload.leads.length > 0) {
-              replaceLeads(payload.leads, searchId);
-            }
+
             setState((prev) => {
               if (prev.searchId !== searchId) return prev;
-              const count = prev.leads.length;
+              const merged =
+                payload.leads.length > 0
+                  ? mergePollLeads(prev.leads, payload.leads)
+                  : prev.leads;
+              const count = Math.max(merged.length, payload.totalFound);
+              const running = payload.scrapingInProgress;
               return {
                 ...prev,
+                leads: merged,
                 totalFound: count,
+                message: progressMessage(
+                  count,
+                  running ? "running" : "completed",
+                  prev.queuePosition
+                ),
                 queuePosition: payload.queuePosition,
                 summary: payload.summary ?? prev.summary,
                 nearbyCities: payload.nearbyCities ?? prev.nearbyCities,
                 scrapingInProgress: payload.scrapingInProgress,
+                status: running ? "running" : prev.status,
               };
             });
+
             if (
               !payload.scrapingInProgress &&
-              (payload.status === "completed" || payload.leads.length > 0)
+              (payload.status === "completed" || payload.totalFound > 0)
             ) {
-              const count =
-                payload.leads.length > 0
-                  ? payload.leads.length
-                  : payload.totalFound;
+              const count = Math.max(payload.totalFound, payload.leads.length);
               finishSearch(
                 count,
                 count === 0
@@ -480,7 +526,7 @@ export function useSearch(options?: UseSearchOptions) {
         })();
       }, SCRAPING_POLL_INTERVAL_MS);
     },
-    [finishSearch, replaceLeads, stopScrapingPoll]
+    [finishSearch, progressMessage, stopScrapingPoll]
   );
 
   const phase1Complete = useCallback(
@@ -496,38 +542,20 @@ export function useSearch(options?: UseSearchOptions) {
         return {
           ...prev,
           leads: merged,
-          status: "completed",
+          status: "running",
           totalFound,
           queuePosition: 0,
           error: null,
           scrapingInProgress: true,
           message:
             message ??
-            `Found ${totalFound.toLocaleString()} potential clients. Finding email addresses in the background...`,
+            progressMessage(totalFound, "running", 0),
         };
       });
 
-      void pollSearchResults(activeId)
-        .then((payload) => {
-          if (activeId !== searchIdRef.current) return;
-          if (payload.leads.length > 0) replaceLeads(payload.leads, activeId);
-          setState((prev) => {
-            if (prev.searchId !== activeId) return prev;
-            return {
-              ...prev,
-              totalFound: prev.leads.length,
-              summary: payload.summary,
-              nearbyCities: payload.nearbyCities ?? [],
-              scrapingInProgress: payload.scrapingInProgress,
-              queuePosition: payload.queuePosition,
-            };
-          });
-        })
-        .catch(() => undefined);
-
       startResultsPoll(activeId);
     },
-    [replaceLeads, startResultsPoll]
+    [progressMessage, startResultsPoll]
   );
 
   const pollForResults = useCallback(
@@ -564,7 +592,7 @@ export function useSearch(options?: UseSearchOptions) {
             if (searchId !== searchIdRef.current) return;
             await syncFromApi(searchId);
 
-            if (job.status === "completed") {
+            if (job.status === "completed" && !job.scrapingInProgress) {
               setState((prev) => {
                 if (prev.searchId !== searchId) return prev;
                 const count = prev.leads.length;
@@ -1017,9 +1045,7 @@ export function useSearch(options?: UseSearchOptions) {
 
         connectToStream(result.searchId);
         startPolling(result.searchId);
-        if (queuePosition > 0) {
-          startResultsPoll(result.searchId);
-        }
+        startResultsPoll(result.searchId);
 
         stopTimeout();
         timeoutRef.current = setTimeout(() => {
@@ -1095,7 +1121,7 @@ export function useSearch(options?: UseSearchOptions) {
   const runSearchWithNearbyCity = useCallback(
     (city: string) => {
       void search(queryRef.current || "businesses", city, {
-        accumulate: false,
+        accumulate: true,
       });
     },
     [search]

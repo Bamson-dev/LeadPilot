@@ -350,7 +350,7 @@ export function SearchDashboard() {
     !isSearching &&
     !savedBanner;
 
-  const exportCount = filteredLeadsToExport.length;
+  const exportCount = tableLeads.length;
   const exportPulse = status === "completed" && exportCount > 0;
 
   const searchesRemaining =
@@ -671,8 +671,8 @@ export function SearchDashboard() {
             leads={tableLeads}
           />
           <NearbyCityChips
+            show={status === "completed" && !scrapingInProgress && !isSearching}
             cities={nearbyCities}
-            totalFound={tableLeads.length}
             onSelectCity={(city) => {
               setLocation(city);
               void runSearchWithNearbyCity(city);

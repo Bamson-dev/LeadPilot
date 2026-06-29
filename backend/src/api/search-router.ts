@@ -7,6 +7,7 @@ import {
   getSearchJobAccess,
   getSearchResults,
   getAllSearchLeads,
+  countSearchLeads,
   setSearchJobLicenseEmail,
   markSearchComplete,
   markSearchFailed,
@@ -200,7 +201,8 @@ async function buildSearchResultsPayload(
   limit: number
 ): Promise<SearchResultsResponse> {
   const job = await getSearchJob(searchId);
-  const { leads, total } = await getSearchResults(searchId, page, limit);
+  const total = await countSearchLeads(searchId);
+  const { leads } = await getSearchResults(searchId, page, limit);
   const summary =
     job?.statsSummary ??
     computeSearchStats(
@@ -216,7 +218,7 @@ async function buildSearchResultsPayload(
     status: job?.status ?? "unknown",
     leads,
     total,
-    totalFound: job?.totalFound ?? total,
+    totalFound: total,
     scrapingInProgress: Boolean(job?.scrapingInProgress),
     queuePosition,
     summary,

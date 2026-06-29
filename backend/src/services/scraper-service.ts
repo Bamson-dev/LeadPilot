@@ -246,10 +246,6 @@ async function runBackgroundWork(
             seenKeys.add(key);
             emitLead(emit, basic);
             void insertBusinessLead(basic).catch(() => undefined);
-            void updateSearchJob(searchId, {
-              processed: seenKeys.size,
-              totalFound: seenKeys.size,
-            }).catch(() => undefined);
           },
         });
       } finally {
@@ -487,13 +483,6 @@ export async function runScraperJob(
           error: err instanceof Error ? err.message : "unknown",
         });
       });
-
-      if (leadsFoundSoFar % 3 === 0) {
-        void updateSearchJob(searchId, {
-          processed: leadsFoundSoFar,
-          totalFound: leadsFoundSoFar,
-        }).catch(() => undefined);
-      }
     };
 
     step = "phase1_maps_scrape";
@@ -571,14 +560,6 @@ export async function runScraperJob(
     const licenseEmail =
       options?.licenseEmail?.toLowerCase().trim() ||
       (await resolveLicenseEmail());
-    if (licenseEmail && phase1Total > 0) {
-      void recordSearchHistorySafe({
-        email: licenseEmail,
-        business_type: query,
-        location,
-        results_count: phase1Total,
-      });
-    }
 
     pool.release(browser);
     browserReleased = true;
