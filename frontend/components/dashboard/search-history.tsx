@@ -164,7 +164,7 @@ export function SearchHistory({
                       {item.query} in {item.location}
                     </div>
                     <div style={{ color: "#6B6B80", fontSize: 11, marginTop: 2 }}>
-                      {item.total_found} businesses ·{" "}
+                      {item.total_found} potential clients ·{" "}
                       {new Date(item.created_at).toLocaleDateString()}
                     </div>
                   </div>

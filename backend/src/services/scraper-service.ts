@@ -192,7 +192,7 @@ async function runBackgroundWork(
     const stats = computeSearchStats(leads);
 
     let nearbyCities = undefined;
-    if (!isTrial && stats.total < 500) {
+    if (!isTrial && stats.total < 300) {
       const geo = await geocodeCity(location);
       nearbyCities = findNearbyCities(
         location,

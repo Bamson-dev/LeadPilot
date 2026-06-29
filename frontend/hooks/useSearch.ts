@@ -287,7 +287,10 @@ export function useSearch(options?: UseSearchOptions) {
             status: "completed",
             queuePosition: 0,
             error: null,
-            message: `Search complete. Found ${count} businesses.`,
+            message:
+              count === 0
+                ? "No potential clients found in this area. Try a nearby city."
+                : `We found ${count.toLocaleString()} potential clients for you.`,
           };
         });
       } catch {
@@ -378,7 +381,9 @@ export function useSearch(options?: UseSearchOptions) {
             ) {
               finishSearch(
                 payload.totalFound,
-                `Search complete. Found ${payload.totalFound} businesses.`
+                payload.totalFound === 0
+                  ? "No potential clients found in this area. Try a nearby city."
+                  : `We found ${payload.totalFound.toLocaleString()} potential clients for you.`
               );
             }
           } catch {
@@ -408,7 +413,7 @@ export function useSearch(options?: UseSearchOptions) {
           scrapingInProgress: true,
           message:
             message ??
-            `Found ${totalFound} businesses. Finding email addresses in the background...`,
+            `Found ${totalFound.toLocaleString()} potential clients. Finding email addresses in the background...`,
         };
       });
 
@@ -442,7 +447,9 @@ export function useSearch(options?: UseSearchOptions) {
           replaceLeads(mapped);
           finishSearch(
             fetched.length,
-            `Search complete. Found ${fetched.length} businesses.`
+            fetched.length === 0
+              ? "No potential clients found in this area. Try a nearby city."
+              : `We found ${fetched.length.toLocaleString()} potential clients for you.`
           );
         }
       } catch {
@@ -476,7 +483,9 @@ export function useSearch(options?: UseSearchOptions) {
                   queueMicrotask(() =>
                     finishSearch(
                       count,
-                      `Search complete. Found ${count} businesses.`
+                      count === 0
+                        ? "No potential clients found in this area. Try a nearby city."
+                        : `We found ${count.toLocaleString()} potential clients for you.`
                     )
                   );
                   return {
@@ -663,7 +672,7 @@ export function useSearch(options?: UseSearchOptions) {
                   queueMicrotask(() =>
                     finishSearch(
                       merged.length,
-                      `Found ${merged.length} businesses.`
+                      `Found ${merged.length.toLocaleString()} potential clients.`
                     )
                   );
                   return {
@@ -713,7 +722,10 @@ export function useSearch(options?: UseSearchOptions) {
               totalFound: merged.length,
               status: "completed",
               error: null,
-              message: `Search complete. Found ${merged.length} businesses.`,
+              message:
+                merged.length === 0
+                  ? "No potential clients found in this area. Try a nearby city."
+                  : `We found ${merged.length.toLocaleString()} potential clients for you.`,
             };
           }
           return prev;
@@ -759,7 +771,10 @@ export function useSearch(options?: UseSearchOptions) {
                 totalFound: merged.length,
                 status: "completed",
                 error: null,
-                message: `Search complete. Found ${merged.length} businesses.`,
+                message:
+                merged.length === 0
+                  ? "No potential clients found in this area. Try a nearby city."
+                  : `We found ${merged.length.toLocaleString()} potential clients for you.`,
               };
             }
             completedRef.current = true;
@@ -861,7 +876,7 @@ export function useSearch(options?: UseSearchOptions) {
               status: "completed",
               leads: merged,
               searchId: result.searchId,
-              message: `Found ${result.totalFound ?? mapped.length} businesses instantly from recent search`,
+              message: `Found ${(result.totalFound ?? mapped.length).toLocaleString()} potential clients instantly from recent search`,
               totalFound,
               searchesRemaining: result.searchesRemaining ?? null,
               queuePosition: 0,

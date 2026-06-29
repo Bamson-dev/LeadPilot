@@ -2,6 +2,9 @@ import { EMAIL_FETCH_TIMEOUT_MS } from "../utils/constants";
 import { isValidEmail } from "../parsers/email-validation";
 import { logger } from "../../utils/logger";
 import { resolveEffectiveBusinessWebsite } from "../utils/effective-website";
+import { chromium } from "playwright";
+import { acquirePlaywrightSlot } from "../browser/playwright-semaphore";
+import { getChromiumLaunchOptions } from "../browser/chromium-options";
 
 export interface EmailCrawlResult {
   emails: string[];
@@ -169,6 +172,58 @@ export async function crawlEmailsFromWebsite(
   }
 }
 
+async function fetchPageHtmlWithPlaywright(
+  pageUrl: string,
+  timeoutMs: number
+): Promise<string | null> {
+  const release = await acquirePlaywrightSlot();
+  let browser = null;
+  try {
+    logger.info("[email-diag] Launching Playwright browser for email scrape", {
+      pageUrl: pageUrl.substring(0, 80),
+      timeoutMs,
+    });
+    browser = await chromium.launch(getChromiumLaunchOptions());
+    const page = await browser.newPage({
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    });
+    await page.goto(pageUrl, {
+      timeout: timeoutMs,
+      waitUntil: "domcontentloaded",
+    });
+    await page.waitForTimeout(1500);
+    const html = await page.content();
+    logger.info("[email-diag] Playwright page loaded", {
+      pageUrl: pageUrl.substring(0, 80),
+      htmlLength: html.length,
+      mailtoFound: html.toLowerCase().includes("mailto:"),
+    });
+    return html;
+  } catch (err) {
+    logger.warn("[email-diag] Playwright page load failed", {
+      pageUrl: pageUrl.substring(0, 80),
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    return null;
+  } finally {
+    await browser?.close().catch(() => undefined);
+    release();
+  }
+}
+
+async function fetchPageHtmlBestEffort(
+  pageUrl: string,
+  timeoutMs: number
+): Promise<string | null> {
+  const httpHtml = await fetchPageHtml(pageUrl, timeoutMs);
+  if (httpHtml && httpHtml.length > 500) return httpHtml;
+
+  const remaining = Math.max(3000, timeoutMs);
+  const playwrightHtml = await fetchPageHtmlWithPlaywright(pageUrl, remaining);
+  return playwrightHtml ?? httpHtml;
+}
+
 async function fetchPageHtml(pageUrl: string, timeoutMs = EMAIL_FETCH_TIMEOUT_MS): Promise<string | null> {
   try {
     const controller = new AbortController();
@@ -177,8 +232,9 @@ async function fetchPageHtml(pageUrl: string, timeoutMs = EMAIL_FETCH_TIMEOUT_MS
     const response = await fetch(pageUrl, {
       signal: controller.signal,
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; LeadBot/1.0)",
-        Accept: "text/html,application/xhtml+xml",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
       },
       redirect: "follow",
@@ -374,23 +430,31 @@ function filterScrapedEmails(emails: string[]): string[] {
   return result;
 }
 
-function extractEmailsFromHtmlStrict(html: string): string[] {
+function extractEmailsFromHtmlStrict(html: string, skipGenericFilter = false): string[] {
+  const decoded = html
+    .replace(/&#64;/g, "@")
+    .replace(/&#x40;/gi, "@")
+    .replace(/\[at\]/gi, "@")
+    .replace(/\(at\)/gi, "@");
+
   const found: string[] = [];
 
   let match: RegExpExecArray | null;
-  while ((match = MAILTO_REGEX.exec(html)) !== null) {
+  while ((match = MAILTO_REGEX.exec(decoded)) !== null) {
     const email = match[1].toLowerCase().trim();
     if (isValidEmail(email)) found.push(email);
   }
   MAILTO_REGEX.lastIndex = 0;
 
-  const allMatches = html.match(EMAIL_REGEX) || [];
+  const allMatches = decoded.match(EMAIL_REGEX) || [];
   for (const email of allMatches) {
     const normalized = email.toLowerCase().trim();
     if (isValidEmail(normalized)) found.push(normalized);
   }
 
-  return filterScrapedEmails([...new Set(found)]);
+  const unique = [...new Set(found)];
+  if (skipGenericFilter) return unique;
+  return filterScrapedEmails(unique);
 }
 
 function findContactLinkFromHtml(html: string, baseUrl: string): string | null {
@@ -412,34 +476,83 @@ function findContactLinkFromHtml(html: string, baseUrl: string): string | null {
 
 /**
  * Strict website email scrape for background enrichment:
- * mailto → regex → contact page. 5s total timeout per site. No predictions.
+ * mailto → regex → contact page. 10s total timeout per site. No predictions.
  */
 export async function scrapeBusinessEmailStrict(
   websiteUrl: string | null | undefined
 ): Promise<string[]> {
-  if (!websiteUrl?.trim()) return [];
+  const siteLabel = websiteUrl?.trim().substring(0, 80) ?? "(empty)";
+  logger.info("[email-diag] scrapeBusinessEmailStrict start", {
+    websiteUrl: siteLabel,
+    method: "http-fetch",
+    timeoutMs: EMAIL_FETCH_TIMEOUT_MS,
+  });
+
+  if (!websiteUrl?.trim()) {
+    logger.info("[email-diag] Skipped — no website URL", { websiteUrl: siteLabel });
+    return [];
+  }
 
   const deadline = Date.now() + EMAIL_FETCH_TIMEOUT_MS;
-
   const timedOut = () => Date.now() >= deadline;
 
   try {
     const resolved = await resolveEffectiveBusinessWebsite(websiteUrl);
-    if (!resolved) return [];
+    if (!resolved) {
+      logger.warn("[email-diag] Could not resolve effective website", {
+        websiteUrl: siteLabel,
+      });
+      return [];
+    }
+
+    logger.info("[email-diag] Resolved website", {
+      original: siteLabel,
+      resolved: resolved.substring(0, 80),
+    });
 
     let baseUrl = resolved.trim();
     if (!baseUrl.startsWith("http")) baseUrl = `https://${baseUrl}`;
     baseUrl = baseUrl.replace(/\/$/, "");
 
-    const homepageHtml = await fetchPageHtml(
-      baseUrl,
-      Math.max(500, deadline - Date.now())
-    );
-    if (timedOut()) return [];
+    const homepageTimeout = Math.max(500, deadline - Date.now());
+    logger.info("[email-diag] Fetching homepage", {
+      baseUrl: baseUrl.substring(0, 80),
+      timeoutMs: homepageTimeout,
+    });
 
-    if (homepageHtml) {
+    const homepageHtml = await fetchPageHtmlBestEffort(baseUrl, homepageTimeout);
+    if (timedOut()) {
+      logger.warn("[email-diag] Timed out before homepage loaded", {
+        websiteUrl: siteLabel,
+      });
+      return [];
+    }
+
+    if (!homepageHtml) {
+      logger.warn("[email-diag] Homepage returned empty HTML", {
+        websiteUrl: siteLabel,
+        baseUrl: baseUrl.substring(0, 80),
+      });
+    } else {
+      logger.info("[email-diag] Homepage loaded", {
+        websiteUrl: siteLabel,
+        htmlLength: homepageHtml.length,
+      });
+      const rawHome = extractEmailsFromHtmlStrict(homepageHtml, true);
       const fromHome = extractEmailsFromHtmlStrict(homepageHtml);
-      if (fromHome.length > 0) return fromHome.slice(0, 3);
+      logger.info("[email-diag] Homepage email scan", {
+        websiteUrl: siteLabel,
+        rawMatches: rawHome.length,
+        afterFilter: fromHome.length,
+        mailtoFound: homepageHtml.toLowerCase().includes("mailto:"),
+      });
+      if (fromHome.length > 0) {
+        logger.info("[email-diag] Emails found on homepage", {
+          websiteUrl: siteLabel,
+          emails: fromHome.slice(0, 3),
+        });
+        return fromHome.slice(0, 3);
+      }
     }
 
     const contactUrl = homepageHtml
@@ -447,18 +560,46 @@ export async function scrapeBusinessEmailStrict(
       : await findContactPageUrl(baseUrl);
 
     if (contactUrl && !timedOut()) {
-      const contactHtml = await fetchPageHtml(
+      logger.info("[email-diag] Fetching contact page", {
+        websiteUrl: siteLabel,
+        contactUrl: contactUrl.substring(0, 80),
+      });
+      const contactHtml = await fetchPageHtmlBestEffort(
         contactUrl,
         Math.max(500, deadline - Date.now())
       );
       if (contactHtml) {
+        const rawContact = extractEmailsFromHtmlStrict(contactHtml, true);
         const fromContact = extractEmailsFromHtmlStrict(contactHtml);
-        if (fromContact.length > 0) return fromContact.slice(0, 3);
+        logger.info("[email-diag] Contact page email scan", {
+          websiteUrl: siteLabel,
+          rawMatches: rawContact.length,
+          afterFilter: fromContact.length,
+        });
+        if (fromContact.length > 0) {
+          logger.info("[email-diag] Emails found on contact page", {
+            websiteUrl: siteLabel,
+            emails: fromContact.slice(0, 3),
+          });
+          return fromContact.slice(0, 3);
+        }
+      } else {
+        logger.warn("[email-diag] Contact page returned empty HTML", {
+          websiteUrl: siteLabel,
+          contactUrl: contactUrl.substring(0, 80),
+        });
       }
+    } else if (!contactUrl) {
+      logger.info("[email-diag] No contact page link found", { websiteUrl: siteLabel });
     }
 
+    logger.info("[email-diag] No emails found", { websiteUrl: siteLabel });
     return [];
-  } catch {
+  } catch (err) {
+    logger.error("[email-diag] scrapeBusinessEmailStrict failed", {
+      websiteUrl: siteLabel,
+      error: err instanceof Error ? err.message : "unknown",
+    });
     return [];
   }
 }

@@ -146,7 +146,7 @@ export function RecentSearchesPanel({
                           {item.business_type} in {item.city}
                         </div>
                         <div style={{ color: "#6B6B80", fontSize: 11, marginTop: 3 }}>
-                          {item.results_count.toLocaleString()} results ·{" "}
+                          {item.results_count.toLocaleString()} potential clients ·{" "}
                           {formatRelativeSearchTime(item.created_at)}
                         </div>
                       </div>

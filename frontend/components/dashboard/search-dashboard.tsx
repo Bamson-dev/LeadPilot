@@ -680,29 +680,19 @@ export function SearchDashboard() {
                 Search complete
               </div>
               <div style={{ color: "#6B6B80", fontSize: 12 }}>
-                Found {totalFound} businesses. Your leads are ready to export.
+                We found {totalFound.toLocaleString()} potential clients for you. Your leads are
+                ready to export.
               </div>
             </div>
           </div>
         )}
 
-        {status === "completed" && sessionSearchCount === 1 && !error && !savedBanner && (
-          <div
-            style={{
-              background: "rgba(124,58,237,0.05)",
-              border: "1px solid rgba(124,58,237,0.12)",
-              borderRadius: 8,
-              padding: "10px 14px",
-              marginTop: 8,
-              fontSize: 12,
-              color: "#6B6B80",
-              lineHeight: 1.6,
-            }}
-          >
-            Tip: Each search typically returns 60 to 120 businesses. Use the area
-            suggestions below to search specific neighborhoods and build a larger
-            list. New results are added without clearing your current ones.
-          </div>
+        {status === "completed" && !error && !savedBanner && !showSuccess && (
+          <p className="mt-4 text-sm text-[#A1A1B5]">
+            {totalFound === 0
+              ? "No potential clients found in this area. Try a nearby city."
+              : `We found ${totalFound.toLocaleString()} potential clients for you.`}
+          </p>
         )}
 
         {error && (
@@ -721,12 +711,6 @@ export function SearchDashboard() {
               Try Again
             </Button>
           </div>
-        )}
-
-        {status === "completed" && !error && !savedBanner && !showSuccess && (
-          <p className="mt-4 text-sm text-[#A1A1B5]">
-            Search complete. Found {totalFound} businesses.
-          </p>
         )}
       </div>
 
@@ -852,7 +836,7 @@ export function SearchDashboard() {
               }}
             >
               {suggestionsMessage ||
-                `Each search typically returns 60 to 120 businesses. Click an area below to find more businesses and add them to your list.`}
+                `Click an area below to find more potential clients and add them to your list.`}
             </p>
             <p
               style={{
@@ -862,7 +846,7 @@ export function SearchDashboard() {
                 fontWeight: 500,
               }}
             >
-              Each area search adds new businesses without clearing your current results.
+              Each area search adds new potential clients without clearing your current results.
             </p>
           </div>
 

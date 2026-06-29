@@ -3,6 +3,8 @@
  * Divides a city into a 3×3 or 5×5 grid to collect more unique place URLs.
  */
 
+import { logger } from "../../utils/logger";
+
 export interface GeoCenter {
   lat: number;
   lng: number;
@@ -17,6 +19,52 @@ export interface GridPoint {
 
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
 
+const COUNTRY_SUFFIXES = [
+  "united kingdom",
+  "united states",
+  "united arab emirates",
+  "south africa",
+  "new zealand",
+  "saudi arabia",
+  "south korea",
+  "north korea",
+  "united states of america",
+  "uk",
+  "usa",
+  "uae",
+  "kenya",
+  "nigeria",
+  "ghana",
+  "canada",
+  "australia",
+  "india",
+  "france",
+  "germany",
+  "spain",
+  "italy",
+  "brazil",
+  "mexico",
+  "japan",
+  "china",
+  "egypt",
+  "morocco",
+  "ethiopia",
+  "tanzania",
+  "uganda",
+  "rwanda",
+  "zimbabwe",
+  "zambia",
+  "namibia",
+  "botswana",
+  "mozambique",
+  "angola",
+  "cameroon",
+  "senegal",
+  "ivory coast",
+  "côte d'ivoire",
+  "dubai",
+];
+
 /** Approximate centers for common search locations (fallback when geocoding fails). */
 const CITY_FALLBACKS: Record<string, GeoCenter> = {
   lagos: { lat: 6.5244, lng: 3.3792, radiusKm: 25, isLargeCity: true },
@@ -26,6 +74,9 @@ const CITY_FALLBACKS: Record<string, GeoCenter> = {
   ibadan: { lat: 7.3775, lng: 3.947, radiusKm: 12, isLargeCity: false },
   manchester: { lat: 53.4808, lng: -2.2426, radiusKm: 12, isLargeCity: false },
   birmingham: { lat: 52.4862, lng: -1.8904, radiusKm: 12, isLargeCity: false },
+  nairobi: { lat: -1.2921, lng: 36.8219, radiusKm: 18, isLargeCity: true },
+  dubai: { lat: 25.2048, lng: 55.2708, radiusKm: 20, isLargeCity: true },
+  kenya: { lat: -1.2921, lng: 36.8219, radiusKm: 18, isLargeCity: true },
 };
 
 function normalizeLocationKey(location: string): string {
@@ -40,13 +91,57 @@ function fallbackGeo(location: string): GeoCenter {
   return { lat: 0, lng: 0, radiusKm: 12, isLargeCity: false };
 }
 
+/**
+ * Nominatim works best with city names only — strip trailing country from
+ * inputs like "Nairobi Kenya" or "Abuja, Nigeria".
+ */
+export function extractCityForGeocoding(location: string): string {
+  const trimmed = location.trim();
+  if (!trimmed) return trimmed;
+
+  if (trimmed.includes(",")) {
+    return trimmed.split(",")[0]?.trim() || trimmed;
+  }
+
+  const lower = trimmed.toLowerCase();
+  for (const country of COUNTRY_SUFFIXES) {
+    const suffix = ` ${country}`;
+    if (lower.endsWith(suffix)) {
+      return trimmed.slice(0, -suffix.length).trim();
+    }
+  }
+
+  const words = trimmed.split(/\s+/);
+  if (words.length >= 2) {
+    const lastWord = words[words.length - 1]?.toLowerCase() ?? "";
+    if (COUNTRY_SUFFIXES.includes(lastWord)) {
+      return words.slice(0, -1).join(" ").trim();
+    }
+  }
+
+  return trimmed;
+}
+
 export async function geocodeCity(location: string): Promise<GeoCenter> {
   const trimmed = location.trim();
-  if (!trimmed) return fallbackGeo(location);
+  const geocodeQuery = extractCityForGeocoding(trimmed);
+
+  logger.info("[search-diag] Geocoding city", {
+    fullLocation: trimmed,
+    geocodeQuery,
+  });
+
+  if (!trimmed) {
+    const fb = fallbackGeo(location);
+    logger.info("[search-diag] Nominatim skipped — empty location, using fallback", {
+      geo: fb,
+    });
+    return fb;
+  }
 
   try {
     const params = new URLSearchParams({
-      q: trimmed,
+      q: geocodeQuery,
       format: "json",
       limit: "1",
     });
@@ -58,7 +153,15 @@ export async function geocodeCity(location: string): Promise<GeoCenter> {
     });
     clearTimeout(timeout);
 
-    if (!res.ok) return fallbackGeo(location);
+    if (!res.ok) {
+      const fb = fallbackGeo(location);
+      logger.warn("[search-diag] Nominatim HTTP error — using fallback", {
+        status: res.status,
+        geocodeQuery,
+        fallback: fb,
+      });
+      return fb;
+    }
 
     const data = (await res.json()) as Array<{
       lat: string;
@@ -66,15 +169,30 @@ export async function geocodeCity(location: string): Promise<GeoCenter> {
       boundingbox?: string[];
       type?: string;
       class?: string;
+      display_name?: string;
     }>;
 
-    if (!data.length) return fallbackGeo(location);
+    if (!data.length) {
+      const fb = fallbackGeo(location);
+      logger.warn("[search-diag] Nominatim returned zero results — using fallback", {
+        geocodeQuery,
+        fullLocation: trimmed,
+        fallback: fb,
+      });
+      return fb;
+    }
 
     const hit = data[0];
     const lat = parseFloat(hit.lat);
     const lng = parseFloat(hit.lon);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      return fallbackGeo(location);
+      const fb = fallbackGeo(location);
+      logger.warn("[search-diag] Nominatim invalid coordinates — using fallback", {
+        geocodeQuery,
+        hit,
+        fallback: fb,
+      });
+      return fb;
     }
 
     let radiusKm = 12;
@@ -96,9 +214,21 @@ export async function geocodeCity(location: string): Promise<GeoCenter> {
       hit.type === "administrative" ||
       hit.class === "place";
 
-    return { lat, lng, radiusKm, isLargeCity };
-  } catch {
-    return fallbackGeo(location);
+    const geo = { lat, lng, radiusKm, isLargeCity };
+    logger.info("[search-diag] Nominatim geocode success", {
+      geocodeQuery,
+      displayName: hit.display_name,
+      geo,
+    });
+    return geo;
+  } catch (err) {
+    const fb = fallbackGeo(location);
+    logger.warn("[search-diag] Nominatim geocode failed — using fallback", {
+      geocodeQuery,
+      error: err instanceof Error ? err.message : "unknown",
+      fallback: fb,
+    });
+    return fb;
   }
 }
 
@@ -124,13 +254,15 @@ export function buildGridPoints(geo: GeoCenter, expanded = false): GridPoint[] {
   return points;
 }
 
-/** Google Maps search URL centered on a grid point. */
+/** Google Maps search URL centered on a grid point with full location context. */
 export function buildGridSearchUrl(
   keyword: string,
   point: GridPoint,
+  location: string,
   zoom = 14
 ): string {
-  const q = encodeURIComponent(keyword);
+  const phrase = `${keyword} in ${location.trim()}`;
+  const q = encodeURIComponent(phrase);
   return `https://www.google.com/maps/search/${q}/@${point.lat},${point.lng},${zoom}z`;
 }
 
@@ -145,11 +277,21 @@ export async function buildGridSearchUrls(
 
   for (const keyword of keywords) {
     for (const point of points) {
-      urls.add(buildGridSearchUrl(keyword, point));
+      urls.add(buildGridSearchUrl(keyword, point, location));
     }
   }
 
-  return [...urls];
+  const urlList = [...urls];
+  logger.info("[search-diag] Grid URLs generated", {
+    location,
+    keywordCount: keywords.length,
+    gridPoints: points.length,
+    totalUrls: urlList.length,
+    geo,
+    sampleUrls: urlList.slice(0, 3),
+  });
+
+  return urlList;
 }
 
 export function expandGeoRadius(geo: GeoCenter): GeoCenter {

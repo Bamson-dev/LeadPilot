@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { COMMISSION_NGN, COMMISSION_USD, MIN_PAYOUT_NGN } from "../constants/pricing";
 import { config } from "../config/env";
+import { extractCityForGeocoding } from "../scraper/googleMaps/grid-search";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -353,29 +354,26 @@ export async function sendSearchCompleteEmail(
   });
 }
 
-function resultsEmailWrapper(body: string): string {
+function resultsEmailWrapper(body: string, email: string): string {
+  const unsubscribeUrl = getUnsubscribeUrl(email);
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    body { margin: 0; padding: 0; background: #f4f4f5; font-family: -apple-system, 'Segoe UI', Inter, sans-serif; }
+    body { margin: 0; padding: 0; background: #f4f4f5; font-family: Inter, -apple-system, 'Segoe UI', sans-serif; }
     .wrap { max-width: 560px; margin: 32px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
     .header { padding: 28px 40px 20px; border-bottom: 1px solid #f0f0f0; }
     .logo { font-size: 18px; font-weight: 800; color: #09090b; letter-spacing: -0.5px; }
     .logo span { color: #7C3AED; }
     .body { padding: 36px 40px; }
-    h1 { font-size: 22px; font-weight: 800; color: #09090b; margin: 0 0 16px; line-height: 1.3; letter-spacing: -0.3px; }
-    p { font-size: 15px; color: #3f3f46; line-height: 1.75; margin: 0 0 16px; }
-    .stats { background: #faf5ff; border-radius: 10px; padding: 20px 24px; margin: 20px 0; }
-    .stats-row { display: flex; justify-content: space-between; font-size: 14px; color: #3f3f46; padding: 6px 0; border-bottom: 1px solid #ede9fe; }
-    .stats-row:last-child { border-bottom: none; }
-    .stats-row strong { color: #09090b; }
-    .btn { display: block; background: #7C3AED; color: #ffffff !important; text-align: center; padding: 15px 24px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 15px; margin: 28px 0 8px; }
-    .note { font-size: 13px; color: #71717a; line-height: 1.6; margin-top: 16px; }
+    p { font-size: 15px; color: #18181b; line-height: 1.75; margin: 0 0 16px; }
+    .btn { display: block; background: #7C3AED; color: #ffffff !important; text-align: center; padding: 16px 24px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 16px; margin: 28px 0 8px; }
     .footer { padding: 20px 40px 28px; border-top: 1px solid #f0f0f0; }
     .footer p { font-size: 12px; color: #a1a1aa; line-height: 1.6; margin: 0; }
+    .footer a { color: #7C3AED; text-decoration: none; }
   </style>
 </head>
 <body>
@@ -387,7 +385,7 @@ function resultsEmailWrapper(body: string): string {
       ${body}
     </div>
     <div class="footer">
-      <p>LeadThur by Pdigital Marketstore Ltd</p>
+      <p><a href="${unsubscribeUrl}">Unsubscribe</a> · LeadThur by Pdigital Marketstore Ltd</p>
     </div>
   </div>
 </body>
@@ -404,33 +402,25 @@ export interface SearchResultsEmailStats {
 export async function sendSearchResultsReadyEmail(
   email: string,
   searchId: string,
-  query: string,
+  _query: string,
   location: string,
   stats: SearchResultsEmailStats,
-  options?: { timedOut?: boolean }
+  _options?: { timedOut?: boolean }
 ): Promise<void> {
   const resultsUrl = `${getFrontendUrl()}/dashboard/search/${searchId}`;
-  const timeoutNote = options?.timedOut
-    ? `<p class="note">Email addresses were found for ${stats.withEmail} businesses. Some business websites did not respond in time, but all other contact details are included.</p>`
-    : "";
+  const city = extractCityForGeocoding(location);
+  const countLabel = stats.total.toLocaleString("en-US");
 
   const body = `
-    <h1>Your results are ready</h1>
-    <p>Your LeadThur search for <strong>${escapeHtml(query)}</strong> in <strong>${escapeHtml(location)}</strong> is complete.</p>
-    <div class="stats">
-      <div class="stats-row"><span>Businesses found</span><strong>${stats.total}</strong></div>
-      <div class="stats-row"><span>With phone numbers</span><strong>${stats.withPhone}</strong></div>
-      <div class="stats-row"><span>With email addresses</span><strong>${stats.withEmail}</strong></div>
-      <div class="stats-row"><span>With websites</span><strong>${stats.withWebsite}</strong></div>
-    </div>
-    ${timeoutNote}
-    <a href="${resultsUrl}" class="btn">View my results →</a>
+    <p>Good news. We just finished searching ${escapeHtml(city)} for you and found ${countLabel} potential clients ready for you to reach out to.</p>
+    <p>These are real businesses with direct contact details. The sooner you reach out the better your chances of landing them before anyone else does.</p>
+    <a href="${resultsUrl}" class="btn">View my ${countLabel} potential clients</a>
   `;
 
   await deliver({
     to: email,
-    subject: `your results are ready, ${stats.total} potential clients found`,
-    html: resultsEmailWrapper(body),
+    subject: `we found ${countLabel} potential clients for you in ${city}`,
+    html: resultsEmailWrapper(body, email),
   });
 }
 
@@ -477,12 +467,15 @@ export async function sendSearchQueueFailureEmail(
   query: string,
   location: string
 ): Promise<void> {
-  const html = resultsEmailWrapper(`
+  const html = resultsEmailWrapper(
+    `
     <h1>Your search ran into a problem</h1>
     <p>We could not finish your search for <strong>${escapeHtml(query)}</strong> in <strong>${escapeHtml(location)}</strong> this time.</p>
     <p>Please try again in a few minutes. If the problem continues, try a broader city or business type.</p>
     <a href="${getFrontendUrl()}/dashboard" class="btn">Try another search →</a>
-  `);
+  `,
+    email
+  );
 
   await deliver({
     to: email,

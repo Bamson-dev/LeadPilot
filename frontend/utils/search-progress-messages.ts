@@ -13,7 +13,10 @@ export function getSearchProgressMessage(
   }
 
   if (status === "completed") {
-    return `Search complete. Found ${count} businesses in ${loc}.`;
+    if (count === 0) {
+      return "No potential clients found in this area. Try a nearby city.";
+    }
+    return `We found ${count.toLocaleString()} potential clients for you.`;
   }
 
   if (status === "queued" && queuePosition != null && queuePosition > 0) {
@@ -24,18 +27,18 @@ export function getSearchProgressMessage(
     return "Starting your search...";
   }
   if (count <= 5) {
-    return "Found first businesses. Extracting contact details...";
+    return "Found first potential clients. Extracting contact details...";
   }
   if (count <= 15) {
-    return `Found ${count} businesses for ${q} in ${loc}. Still searching...`;
+    return `Found ${count} potential clients for ${q} in ${loc}. Still searching...`;
   }
   if (count <= 30) {
-    return `Found ${count} businesses. Collecting phone numbers and details...`;
+    return `Found ${count} potential clients. Collecting phone numbers and details...`;
   }
   if (count <= 50) {
-    return `Found ${count} businesses. Almost done...`;
+    return `Found ${count} potential clients. Almost done...`;
   }
-  return `Found ${count} businesses. Wrapping up...`;
+  return `Found ${count} potential clients. Wrapping up...`;
 }
 
 /** Progress bar: leads found / 250, capped at 99% until complete. */

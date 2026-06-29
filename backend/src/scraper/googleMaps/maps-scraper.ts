@@ -15,7 +15,10 @@ import {
   isOnConsentPage,
   seedGoogleConsentCookies,
 } from "./google-consent";
-import { buildAllSearchStrategyUrls } from "./search-strategies";
+import {
+  buildGridStrategyUrls,
+  buildSearchStrategyUrls,
+} from "./search-strategies";
 import {
   DETAIL_PANEL_WAIT_MS,
   MAX_LEADS_PER_SEARCH,
@@ -556,6 +559,51 @@ async function scrapeUrlsFromPage(
   }
 }
 
+async function collectUrlsFromStrategies(
+  context: BrowserContext,
+  strategyUrls: string[],
+  query: string,
+  location: string,
+  allUrls: Set<string>,
+  urlCap: number,
+  deadline: number | null
+): Promise<{ added: number; failed: number }> {
+  const timedOut = () => deadline !== null && Date.now() >= deadline;
+  if (timedOut() || strategyUrls.length === 0) {
+    return { added: 0, failed: 0 };
+  }
+
+  const before = allUrls.size;
+  const results = await Promise.allSettled(
+    strategyUrls.map((strategyUrl) =>
+      Promise.race([
+        scrapeUrlsFromPage(context, strategyUrl, query, location),
+        new Promise<string[]>((_, reject) =>
+          setTimeout(
+            () => reject(new Error("Strategy timeout")),
+            STRATEGY_TIMEOUT_MS
+          )
+        ),
+      ])
+    )
+  );
+
+  let failed = 0;
+  for (const result of results) {
+    if (result.status === "fulfilled") {
+      for (const url of result.value) {
+        allUrls.add(url);
+        if (allUrls.size >= urlCap) break;
+      }
+    } else {
+      failed++;
+    }
+    if (allUrls.size >= urlCap) break;
+  }
+
+  return { added: allUrls.size - before, failed };
+}
+
 async function getBusinessUrls(
   context: BrowserContext,
   query: string,
@@ -568,34 +616,24 @@ async function getBusinessUrls(
   const deadline = phase1DeadlineMs ?? null;
 
   const timedOut = () => deadline !== null && Date.now() >= deadline;
-
-  let searchStrategies: string[];
-  try {
-    searchStrategies = await buildAllSearchStrategyUrls(
-      query,
-      location,
-      isTrial,
-      expanded
-    );
-  } catch {
-    searchStrategies = await buildAllSearchStrategyUrls(query, location, isTrial, false);
-  }
-
-  const finalStrategies = isTrial
-    ? searchStrategies.slice(0, TRIAL_STRATEGY_LIMIT)
-    : searchStrategies;
   const urlCap = isTrial ? TRIAL_URL_CAP : MAX_LEADS_PER_SEARCH;
 
-  logger.info("Multi-strategy Maps search", {
+  const classicUrls = buildSearchStrategyUrls(query, location, isTrial);
+  const finalClassic = isTrial
+    ? classicUrls.slice(0, TRIAL_STRATEGY_LIMIT)
+    : classicUrls;
+
+  logger.info("[search-diag] Starting URL collection", {
     query,
     location,
-    strategies: finalStrategies.length,
     isTrial: isTrial || false,
     expanded,
+    classicStrategyCount: finalClassic.length,
+    phase1DeadlineMs: deadline,
   });
 
   if (isTrial) {
-    for (const strategyUrl of finalStrategies) {
+    for (const strategyUrl of finalClassic) {
       if (timedOut()) break;
       const urls = await scrapeUrlsFromPage(context, strategyUrl, query, location);
       for (const url of urls) {
@@ -604,59 +642,114 @@ async function getBusinessUrls(
       if (allUrls.size >= TRIAL_URL_CAP) break;
     }
   } else {
-    for (const strategyUrl of finalStrategies) {
-      if (timedOut()) break;
+    const classicResult = await collectUrlsFromStrategies(
+      context,
+      finalClassic,
+      query,
+      location,
+      allUrls,
+      urlCap,
+      deadline
+    );
+
+    logger.info("[search-diag] Classic strategies complete", {
+      query,
+      location,
+      classicUrlsRun: finalClassic.length,
+      urlsAdded: classicResult.added,
+      strategiesFailed: classicResult.failed,
+      totalUrls: allUrls.size,
+      sampleClassicUrls: finalClassic.slice(0, 3),
+    });
+
+    let gridUrlsAdded = 0;
+    if (!timedOut() && allUrls.size < urlCap) {
+      let gridUrls: string[] = [];
       try {
-        const urls = await Promise.race([
-          scrapeUrlsFromPage(context, strategyUrl, query, location),
-          new Promise<string[]>((_, reject) =>
-            setTimeout(
-              () => reject(new Error("Strategy timeout")),
-              STRATEGY_TIMEOUT_MS
-            )
-          ),
-        ]);
-        for (const url of urls) {
+        gridUrls = await buildGridStrategyUrls(query, location, expanded);
+      } catch (err) {
+        logger.warn("[search-diag] Grid URL generation failed", {
+          query,
+          location,
+          error: err instanceof Error ? err.message : "unknown",
+        });
+      }
+
+      if (gridUrls.length > 0) {
+        const beforeGrid = allUrls.size;
+        const gridResult = await collectUrlsFromStrategies(
+          context,
+          gridUrls,
+          query,
+          location,
+          allUrls,
+          urlCap,
+          deadline
+        );
+        gridUrlsAdded = allUrls.size - beforeGrid;
+
+        logger.info("[search-diag] Grid strategies complete", {
+          query,
+          location,
+          gridUrlsRun: gridUrls.length,
+          urlsAdded: gridResult.added,
+          uniqueFromGrid: gridUrlsAdded,
+          strategiesFailed: gridResult.failed,
+          totalUrls: allUrls.size,
+          sampleGridUrls: gridUrls.slice(0, 3),
+        });
+      }
+    }
+
+    let merged = deduplicateByPlaceId([...allUrls]);
+
+    if ((gridUrlsAdded < 10 || merged.length < 10) && !timedOut()) {
+      logger.info("[search-diag] Triggering single-point fallback", {
+        query,
+        location,
+        gridUrlsAdded,
+        totalBeforeFallback: merged.length,
+      });
+
+      const singleUrl = `https://www.google.com/maps/search/${encodeURIComponent(`${query} in ${location}`)}`;
+      try {
+        const fallbackUrls = await scrapeUrlsFromPage(
+          context,
+          singleUrl,
+          query,
+          location
+        );
+        logger.info("[search-diag] Single-point fallback raw results", {
+          query,
+          location,
+          singleUrl,
+          rawCount: fallbackUrls.length,
+        });
+        for (const url of fallbackUrls) {
           allUrls.add(url);
         }
-      } catch {
-        /* continue with next strategy */
+        merged = deduplicateByPlaceId([...allUrls]);
+        logger.info("[search-diag] Single-point fallback complete", {
+          query,
+          location,
+          totalAfterFallback: merged.length,
+        });
+      } catch (err) {
+        logger.warn("[search-diag] Single-point fallback failed", {
+          query,
+          location,
+          error: err instanceof Error ? err.message : "unknown",
+        });
       }
-      if (allUrls.size >= urlCap) break;
     }
   }
 
-  let merged = deduplicateByPlaceId([...allUrls]);
-
-  if (!isTrial && merged.length < 20 && !timedOut()) {
-    logger.warn("Parallel strategies returned low results — trying sequential fallback", {
-      query,
-      location,
-      count: merged.length,
-    });
-
-    for (const strategyUrl of finalStrategies) {
-      if (timedOut()) break;
-      const urls = await scrapeUrlsFromPage(context, strategyUrl, query, location);
-      for (const url of urls) {
-        allUrls.add(url);
-      }
-      if (allUrls.size >= 100) break;
-    }
-
-    merged = deduplicateByPlaceId([...allUrls]);
-    logger.info("Sequential fallback complete", {
-      query,
-      location,
-      total: merged.length,
-    });
-  }
+  const merged = deduplicateByPlaceId([...allUrls]);
 
   logger.info("URL collection complete — starting extraction", {
     query,
     location,
     urlsCollected: merged.length,
-    strategiesRun: finalStrategies.length,
     isTrial: isTrial || false,
   });
 
