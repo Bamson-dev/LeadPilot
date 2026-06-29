@@ -445,8 +445,17 @@ function getUnsubscribeUrl(email: string): string {
   return `${backend}/unsubscribe?email=${encodeURIComponent(email)}`;
 }
 
-function trialEmailWrapper(body: string, email: string): string {
+function getTrialEmailOpenedUrl(email: string, step: number): string {
+  const frontend = getFrontendUrl();
+  const backend = frontend.includes("staging.leadthur")
+    ? "https://staging-backend.leadthur.com"
+    : "https://backend.leadthur.com";
+  return `${backend}/trial/email-opened?email=${encodeURIComponent(email)}&step=${step}`;
+}
+
+function trialEmailWrapper(body: string, email: string, step: number): string {
   const unsubscribeUrl = getUnsubscribeUrl(email);
+  const openedUrl = getTrialEmailOpenedUrl(email, step);
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -482,6 +491,7 @@ function trialEmailWrapper(body: string, email: string): string {
     <div class="footer">
       <p>You are receiving this because you signed up for a LeadThur free trial.<br>
       <a href="${unsubscribeUrl}">Unsubscribe</a> · LeadThur by Pdigital Marketstore Ltd</p>
+      <img src="${openedUrl}" alt="" width="1" height="1" style="display:block;opacity:0;width:1px;height:1px;border:0;margin-top:4px" />
     </div>
   </div>
 </body>
@@ -496,6 +506,6 @@ export async function sendTrialEmail(email: string, step: number): Promise<void>
     throw new Error(`Invalid trial email step: ${step}`);
   }
 
-  const html = trialEmailWrapper(body, email);
+  const html = trialEmailWrapper(body, email, step);
   await deliver({ to: email, subject, html });
 }

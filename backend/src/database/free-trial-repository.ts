@@ -118,3 +118,40 @@ export async function listTrialSignupsDueForSequence(): Promise<FreeTrialSignup[
   if (error) throw new Error(error.message);
   return (data ?? []) as FreeTrialSignup[];
 }
+
+export async function recordTrialEmailOpen(email: string, step: number): Promise<void> {
+  const normalized = email.toLowerCase().trim();
+  const existing = await supabase
+    .from("trial_email_opens")
+    .select("open_count")
+    .eq("email", normalized)
+    .eq("step", step)
+    .maybeSingle();
+
+  if (existing.error) throw new Error(existing.error.message);
+
+  if (!existing.data) {
+    const { error } = await supabase
+      .from("trial_email_opens")
+      .insert({
+        email: normalized,
+        step,
+        open_count: 1,
+        last_opened_at: new Date().toISOString(),
+      });
+
+    if (error) throw new Error(error.message);
+    return;
+  }
+
+  const { error } = await supabase
+    .from("trial_email_opens")
+    .update({
+      open_count: (existing.data.open_count || 0) + 1,
+      last_opened_at: new Date().toISOString(),
+    })
+    .eq("email", normalized)
+    .eq("step", step);
+
+  if (error) throw new Error(error.message);
+}
