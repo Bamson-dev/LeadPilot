@@ -25,7 +25,7 @@ import {
 import { formatScraperError } from "../scraper/utils/scraper-errors";
 import { logger } from "../utils/logger";
 import { rawLeadToBusinessLead } from "../utils/lead-mapper";
-import { formatSearchMessage } from "../utils/search-messages";
+import { formatSearchMessage, PHASE1_LOADING_MESSAGE } from "../utils/search-messages";
 import { generateAreaSuggestions } from "./suggestion-service";
 import { runBatchEmailScraping } from "./email-batch-scraper";
 import { computeSearchStats } from "./search-stats";
@@ -448,7 +448,7 @@ export async function runScraperJob(
       scrapingInProgress: !isTrial,
     });
 
-    const startMessage = formatSearchMessage(query, location);
+    const startMessage = PHASE1_LOADING_MESSAGE;
     if (!isTrial) {
       emit({ type: "phase", phase: startMessage });
       emit({

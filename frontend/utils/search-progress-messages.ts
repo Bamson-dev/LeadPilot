@@ -24,6 +24,9 @@ export function getSearchProgressMessage(
   }
 
   if (count === 0) {
+    if (status === "running") {
+      return "Searching for potential clients across the city. This takes about a minute to get the best results.";
+    }
     return "Starting your search...";
   }
   if (count <= 5) {

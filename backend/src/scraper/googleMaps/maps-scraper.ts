@@ -18,7 +18,12 @@ import {
 import {
   buildGridStrategyUrls,
   buildSearchStrategyUrls,
+  getKeywordVariations,
 } from "./search-strategies";
+import {
+  buildNeighbourhoodSearchUrls,
+  discoverNeighbourhoodAreas,
+} from "./neighbourhood-expansion";
 import {
   cleanLocationInput,
   geocodeGoogle,
@@ -28,7 +33,21 @@ import {
   type GeoCenter,
 } from "./grid-search";
 import {
+  MAPS_VIEWPORTS,
+  randomDelay,
+  randomUserAgent,
+  shuffleArray,
+} from "./scraper-randomization";
+import {
   DETAIL_PANEL_WAIT_MS,
+  MAPS_BATCH_DELAY_MAX_MS,
+  MAPS_BATCH_DELAY_MIN_MS,
+  MAPS_PAGE_READ_DELAY_MAX_MS,
+  MAPS_PAGE_READ_DELAY_MIN_MS,
+  MAPS_SCROLL_COUNT,
+  MAPS_SCROLL_DELAY_MAX_MS,
+  MAPS_SCROLL_DELAY_MIN_MS,
+  MAPS_URL_BATCH_SIZE,
   MAX_LEADS_PER_SEARCH,
   PHASE1_DEADLINE_MS,
   PLACE_GOTO_TIMEOUT_MS,
@@ -39,7 +58,7 @@ import {
   SIDEBAR_STABLE_ROUNDS,
 } from "../utils/constants";
 
-const BATCH_SIZE = 6;
+const BATCH_SIZE = MAPS_URL_BATCH_SIZE;
 const EXTRACT_RACE_TIMEOUT_MS = 20000;
 
 export interface MapsScrapeOptions {
@@ -406,6 +425,26 @@ async function loadMapsSearchPage(page: Page, searchUrl: string): Promise<void> 
   }
 }
 
+async function scrollResultsPanel(page: Page): Promise<void> {
+  for (let i = 0; i < MAPS_SCROLL_COUNT; i++) {
+    try {
+      await page.evaluate(() => {
+        const feed =
+          document.querySelector('[role="feed"]') ||
+          document.querySelector('div[aria-label*="Results"]') ||
+          document.querySelector(".m6QErb");
+
+        if (feed) {
+          (feed as HTMLElement).scrollTop += 500;
+        }
+      });
+    } catch {
+      /* best-effort */
+    }
+    await randomDelay(MAPS_SCROLL_DELAY_MIN_MS, MAPS_SCROLL_DELAY_MAX_MS);
+  }
+}
+
 async function autoScroll(page: Page): Promise<void> {
   try {
     await page.evaluate(async () => {
@@ -507,14 +546,16 @@ async function scrapeUrlsFromPage(
   query: string,
   location: string
 ): Promise<string[]> {
+  const viewport = shuffleArray([...MAPS_VIEWPORTS])[0];
   const page = await context.newPage();
 
   try {
-    logger.info("Maps search starting", { searchUrl, query, location });
-
+    await page.setViewportSize(viewport);
     await page.setExtraHTTPHeaders({
       "Accept-Language": "en-US,en;q=0.9",
     });
+
+    logger.info("Maps search starting", { searchUrl, query, location });
 
     await page.goto(withMapsLocale(searchUrl), {
       waitUntil: "domcontentloaded",
@@ -536,9 +577,9 @@ async function scrapeUrlsFromPage(
       logger.warn("Feed selector timeout — attempting extraction anyway", { searchUrl });
     });
 
-    await page.waitForTimeout(2000);
+    await randomDelay(MAPS_PAGE_READ_DELAY_MIN_MS, MAPS_PAGE_READ_DELAY_MAX_MS);
 
-    await autoScroll(page);
+    await scrollResultsPanel(page);
     await tryLoadMoreAndScroll(page);
 
     const urls = await page.evaluate(() => {
@@ -583,37 +624,47 @@ async function collectUrlsFromStrategies(
   }
 
   const before = allUrls.size;
-  const results = await Promise.allSettled(
-    strategyUrls.map((strategyUrl) =>
-      Promise.race([
-        scrapeUrlsFromPage(context, strategyUrl, query, location),
-        new Promise<string[]>((_, reject) =>
-          setTimeout(
-            () => reject(new Error("Strategy timeout")),
-            STRATEGY_TIMEOUT_MS
-          )
-        ),
-      ])
-    )
-  );
-
+  const ordered = shuffleArray(strategyUrls);
   let failed = 0;
-  for (const result of results) {
-    if (result.status === "fulfilled") {
-      for (const url of result.value) {
-        allUrls.add(url);
-        if (allUrls.size >= urlCap) break;
+
+  for (let i = 0; i < ordered.length; i += MAPS_URL_BATCH_SIZE) {
+    if (timedOut() || allUrls.size >= urlCap) break;
+
+    const batch = ordered.slice(i, i + MAPS_URL_BATCH_SIZE);
+    const results = await Promise.allSettled(
+      batch.map((strategyUrl) =>
+        Promise.race([
+          scrapeUrlsFromPage(context, strategyUrl, query, location),
+          new Promise<string[]>((_, reject) =>
+            setTimeout(
+              () => reject(new Error("Strategy timeout")),
+              STRATEGY_TIMEOUT_MS
+            )
+          ),
+        ])
+      )
+    );
+
+    for (const result of results) {
+      if (result.status === "fulfilled") {
+        for (const url of result.value) {
+          allUrls.add(url);
+          if (allUrls.size >= urlCap) break;
+        }
+      } else {
+        failed++;
       }
-    } else {
-      failed++;
     }
-    if (allUrls.size >= urlCap) break;
+
+    if (i + MAPS_URL_BATCH_SIZE < ordered.length && !timedOut()) {
+      await randomDelay(MAPS_BATCH_DELAY_MIN_MS, MAPS_BATCH_DELAY_MAX_MS);
+    }
   }
 
   return { added: allUrls.size - before, failed };
 }
 
-async function collectClassicAndGridParallel(
+async function collectClassicGridAndNeighbourhood(
   context: BrowserContext,
   query: string,
   location: string,
@@ -623,7 +674,12 @@ async function collectClassicAndGridParallel(
   deadline: number | null,
   expanded: boolean,
   isTrial: boolean
-): Promise<{ classicAdded: number; gridAdded: number }> {
+): Promise<{
+  classicAdded: number;
+  gridAdded: number;
+  neighbourhoodAdded: number;
+  areasDiscovered: number;
+}> {
   const classicUrls = buildSearchStrategyUrls(query, location, isTrial);
   const finalClassic = isTrial
     ? classicUrls.slice(0, TRIAL_STRATEGY_LIMIT)
@@ -631,35 +687,35 @@ async function collectClassicAndGridParallel(
 
   const gridUrls =
     !isTrial && geo
-      ? await buildGridStrategyUrls(query, location, expanded, geo)
+      ? buildGridStrategyUrls(getKeywordVariations(query), location, geo, expanded)
       : [];
 
-  const [classicResult, gridResult] = await Promise.all([
-    collectUrlsFromStrategies(
+  const neighbourhoodPromise = !isTrial
+    ? discoverNeighbourhoodAreas(location, query)
+    : Promise.resolve([]);
+
+  const classicResult = await collectUrlsFromStrategies(
+    context,
+    finalClassic,
+    query,
+    location,
+    allUrls,
+    urlCap,
+    deadline
+  );
+
+  let gridResult = { added: 0, failed: 0 };
+  if (gridUrls.length > 0 && !(deadline !== null && Date.now() >= deadline)) {
+    gridResult = await collectUrlsFromStrategies(
       context,
-      finalClassic,
+      gridUrls,
       query,
       location,
       allUrls,
       urlCap,
       deadline
-    ),
-    gridUrls.length > 0
-      ? collectUrlsFromStrategies(
-          context,
-          gridUrls,
-          query,
-          location,
-          allUrls,
-          urlCap,
-          deadline
-        )
-      : Promise.resolve({ added: 0, failed: 0 }),
-  ]);
+    );
 
-  const gridAdded = gridResult.added;
-
-  if (gridUrls.length > 0) {
     logger.info("[search-diag] Grid strategies complete", {
       query,
       location,
@@ -671,9 +727,34 @@ async function collectClassicAndGridParallel(
     });
   }
 
+  const areas = await neighbourhoodPromise;
+  let neighbourhoodAdded = 0;
+  if (
+    areas.length > 0 &&
+    !(deadline !== null && Date.now() >= deadline)
+  ) {
+    const neighbourhoodUrls = buildNeighbourhoodSearchUrls(
+      query,
+      location,
+      areas
+    );
+    const neighbourhoodResult = await collectUrlsFromStrategies(
+      context,
+      neighbourhoodUrls,
+      query,
+      location,
+      allUrls,
+      urlCap,
+      deadline
+    );
+    neighbourhoodAdded = neighbourhoodResult.added;
+  }
+
   return {
     classicAdded: classicResult.added,
-    gridAdded,
+    gridAdded: gridResult.added,
+    neighbourhoodAdded,
+    areasDiscovered: areas.length,
   };
 }
 
@@ -757,7 +838,7 @@ async function getBusinessUrls(
   } else {
     // Attempt 1: Nominatim full + classic + grid in parallel
     const fullGeo = await geocodeNominatimFull(searchLocation);
-    const attempt1 = await collectClassicAndGridParallel(
+    const attempt1 = await collectClassicGridAndNeighbourhood(
       context,
       query,
       searchLocation,
@@ -776,13 +857,15 @@ async function getBusinessUrls(
       geo: fullGeo?.geo,
       classicAdded: attempt1.classicAdded,
       gridAdded: attempt1.gridAdded,
+      neighbourhoodAdded: attempt1.neighbourhoodAdded,
+      areasDiscovered: attempt1.areasDiscovered,
       totalUrls: countUrls(),
     });
 
     // Attempt 2: Nominatim shortened + classic + grid
     if (countUrls() < MIN_URLS_BEFORE_NEXT_FALLBACK && !timedOut()) {
       const shortGeo = await geocodeNominatimShortened(searchLocation);
-      const attempt2 = await collectClassicAndGridParallel(
+      const attempt2 = await collectClassicGridAndNeighbourhood(
         context,
         query,
         searchLocation,
@@ -801,6 +884,8 @@ async function getBusinessUrls(
         geo: shortGeo?.geo,
         classicAdded: attempt2.classicAdded,
         gridAdded: attempt2.gridAdded,
+        neighbourhoodAdded: attempt2.neighbourhoodAdded,
+        areasDiscovered: attempt2.areasDiscovered,
         totalUrls: countUrls(),
       });
     }
@@ -812,7 +897,7 @@ async function getBusinessUrls(
       hasGoogleGeocodingApiKey()
     ) {
       const googleGeo = await geocodeGoogle(searchLocation);
-      const attempt3 = await collectClassicAndGridParallel(
+      const attempt3 = await collectClassicGridAndNeighbourhood(
         context,
         query,
         searchLocation,
@@ -831,6 +916,8 @@ async function getBusinessUrls(
         geo: googleGeo?.geo,
         classicAdded: attempt3.classicAdded,
         gridAdded: attempt3.gridAdded,
+        neighbourhoodAdded: attempt3.neighbourhoodAdded,
+        areasDiscovered: attempt3.areasDiscovered,
         totalUrls: countUrls(),
       });
     }
@@ -862,6 +949,7 @@ async function getBusinessUrls(
   logger.info("URL collection complete — starting extraction", {
     query,
     location: searchLocation,
+    rawUrlCount: allUrls.size,
     urlsCollected: merged.length,
     isTrial: isTrial || false,
   });
@@ -1041,9 +1129,8 @@ export async function scrapeGoogleMaps(
   } = options;
 
   const context = await browser.newContext({
-    userAgent:
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-    viewport: { width: 1400, height: 900 },
+    userAgent: randomUserAgent(),
+    viewport: shuffleArray([...MAPS_VIEWPORTS])[0],
     locale: "en-US",
     timezoneId: "America/Los_Angeles",
     extraHTTPHeaders: {
@@ -1173,6 +1260,9 @@ export async function scrapeGoogleMaps(
       }
 
       startIndex = i + BATCH_SIZE;
+      if (i + BATCH_SIZE < businessUrls.length && !isPastDeadline()) {
+        await randomDelay(MAPS_BATCH_DELAY_MIN_MS, MAPS_BATCH_DELAY_MAX_MS);
+      }
     }
 
     const remainingUrls =
@@ -1205,9 +1295,8 @@ export async function continueMapsExtraction(
   if (placeUrls.length === 0) return startCount;
 
   const context = await browser.newContext({
-    userAgent:
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-    viewport: { width: 1400, height: 900 },
+    userAgent: randomUserAgent(),
+    viewport: shuffleArray([...MAPS_VIEWPORTS])[0],
     locale: "en-US",
     timezoneId: "America/Los_Angeles",
     extraHTTPHeaders: { "Accept-Language": "en-US,en;q=0.9" },
@@ -1257,6 +1346,10 @@ export async function continueMapsExtraction(
         onProgress?.(count, max);
         if (onLead) onLead(lead);
       }
+
+      if (i + BATCH_SIZE < placeUrls.length) {
+        await randomDelay(MAPS_BATCH_DELAY_MIN_MS, MAPS_BATCH_DELAY_MAX_MS);
+      }
     }
 
     return count;
@@ -1301,9 +1394,8 @@ export async function countCollectedBusinessUrls(
   phase1DeadlineMs = 45_000
 ): Promise<number> {
   const context = await browser.newContext({
-    userAgent:
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-    viewport: { width: 1400, height: 900 },
+    userAgent: randomUserAgent(),
+    viewport: shuffleArray([...MAPS_VIEWPORTS])[0],
     locale: "en-US",
     timezoneId: "America/Los_Angeles",
     extraHTTPHeaders: {

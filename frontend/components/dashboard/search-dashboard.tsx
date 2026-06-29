@@ -38,6 +38,7 @@ import {
 import type { Lead } from "@/types/lead";
 import { applyRatingFilter, type RatingFilterValue } from "@/lib/rating-filter";
 import { applyStatusFilter } from "@/lib/lead-status";
+import { getQueryVariations } from "@/utils/query-variations";
 
 interface ActivityItem {
   query: string;
@@ -63,6 +64,7 @@ export function SearchDashboard() {
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [templateLead, setTemplateLead] = useState<Lead | null>(null);
   const [showCreditDeduction, setShowCreditDeduction] = useState(false);
+  const searchAgainVariationRef = useRef(0);
 
   const loadUserStats = useCallback(async () => {
     const usage = await getLicenseUsage();
@@ -299,7 +301,11 @@ export function SearchDashboard() {
     setRatingFilter("all");
     setBusinessType(businessTypeValue);
     setLocation(locationValue);
-    void runSearch(businessTypeValue, locationValue);
+    const variations = getQueryVariations(businessTypeValue);
+    const idx = searchAgainVariationRef.current % variations.length;
+    searchAgainVariationRef.current += 1;
+    const queryVariant = variations[idx] ?? businessTypeValue;
+    void runSearch(queryVariant, locationValue, { accumulate: true });
   };
 
   const handleViewSavedResults = useCallback(
@@ -314,6 +320,7 @@ export function SearchDashboard() {
   );
 
   const startNewSession = () => {
+    searchAgainVariationRef.current = 0;
     reset();
     setSuggestionsMessage("");
     setSavedBanner(null);
@@ -605,9 +612,9 @@ export function SearchDashboard() {
 
         {status === "completed" && !error && !savedBanner && !showSuccess && (
           <p className="mt-4 text-sm text-[#A1A1B5]">
-            {totalFound === 0
+            {tableLeads.length === 0
               ? "No potential clients found in this area. Try a nearby city."
-              : `We found ${totalFound.toLocaleString()} potential clients for you.`}
+              : `We found ${tableLeads.length.toLocaleString()} potential clients for you.`}
           </p>
         )}
 

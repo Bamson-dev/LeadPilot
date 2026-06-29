@@ -123,6 +123,23 @@ export function useSearch(options?: UseSearchOptions) {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const finalFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const accumulateRef = useRef(false);
+
+  function leadDisplayKey(lead: BusinessLead): string {
+    return `${lead.name?.toLowerCase().trim() ?? ""}-${(lead.phone ?? "").replace(/\s/g, "")}`;
+  }
+
+  function dedupeLeadsList(leads: BusinessLead[]): BusinessLead[] {
+    const seen = new Set<string>();
+    const out: BusinessLead[] = [];
+    for (const lead of leads) {
+      const key = leadDisplayKey(lead);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(lead);
+    }
+    return out;
+  }
   const [suggestions, setSuggestions] = useState<AreaSuggestion[]>([]);
   const scrapingPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -184,10 +201,27 @@ export function useSearch(options?: UseSearchOptions) {
 
   const mergeLeads = useCallback((incoming: BusinessLead[]) => {
     const activeId = searchIdRef.current;
-    const filtered = filterLeadsForSearch(incoming, activeId);
+    const filtered = accumulateRef.current
+      ? incoming
+      : filterLeadsForSearch(incoming, activeId);
     if (filtered.length === 0) return;
     setState((prev) => {
-      if (activeId && prev.searchId && prev.searchId !== activeId) return prev;
+      if (!accumulateRef.current && activeId && prev.searchId && prev.searchId !== activeId) {
+        return prev;
+      }
+
+      if (accumulateRef.current) {
+        const merged = dedupeLeadsList([...prev.leads, ...filtered]);
+        const count = merged.length;
+        return {
+          ...prev,
+          leads: merged,
+          totalFound: count,
+          status: prev.status === "starting" ? "running" : prev.status,
+          message: progressMessage(count, "running", prev.queuePosition),
+        };
+      }
+
       const byId = new Map(prev.leads.map((l) => [l.id, l]));
       let changed = false;
 
@@ -224,13 +258,20 @@ export function useSearch(options?: UseSearchOptions) {
     (incoming: BusinessLead[], searchId?: string | null) => {
       const activeId = searchId ?? searchIdRef.current;
       if (!activeId || activeId !== searchIdRef.current) return;
-      const filtered = filterLeadsForSearch(incoming, activeId);
-      const count = filtered.length;
+      const filtered = accumulateRef.current
+        ? incoming
+        : filterLeadsForSearch(incoming, activeId);
       setState((prev) => {
-        if (prev.searchId && prev.searchId !== activeId) return prev;
+        if (!accumulateRef.current && prev.searchId && prev.searchId !== activeId) {
+          return prev;
+        }
+        const leads = accumulateRef.current
+          ? dedupeLeadsList([...prev.leads, ...filtered])
+          : filtered;
+        const count = leads.length;
         return {
           ...prev,
-          leads: filtered,
+          leads,
           totalFound: count,
           searchId: activeId,
           message: progressMessage(
@@ -893,6 +934,7 @@ export function useSearch(options?: UseSearchOptions) {
       }
 
       const accumulate = runOptions?.accumulate === true;
+      accumulateRef.current = accumulate;
 
       closeStream();
       completedRef.current = false;
@@ -938,12 +980,7 @@ export function useSearch(options?: UseSearchOptions) {
           const filtered = filterLeadsForSearch(mapped, result.searchId);
           setState((prev) => {
             const merged = accumulate
-              ? [
-                  ...prev.leads,
-                  ...filtered.filter(
-                    (l) => !prev.leads.some((p) => p.id === l.id)
-                  ),
-                ]
+              ? dedupeLeadsList([...prev.leads, ...filtered])
               : filtered;
             const totalFound = merged.length;
             onCompleteRef.current?.(
@@ -1082,6 +1119,7 @@ export function useSearch(options?: UseSearchOptions) {
   );
 
   const reset = useCallback(() => {
+    accumulateRef.current = false;
     closeStream();
     searchIdRef.current = null;
     pendingLeadsRef.current = [];
@@ -1104,6 +1142,7 @@ export function useSearch(options?: UseSearchOptions) {
   }, [closeStream]);
 
   const clearResults = useCallback(() => {
+    accumulateRef.current = false;
     closeStream();
     searchIdRef.current = null;
     pendingLeadsRef.current = [];

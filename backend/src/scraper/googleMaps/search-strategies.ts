@@ -1,135 +1,87 @@
 /**
- * Build Maps search URL variants for a query/location pair.
- * Grid points, keyword variations, and sub-areas increase unique place URLs.
+ * Dynamic Google Maps search URL generation — no hardcoded cities or business types.
  */
 
 import {
-  buildGridSearchUrls,
+  buildGridPoints,
+  buildGridSearchUrl,
   type GeoCenter,
+  type GridPoint,
 } from "./grid-search";
+import {
+  randomZoomLevel,
+  shuffleArray,
+} from "./scraper-randomization";
+import { KEYWORD_VARIATION_LIMIT } from "../utils/constants";
 
-const NIGERIA_CITIES = [
-  "abuja",
-  "lagos",
-  "port harcourt",
-  "kano",
-  "ibadan",
-  "enugu",
-  "benin",
-  "kaduna",
-  "owerri",
-  "uyo",
-  "calabar",
-  "warri",
-];
+const QUALIFIERS = ["best", "top rated"] as const;
 
-const KEYWORD_SYNONYMS: Record<string, string[]> = {
-  restaurant: ["restaurants", "dining", "food", "eatery"],
-  restaurants: ["restaurant", "dining", "food", "eatery"],
-  cafe: ["cafes", "coffee shop", "coffee"],
-  hotel: ["hotels", "lodging", "accommodation"],
-  salon: [
-    "salons",
-    "hair salon",
-    "beauty salon",
-    "hair studio",
-    "spa",
-    "barbershop",
-    "nail salon",
-  ],
-  salons: [
-    "salon",
-    "hair salon",
-    "beauty salon",
-    "hair studio",
-    "spa",
-    "barbershop",
-    "nail salon",
-  ],
-  gym: ["gyms", "fitness", "fitness center"],
-  dentist: ["dentists", "dental clinic", "dental"],
-  lawyer: ["lawyers", "law firm", "attorney"],
-  plumber: ["plumbers", "plumbing"],
-  electrician: ["electricians", "electrical"],
-};
+/** Universal synonym patterns — works for any business type worldwide. */
+export function getKeywordVariations(query: string): string[] {
+  const base = query.trim();
+  if (!base) return [];
 
-export function isNigeriaLocation(location: string): boolean {
-  const lower = location.toLowerCase();
-  return (
-    lower.includes("nigeria") ||
-    NIGERIA_CITIES.some((city) => lower.includes(city))
+  const lower = base.toLowerCase();
+  const stem =
+    lower.endsWith("s") && lower.length > 3 ? lower.slice(0, -1) : lower;
+
+  const variants = new Set<string>([base, stem]);
+  variants.add(`${stem} shop`);
+  variants.add(`${stem} studio`);
+  variants.add(`${stem} center`);
+  variants.add(`${stem} services`);
+  variants.add(`${base} near me`);
+  variants.add(`best ${base}`);
+  variants.add(`top ${base}`);
+  variants.add(`local ${base}`);
+
+  return [...variants].slice(0, KEYWORD_VARIATION_LIMIT);
+}
+
+function encodeMapsSearch(phrase: string): string {
+  return `https://www.google.com/maps/search/${encodeURIComponent(phrase)}`;
+}
+
+/** Format 2 — text relevance search for the full location string. */
+export function buildTextSearchUrl(keyword: string, location: string): string {
+  return encodeMapsSearch(`${keyword} in ${location.trim()}`);
+}
+
+/** Format 3 — qualifier searches (best / top rated). */
+export function buildQualifierSearchUrls(
+  keyword: string,
+  location: string
+): string[] {
+  const loc = location.trim();
+  return QUALIFIERS.map((q) =>
+    encodeMapsSearch(`${q} ${keyword} ${loc}`)
   );
 }
 
-export function getKeywordVariations(query: string): string[] {
-  const q = query.trim().toLowerCase();
-  const variants = new Set<string>([query.trim()]);
-
-  for (const [key, synonyms] of Object.entries(KEYWORD_SYNONYMS)) {
-    if (q === key || q.includes(key)) {
-      synonyms.forEach((s) => variants.add(s));
-      variants.add(key);
-    }
-  }
-
-  return [...variants];
-}
-
-export function getLocationVariants(location: string): string[] {
-  const trimmed = location.trim();
-  const lower = trimmed.toLowerCase();
-  const variants = new Set<string>([trimmed]);
-
-  if (
-    lower.includes("new york") ||
-    lower === "nyc" ||
-    lower.includes("new york city")
-  ) {
-    [
-      "New York City",
-      "NYC",
-      "Manhattan",
-      "Brooklyn",
-      "Queens",
-      "Bronx",
-      "Staten Island",
-    ].forEach((v) => variants.add(v));
-  }
-
-  if (lower.includes("los angeles") || lower === "la" || lower.includes("l.a.")) {
-    [
-      "Los Angeles",
-      "LA",
-      "Hollywood",
-      "Santa Monica",
-      "Venice",
-      "Downtown Los Angeles",
-    ].forEach((v) => variants.add(v));
-  }
-
-  if (lower.includes("london")) {
-    [
-      "London",
-      "Central London",
-      "West London",
-      "East London",
-      "North London",
-      "South London",
-    ].forEach((v) => variants.add(v));
-  }
-
-  if (lower.includes("chicago")) {
-    ["Chicago", "Downtown Chicago", "North Side Chicago", "South Side Chicago"].forEach(
-      (v) => variants.add(v)
-    );
-  }
-
-  return [...variants];
+/** All three URL formats for a single grid point. */
+export function buildGridPointUrlFormats(
+  keyword: string,
+  location: string,
+  point: GridPoint
+): string[] {
+  const zoom = randomZoomLevel();
+  const urls = new Set<string>([
+    buildGridSearchUrl(keyword, point, location, zoom),
+    buildTextSearchUrl(keyword, location),
+    ...buildQualifierSearchUrls(keyword, location),
+  ]);
+  return [...urls];
 }
 
 function phrasesForQueryLocation(query: string, loc: string): string[] {
   const q = query.trim();
-  return [`${q} in ${loc}`, `${loc} ${q}`, `best ${q} ${loc}`];
+  const location = loc.trim();
+  return [
+    `${q} in ${location}`,
+    `${location} ${q}`,
+    `best ${q} ${location}`,
+    `top ${q} ${location}`,
+  ];
 }
 
 export function buildSearchStrategyUrls(
@@ -143,60 +95,59 @@ export function buildSearchStrategyUrls(
   if (isTrial) {
     const q = query.trim();
     return [
-      `https://www.google.com/maps/search/${encodeURIComponent(`${q} in ${locTrimmed}`)}`,
-      `https://www.google.com/maps/search/${encodeURIComponent(`${locTrimmed} ${q}`)}`,
+      encodeMapsSearch(`${q} in ${locTrimmed}`),
+      encodeMapsSearch(`${locTrimmed} ${q}`),
     ];
   }
 
   const urls = new Set<string>();
-  const locations = getLocationVariants(locTrimmed);
 
-  for (const loc of locations) {
-    for (const keyword of keywords) {
-      for (const phrase of phrasesForQueryLocation(keyword, loc)) {
-        urls.add(
-          `https://www.google.com/maps/search/${encodeURIComponent(phrase)}`
-        );
+  for (const keyword of keywords) {
+    for (const phrase of phrasesForQueryLocation(keyword, locTrimmed)) {
+      urls.add(encodeMapsSearch(phrase));
+    }
+    urls.add(buildTextSearchUrl(keyword, locTrimmed));
+    for (const qualifierUrl of buildQualifierSearchUrls(keyword, locTrimmed)) {
+      urls.add(qualifierUrl);
+    }
+  }
+
+  return shuffleArray([...urls]);
+}
+
+/** Grid-based URLs with shuffled points and multiple formats per point. */
+export function buildGridStrategyUrls(
+  keywords: string[],
+  location: string,
+  geo: GeoCenter,
+  expanded = false
+): string[] {
+  const points = shuffleArray(buildGridPoints(geo, expanded));
+  const urls = new Set<string>();
+
+  for (const keyword of keywords) {
+    for (const point of points) {
+      for (const url of buildGridPointUrlFormats(keyword, location, point)) {
+        urls.add(url);
       }
     }
   }
 
-  if (isNigeriaLocation(locTrimmed)) {
-    for (const keyword of keywords) {
-      urls.add(
-        `https://www.google.com/maps/search/${encodeURIComponent(`${keyword} ${locTrimmed} Nigeria`)}`
-      );
-    }
-  }
-
-  return [...urls];
+  return shuffleArray([...urls]);
 }
 
-/** Grid-based URLs — uses pre-resolved geo when provided. */
-export async function buildGridStrategyUrls(
-  query: string,
-  location: string,
-  expanded = false,
-  geo?: GeoCenter | null
-): Promise<string[]> {
-  const keywords = getKeywordVariations(query);
-  try {
-    return await buildGridSearchUrls(keywords, location, expanded, geo);
-  } catch {
-    return [];
-  }
-}
-
-/** Combined strategy list: classic phrases first, then grid (for deduped collection). */
+/** Classic text strategies + grid (caller runs batched collection). */
 export async function buildAllSearchStrategyUrls(
   query: string,
   location: string,
   isTrial = false,
-  expanded = false
+  expanded = false,
+  geo?: GeoCenter | null
 ): Promise<string[]> {
   const classic = buildSearchStrategyUrls(query, location, isTrial);
-  if (isTrial) return classic;
+  if (isTrial || !geo) return classic;
 
-  const grid = await buildGridStrategyUrls(query, location, expanded);
-  return [...new Set([...classic, ...grid])];
+  const keywords = getKeywordVariations(query);
+  const grid = buildGridStrategyUrls(keywords, location, geo, expanded);
+  return shuffleArray([...new Set([...classic, ...grid])]);
 }

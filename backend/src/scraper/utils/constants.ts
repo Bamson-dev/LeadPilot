@@ -7,6 +7,16 @@ export const MIN_CACHE_LEADS_TO_REUSE = parseInt(
   10
 );
 export const SCRAPE_CONCURRENCY = 5;
+export const MAPS_URL_BATCH_SIZE = 5;
+export const MAPS_BATCH_DELAY_MIN_MS = 2000;
+export const MAPS_BATCH_DELAY_MAX_MS = 4000;
+export const MAPS_SCROLL_COUNT = 5;
+export const MAPS_SCROLL_DELAY_MIN_MS = 800;
+export const MAPS_SCROLL_DELAY_MAX_MS = 1500;
+export const MAPS_PAGE_READ_DELAY_MIN_MS = 500;
+export const MAPS_PAGE_READ_DELAY_MAX_MS = 1500;
+export const NEIGHBOURHOOD_AREA_LIMIT = 15;
+export const KEYWORD_VARIATION_LIMIT = 10;
 export const PLACE_TIMEOUT_MS = 25000;
 export const PLACE_GOTO_TIMEOUT_MS = 20000;
 export const SIDEBAR_MIN_LISTINGS = 10;
@@ -24,7 +34,7 @@ export const LARGE_CITY_RESULT_THRESHOLD = 300;
 export const EMAIL_SCRAPE_MAX_WEBSITES = 200;
 export const MEMORY_SKIP_SCRAPE_PERCENT = 80;
 export const EMAIL_SCRAPE_MAX_MS = 3 * 60 * 1000;
-export const PHASE1_DEADLINE_MS = 25_000;
+export const PHASE1_DEADLINE_MS = 90_000;
 export const EMAIL_REGEX =
   /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
 /** Soft cap for legacy callers; crawlers return all valid emails up to this bound. */
