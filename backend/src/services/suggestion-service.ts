@@ -1,11 +1,13 @@
 import { logger } from "../utils/logger";
 import { getDeepseekApiKey } from "../utils/deepseek-config";
 import {
+  geocodeNominatimDetailed,
+  searchCitiesInNominatimRegion,
+} from "../scraper/googleMaps/grid-search";
+import {
   discoverNeighbourhoodAreas,
   parseCityCountry,
 } from "../scraper/googleMaps/neighbourhood-expansion";
-import { geocodeCity } from "../scraper/googleMaps/grid-search";
-import { findNearbyCities } from "./nearby-cities";
 
 const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions";
 const MAX_SUGGESTIONS = 6;
@@ -16,87 +18,77 @@ export interface AreaSuggestion {
   label: string;
 }
 
-export interface GenerateAreaSuggestionsOptions {
-  excludeLocations?: string[];
+export interface AreaSuggestionResult {
+  suggestions: AreaSuggestion[];
+  message: string;
+  source: "deepseek" | "nominatim_areas" | "nominatim_cities" | "none";
 }
 
-function normalizeLocationKey(value: string): string {
-  return value.toLowerCase().trim().replace(/\s+/g, " ");
+export function normalizeExpansionLocation(location: string): string {
+  return location.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-function isLocationExcluded(location: string, exclude: string[]): boolean {
-  const key = normalizeLocationKey(location);
-  return exclude.some((raw) => {
-    const excluded = normalizeLocationKey(raw);
-    if (!excluded) return false;
-    return (
-      key === excluded ||
-      key.includes(excluded) ||
-      excluded.includes(key)
-    );
-  });
+function buildExcludeSet(
+  baseLocation: string,
+  excludeLocations?: string[]
+): Set<string> {
+  const set = new Set<string>();
+  const base = normalizeExpansionLocation(baseLocation);
+  if (base) set.add(base);
+  for (const loc of excludeLocations ?? []) {
+    const key = normalizeExpansionLocation(loc);
+    if (key) set.add(key);
+  }
+  return set;
 }
 
-function areasToSuggestions(
-  query: string,
-  parentLocation: string,
-  areas: string[],
-  exclude: string[]
-): AreaSuggestion[] {
-  const { city, country } = parseCityCountry(parentLocation);
-  const cityLabel = country ? `${city}, ${country}` : city;
+function isExcludedLocation(location: string, exclude: Set<string>): boolean {
+  const key = normalizeExpansionLocation(location);
+  if (exclude.has(key)) return true;
+  for (const ex of exclude) {
+    if (key.includes(ex) || ex.includes(key)) return true;
+  }
+  return false;
+}
 
-  const out: AreaSuggestion[] = [];
+function dedupeSuggestions(items: AreaSuggestion[]): AreaSuggestion[] {
   const seen = new Set<string>();
-
-  for (const area of areas) {
-    const trimmedArea = area.trim();
-    if (!trimmedArea) continue;
-
-    const location = country
-      ? `${trimmedArea}, ${cityLabel}`
-      : `${trimmedArea} ${cityLabel}`.trim();
-
-    if (isLocationExcluded(location, exclude)) continue;
-    if (isLocationExcluded(trimmedArea, exclude)) continue;
-
-    const key = normalizeLocationKey(location);
+  const out: AreaSuggestion[] = [];
+  for (const item of items) {
+    const key = normalizeExpansionLocation(item.location);
     if (seen.has(key)) continue;
     seen.add(key);
-
-    out.push({
-      query,
-      location,
-      label: `${query} in ${location}`,
-    });
-
-    if (out.length >= MAX_SUGGESTIONS) break;
+    out.push(item);
   }
-
   return out;
 }
 
-async function fetchDeepseekAreaSuggestions(
+async function fetchDeepseekAreaStrings(
   query: string,
   location: string,
-  totalFound: number
+  totalFound: number,
+  alreadySearched: string[]
 ): Promise<string[]> {
   const apiKey = getDeepseekApiKey();
   if (!apiKey) return [];
-  if (totalFound >= 200) return [];
+
+  const searchedNote =
+    alreadySearched.length > 0
+      ? `\n- Do NOT suggest any of these locations the user already searched: ${alreadySearched.join("; ")}`
+      : "";
 
   const prompt = `The user searched for "${query}" in "${location}" using a business lead finder tool and got ${totalFound} results from Google Maps.
 
-Google Maps limits results per search to around 60 to 120 businesses. Suggest 6 specific sub-areas, neighborhoods, or districts within "${location}" where the user can run separate searches to find more "${query}" businesses.
+Google Maps limits results per search to around 60 to 120 businesses. Suggest up to 6 specific sub-areas, neighborhoods, or districts within "${location}" where the user can run separate searches to find more "${query}" businesses.
 
 Rules:
 - Return only areas that actually exist within or very close to "${location}"
 - Use the most well-known and commercially active neighborhoods or districts
-- Format each area so it works as a Google Maps search location. Example: Westlands Nairobi or Sandton Johannesburg
+- Format each area so it works as a Google Maps search location
+- Never suggest the exact same location the user already searched${searchedNote}
 - If the location is already a very small area with no meaningful sub-areas return an empty array
-- Never suggest the exact same location the user already searched
 
-Respond with ONLY a valid JSON array of strings. No explanation. No markdown. No code blocks. Just the raw JSON array.`;
+Respond with ONLY a valid JSON array of strings. No explanation. No markdown.`;
 
   const response = await fetch(DEEPSEEK_API_URL, {
     method: "POST",
@@ -134,102 +126,155 @@ Respond with ONLY a valid JSON array of strings. No explanation. No markdown. No
   }
 }
 
-async function nearbyCitySuggestions(
+async function nominatimSubAreaSuggestions(
   query: string,
   location: string,
-  exclude: string[]
+  exclude: Set<string>
 ): Promise<AreaSuggestion[]> {
-  const geo = await geocodeCity(location);
-  if (!geo) return [];
+  const areas = await discoverNeighbourhoodAreas(location, query);
+  const { city, country } = parseCityCountry(location);
+  const cityLabel = country ? `${city}, ${country}` : city;
 
-  const nearby = findNearbyCities(location, geo.lat, geo.lng, MAX_SUGGESTIONS, 150);
   const out: AreaSuggestion[] = [];
-
-  for (const item of nearby) {
-    if (isLocationExcluded(item.city, exclude)) continue;
+  for (const area of areas) {
+    const loc = `${area} ${cityLabel}`.trim();
+    if (isExcludedLocation(loc, exclude)) continue;
     out.push({
       query,
-      location: item.city,
-      label: `${query} in ${item.city}`,
+      location: loc,
+      label: `${query} in ${area} ${cityLabel}`,
     });
     if (out.length >= MAX_SUGGESTIONS) break;
+  }
+
+  if (out.length > 0) {
+    logger.info("[suggestions] Nominatim sub-area fallback", {
+      location,
+      query,
+      count: out.length,
+    });
   }
 
   return out;
 }
 
-/**
- * Area expansion suggestions: Nominatim neighbourhoods first, DeepSeek sub-areas second,
- * nearby cities as fallback when no sub-areas exist.
- */
+async function nominatimNearbyCitySuggestions(
+  query: string,
+  location: string,
+  exclude: Set<string>
+): Promise<AreaSuggestion[]> {
+  const geocoded = await geocodeNominatimDetailed(location);
+  if (!geocoded?.hit?.address) return [];
+
+  const cities = await searchCitiesInNominatimRegion(
+    geocoded.hit.address,
+    MAX_SUGGESTIONS + exclude.size,
+    geocoded.hit.boundingBox
+  );
+
+  const out: AreaSuggestion[] = [];
+  for (const city of cities) {
+    if (isExcludedLocation(city.city, exclude)) continue;
+    out.push({
+      query,
+      location: city.city,
+      label: `${query} in ${city.label}`,
+    });
+    if (out.length >= MAX_SUGGESTIONS) break;
+  }
+
+  if (out.length > 0) {
+    logger.info("[suggestions] Nominatim nearby-city fallback", {
+      location,
+      query,
+      count: out.length,
+    });
+  }
+
+  return out;
+}
+
 export async function generateAreaSuggestions(
   query: string,
   location: string,
   totalFound: number,
-  options?: GenerateAreaSuggestionsOptions
-): Promise<AreaSuggestion[]> {
-  const exclude = [
-    location,
-    ...(options?.excludeLocations ?? []),
-  ].filter(Boolean);
-
+  options?: { excludeLocations?: string[] }
+): Promise<AreaSuggestionResult> {
   try {
-    const nominatimAreas = await discoverNeighbourhoodAreas(location, query);
-    let suggestions = areasToSuggestions(query, location, nominatimAreas, exclude);
+    if (totalFound >= 200) {
+      return {
+        suggestions: [],
+        message: "Great coverage. You already have a large result set for this area.",
+        source: "none",
+      };
+    }
 
-    if (suggestions.length < 3) {
-      const deepseekAreas = await fetchDeepseekAreaSuggestions(
-        query,
-        location,
-        totalFound
-      );
-      const fromDeepseek = areasToSuggestions(
-        query,
-        location,
-        deepseekAreas,
-        exclude
-      );
+    const exclude = buildExcludeSet(location, options?.excludeLocations);
+    const alreadySearched = [...exclude];
 
-      const seen = new Set(suggestions.map((s) => normalizeLocationKey(s.location)));
-      for (const item of fromDeepseek) {
-        const key = normalizeLocationKey(item.location);
-        if (seen.has(key)) continue;
-        seen.add(key);
-        suggestions.push(item);
-        if (suggestions.length >= MAX_SUGGESTIONS) break;
+    let suggestions: AreaSuggestion[] = [];
+    let source: AreaSuggestionResult["source"] = "none";
+    let message = "";
+
+    const deepseekAreas = await fetchDeepseekAreaStrings(
+      query,
+      location,
+      totalFound,
+      alreadySearched
+    );
+
+    if (deepseekAreas.length > 0) {
+      suggestions = deepseekAreas
+        .map((area) => ({
+          query,
+          location: area,
+          label: `${query} in ${area}`,
+        }))
+        .filter((s) => !isExcludedLocation(s.location, exclude));
+      if (suggestions.length > 0) {
+        source = "deepseek";
+        message = `Split your search across these areas to find more ${query} businesses`;
       }
+    }
+
+    if (suggestions.length < MAX_SUGGESTIONS) {
+      const nominatimAreas = await nominatimSubAreaSuggestions(query, location, exclude);
+      const merged = dedupeSuggestions([...suggestions, ...nominatimAreas]);
+      if (merged.length > suggestions.length && source === "none") {
+        source = "nominatim_areas";
+        message = `Search these neighbourhoods within your area to find more ${query} businesses`;
+      }
+      suggestions = merged.slice(0, MAX_SUGGESTIONS);
     }
 
     if (suggestions.length === 0) {
-      suggestions = await nearbyCitySuggestions(query, location, exclude);
-      if (suggestions.length > 0) {
-        logger.info("[suggestions] Using nearby city fallback", {
-          location,
-          query,
-          count: suggestions.length,
-        });
+      const nearbyCities = await nominatimNearbyCitySuggestions(query, location, exclude);
+      if (nearbyCities.length > 0) {
+        suggestions = nearbyCities;
+        source = "nominatim_cities";
+        message = `Try these nearby cities to find more ${query} businesses`;
       }
     }
 
-    logger.info("[suggestions] Area suggestions generated", {
-      location,
-      query,
-      totalFound,
-      nominatimCount: nominatimAreas.length,
-      returned: suggestions.length,
-      excluded: exclude.length,
-    });
+    suggestions = dedupeSuggestions(suggestions)
+      .filter((s) => !isExcludedLocation(s.location, exclude))
+      .slice(0, MAX_SUGGESTIONS);
 
-    return suggestions.slice(0, MAX_SUGGESTIONS);
+    return { suggestions, message, source };
   } catch (err) {
     logger.error("Failed to generate area suggestions", {
       error: err instanceof Error ? err.message : "unknown",
     });
-
-    try {
-      return await nearbyCitySuggestions(query, location, exclude);
-    } catch {
-      return [];
-    }
+    return { suggestions: [], message: "", source: "none" };
   }
+}
+
+/** @deprecated Use generateAreaSuggestions return value */
+export async function generateAreaSuggestionsLegacy(
+  query: string,
+  location: string,
+  totalFound: number
+): Promise<AreaSuggestion[]> {
+  const result = await generateAreaSuggestions(query, location, totalFound);
+  return result.suggestions;
 }

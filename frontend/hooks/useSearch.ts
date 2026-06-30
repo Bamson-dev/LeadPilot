@@ -114,6 +114,21 @@ function filterLeadsForSearch(
   return leads.filter((l) => !l.searchId || l.searchId === searchId);
 }
 
+function normalizeExpansionLocation(location: string): string {
+  return location.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function registerExpansionLocation(
+  prev: string[],
+  location: string,
+  reset: boolean
+): string[] {
+  const key = normalizeExpansionLocation(location);
+  if (!key) return reset ? [] : prev;
+  if (reset) return [key];
+  return prev.includes(key) ? prev : [...prev, key];
+}
+
 function normalizeSuggestions(
   raw: Array<AreaSuggestion | string>,
   fallbackQuery: string
@@ -178,51 +193,6 @@ export function useSearch(options?: UseSearchOptions) {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const finalFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const accumulateRef = useRef(false);
-  const searchedLocationsRef = useRef<string[]>([]);
-  const [searchedLocations, setSearchedLocations] = useState<string[]>([]);
-  const parentSearchLocationRef = useRef("");
-  const [parentSearchLocation, setParentSearchLocation] = useState("");
-
-  function normalizeSearchedLocation(value: string): string {
-    return value.toLowerCase().trim().replace(/\s+/g, " ");
-  }
-
-  function isSuggestionAlreadySearched(
-    location: string,
-    searched: string[]
-  ): boolean {
-    const key = normalizeSearchedLocation(location);
-    return searched.some((raw) => {
-      const excluded = normalizeSearchedLocation(raw);
-      if (!excluded) return false;
-      return (
-        key === excluded ||
-        key.includes(excluded) ||
-        excluded.includes(key)
-      );
-    });
-  }
-
-  function filterSuggestionsBySearched(
-    items: AreaSuggestion[],
-    searched: string[]
-  ): AreaSuggestion[] {
-    return items.filter((s) => !isSuggestionAlreadySearched(s.location, searched));
-  }
-
-  function applySuggestions(
-    raw: Array<AreaSuggestion | string>,
-    query: string,
-    searched: string[]
-  ): void {
-    const normalized = filterSuggestionsBySearched(
-      normalizeSuggestions(raw, query),
-      searched
-    );
-    if (normalized.length > 0) {
-      setSuggestions(normalized);
-    }
-  }
 
   function leadDisplayKey(lead: BusinessLead): string {
     return `${lead.name?.toLowerCase().trim() ?? ""}-${(lead.phone ?? "").replace(/\s/g, "")}`;
@@ -240,6 +210,9 @@ export function useSearch(options?: UseSearchOptions) {
     return out;
   }
   const [suggestions, setSuggestions] = useState<AreaSuggestion[]>([]);
+  const [searchedExpansionLocations, setSearchedExpansionLocations] = useState<
+    string[]
+  >([]);
   const scrapingPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopScrapingPoll = useCallback(() => {
@@ -865,10 +838,8 @@ export function useSearch(options?: UseSearchOptions) {
             case "suggestions": {
               const raw = data.suggestions ?? [];
               if (raw.length > 0) {
-                applySuggestions(
-                  raw,
-                  queryRef.current,
-                  searchedLocationsRef.current
+                setSuggestions(
+                  normalizeSuggestions(raw, queryRef.current)
                 );
               }
               break;
@@ -1037,25 +1008,6 @@ export function useSearch(options?: UseSearchOptions) {
       const accumulate = runOptions?.accumulate === true;
       accumulateRef.current = accumulate;
 
-      const locTrim = location.trim();
-      if (accumulate) {
-        setSearchedLocations((prev) => {
-          const exists = prev.some(
-            (l) =>
-              normalizeSearchedLocation(l) === normalizeSearchedLocation(locTrim)
-          );
-          const next = exists ? prev : [...prev, locTrim];
-          searchedLocationsRef.current = next;
-          return next;
-        });
-      } else {
-        const next = [locTrim];
-        searchedLocationsRef.current = next;
-        setSearchedLocations(next);
-        parentSearchLocationRef.current = locTrim;
-        setParentSearchLocation(locTrim);
-      }
-
       closeStream();
       completedRef.current = false;
       if (!accumulate) {
@@ -1063,6 +1015,9 @@ export function useSearch(options?: UseSearchOptions) {
       }
       queryRef.current = query.trim();
       locationRef.current = location.trim();
+      setSearchedExpansionLocations((prev) =>
+        registerExpansionLocation(prev, location.trim(), !accumulate)
+      );
       pendingLeadsRef.current = [];
       reconnectCountRef.current = 0;
       ssePollFallbackRef.current = false;
@@ -1274,16 +1229,13 @@ export function useSearch(options?: UseSearchOptions) {
 
   const reset = useCallback(() => {
     accumulateRef.current = false;
-    searchedLocationsRef.current = [];
-    setSearchedLocations([]);
-    parentSearchLocationRef.current = "";
-    setParentSearchLocation("");
     closeStream();
     searchIdRef.current = null;
     pendingLeadsRef.current = [];
     queryRef.current = "";
     locationRef.current = "";
     setSuggestions([]);
+    setSearchedExpansionLocations([]);
     setState({
       status: "idle",
       leads: [],
@@ -1304,14 +1256,11 @@ export function useSearch(options?: UseSearchOptions) {
 
   const clearResults = useCallback(() => {
     accumulateRef.current = false;
-    searchedLocationsRef.current = [];
-    setSearchedLocations([]);
-    parentSearchLocationRef.current = "";
-    setParentSearchLocation("");
     closeStream();
     searchIdRef.current = null;
     pendingLeadsRef.current = [];
     setSuggestions([]);
+    setSearchedExpansionLocations([]);
     setState((prev) => ({
       ...prev,
       status: "idle",
@@ -1379,9 +1328,8 @@ export function useSearch(options?: UseSearchOptions) {
     runSearchWithNearbyCity,
     runSearchWithRegionCity,
     suggestions,
+    searchedExpansionLocations,
     setSuggestions,
-    searchedLocations,
-    parentSearchLocation,
     clearSuggestions: () => setSuggestions([]),
     clearResults,
     closeStream: closeStream,

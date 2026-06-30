@@ -3,13 +3,9 @@
 import { CopyButton } from "@/components/dashboard/copy-button";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { getPredictedEmails, getVerifiedEmails } from "@/utils/get-display-email";
-import { phoneDigitsForWhatsapp } from "@/lib/whatsapp";
+import { resolveEmailCellFallback } from "@/utils/email-cell-fallback";
 import type { Lead } from "@/types/lead";
 import type { PredictedEmail } from "@leadthur/shared";
-import {
-  isPlatformOnlyWebsite,
-  isWhatsappPlatformWebsite,
-} from "@leadthur/shared";
 
 interface EmailCellProps {
   lead: Lead;
@@ -94,36 +90,17 @@ function EmailRow({
   );
 }
 
-function PlatformEmailFallback({ lead }: { lead: Lead }) {
-  const isWhatsapp = isWhatsappPlatformWebsite(lead.website);
-  const hasPhone = Boolean(lead.phone?.trim());
-  const whatsappUrl =
-    isWhatsapp && hasPhone
-      ? `https://wa.me/${phoneDigitsForWhatsapp(lead.phone)}`
-      : null;
-
-  if (isWhatsapp && whatsappUrl) {
-    return (
-      <div className="leading-snug">
-        <a
-          href={whatsappUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[11px] font-medium text-emerald-400 hover:text-emerald-300 hover:underline"
-          title="Open WhatsApp chat with this business"
-        >
-          No email — message via WhatsApp
-        </a>
-      </div>
-    );
-  }
-
+function PlatformFallback({
+  primary,
+  secondary,
+}: {
+  primary: string;
+  secondary: string;
+}) {
   return (
     <div className="leading-snug">
-      <span className="text-[11px] text-zinc-400">No email available</span>
-      {hasPhone && (
-        <p className="mt-0.5 text-[10px] text-zinc-500">Reach out by phone</p>
-      )}
+      <p className="text-[11px] text-zinc-400 m-0">{primary}</p>
+      <p className="text-[10px] text-zinc-500 m-0 mt-0.5">{secondary}</p>
     </div>
   );
 }
@@ -150,11 +127,24 @@ export function EmailCell({ lead, copiedId: copiedIdProp, onCopy: onCopyProp }: 
   });
 
   if (verifiedUnique.length === 0 && predictedUnique.length === 0) {
-    if (!lead.website?.trim()) {
-      return <span className="text-zinc-500">—</span>;
+    const fallback = resolveEmailCellFallback(lead);
+    if (fallback.kind === "whatsapp") {
+      return (
+        <a
+          href={fallback.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[11px] text-[#25D366] hover:underline leading-snug inline-block"
+          title="Open WhatsApp chat with this business"
+        >
+          {fallback.label}
+        </a>
+      );
     }
-    if (isPlatformOnlyWebsite(lead.website)) {
-      return <PlatformEmailFallback lead={lead} />;
+    if (fallback.kind === "platform") {
+      return (
+        <PlatformFallback primary={fallback.primary} secondary={fallback.secondary} />
+      );
     }
     return <span className="text-zinc-500">—</span>;
   }

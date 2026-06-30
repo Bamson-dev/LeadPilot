@@ -266,12 +266,13 @@ searchRouter.get(
 );
 
 searchRouter.get("/suggestions", async (req: Request, res: Response) => {
+  // Area suggestions: DeepSeek → Nominatim sub-areas → Nominatim nearby cities
   try {
     const { query, location, totalFound, exclude } = req.query as {
       query?: string;
       location?: string;
       totalFound?: string;
-      exclude?: string | string[];
+      exclude?: string;
     };
 
     if (!query || !location) {
@@ -280,43 +281,19 @@ searchRouter.get("/suggestions", async (req: Request, res: Response) => {
     }
 
     const found = parseInt(totalFound || "0", 10);
-    const excludeRaw = exclude
-      ? Array.isArray(exclude)
-        ? exclude
-        : exclude.split("|")
-      : [];
-    const excludeLocations = excludeRaw.map((v) => v.trim()).filter(Boolean);
+    const excludeLocations = exclude
+      ? String(exclude).split("|").map((s) => s.trim()).filter(Boolean)
+      : undefined;
 
-    const suggestions = await generateAreaSuggestions(
-      query,
-      location,
-      found,
-      { excludeLocations }
-    );
-
-    if (suggestions.length === 0) {
-      res.json({
-        suggestions: [],
-        message:
-          found >= 200
-            ? "Great coverage. You already have a large result set for this area."
-            : "Try a nearby city from the suggestions above, or broaden your search location.",
-      });
-      return;
-    }
-
-    const usedNearbyFallback = suggestions.some((s) => {
-      const loc = s.location.toLowerCase();
-      const parent = location.toLowerCase();
-      return !loc.includes(parent.split(",")[0]?.trim() ?? parent);
+    const result = await generateAreaSuggestions(query, location, found, {
+      excludeLocations,
     });
 
     res.json({
-      suggestions,
-      message: usedNearbyFallback
-        ? `Find more ${query} businesses in these nearby cities`
-        : `Split your search across these areas to find more ${query} businesses`,
-      totalAreas: suggestions.length,
+      suggestions: result.suggestions,
+      message: result.message,
+      totalAreas: result.suggestions.length,
+      source: result.source,
     });
   } catch (err) {
     logger.error("Suggestions endpoint failed", {

@@ -271,11 +271,12 @@ export async function getSearchSuggestions(
   query: string,
   location: string,
   totalFound: number,
-  excludeLocations: string[] = []
+  excludeLocations?: string[]
 ): Promise<{
   suggestions: Array<{ query: string; location: string; label: string }>;
   message: string;
   totalAreas?: number;
+  source?: string;
 }> {
   try {
     const params = new URLSearchParams({
@@ -283,8 +284,7 @@ export async function getSearchSuggestions(
       location,
       totalFound: totalFound.toString(),
     });
-
-    if (excludeLocations.length > 0) {
+    if (excludeLocations && excludeLocations.length > 0) {
       params.set("exclude", excludeLocations.join("|"));
     }
 
@@ -298,6 +298,7 @@ export async function getSearchSuggestions(
       suggestions: Array<{ query: string; location: string; label: string }>;
       message: string;
       totalAreas?: number;
+      source?: string;
     }>;
   } catch {
     return { suggestions: [], message: "" };

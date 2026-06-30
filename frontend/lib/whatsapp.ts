@@ -24,6 +24,13 @@ export function buildWhatsappUrl(phone: string | null, message: string): string 
   return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
 }
 
+/** Open WhatsApp chat without a pre-filled message. */
+export function buildWhatsappChatUrl(phone: string | null): string | null {
+  const digits = phoneDigitsForWhatsapp(phone);
+  if (!digits) return null;
+  return `https://wa.me/${digits}`;
+}
+
 export const WHATSAPP_NICHE_LABELS: Record<string, string> = {
   web_design: "Web Design",
   social_media: "Social Media",

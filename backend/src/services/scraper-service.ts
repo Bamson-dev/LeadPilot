@@ -536,6 +536,7 @@ async function runBackgroundWork(
         );
         if (nearbyCities.length > 0) {
           await updateSearchJob(searchId, { nearbyCities });
+          emit({ type: "suggestions", suggestions: nearbyCities.map((c) => c.city) });
         }
       }
     }
@@ -568,9 +569,9 @@ async function runBackgroundWork(
 
     if (!isTrial) {
       void generateAreaSuggestions(query, location, stats.total)
-        .then((suggestions) => {
-          if (suggestions.length > 0) {
-            emit({ type: "suggestions", suggestions });
+        .then((result) => {
+          if (result.suggestions.length > 0) {
+            emit({ type: "suggestions", suggestions: result.suggestions });
           }
         })
         .catch(() => undefined);

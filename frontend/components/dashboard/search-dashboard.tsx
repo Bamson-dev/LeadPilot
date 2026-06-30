@@ -119,9 +119,8 @@ export function SearchDashboard() {
     runSearchWithNearbyCity,
     runSearchWithRegionCity,
     suggestions,
+    searchedExpansionLocations,
     setSuggestions,
-    searchedLocations,
-    parentSearchLocation,
     clearResults,
     reset,
     loadSavedLeads,
@@ -139,18 +138,20 @@ export function SearchDashboard() {
     },
   });
 
-  const parentLocationRef = useRef("");
-  parentLocationRef.current = parentSearchLocation;
-
   const fetchSuggestions = useCallback(
-    async (query: string, loc: string, totalFound: number) => {
+    async (
+      query: string,
+      loc: string,
+      totalFound: number,
+      excludeLocations?: string[]
+    ) => {
       setLoadingSuggestions(true);
       try {
         const data = await getSearchSuggestions(
           query,
           loc,
           totalFound,
-          searchedLocations
+          excludeLocations
         );
         if ((data.suggestions?.length ?? 0) > 0) {
           setSuggestions(data.suggestions);
@@ -160,7 +161,7 @@ export function SearchDashboard() {
         setLoadingSuggestions(false);
       }
     },
-    [setSuggestions, searchedLocations]
+    [setSuggestions]
   );
 
   onSearchCompleteRef.current = (
@@ -169,8 +170,7 @@ export function SearchDashboard() {
     loc: string,
     totalFound: number
   ) => {
-    const suggestionLoc = parentLocationRef.current || loc;
-    void fetchSuggestions(query, suggestionLoc, totalFound);
+    void fetchSuggestions(query, loc, totalFound, searchedExpansionLocations);
 
     if (totalFound > 0) {
       const email =
@@ -207,18 +207,18 @@ export function SearchDashboard() {
   useEffect(() => {
     if (status !== "completed" || suggestions.length > 0) return;
     const q = searchMeta.business || businessType;
-    const loc = parentSearchLocation || searchMeta.location || location;
+    const loc = searchMeta.location || location;
     if (!q.trim() || !loc.trim()) return;
-    void fetchSuggestions(q, loc, totalFound);
+    void fetchSuggestions(q, loc, totalFound, searchedExpansionLocations);
   }, [
     status,
     suggestions.length,
     searchMeta.business,
     searchMeta.location,
-    parentSearchLocation,
     businessType,
     location,
     totalFound,
+    searchedExpansionLocations,
     fetchSuggestions,
   ]);
 
