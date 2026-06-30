@@ -1,10 +1,7 @@
-import type { Browser, BrowserContext } from "playwright";
+import type { BrowserContext } from "playwright";
 import type { BusinessLead, PredictedEmail, StreamEvent } from "@leadthur/shared";
 import { isBlockedEmailScrapeDomain } from "@leadthur/shared";
-import {
-  createEmailBrowserContext,
-  discoverBusinessEmailsCombined,
-} from "../scraper/emailCrawler/email-crawler";
+import { createEmailBrowserContext } from "../scraper/emailCrawler/email-crawler";
 import {
   EMAIL_SCRAPE_MAX_MS,
   EMAIL_SCRAPE_TAB_CONCURRENCY,
@@ -16,6 +13,10 @@ import {
   markBusinessLeadEmailScraped,
   updateBusinessLeadEnrichment,
 } from "../database/search-repository";
+import {
+  enrichBusinessLeadEmail,
+  enrichmentToBusinessLead,
+} from "./email-enrichment-service";
 import { logger } from "../utils/logger";
 import { logSearchLifecycle } from "../utils/search-job-lifecycle";
 
@@ -25,7 +26,7 @@ const phase2FirstTabLogged = new Set<string>();
 
 export interface BatchEmailScrapeOptions {
   totalResultCount?: number;
-  browser?: Browser;
+  browser?: import("playwright").Browser;
 }
 
 function leadHasEmail(lead: BusinessLead): boolean {
@@ -37,38 +38,12 @@ function leadHasEmail(lead: BusinessLead): boolean {
   );
 }
 
-function buildEnrichedLead(
-  lead: BusinessLead,
-  verified: string[],
-  predicted: string[]
-): BusinessLead {
-  const predictedEmails: PredictedEmail[] = predicted.map((email) => ({
-    email,
-    confidence: 78,
-    label: "medium",
-    source: "business_pattern",
-  }));
-
-  const hasVerified = verified.length > 0;
-  const displayParts = [...verified, ...predicted];
-
-  return {
-    ...lead,
-    emails: verified,
-    verifiedEmails: verified,
-    predictedEmails,
-    email: displayParts.length > 0 ? displayParts.join(", ") : null,
-    emailSource: hasVerified ? "website" : predicted.length > 0 ? "predicted" : "none",
-    emailScraped: true,
-  };
-}
-
 async function scrapeOneLeadEmail(
   lead: BusinessLead,
   browserContext: BrowserContext
-): Promise<BusinessLead> {
+): Promise<{ lead: BusinessLead; fromCache: boolean }> {
   if (!lead.website || leadHasEmail(lead) || lead.emailScraped) {
-    return lead;
+    return { lead, fromCache: false };
   }
 
   if (isBlockedEmailScrapeDomain(lead.website)) {
@@ -76,7 +51,18 @@ async function scrapeOneLeadEmail(
       businessId: lead.id,
       website: lead.website.substring(0, 80),
     });
-    return { ...lead, emailScraped: true, email: null, emails: [], verifiedEmails: [], predictedEmails: [], emailSource: "none" };
+    return {
+      lead: {
+        ...lead,
+        emailScraped: true,
+        email: null,
+        emails: [],
+        verifiedEmails: [],
+        predictedEmails: [],
+        emailSource: "none",
+      },
+      fromCache: false,
+    };
   }
 
   logger.info("[email-diag] Scraping lead email", {
@@ -94,24 +80,32 @@ async function scrapeOneLeadEmail(
     });
   }
 
-  const { verifiedEmails, predictedEmails } = await discoverBusinessEmailsCombined(
-    lead.website,
-    {
-      category: lead.category,
-      businessName: lead.name,
-      browserContext,
-    }
-  );
+  const enrichment = await enrichBusinessLeadEmail(lead, { browserContext });
 
-  if (verifiedEmails.length === 0 && predictedEmails.length === 0) {
+  if (
+    enrichment.verifiedEmails.length === 0 &&
+    enrichment.predictedEmails.length === 0
+  ) {
     logger.info("[email-diag] No emails discovered for lead", {
       businessId: lead.id,
       website: lead.website.substring(0, 80),
+      fromCache: enrichment.fromCache,
     });
-    return { ...lead, emailScraped: true };
+    return { lead: { ...lead, emailScraped: true }, fromCache: enrichment.fromCache };
   }
 
-  return buildEnrichedLead(lead, verifiedEmails, predictedEmails);
+  if (enrichment.fromCache) {
+    logger.info("[email-diag] Email served from domain cache", {
+      businessId: lead.id,
+      website: lead.website.substring(0, 80),
+      source: enrichment.emailSource,
+    });
+  }
+
+  return {
+    lead: enrichmentToBusinessLead(lead, enrichment),
+    fromCache: enrichment.fromCache,
+  };
 }
 
 function resolveTabConcurrency(totalResultCount?: number): number {
@@ -177,6 +171,7 @@ export async function runBatchEmailScraping(
   let emailsFound = 0;
   let emailsScraped = 0;
   let websitesAttempted = 0;
+  let cacheHits = 0;
 
   const ownsBrowser = !options.browser;
   let browser = options.browser ?? null;
@@ -186,7 +181,7 @@ export async function runBatchEmailScraping(
     searchId,
     tabConcurrency,
     totalResultCount: options.totalResultCount ?? null,
-    perSiteTimeoutMs: 15000,
+    perSiteTimeoutMs: 25000,
     websiteCap: "none",
     reusingBrowser: Boolean(options.browser),
   });
@@ -219,7 +214,8 @@ export async function runBatchEmailScraping(
         emailsScraped++;
 
         try {
-          const enriched = await scrapeOneLeadEmail(lead, context);
+          const { lead: enriched, fromCache } = await scrapeOneLeadEmail(lead, context);
+          if (fromCache) cacheHits++;
           const hasEmails =
             (enriched.verifiedEmails?.length ?? 0) > 0 ||
             (enriched.predictedEmails?.length ?? 0) > 0;
@@ -278,6 +274,7 @@ export async function runBatchEmailScraping(
     emailsFound,
     emailsScraped,
     websitesAttempted,
+    cacheHits,
     tabConcurrency,
   });
 

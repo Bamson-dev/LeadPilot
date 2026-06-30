@@ -1,19 +1,13 @@
+import type { BrowserContext } from "playwright";
 import type { BusinessLead, PredictedEmail } from "@leadthur/shared";
 import type { RawLeadInput } from "../types/scraper";
-import { crawlEmailForWebsite } from "../scraper/emailCrawler/email-crawler";
-import { resolveEffectiveBusinessWebsite } from "../scraper/utils/effective-website";
 import { parseMapsEmailsFromLead } from "../scraper/utils/lead-email";
-import { mergeEmails, parseEmailList } from "../scraper/parsers/email-filter";
-import { generateEmailsFromWebsite } from "../scraper/parsers/email-generator";
+import { isValidEmail, pickBestEmail } from "../scraper/parsers/email-validation";
+import { formatPredictedEmailsForStorage } from "./email-predictor";
 import {
-  isValidEmail,
-  pickBestEmail,
-} from "../scraper/parsers/email-validation";
-import { resolveGenerationDomain } from "../scraper/utils/domain-utils";
-import {
-  formatPredictedEmailsForStorage,
-  generatePredictedEmails,
-} from "./email-predictor";
+  enrichBusinessLeadEmail,
+  enrichmentToBusinessLead,
+} from "../services/email-enrichment-service";
 
 function verifiedFromMaps(raw: RawLeadInput): string[] {
   return parseMapsEmailsFromLead(raw);
@@ -86,140 +80,36 @@ export function applyWebsiteEmailsToLead(
   return buildVerifiedLead(lead, emails);
 }
 
-/** Apply simple domain-pattern predictions from the website email crawler. */
+/** Apply MX-validated predictions with real confidence scores. */
 export function applyPredictedEmailsToLead(
   lead: BusinessLead,
-  emails: string[]
+  predictions: PredictedEmail[]
 ): BusinessLead {
-  const display = pickBestEmail(
-    emails.filter(isValidEmail),
-    lead.website,
-    15
-  );
-  if (display.length === 0) {
+  const valid = predictions.filter((p) => isValidEmail(p.email));
+  if (valid.length === 0) {
     return { ...lead, emailSource: "none" };
   }
 
-  const predictedEmails: PredictedEmail[] = display.map((email) => ({
-    email,
-    confidence: 0,
-    label: "medium",
-    source: "business_pattern",
-  }));
-
+  const addresses = valid.map((p) => p.email);
   return {
     ...lead,
-    emails: display,
+    emails: [],
     verifiedEmails: [],
-    predictedEmails,
-    email: display.join(", "),
+    predictedEmails: valid,
+    email: addresses.join(", "),
     emailSource: "predicted",
   };
 }
 
 export async function enrichLeadEmail(
   lead: BusinessLead,
-  options?: { skipWebsiteCrawl?: boolean }
+  options?: { skipWebsiteCrawl?: boolean; browserContext?: BrowserContext }
 ): Promise<BusinessLead> {
-  const mapsVerified =
-    lead.verifiedEmails.length > 0
-      ? lead.verifiedEmails
-      : lead.emails.length > 0
-        ? lead.emails
-        : lead.email
-          ? parseEmailList(lead.email)
-          : [];
-
-  const effectiveWebsite =
-    (await resolveEffectiveBusinessWebsite(lead.website)) ?? lead.website;
-
-  let websiteVerified: string[] = [];
-  if (!options?.skipWebsiteCrawl) {
-    const crawl = await crawlEmailForWebsite(effectiveWebsite);
-    if (crawl.emails.length > 0) {
-      if (crawl.emailSource === "generated") {
-        return applyPredictedEmailsToLead(lead, crawl.emails);
-      }
-      return buildVerifiedLead(lead, crawl.emails);
-    }
-    websiteVerified = [];
-  }
-
-  const mergedVerified = mergeEmails(mapsVerified, websiteVerified);
-  const allVerified = pickBestEmail(mergedVerified, effectiveWebsite ?? lead.website, 100);
-  if (allVerified.length > 0) {
-    return buildVerifiedLead(lead, allVerified);
-  }
-
-  if (!effectiveWebsite?.trim() && !lead.website?.trim()) {
-    return {
-      ...lead,
-      emails: [],
-      verifiedEmails: [],
-      predictedEmails: [],
-      email: null,
-      emailSource: "none",
-    };
-  }
-
-  const predictions = await generatePredictedEmails({
-    businessName: lead.name,
-    website: effectiveWebsite ?? lead.website,
-    category: lead.category,
+  const enrichment = await enrichBusinessLeadEmail(lead, {
+    browserContext: options?.browserContext,
+    skipPlaywrightScrape: options?.skipWebsiteCrawl,
   });
-
-  const validPredictions = predictions.filter((p) => isValidEmail(p.email));
-  if (validPredictions.length > 0) {
-    const predictedAddresses = validPredictions.map((p) => p.email);
-    return {
-      ...lead,
-      emails: [],
-      verifiedEmails: [],
-      predictedEmails: validPredictions,
-      email: predictedAddresses.join(", "),
-      emailSource: "predicted",
-    };
-  }
-
-  const domain = resolveGenerationDomain(effectiveWebsite ?? lead.website);
-  if (domain) {
-    const fallbackAddresses = generateEmailsFromWebsite(
-      effectiveWebsite ?? lead.website,
-      lead.category,
-      lead.name
-    ).filter(isValidEmail);
-    const fallbackEmails = pickBestEmail(
-      fallbackAddresses,
-      effectiveWebsite ?? lead.website,
-      100
-    );
-    if (fallbackEmails.length > 0) {
-      const predictedEmails: PredictedEmail[] = fallbackEmails.map((email) => ({
-        email,
-        confidence: 78,
-        label: "medium" as const,
-        source: "business_pattern" as const,
-      }));
-      const addresses = predictedEmails.map((p) => p.email);
-      return {
-        ...lead,
-        emails: [],
-        verifiedEmails: [],
-        predictedEmails,
-        email: addresses.join(", "),
-        emailSource: "predicted",
-      };
-    }
-  }
-
-  return {
-    ...lead,
-    emails: [],
-    verifiedEmails: [],
-    predictedEmails: [],
-    email: null,
-    emailSource: "none",
-  };
+  return enrichmentToBusinessLead(lead, enrichment);
 }
 
 export function predictionStorageFields(lead: BusinessLead): {
@@ -255,26 +145,20 @@ export function predictionsFromDb(row: {
 }): PredictedEmail[] {
   const out: PredictedEmail[] = [];
   if (row.predicted_email) {
+    const confidence = row.prediction_confidence ?? 80;
     out.push({
       email: row.predicted_email,
-      confidence: row.prediction_confidence ?? 80,
-      label:
-        (row.prediction_confidence ?? 0) >= 90
-          ? "high"
-          : (row.prediction_confidence ?? 0) >= 75
-            ? "medium"
-            : "low",
+      confidence,
+      label: confidence >= 90 ? "high" : confidence >= 75 ? "medium" : "low",
       source: "business_pattern",
     });
   }
   if (row.predicted_email_secondary) {
+    const confidence = row.prediction_confidence_secondary ?? 75;
     out.push({
       email: row.predicted_email_secondary,
-      confidence: row.prediction_confidence_secondary ?? 75,
-      label:
-        (row.prediction_confidence_secondary ?? 0) >= 90
-          ? "high"
-          : "medium",
+      confidence,
+      label: confidence >= 90 ? "high" : confidence >= 75 ? "medium" : "low",
       source: "business_pattern",
     });
   }

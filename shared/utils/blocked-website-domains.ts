@@ -25,6 +25,9 @@ const BLOCKED_EMAIL_SCRAPE_DOMAINS = [
   "linkinbio.com",
   "beacons.ai",
   "allmylinks.com",
+  "bit.ly",
+  "glovoapp.com",
+  "calendly.com",
 ] as const;
 
 function hostnameFromUrl(websiteUrl: string): string | null {

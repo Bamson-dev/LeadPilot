@@ -4,6 +4,7 @@ import { CopyButton } from "@/components/dashboard/copy-button";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { getPredictedEmails, getVerifiedEmails } from "@/utils/get-display-email";
 import type { Lead } from "@/types/lead";
+import type { PredictedEmail } from "@leadthur/shared";
 
 interface EmailCellProps {
   lead: Lead;
@@ -16,6 +17,7 @@ function EmailRow({
   leadId,
   index,
   variant,
+  confidence,
   copiedId,
   onCopy,
 }: {
@@ -23,10 +25,17 @@ function EmailRow({
   leadId: string;
   index: number;
   variant: "verified" | "predicted";
+  confidence?: number;
   copiedId: string | null;
   onCopy: (text: string, id: string) => void;
 }) {
   const isVerified = variant === "verified";
+  const confidenceLabel =
+    !isVerified && confidence != null && confidence > 0
+      ? `Predicted · ${confidence}% confidence`
+      : isVerified
+        ? "Verified from website or Google Maps"
+        : "Predicted from domain";
 
   return (
     <div
@@ -35,7 +44,7 @@ function EmailRow({
     >
       <div
         aria-hidden
-        title={isVerified ? "Verified from website" : "Predicted from domain"}
+        title={confidenceLabel}
         style={{
           width: 6,
           height: 6,
@@ -46,6 +55,7 @@ function EmailRow({
       />
       <a
         href={`mailto:${addr}`}
+        title={confidenceLabel}
         style={{
           color: isVerified ? "#F4F4FF" : "#A1A1B5",
           textDecoration: "none",
@@ -57,13 +67,16 @@ function EmailRow({
       </a>
       {!isVerified && (
         <span
-          className="shrink-0 rounded px-1 py-0.5 text-[10px] uppercase tracking-wide"
+          className="shrink-0 rounded px-1 py-0.5 text-[10px] tracking-wide"
           style={{
             color: "#9CA3AF",
             background: "rgba(255,255,255,0.06)",
           }}
+          title={confidenceLabel}
         >
-          predicted
+          {confidence != null && confidence > 0
+            ? `predicted · ${confidence}%`
+            : "predicted"}
         </span>
       )}
       <CopyButton
@@ -82,7 +95,7 @@ export function EmailCell({ lead, copiedId: copiedIdProp, onCopy: onCopyProp }: 
   const onCopy = onCopyProp ?? internal.copyToClipboard;
 
   const verified = getVerifiedEmails(lead);
-  const predicted = getPredictedEmails(lead).map((p) => p.email);
+  const predicted: PredictedEmail[] = getPredictedEmails(lead);
   const seen = new Set<string>();
   const verifiedUnique = verified.filter((addr) => {
     const key = addr.toLowerCase();
@@ -90,8 +103,8 @@ export function EmailCell({ lead, copiedId: copiedIdProp, onCopy: onCopyProp }: 
     seen.add(key);
     return true;
   });
-  const predictedUnique = predicted.filter((addr) => {
-    const key = addr.toLowerCase();
+  const predictedUnique = predicted.filter((p) => {
+    const key = p.email.toLowerCase();
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -114,13 +127,14 @@ export function EmailCell({ lead, copiedId: copiedIdProp, onCopy: onCopyProp }: 
           onCopy={onCopy}
         />
       ))}
-      {predictedUnique.map((addr, i) => (
+      {predictedUnique.map((prediction, i) => (
         <EmailRow
-          key={`${lead.id}-predicted-${addr}-${i}`}
-          addr={addr}
+          key={`${lead.id}-predicted-${prediction.email}-${i}`}
+          addr={prediction.email}
           leadId={lead.id}
           index={i}
           variant="predicted"
+          confidence={prediction.confidence}
           copiedId={copiedId}
           onCopy={onCopy}
         />
