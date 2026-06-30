@@ -295,6 +295,32 @@ export async function insertBusinessLead(lead: BusinessLead): Promise<BusinessLe
   return saved;
 }
 
+export async function updateBusinessLeadEnrichment(lead: BusinessLead): Promise<void> {
+  const fields = predictionStorageFields(lead);
+  const displayEmail =
+    lead.emails.length > 0
+      ? lead.emails.join(", ")
+      : lead.predictedEmails.length > 0
+        ? lead.predictedEmails.map((p) => p.email).join(", ")
+        : lead.email;
+
+  const { error } = await supabase
+    .from("business_leads")
+    .update({
+      email: displayEmail,
+      email_source: dbEmailSource(lead),
+      verified_email: fields.verified_email,
+      predicted_email: fields.predicted_email,
+      predicted_email_secondary: fields.predicted_email_secondary,
+      prediction_confidence: fields.prediction_confidence,
+      prediction_confidence_secondary: fields.prediction_confidence_secondary,
+      email_scraped: true,
+    })
+    .eq("id", lead.id);
+
+  if (error) throw new Error(error.message);
+}
+
 export async function updateBusinessLeadEmails(
   businessId: string,
   emails: string[],

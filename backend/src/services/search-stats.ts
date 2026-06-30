@@ -4,7 +4,8 @@ function leadHasEmail(lead: BusinessLead): boolean {
   return Boolean(
     lead.email?.trim() ||
       (lead.emails?.length ?? 0) > 0 ||
-      (lead.verifiedEmails?.length ?? 0) > 0
+      (lead.verifiedEmails?.length ?? 0) > 0 ||
+      (lead.predictedEmails?.length ?? 0) > 0
   );
 }
 

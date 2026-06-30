@@ -29,12 +29,11 @@ export const PLACE_PAGE_TIMEOUT_MS = 18000;
 export const SEARCH_JOB_TIMEOUT_MS = parseInt(process.env.SEARCH_JOB_TIMEOUT_MS || "600000", 10);
 export const EMAIL_FETCH_TIMEOUT_MS = 15000;
 export const EMAIL_SCRAPE_BATCH_SIZE = 8;
-export const EMAIL_SCRAPE_BATCH_SIZE_MEDIUM = 5;
 export const EMAIL_SCRAPE_BATCH_SIZE_LARGE = 3;
+export const MEDIUM_CITY_RESULT_THRESHOLD = 150;
 export const LARGE_CITY_RESULT_THRESHOLD = 300;
-export const EMAIL_SCRAPE_MAX_WEBSITES = 500;
 export const MEMORY_SKIP_SCRAPE_PERCENT = 80;
-export const EMAIL_SCRAPE_MAX_MS = 10 * 60 * 1000;
+export const EMAIL_SCRAPE_MAX_MS = 3 * 60 * 1000;
 export const PHASE1_DEADLINE_MS = 90_000;
 export const EMAIL_REGEX =
   /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;

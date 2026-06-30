@@ -30,7 +30,7 @@ import { generateAreaSuggestions } from "./suggestion-service";
 import { runBatchEmailScraping } from "./email-batch-scraper";
 import { computeSearchStats } from "./search-stats";
 import { findNearbyCities } from "./nearby-cities";
-import { PHASE1_DEADLINE_MS, MEMORY_SKIP_SCRAPE_PERCENT, EMAIL_SCRAPE_MAX_MS } from "../scraper/utils/constants";
+import { PHASE1_DEADLINE_MS, MEMORY_SKIP_SCRAPE_PERCENT } from "../scraper/utils/constants";
 import type { RawLeadInput } from "../types/scraper";
 import { isMemoryPressureHigh, getMemoryUsagePercent } from "../utils/memory";
 
@@ -149,16 +149,15 @@ async function finalizeSearchAndNotify(
   notifyOptions?: { skipEmailScraping?: boolean }
 ): Promise<void> {
   const leads = await getAllSearchLeads(searchId);
-  const uniqueLeads = deduplicateLeads(leads);
-  const stats = computeSearchStats(uniqueLeads);
-  const totalFound = stats.total;
+  const totalFound = await countSearchLeads(searchId);
+  const stats = computeSearchStats(leads);
 
   await updateSearchJob(searchId, {
     totalFound,
     processed: totalFound,
     status: "completed",
     scrapingInProgress: false,
-    statsSummary: stats,
+    statsSummary: { ...stats, total: totalFound },
     error: null,
   });
 
@@ -172,17 +171,16 @@ async function finalizeSearchAndNotify(
 
     const claimed = await tryClaimResultsEmailSend(searchId);
     if (claimed) {
-      const jobStats = (await getSearchJob(searchId))?.statsSummary ?? stats;
       void sendSearchResultsReadyEmail(
         licenseEmail,
         searchId,
         query,
         location,
         {
-          total: jobStats.total,
-          withPhone: jobStats.withPhone,
-          withEmail: jobStats.withEmail,
-          withWebsite: jobStats.withWebsite,
+          total: totalFound,
+          withPhone: stats.withPhone,
+          withEmail: stats.withEmail,
+          withWebsite: stats.withWebsite,
         },
         {
           timedOut: emailTimedOut,
@@ -275,15 +273,11 @@ async function runBackgroundWork(
         }
       } else {
         logSearchStep(searchId, "email_scraping", { leadCount, memoryPercent });
-        const emailResult = await runBatchEmailScraping(
-          searchId,
-          emit,
-          EMAIL_SCRAPE_MAX_MS,
-          {
-            totalResultCount: leadCount,
-          }
-        );
-        emailTimedOut = emailResult.timedOut;
+        const emailStart = Date.now();
+        await runBatchEmailScraping(searchId, emit, undefined, {
+          totalResultCount: leadCount,
+        });
+        emailTimedOut = Date.now() - emailStart >= 3 * 60 * 1000 - 1000;
       }
     } else {
       const trialLeads = await getAllSearchLeads(searchId);
@@ -297,11 +291,12 @@ async function runBackgroundWork(
       }
     }
 
-    const leads = deduplicateLeads(await getAllSearchLeads(searchId));
+    const leads = await getAllSearchLeads(searchId);
+    const totalFound = await countSearchLeads(searchId);
     const stats = computeSearchStats(leads);
 
     let nearbyCities = undefined;
-    if (!isTrial && stats.total < 300) {
+    if (!isTrial && totalFound < 300) {
       const geo = await geocodeCity(location);
       if (geo) {
         nearbyCities = findNearbyCities(
@@ -319,9 +314,9 @@ async function runBackgroundWork(
     }
 
     await updateSearchJob(searchId, {
-      totalFound: stats.total,
-      processed: stats.total,
-      statsSummary: stats,
+      totalFound,
+      processed: totalFound,
+      statsSummary: { ...stats, total: totalFound },
     });
 
     const licenseEmail = await resolveNotificationEmail(
