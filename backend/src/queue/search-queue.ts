@@ -7,6 +7,10 @@ import {
 } from "./redis-connection";
 import { inlineSearchQueue } from "./inline-search-fallback";
 import { startSearchWorker, stopSearchWorker } from "../workers/search-worker";
+import { logSearchLifecycle } from "../utils/search-job-lifecycle";
+import {
+  BULLMQ_LOCK_DURATION_MS,
+} from "../scraper/utils/constants";
 import {
   SEARCH_QUEUE_NAME,
   type AdminQueueMetrics,
@@ -45,7 +49,10 @@ export async function initSearchQueue(): Promise<void> {
   });
 
   startSearchWorker();
-  logger.info("BullMQ search queue initialized", { name: SEARCH_QUEUE_NAME });
+  logger.info("BullMQ search queue initialized", {
+    name: SEARCH_QUEUE_NAME,
+    lockDurationMs: BULLMQ_LOCK_DURATION_MS,
+  });
 }
 
 export function isBullSearchQueueActive(): boolean {
@@ -62,6 +69,12 @@ export async function shutdownSearchQueue(): Promise<void> {
 }
 
 export async function enqueueSearchJob(data: SearchQueueJobData): Promise<void> {
+  logSearchLifecycle("job_enqueued", data.searchId, {
+    query: data.query,
+    location: data.location,
+    queue: bullQueue && isRedisQueueEnabled() ? "bullmq" : "inline",
+  });
+
   if (bullQueue && isRedisQueueEnabled()) {
     try {
       await bullQueue.add("run-search", data, {

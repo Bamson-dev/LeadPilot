@@ -77,3 +77,18 @@ bash backend/scripts/verify-deployment.sh https://backend.leadthur.com
 ```
 
 All five tests should pass before connecting the dashboard.
+
+## Long-running search jobs (timeouts)
+
+Search jobs run as **background queue work**, not inside the HTTP request that starts them. These layers must **not** kill a job during Phase 1 background extraction (large cities can take 15+ minutes before Phase 2 email scraping starts).
+
+| Layer | Default risk | What to set |
+|-------|----------------|-------------|
+| **Application inline queue** | Was 5 min (fixed in code) | No config — jobs run until Phase 1 + Phase 2 budgets complete |
+| **BullMQ worker** | Default `lockDuration` 30s caused stalled jobs on long Phase 1 (fixed in code to 15 min) | `REDIS_URL` must be set so BullMQ is used; check `/health` → `queue.mode` is `bullmq` |
+| **Docker HEALTHCHECK** | 10s per check only — does **not** kill long jobs | No change needed (`backend/Dockerfile`) |
+| **Node HTTP server** | `requestTimeout` 120s — applies to HTTP only, **not** queue workers | No change needed |
+| **Coolify / Traefik proxy** | Can timeout idle HTTP connections (SSE `/search/:id/stream`) | In Coolify → backend → **Advanced**, if Traefik timeouts exist set `read timeout` ≥ **600s** for SSE; search **processing** is not proxy-bound |
+| **Nginx** (if used in front of Coolify) | `proxy_read_timeout` default 60s breaks SSE | Add `proxy_read_timeout 600s;` and `proxy_buffering off;` in the `location /` block (see [`deploy/VPS.md`](./deploy/VPS.md)) |
+
+After deploy, confirm a large search logs `[search-lifecycle]` stages: `phase1_heartbeat` every 30s → `phase1_complete` → `phase2_attempt_start` → `phase2_first_playwright_tab` → `phase2_complete`.

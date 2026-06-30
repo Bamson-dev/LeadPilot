@@ -1,23 +1,16 @@
 import type { StreamEvent } from "@leadthur/shared";
 import { getSearchJob, markSearchFailed } from "../database/search-repository";
 import { logger } from "../utils/logger";
-import { runScraperJob } from "../services/scraper-service";
+import {
+  recoverSearchJobEmailScraping,
+  runScraperJob,
+} from "../services/scraper-service";
 import { clearStreamBuffer, emitToStream } from "../services/stream-registry";
-import { SEARCH_JOB_TIMEOUT_MS } from "../scraper/utils/constants";
+import { logSearchLifecycle } from "../utils/search-job-lifecycle";
 
 const INLINE_MAX_CONCURRENT = 2;
-const JOB_TIMEOUT_MS = 5 * 60 * 1000;
 
 import type { SearchQueueJobData } from "./search-queue-types";
-
-function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) => {
-      setTimeout(() => reject(new Error(message)), ms);
-    }),
-  ]);
-}
 
 class InlineSearchQueue {
   private queue: Array<{
@@ -28,6 +21,11 @@ class InlineSearchQueue {
   private running = 0;
 
   async add(data: SearchQueueJobData): Promise<void> {
+    logSearchLifecycle("job_enqueued", data.searchId, {
+      queue: "inline",
+      query: data.query,
+      location: data.location,
+    });
     return new Promise((resolve, reject) => {
       this.queue.push({ data, resolve, reject });
       void this.process();
@@ -47,25 +45,56 @@ class InlineSearchQueue {
       }
     };
 
+    const jobStartedAt = Date.now();
+
     try {
       const jobRecord = await getSearchJob(job.data.searchId);
       const isTrial = job.data.isTrial ?? jobRecord?.isTrial ?? false;
 
-      await withTimeout(
-        runScraperJob(job.data.searchId, job.data.query, job.data.location, emit, {
-          licenseKey: job.data.licenseKey,
-          licenseEmail: job.data.licenseEmail,
-          isTrial,
-        }),
-        Math.min(SEARCH_JOB_TIMEOUT_MS, JOB_TIMEOUT_MS),
-        "Search timed out on the server. Try a broader location or a simpler business type."
-      );
+      logSearchLifecycle("job_dequeued", job.data.searchId, {
+        queue: "inline",
+        running: this.running,
+        waiting: this.queue.length,
+      });
+      logSearchLifecycle("job_processing_start", job.data.searchId, {
+        queue: "inline",
+        query: job.data.query,
+        location: job.data.location,
+      });
+
+      await runScraperJob(job.data.searchId, job.data.query, job.data.location, emit, {
+        licenseKey: job.data.licenseKey,
+        licenseEmail: job.data.licenseEmail,
+        isTrial,
+        jobStartedAt,
+      });
+
+      logSearchLifecycle("job_processing_end", job.data.searchId, {
+        queue: "inline",
+        elapsedMs: Date.now() - jobStartedAt,
+      });
       job.resolve();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      emitToStream(job.data.searchId, { type: "error", message });
-      markSearchFailed(job.data.searchId, message).catch(() => undefined);
-      job.reject(err instanceof Error ? err : new Error(message));
+      logger.error("[inline-queue] Search job failed", {
+        searchId: job.data.searchId,
+        error: message,
+      });
+
+      try {
+        await recoverSearchJobEmailScraping(
+          job.data.searchId,
+          job.data.query,
+          job.data.location,
+          emit,
+          { licenseEmail: job.data.licenseEmail, jobStartedAt }
+        );
+        job.resolve();
+      } catch (recoverErr) {
+        emitToStream(job.data.searchId, { type: "error", message });
+        markSearchFailed(job.data.searchId, message).catch(() => undefined);
+        job.reject(recoverErr instanceof Error ? recoverErr : new Error(message));
+      }
     } finally {
       this.running--;
       void this.process();

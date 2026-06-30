@@ -33,6 +33,10 @@ import { findNearbyCities } from "./nearby-cities";
 import { PHASE1_DEADLINE_MS, MEMORY_SKIP_SCRAPE_PERCENT, PHASE2_EMAIL_SCRAPE_MAX_MS, PHASE2_TRIGGER_WATCHDOG_MS } from "../scraper/utils/constants";
 import type { RawLeadInput } from "../types/scraper";
 import { isMemoryPressureHigh, getMemoryUsagePercent } from "../utils/memory";
+import {
+  logSearchLifecycle,
+  startPhase1Heartbeat,
+} from "../utils/search-job-lifecycle";
 
 export type ScrapeEmitter = (event: StreamEvent) => void;
 
@@ -251,6 +255,14 @@ async function runPhase2EmailScraping(
       phase2BudgetMs: PHASE2_EMAIL_SCRAPE_MAX_MS,
     }
   );
+  logSearchLifecycle("phase1_complete", searchId, {
+    leadCount,
+    phase1ElapsedMs,
+  });
+  logSearchLifecycle("phase2_attempt_start", searchId, {
+    leadCount,
+    phase2BudgetMs: PHASE2_EMAIL_SCRAPE_MAX_MS,
+  });
 
   const runPhase2Attempt = async (attempt: number): Promise<void> => {
     phase2Triggered = true;
@@ -275,6 +287,12 @@ async function runPhase2EmailScraping(
       return;
     }
 
+    logSearchLifecycle("phase2_work_begin", searchId, {
+      attempt,
+      leadCount,
+      memoryPercent,
+    });
+
     const emailStart = Date.now();
     const emailBrowser = await pool.acquire(60_000);
     try {
@@ -293,6 +311,12 @@ async function runPhase2EmailScraping(
       searchId,
       leadCount,
       attempt,
+      emailTimedOut,
+      phase2ElapsedMs: Date.now() - emailStart,
+    });
+    logSearchLifecycle("phase2_complete", searchId, {
+      attempt,
+      leadCount,
       emailTimedOut,
       phase2ElapsedMs: Date.now() - emailStart,
     });
@@ -339,6 +363,67 @@ async function runPhase2EmailScraping(
   return { emailTimedOut, skipEmailScraping };
 }
 
+export async function recoverSearchJobEmailScraping(
+  searchId: string,
+  query: string,
+  location: string,
+  emit: ScrapeEmitter,
+  options?: { licenseEmail?: string | null; jobStartedAt?: number }
+): Promise<void> {
+  const job = await getSearchJob(searchId);
+  if (job?.emailScrapingComplete) {
+    logSearchLifecycle("job_processing_end", searchId, {
+      reason: "email_scraping_already_complete",
+    });
+    return;
+  }
+
+  logSearchLifecycle("phase2_recovery_start", searchId, {
+    query,
+    location,
+  });
+
+  const leadCount = await countSearchLeads(searchId);
+  if (leadCount <= 0) return;
+
+  const jobStartedAt =
+    options?.jobStartedAt ??
+    (job?.createdAt ? Date.parse(job.createdAt) : Date.now());
+  const licenseEmail =
+    options?.licenseEmail ?? (await getLicenseEmailBySearchId(searchId));
+
+  const phase2 = await runPhase2EmailScraping(
+    searchId,
+    query,
+    location,
+    leadCount,
+    jobStartedAt,
+    Date.now(),
+    emit,
+    { licenseEmail }
+  );
+
+  await finalizeSearchAndNotify(
+    searchId,
+    query,
+    location,
+    licenseEmail,
+    phase2.emailTimedOut,
+    { skipEmailScraping: phase2.skipEmailScraping }
+  );
+
+  emit({
+    type: "complete",
+    total: leadCount,
+    message: `Search complete. Found ${leadCount} businesses in ${location}.`,
+  });
+
+  logSearchLifecycle("job_processing_end", searchId, {
+    reason: "phase2_recovery",
+    leadCount,
+  });
+}
+
 async function runBackgroundWork(
   searchId: string,
   query: string,
@@ -359,6 +444,11 @@ async function runBackgroundWork(
 
   try {
     if (remainingUrls.length > 0 && pool.isReady()) {
+      logSearchLifecycle("phase1_heartbeat", searchId, {
+        phase: "background_extraction_start",
+        remainingUrls: remainingUrls.length,
+        elapsedMs: Date.now() - jobStartedAt,
+      });
       logSearchStep(searchId, "background_extraction", {
         remainingUrls: remainingUrls.length,
       });
@@ -540,7 +630,12 @@ export async function runScraperJob(
   query: string,
   location: string,
   emit: ScrapeEmitter,
-  options?: { licenseKey?: string; licenseEmail?: string; isTrial?: boolean }
+  options?: {
+    licenseKey?: string;
+    licenseEmail?: string;
+    isTrial?: boolean;
+    jobStartedAt?: number;
+  }
 ): Promise<void> {
   const pool = getBrowserPool();
   let searchComplete = false;
@@ -591,10 +686,17 @@ export async function runScraperJob(
   const seenLeadKeys = new Set<string>();
   const collectedLeads: BusinessLead[] = [];
   const phase1DeadlineMs = Date.now() + PHASE1_DEADLINE_MS;
-  const jobStartedAt = Date.now();
+  const jobStartedAt = options?.jobStartedAt ?? Date.now();
   let step: SearchJobStep = "init";
+  let stopHeartbeat: (() => void) | null = null;
 
   logSearchStep(searchId, "init", { query, location, isTrial });
+  logSearchLifecycle("phase1_begin", searchId, {
+    query,
+    location,
+    isTrial,
+    jobStartedAt,
+  });
 
   try {
     step = "browser_acquire";
@@ -647,6 +749,7 @@ export async function runScraperJob(
 
     step = "phase1_maps_scrape";
     logSearchStep(searchId, step, { phase1DeadlineMs });
+    stopHeartbeat = startPhase1Heartbeat(searchId, jobStartedAt, () => leadsFoundSoFar);
 
     const scrapeResult = await scrapeGoogleMaps(browser, {
       query,
@@ -675,6 +778,8 @@ export async function runScraperJob(
 
     searchComplete = true;
     clearTimeout(runningEmailTimer);
+    stopHeartbeat?.();
+    stopHeartbeat = null;
 
     const uniqueCount = deduplicateLeads(collectedLeads).length;
     const phase1Total = uniqueCount > 0 ? uniqueCount : scrapeResult.count;
@@ -746,38 +851,44 @@ export async function runScraperJob(
 
     if (leadsCollected > 0) {
       const licenseEmail = await resolveLicenseEmail();
-      if (!isTrial) {
+      const existing = await getSearchJob(searchId);
+      if (!existing?.emailScrapingComplete) {
         try {
-          await runPhase2EmailScraping(
+          await recoverSearchJobEmailScraping(
             searchId,
             query,
             location,
-            leadsCollected,
-            jobStartedAt,
-            Date.now(),
             emit,
-            { licenseEmail }
+            { licenseEmail, jobStartedAt }
           );
         } catch (phase2Err) {
-          logger.error("[search-job] Phase 2 failed in main catch — committing Maps results", {
+          logger.error("[search-job] Phase 2 recovery failed in main catch", {
             searchId,
             error: phase2Err instanceof Error ? phase2Err.message : "unknown",
           });
           await markAllLeadsEmailScrapeSkipped(searchId);
+          await commitPartialSearchResults(
+            searchId,
+            query,
+            location,
+            licenseEmail,
+            { emailTimedOut: true }
+          );
         }
+      } else {
+        const committed = await commitPartialSearchResults(
+          searchId,
+          query,
+          location,
+          licenseEmail,
+          { emailTimedOut: true }
+        );
+        emit({
+          type: "complete",
+          total: committed,
+          message: `We found ${committed.toLocaleString()} potential clients for you.`,
+        });
       }
-      const committed = await commitPartialSearchResults(
-        searchId,
-        query,
-        location,
-        licenseEmail,
-        { emailTimedOut: true }
-      );
-      emit({
-        type: "complete",
-        total: committed,
-        message: `We found ${committed.toLocaleString()} potential clients for you.`,
-      });
       return;
     }
 
@@ -803,6 +914,7 @@ export async function runScraperJob(
     });
     throw err;
   } finally {
+    stopHeartbeat?.();
     if (!browserReleased) {
       try {
         pool.release(browser);

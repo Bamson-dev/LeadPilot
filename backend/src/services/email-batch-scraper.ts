@@ -17,8 +17,11 @@ import {
   updateBusinessLeadEnrichment,
 } from "../database/search-repository";
 import { logger } from "../utils/logger";
+import { logSearchLifecycle } from "../utils/search-job-lifecycle";
 
 export type ScrapeEmitter = (event: StreamEvent) => void;
+
+const phase2FirstTabLogged = new Set<string>();
 
 export interface BatchEmailScrapeOptions {
   totalResultCount?: number;
@@ -82,6 +85,14 @@ async function scrapeOneLeadEmail(
     website: lead.website.substring(0, 80),
     category: lead.category,
   });
+
+  if (!phase2FirstTabLogged.has(lead.searchId)) {
+    phase2FirstTabLogged.add(lead.searchId);
+    logSearchLifecycle("phase2_first_playwright_tab", lead.searchId, {
+      businessId: lead.id,
+      website: lead.website.substring(0, 80),
+    });
+  }
 
   const { verifiedEmails, predictedEmails } = await discoverBusinessEmailsCombined(
     lead.website,
@@ -269,6 +280,8 @@ export async function runBatchEmailScraping(
     websitesAttempted,
     tabConcurrency,
   });
+
+  phase2FirstTabLogged.delete(searchId);
 
   return { emailsFound, emailsScraped };
 }

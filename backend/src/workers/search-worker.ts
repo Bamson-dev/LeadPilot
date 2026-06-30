@@ -8,12 +8,18 @@ import {
 } from "../database/search-repository";
 import { getLicenseEmailBySearchId } from "../database/license-repository";
 import {
-  commitPartialSearchResults,
+  recoverSearchJobEmailScraping,
   runScraperJob,
 } from "../services/scraper-service";
 import { clearStreamBuffer, emitToStream } from "../services/stream-registry";
 import { sendSearchQueueFailureEmail } from "../services/email";
 import { logger } from "../utils/logger";
+import { logSearchLifecycle } from "../utils/search-job-lifecycle";
+import {
+  BULLMQ_LOCK_DURATION_MS,
+  BULLMQ_MAX_STALLED_COUNT,
+  BULLMQ_STALLED_INTERVAL_MS,
+} from "../scraper/utils/constants";
 import { SEARCH_QUEUE_NAME, type SearchQueueJobData } from "../queue/search-queue-types";
 import { getRedisConnectionOptions } from "../queue/redis-connection";
 
@@ -29,40 +35,9 @@ async function resolveJobEmail(
   return getLicenseEmailBySearchId(searchId);
 }
 
-async function finalizePartialJob(
-  searchId: string,
-  query: string,
-  location: string,
-  licenseEmail: string | null,
-  reason: string
-): Promise<number> {
-  const count = await commitPartialSearchResults(
-    searchId,
-    query,
-    location,
-    licenseEmail,
-    { emailTimedOut: true }
-  );
-
-  if (count > 0) {
-    logger.warn("[search-worker] Committed partial results instead of failing", {
-      searchId,
-      reason,
-      leadsCollected: count,
-    });
-    emitToStream(searchId, {
-      type: "complete",
-      total: count,
-      message: `We found ${count.toLocaleString()} potential clients for you.`,
-    });
-    clearStreamBuffer(searchId);
-  }
-
-  return count;
-}
-
 async function processSearchJob(job: Job<SearchQueueJobData>): Promise<void> {
   const { searchId, query, location, licenseKey, licenseEmail, isTrial } = job.data;
+  const jobStartedAt = Date.now();
 
   const emit = (event: StreamEvent) => {
     emitToStream(searchId, event);
@@ -74,11 +49,24 @@ async function processSearchJob(job: Job<SearchQueueJobData>): Promise<void> {
   const jobRecord = await getSearchJob(searchId);
   const trial = isTrial ?? jobRecord?.isTrial ?? false;
 
+  logSearchLifecycle("job_dequeued", searchId, {
+    queue: "bullmq",
+    bullJobId: job.id,
+    attemptsMade: job.attemptsMade,
+  });
+  logSearchLifecycle("job_processing_start", searchId, {
+    queue: "bullmq",
+    query,
+    location,
+    lockDurationMs: BULLMQ_LOCK_DURATION_MS,
+  });
+
   logger.info("[search-worker] Job starting", {
     searchId,
     query,
     location,
     isTrial: trial,
+    bullJobId: job.id,
   });
 
   await updateSearchJob(searchId, {
@@ -91,6 +79,11 @@ async function processSearchJob(job: Job<SearchQueueJobData>): Promise<void> {
       licenseKey,
       licenseEmail,
       isTrial: trial,
+      jobStartedAt,
+    });
+    logSearchLifecycle("job_processing_end", searchId, {
+      queue: "bullmq",
+      elapsedMs: Date.now() - jobStartedAt,
     });
   } catch (err) {
     const leadsCollected = await countSearchLeads(searchId);
@@ -102,21 +95,24 @@ async function processSearchJob(job: Job<SearchQueueJobData>): Promise<void> {
       location,
       leadsCollected,
       jobStatus: existing?.status,
+      emailScrapingComplete: existing?.emailScrapingComplete,
       error: err instanceof Error ? err.message : String(err),
       stack: err instanceof Error ? err.stack : undefined,
     });
 
-    if (existing?.status === "completed" && leadsCollected > 0) {
-      logger.info("[search-worker] Job already completed with results — skipping failure", {
-        searchId,
-        leadsCollected,
+    if (leadsCollected > 0 && !existing?.emailScrapingComplete) {
+      await recoverSearchJobEmailScraping(searchId, query, location, emit, {
+        licenseEmail,
+        jobStartedAt,
       });
       return;
     }
 
-    if (leadsCollected > 0) {
-      const email = await resolveJobEmail(searchId, licenseEmail);
-      await finalizePartialJob(searchId, query, location, email, "process_error");
+    if (existing?.status === "completed" && existing?.emailScrapingComplete) {
+      logger.info("[search-worker] Job already fully completed — skipping failure", {
+        searchId,
+        leadsCollected,
+      });
       return;
     }
 
@@ -132,14 +128,24 @@ export function startSearchWorker(): Worker<SearchQueueJobData> | null {
   worker = new Worker<SearchQueueJobData>(SEARCH_QUEUE_NAME, processSearchJob, {
     connection,
     concurrency: WORKER_CONCURRENCY,
+    lockDuration: BULLMQ_LOCK_DURATION_MS,
+    stalledInterval: BULLMQ_STALLED_INTERVAL_MS,
+    maxStalledCount: BULLMQ_MAX_STALLED_COUNT,
   });
 
   worker.on("active", (job) => {
-    logger.info("Search queue job started", { searchId: job.data.searchId });
+    logger.info("Search queue job started", { searchId: job.data.searchId, bullJobId: job.id });
   });
 
   worker.on("completed", (job) => {
-    logger.info("Search queue job completed", { searchId: job.data.searchId });
+    logger.info("Search queue job completed", { searchId: job.data.searchId, bullJobId: job.id });
+  });
+
+  worker.on("stalled", (jobId) => {
+    logger.error("[search-worker] BullMQ job stalled — lock may have expired during long Phase 1", {
+      bullJobId: jobId,
+      lockDurationMs: BULLMQ_LOCK_DURATION_MS,
+    });
   });
 
   worker.on("failed", async (job, err) => {
@@ -159,29 +165,33 @@ export function startSearchWorker(): Worker<SearchQueueJobData> | null {
       final: isFinalFailure,
       leadsCollected,
       jobStatus: existing?.status,
+      emailScrapingComplete: existing?.emailScrapingComplete,
       error: err.message,
       stack: err.stack,
     });
 
     if (!isFinalFailure) return;
 
-    if (leadsCollected > 0 || existing?.status === "completed") {
-      if (existing?.status !== "completed") {
-        const email = await resolveJobEmail(searchId, licenseEmail);
-        await finalizePartialJob(
-          searchId,
-          query,
-          location,
-          email,
-          "queue_failed_handler"
-        ).catch((finalizeErr) =>
-          logger.error("[search-worker] Partial finalize in failed handler failed", {
-            searchId,
-            error:
-              finalizeErr instanceof Error ? finalizeErr.message : "unknown",
-          })
-        );
+    const emit = (event: StreamEvent) => {
+      emitToStream(searchId, event);
+      if (event.type === "complete" || event.type === "error") {
+        clearStreamBuffer(searchId);
       }
+    };
+
+    if (leadsCollected > 0 && !existing?.emailScrapingComplete) {
+      await recoverSearchJobEmailScraping(searchId, query, location, emit, {
+        licenseEmail,
+      }).catch((recoverErr) =>
+        logger.error("[search-worker] Phase 2 recovery in failed handler failed", {
+          searchId,
+          error: recoverErr instanceof Error ? recoverErr.message : "unknown",
+        })
+      );
+      return;
+    }
+
+    if (existing?.emailScrapingComplete) {
       return;
     }
 
@@ -215,6 +225,9 @@ export function startSearchWorker(): Worker<SearchQueueJobData> | null {
   logger.info("BullMQ search worker started", {
     queue: SEARCH_QUEUE_NAME,
     concurrency: WORKER_CONCURRENCY,
+    lockDurationMs: BULLMQ_LOCK_DURATION_MS,
+    stalledIntervalMs: BULLMQ_STALLED_INTERVAL_MS,
+    maxStalledCount: BULLMQ_MAX_STALLED_COUNT,
   });
 
   return worker;

@@ -41,6 +41,11 @@ export const PHASE2_EMAIL_SCRAPE_MAX_MS = 5 * 60 * 1000;
 export const EMAIL_SCRAPE_MAX_MS = PHASE2_EMAIL_SCRAPE_MAX_MS;
 export const PHASE2_TRIGGER_WATCHDOG_MS = 10_000;
 export const PHASE1_DEADLINE_MS = 90_000;
+/** BullMQ lock must cover longest Phase 1 background extraction + Phase 2 email scrape. */
+export const BULLMQ_LOCK_DURATION_MS = 15 * 60 * 1000;
+export const BULLMQ_STALLED_INTERVAL_MS = 2 * 60 * 1000;
+export const BULLMQ_MAX_STALLED_COUNT = 5;
+export const PHASE1_HEARTBEAT_MS = 30_000;
 export const EMAIL_REGEX =
   /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
 /** Soft cap for legacy callers; crawlers return all valid emails up to this bound. */
