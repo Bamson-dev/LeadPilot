@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { AreaSuggestion, BusinessLead, NearbyCitySuggestion, SearchStatsSummary } from "@leadthur/shared";
+import type { AreaSuggestion, BusinessLead, CitySelectionSuggestion, NearbyCitySuggestion, SearchStatsSummary } from "@leadthur/shared";
 import { getResults, getSearch, pollSearchResults, probeSearchAccess, SearchLimitError, startSearch } from "@/services/api";
 import { getApiUrl } from "@/utils/env";
 import { getLicenseQueryString } from "@/services/api";
@@ -27,6 +27,8 @@ interface SearchState {
   emailScrapingComplete: boolean;
   summary: SearchStatsSummary | null;
   nearbyCities: NearbyCitySuggestion[];
+  regionCitySuggestions: CitySelectionSuggestion[];
+  regionSelectionMessage: string | null;
 }
 
 const POLL_INTERVAL_MS = 3000;
@@ -160,6 +162,8 @@ export function useSearch(options?: UseSearchOptions) {
     emailScrapingComplete: true,
     summary: null,
     nearbyCities: [],
+    regionCitySuggestions: [],
+    regionSelectionMessage: null,
   });
 
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -1015,10 +1019,29 @@ export function useSearch(options?: UseSearchOptions) {
         emailScrapingComplete: false,
         summary: null,
         nearbyCities: [],
+        regionCitySuggestions: [],
+        regionSelectionMessage: null,
       }));
 
       try {
         const result = await startSearch(query.trim(), location.trim());
+
+        if (result.requiresCitySelection && result.citySuggestions?.length) {
+          searchIdRef.current = null;
+          setState((prev) => ({
+            ...prev,
+            status: "idle",
+            searchId: null,
+            message: result.message ?? prev.message,
+            regionCitySuggestions: result.citySuggestions ?? [],
+            regionSelectionMessage: result.message ?? null,
+            error: null,
+            scrapingInProgress: false,
+            emailScrapingComplete: true,
+          }));
+          return;
+        }
+
         searchIdRef.current = result.searchId;
         const queuePosition = result.queuePosition ?? 0;
 
@@ -1053,6 +1076,8 @@ export function useSearch(options?: UseSearchOptions) {
               emailScrapingComplete: true,
               summary: null,
               nearbyCities: [],
+      regionCitySuggestions: [],
+      regionSelectionMessage: null,
             };
           });
           return;
@@ -1169,6 +1194,18 @@ export function useSearch(options?: UseSearchOptions) {
     [search]
   );
 
+  const runSearchWithRegionCity = useCallback(
+    (city: string) => {
+      setState((prev) => ({
+        ...prev,
+        regionCitySuggestions: [],
+        regionSelectionMessage: null,
+      }));
+      void search(queryRef.current || "businesses", city);
+    },
+    [search]
+  );
+
   const reset = useCallback(() => {
     accumulateRef.current = false;
     closeStream();
@@ -1190,6 +1227,8 @@ export function useSearch(options?: UseSearchOptions) {
       emailScrapingComplete: true,
       summary: null,
       nearbyCities: [],
+      regionCitySuggestions: [],
+      regionSelectionMessage: null,
     });
   }, [closeStream]);
 
@@ -1212,6 +1251,8 @@ export function useSearch(options?: UseSearchOptions) {
       emailScrapingComplete: true,
       summary: null,
       nearbyCities: [],
+      regionCitySuggestions: [],
+      regionSelectionMessage: null,
     }));
   }, [closeStream]);
 
@@ -1231,6 +1272,8 @@ export function useSearch(options?: UseSearchOptions) {
       emailScrapingComplete: true,
       summary: null,
       nearbyCities: [],
+      regionCitySuggestions: [],
+      regionSelectionMessage: null,
     });
   }, [closeStream, progressMessage, state.searchesRemaining]);
 
@@ -1260,6 +1303,7 @@ export function useSearch(options?: UseSearchOptions) {
     runSearch: search,
     runSearchWithSuggestion,
     runSearchWithNearbyCity,
+    runSearchWithRegionCity,
     suggestions,
     setSuggestions,
     clearSuggestions: () => setSuggestions([]),

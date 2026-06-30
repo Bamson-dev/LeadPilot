@@ -15,6 +15,7 @@ import {
   type SearchJobAccess,
 } from "../database/search-repository";
 import { computeSearchStats } from "../services/search-stats";
+import { checkBroadRegionLocation } from "../services/region-detection";
 import {
   copyCachedLeadsForInsert,
   getCachedSearch,
@@ -452,6 +453,21 @@ searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => 
 
     const trimmedQuery = query.trim();
     const trimmedLocation = location.trim();
+
+    const regionCheck = await checkBroadRegionLocation(trimmedLocation, trimmedQuery);
+    if (regionCheck.isBroadRegion && regionCheck.citySuggestions?.length) {
+      res.status(200).json({
+        searchId: "",
+        status: "city_selection_required",
+        requiresCitySelection: true,
+        citySuggestions: regionCheck.citySuggestions,
+        message:
+          regionCheck.message ??
+          "LeadThur works best for specific cities. Pick a city below to search.",
+        searchesRemaining: req.searchesRemaining ?? null,
+      } satisfies SearchResponse);
+      return;
+    }
 
     const memUsage = getMemoryUsagePercent();
     if (memUsage > 85) {

@@ -18,6 +18,7 @@ import { WelcomeState } from "@/components/dashboard/welcome-state";
 import { SearchQueueCard } from "@/components/dashboard/search-queue-card";
 import { ScrapingProgressBanner } from "@/components/dashboard/scraping-progress-banner";
 import { NearbyCityChips } from "@/components/dashboard/nearby-city-chips";
+import { RegionCityChips } from "@/components/dashboard/region-city-chips";
 import { ResultsTable } from "@/features/results/results-table";
 import { WhatsappTemplateModal } from "@/components/dashboard/whatsapp-template-modal";
 import { useSearch } from "@/hooks/useSearch";
@@ -116,6 +117,7 @@ export function SearchDashboard() {
     runSearch,
     runSearchWithSuggestion,
     runSearchWithNearbyCity,
+    runSearchWithRegionCity,
     suggestions,
     setSuggestions,
     clearResults,
@@ -124,6 +126,8 @@ export function SearchDashboard() {
     scrapingInProgress,
     emailScrapingComplete,
     nearbyCities,
+    regionCitySuggestions,
+    regionSelectionMessage,
     queuePosition,
   } = useSearch({
     onSearchComplete: (...args) => onSearchCompleteRef.current?.(...args),
@@ -669,6 +673,14 @@ export function SearchDashboard() {
             scrapingInProgress={scrapingInProgress}
             emailScrapingComplete={emailScrapingComplete}
             leads={tableLeads}
+          />
+          <RegionCityChips
+            suggestions={regionCitySuggestions}
+            message={regionSelectionMessage ?? undefined}
+            onSelectCity={(city) => {
+              setLocation(city);
+              void runSearchWithRegionCity(city);
+            }}
           />
           <NearbyCityChips
             show={status === "completed" && emailScrapingComplete && !isSearching}

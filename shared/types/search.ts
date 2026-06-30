@@ -37,15 +37,23 @@ export interface SearchRequest {
   location: string;
 }
 
+export interface CitySelectionSuggestion {
+  city: string;
+  label: string;
+}
+
 export interface SearchResponse {
   searchId: string;
   status: string;
   cached?: boolean;
   totalFound?: number;
   scrapingInProgress?: boolean;
+  emailScrapingComplete?: boolean;
   queuePosition?: number;
   searchesRemaining?: number | null;
   message?: string;
+  requiresCitySelection?: boolean;
+  citySuggestions?: CitySelectionSuggestion[];
 }
 
 export interface AreaSuggestion {

@@ -30,7 +30,7 @@ import { generateAreaSuggestions } from "./suggestion-service";
 import { runBatchEmailScraping } from "./email-batch-scraper";
 import { computeSearchStats } from "./search-stats";
 import { findNearbyCities } from "./nearby-cities";
-import { PHASE1_DEADLINE_MS, MEMORY_SKIP_SCRAPE_PERCENT } from "../scraper/utils/constants";
+import { PHASE1_DEADLINE_MS, MEMORY_SKIP_SCRAPE_PERCENT, PHASE2_EMAIL_SCRAPE_MAX_MS, PHASE2_TRIGGER_WATCHDOG_MS } from "../scraper/utils/constants";
 import type { RawLeadInput } from "../types/scraper";
 import { isMemoryPressureHigh, getMemoryUsagePercent } from "../utils/memory";
 
@@ -197,6 +197,148 @@ async function finalizeSearchAndNotify(
   }
 }
 
+async function markAllLeadsEmailScrapeSkipped(searchId: string): Promise<void> {
+  const { markBusinessLeadEmailScraped } = await import(
+    "../database/search-repository"
+  );
+  const pending = (await getAllSearchLeads(searchId)).filter(
+    (lead) => lead.website && !lead.emailScraped
+  );
+  for (const lead of pending) {
+    await markBusinessLeadEmailScraped(lead.id, []).catch(() => undefined);
+  }
+  await updateSearchJob(searchId, { emailScrapingComplete: true });
+}
+
+async function runPhase2EmailScraping(
+  searchId: string,
+  query: string,
+  location: string,
+  leadCount: number,
+  jobStartedAt: number,
+  phase1CompletedAt: number,
+  emit: ScrapeEmitter,
+  options: {
+    licenseEmail?: string | null;
+    skipEmailScraping?: boolean;
+  }
+): Promise<{ emailTimedOut: boolean; skipEmailScraping: boolean }> {
+  const pool = getBrowserPool();
+  let emailTimedOut = false;
+  let skipEmailScraping = options.skipEmailScraping ?? false;
+  let phase2Triggered = false;
+  let phase2Finished = false;
+
+  const phase1ElapsedMs = phase1CompletedAt - jobStartedAt;
+
+  if (leadCount <= 0) {
+    logger.info("[search-job] Phase 1 complete — no leads, skipping Phase 2", {
+      searchId,
+      phase1ElapsedMs,
+    });
+    await updateSearchJob(searchId, { emailScrapingComplete: true });
+    return { emailTimedOut: false, skipEmailScraping: true };
+  }
+
+  logger.info(
+    "[search-job] Phase 1 complete, starting Phase 2 email scraping",
+    {
+      searchId,
+      query,
+      location,
+      leadCount,
+      phase1ElapsedMs,
+      phase2BudgetMs: PHASE2_EMAIL_SCRAPE_MAX_MS,
+    }
+  );
+
+  const runPhase2Attempt = async (attempt: number): Promise<void> => {
+    phase2Triggered = true;
+    logSearchStep(searchId, "email_scraping", {
+      attempt,
+      leadCount,
+      phase1ElapsedMs,
+      phase2BudgetMs: PHASE2_EMAIL_SCRAPE_MAX_MS,
+    });
+
+    const memoryPercent = Math.round(getMemoryUsagePercent());
+    if (isMemoryPressureHigh(MEMORY_SKIP_SCRAPE_PERCENT)) {
+      skipEmailScraping = true;
+      logger.warn("[search-job] Skipping Playwright email scrape — high memory", {
+        searchId,
+        memoryPercent,
+        leadCount,
+        attempt,
+      });
+      await markAllLeadsEmailScrapeSkipped(searchId);
+      phase2Finished = true;
+      return;
+    }
+
+    const emailStart = Date.now();
+    const emailBrowser = await pool.acquire(60_000);
+    try {
+      await runBatchEmailScraping(searchId, emit, PHASE2_EMAIL_SCRAPE_MAX_MS, {
+        totalResultCount: leadCount,
+        browser: emailBrowser,
+      });
+    } finally {
+      pool.release(emailBrowser);
+    }
+    emailTimedOut = Date.now() - emailStart >= PHASE2_EMAIL_SCRAPE_MAX_MS - 1000;
+    await updateSearchJob(searchId, { emailScrapingComplete: true });
+    phase2Finished = true;
+
+    logger.info("[search-job] Phase 2 email scraping complete", {
+      searchId,
+      leadCount,
+      attempt,
+      emailTimedOut,
+      phase2ElapsedMs: Date.now() - emailStart,
+    });
+  };
+
+  const watchdog = setTimeout(() => {
+    if (phase2Triggered || phase2Finished) return;
+    logger.error(
+      "[search-job] Phase 2 failed to trigger within 10s — retrying immediately",
+      { searchId, leadCount, phase1ElapsedMs }
+    );
+    void runPhase2Attempt(2).catch(async (err) => {
+      logger.error("[search-job] Phase 2 watchdog retry failed", {
+        searchId,
+        error: err instanceof Error ? err.message : "unknown",
+      });
+      await markAllLeadsEmailScrapeSkipped(searchId);
+      phase2Finished = true;
+    });
+  }, PHASE2_TRIGGER_WATCHDOG_MS);
+
+  try {
+    await runPhase2Attempt(1);
+  } catch (err) {
+    logger.error("[search-job] Phase 2 first attempt failed — retrying", {
+      searchId,
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    if (!phase2Finished) {
+      try {
+        await runPhase2Attempt(2);
+      } catch (retryErr) {
+        logger.error("[search-job] Phase 2 retry failed — committing Maps-only results", {
+          searchId,
+          error: retryErr instanceof Error ? retryErr.message : "unknown",
+        });
+        await markAllLeadsEmailScrapeSkipped(searchId);
+      }
+    }
+  } finally {
+    clearTimeout(watchdog);
+  }
+
+  return { emailTimedOut, skipEmailScraping };
+}
+
 async function runBackgroundWork(
   searchId: string,
   query: string,
@@ -204,9 +346,14 @@ async function runBackgroundWork(
   remainingUrls: string[],
   isTrial: boolean,
   emit: ScrapeEmitter,
-  options?: { licenseKey?: string; licenseEmail?: string | null }
+  options?: {
+    licenseKey?: string;
+    licenseEmail?: string | null;
+    jobStartedAt?: number;
+  }
 ): Promise<void> {
   const pool = getBrowserPool();
+  const jobStartedAt = options?.jobStartedAt ?? Date.now();
   let emailTimedOut = false;
   let skipEmailScraping = false;
 
@@ -252,44 +399,23 @@ async function runBackgroundWork(
       }
     }
 
+    const phase1CompletedAt = Date.now();
     await updateSearchJob(searchId, { scrapingInProgress: false });
 
     if (!isTrial) {
       const leadCount = await countSearchLeads(searchId);
-      const memoryPercent = Math.round(getMemoryUsagePercent());
-
-      if (isMemoryPressureHigh(MEMORY_SKIP_SCRAPE_PERCENT)) {
-        skipEmailScraping = true;
-        logger.warn("[search-job] Skipping Playwright email scrape — high memory", {
-          searchId,
-          memoryPercent,
-          leadCount,
-        });
-        const { markBusinessLeadEmailScraped } = await import(
-          "../database/search-repository"
-        );
-        const pending = (await getAllSearchLeads(searchId)).filter(
-          (lead) => lead.website && !lead.emailScraped
-        );
-        for (const lead of pending) {
-          await markBusinessLeadEmailScraped(lead.id, []).catch(() => undefined);
-        }
-        await updateSearchJob(searchId, { emailScrapingComplete: true });
-      } else {
-        logSearchStep(searchId, "email_scraping", { leadCount, memoryPercent });
-        const emailStart = Date.now();
-        const emailBrowser = await pool.acquire(60_000);
-        try {
-          await runBatchEmailScraping(searchId, emit, undefined, {
-            totalResultCount: leadCount,
-            browser: emailBrowser,
-          });
-        } finally {
-          pool.release(emailBrowser);
-        }
-        emailTimedOut = Date.now() - emailStart >= 3 * 60 * 1000 - 1000;
-        await updateSearchJob(searchId, { emailScrapingComplete: true });
-      }
+      const phase2 = await runPhase2EmailScraping(
+        searchId,
+        query,
+        location,
+        leadCount,
+        jobStartedAt,
+        phase1CompletedAt,
+        emit,
+        { licenseEmail: options?.licenseEmail }
+      );
+      emailTimedOut = phase2.emailTimedOut;
+      skipEmailScraping = phase2.skipEmailScraping;
     } else {
       const trialLeads = await getAllSearchLeads(searchId);
       for (const lead of trialLeads) {
@@ -300,6 +426,7 @@ async function runBackgroundWork(
           await markBusinessLeadEmailScraped(lead.id, []).catch(() => undefined);
         }
       }
+      await updateSearchJob(searchId, { emailScrapingComplete: true });
     }
 
     const leads = await getAllSearchLeads(searchId);
@@ -367,6 +494,28 @@ async function runBackgroundWork(
       options?.licenseEmail
     );
     if (leadsCollected > 0) {
+      if (!isTrial) {
+        try {
+          const phase2 = await runPhase2EmailScraping(
+            searchId,
+            query,
+            location,
+            leadsCollected,
+            options?.jobStartedAt ?? Date.now(),
+            Date.now(),
+            emit,
+            { licenseEmail }
+          );
+          skipEmailScraping = phase2.skipEmailScraping;
+          emailTimedOut = phase2.emailTimedOut;
+        } catch (phase2Err) {
+          logger.error("[search-job] Phase 2 failed after background error", {
+            searchId,
+            error: phase2Err instanceof Error ? phase2Err.message : "unknown",
+          });
+          await markAllLeadsEmailScrapeSkipped(searchId);
+        }
+      }
       await finalizeSearchAndNotify(
         searchId,
         query,
@@ -442,6 +591,7 @@ export async function runScraperJob(
   const seenLeadKeys = new Set<string>();
   const collectedLeads: BusinessLead[] = [];
   const phase1DeadlineMs = Date.now() + PHASE1_DEADLINE_MS;
+  const jobStartedAt = Date.now();
   let step: SearchJobStep = "init";
 
   logSearchStep(searchId, "init", { query, location, isTrial });
@@ -584,6 +734,7 @@ export async function runScraperJob(
       {
         licenseKey: options?.licenseKey,
         licenseEmail: licenseEmail ?? options?.licenseEmail,
+        jobStartedAt,
       }
     );
   } catch (err) {
@@ -595,6 +746,26 @@ export async function runScraperJob(
 
     if (leadsCollected > 0) {
       const licenseEmail = await resolveLicenseEmail();
+      if (!isTrial) {
+        try {
+          await runPhase2EmailScraping(
+            searchId,
+            query,
+            location,
+            leadsCollected,
+            jobStartedAt,
+            Date.now(),
+            emit,
+            { licenseEmail }
+          );
+        } catch (phase2Err) {
+          logger.error("[search-job] Phase 2 failed in main catch — committing Maps results", {
+            searchId,
+            error: phase2Err instanceof Error ? phase2Err.message : "unknown",
+          });
+          await markAllLeadsEmailScrapeSkipped(searchId);
+        }
+      }
       const committed = await commitPartialSearchResults(
         searchId,
         query,

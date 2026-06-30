@@ -9,7 +9,6 @@ import {
 import { getLicenseEmailBySearchId } from "../database/license-repository";
 import {
   commitPartialSearchResults,
-  forceFinalizeSearchJob,
   runScraperJob,
 } from "../services/scraper-service";
 import { clearStreamBuffer, emitToStream } from "../services/stream-registry";
@@ -19,31 +18,8 @@ import { SEARCH_QUEUE_NAME, type SearchQueueJobData } from "../queue/search-queu
 import { getRedisConnectionOptions } from "../queue/redis-connection";
 
 const WORKER_CONCURRENCY = 2;
-const JOB_TIMEOUT_MS = 5 * 60 * 1000;
 
 let worker: Worker<SearchQueueJobData> | null = null;
-
-async function runWithTimeout<T>(
-  work: Promise<T>,
-  ms: number,
-  onTimeout: () => Promise<void>
-): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      work,
-      new Promise<T>((_, reject) => {
-        timer = setTimeout(() => {
-          void onTimeout().finally(() => {
-            reject(new Error("Search job timed out after 5 minutes"));
-          });
-        }, ms);
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
 
 async function resolveJobEmail(
   searchId: string,
@@ -110,26 +86,12 @@ async function processSearchJob(job: Job<SearchQueueJobData>): Promise<void> {
     scrapingInProgress: !trial,
   });
 
-  const timeoutFinalize = async () => {
-    logger.warn("[search-worker] 5-minute timeout — finalizing partial results", {
-      searchId,
-      query,
-      location,
-    });
-    const email = await resolveJobEmail(searchId, licenseEmail);
-    await finalizePartialJob(searchId, query, location, email, "worker_timeout");
-  };
-
   try {
-    await runWithTimeout(
-      runScraperJob(searchId, query, location, emit, {
-        licenseKey,
-        licenseEmail,
-        isTrial: trial,
-      }),
-      JOB_TIMEOUT_MS,
-      timeoutFinalize
-    );
+    await runScraperJob(searchId, query, location, emit, {
+      licenseKey,
+      licenseEmail,
+      isTrial: trial,
+    });
   } catch (err) {
     const leadsCollected = await countSearchLeads(searchId);
     const existing = await getSearchJob(searchId);

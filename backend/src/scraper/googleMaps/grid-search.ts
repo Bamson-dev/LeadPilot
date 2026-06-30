@@ -25,6 +25,20 @@ export interface GeocodeResult {
   queryUsed: string;
 }
 
+export interface NominatimGeocodeHit {
+  lat: number;
+  lng: number;
+  type?: string;
+  class?: string;
+  displayName?: string;
+  address?: Record<string, string>;
+}
+
+export interface RegionCitySuggestion {
+  city: string;
+  label: string;
+}
+
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
 const NOMINATIM_TIMEOUT_MS = 3000;
 const GOOGLE_GEOCODE_TIMEOUT_MS = 5000;
@@ -152,9 +166,34 @@ function parseNominatimHit(hit: {
   return { lat, lng, radiusKm, isLargeCity };
 }
 
+function parseNominatimAddress(
+  hit: {
+    lat: string;
+    lon: string;
+    boundingbox?: string[];
+    type?: string;
+    class?: string;
+    display_name?: string;
+    address?: Record<string, string>;
+  }
+): NominatimGeocodeHit | null {
+  const lat = parseFloat(hit.lat);
+  const lng = parseFloat(hit.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return {
+    lat,
+    lng,
+    type: hit.type,
+    class: hit.class,
+    displayName: hit.display_name,
+    address: hit.address,
+  };
+}
+
 async function geocodeNominatimQuery(
   query: string,
-  source: GeocodeSource
+  source: GeocodeSource,
+  options?: { addressDetails?: boolean }
 ): Promise<GeocodeResult | null> {
   const q = query.trim();
   if (!q) return null;
@@ -165,6 +204,9 @@ async function geocodeNominatimQuery(
       format: "json",
       limit: "1",
     });
+    if (options?.addressDetails) {
+      params.set("addressdetails", "1");
+    }
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), NOMINATIM_TIMEOUT_MS);
 
@@ -190,6 +232,7 @@ async function geocodeNominatimQuery(
       type?: string;
       class?: string;
       display_name?: string;
+      address?: Record<string, string>;
     }>;
 
     if (!data.length) {
@@ -229,6 +272,126 @@ export async function geocodeNominatimFull(
   location: string
 ): Promise<GeocodeResult | null> {
   return geocodeNominatimQuery(location, "nominatim-full");
+}
+
+export async function geocodeNominatimDetailed(
+  location: string
+): Promise<{
+  geo: GeoCenter | null;
+  hit: NominatimGeocodeHit | null;
+  queryUsed: string;
+} | null> {
+  const q = location.trim();
+  if (!q) return null;
+
+  try {
+    const params = new URLSearchParams({
+      q,
+      format: "json",
+      limit: "1",
+      addressdetails: "1",
+    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), NOMINATIM_TIMEOUT_MS);
+
+    const res = await fetch(`${NOMINATIM_URL}?${params}`, {
+      signal: controller.signal,
+      headers: { "User-Agent": "LeadThur/1.0 (staging search)" },
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) return null;
+
+    const data = (await res.json()) as Array<{
+      lat: string;
+      lon: string;
+      boundingbox?: string[];
+      type?: string;
+      class?: string;
+      display_name?: string;
+      address?: Record<string, string>;
+    }>;
+
+    if (!data.length) return null;
+
+    const geo = parseNominatimHit(data[0]);
+    const hit = parseNominatimAddress(data[0]);
+    if (!geo || !hit) return null;
+
+    return { geo, hit, queryUsed: q };
+  } catch {
+    return null;
+  }
+}
+
+export async function searchCitiesInNominatimRegion(
+  address: Record<string, string>,
+  limit = 10
+): Promise<RegionCitySuggestion[]> {
+  const country = address.country?.trim();
+  const state =
+    address.state?.trim() ||
+    address.region?.trim() ||
+    address.province?.trim() ||
+    address.state_district?.trim();
+
+  if (!country && !state) return [];
+
+  const params = new URLSearchParams({
+    format: "json",
+    addressdetails: "1",
+    featuretype: "city",
+    limit: String(Math.min(10, Math.max(1, limit))),
+  });
+
+  if (state) params.set("state", state);
+  if (country) params.set("country", country);
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), NOMINATIM_TIMEOUT_MS);
+    const res = await fetch(`${NOMINATIM_URL}?${params}`, {
+      signal: controller.signal,
+      headers: { "User-Agent": "LeadThur/1.0 (staging search)" },
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) return [];
+
+    const data = (await res.json()) as Array<{
+      display_name?: string;
+      name?: string;
+      address?: Record<string, string>;
+    }>;
+
+    const seen = new Set<string>();
+    const out: RegionCitySuggestion[] = [];
+
+    for (const row of data) {
+      const label =
+        row.address?.city ||
+        row.address?.town ||
+        row.address?.village ||
+        row.name ||
+        row.display_name?.split(",")[0]?.trim() ||
+        "";
+      const city = row.display_name?.trim() || label;
+      if (!label || !city) continue;
+      const key = label.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ city, label });
+    }
+
+    return out;
+  } catch (err) {
+    logger.warn("[search-diag] Nominatim city list failed", {
+      state,
+      country,
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    return [];
+  }
 }
 
 export async function geocodeNominatimShortened(
