@@ -2,9 +2,15 @@ import type { PredictedEmail } from "@leadthur/shared";
 import type { Lead } from "@/types/lead";
 
 export function getVerifiedEmails(
-  lead: Pick<Lead, "email" | "verified_emails" | "extracted_email" | "emails">
+  lead: Pick<
+    Lead,
+    "email" | "verified_emails" | "extracted_email" | "emails"
+  > & {
+    verifiedEmails?: string[];
+  }
 ): string[] {
   if (lead.emails && lead.emails.length > 0) return lead.emails;
+  if (lead.verifiedEmails?.length) return lead.verifiedEmails;
   if (lead.verified_emails?.length) return lead.verified_emails;
   if (lead.extracted_email?.trim()) {
     return lead.extracted_email.split(/,\s*/).map((e) => e.trim()).filter(Boolean);
@@ -14,9 +20,10 @@ export function getVerifiedEmails(
 }
 
 export function getPredictedEmails(
-  lead: Pick<Lead, "predicted_emails">
+  lead: Pick<Lead, "predicted_emails"> & { predictedEmails?: PredictedEmail[] }
 ): PredictedEmail[] {
-  return lead.predicted_emails ?? [];
+  if (lead.predicted_emails?.length) return lead.predicted_emails;
+  return lead.predictedEmails ?? [];
 }
 
 /** All verified emails, then predicted — no cap, no labels in UI. */

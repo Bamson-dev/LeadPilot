@@ -24,16 +24,31 @@ export interface Lead {
 }
 
 export function businessLeadToLead(lead: BusinessLead): Lead {
-  const verified =
-    lead.verifiedEmails?.length > 0
-      ? lead.verifiedEmails
-      : lead.emailSource === "website" && lead.emails?.length > 0
-        ? lead.emails
-        : lead.emailSource !== "predicted" && lead.email
-          ? lead.email.split(/,\s*/).map((e) => e.trim()).filter(Boolean)
-          : [];
+  const raw = lead as BusinessLead & {
+    verified_emails?: string[];
+    predicted_emails?: PredictedEmail[];
+    email_source?: Lead["email_source"];
+    extracted_email?: string | null;
+  };
 
-  const predicted = lead.predictedEmails ?? [];
+  const verified =
+    raw.verifiedEmails?.length > 0
+      ? raw.verifiedEmails
+      : raw.verified_emails?.length
+        ? raw.verified_emails
+        : raw.emailSource === "website" && raw.emails?.length > 0
+          ? raw.emails
+          : raw.extracted_email?.trim()
+            ? raw.extracted_email.split(/,\s*/).map((e) => e.trim()).filter(Boolean)
+            : raw.emailSource !== "predicted" &&
+                raw.email_source !== "predicted" &&
+                raw.email
+              ? raw.email.split(/,\s*/).map((e) => e.trim()).filter(Boolean)
+              : [];
+
+  const predicted = raw.predictedEmails?.length
+    ? raw.predictedEmails
+    : raw.predicted_emails ?? [];
 
   const displayVerified = verified;
   const displayPredicted = predicted.map((p) => p.email);

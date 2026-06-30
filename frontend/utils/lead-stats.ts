@@ -30,7 +30,8 @@ export function computeLeadStats(leads: Lead[]): LeadStats {
     const hasEmail =
       hasContactValue(lead.email) ||
       (lead.verified_emails?.length ?? 0) > 0 ||
-      (lead.emails?.length ?? 0) > 0;
+      (lead.emails?.length ?? 0) > 0 ||
+      (lead.predicted_emails?.length ?? 0) > 0;
     if (hasEmail) withEmail++;
   }
 

@@ -6,7 +6,7 @@
   "description": "LeadThur — Business Discovery Intelligence",
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build",
+    "build": "next build && node ../backend/scripts/verify-email-field-parity.mjs && node ../backend/scripts/verify-frontend-email-display.mjs",
     "start": "next start",
     "lint": "next lint"
   },

@@ -7,7 +7,7 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
+    "build": "tsc && node scripts/verify-email-field-parity.mjs",
     "start": "node dist/server.js",
     "lint": "tsc --noEmit",
     "send-domain-change": "tsx src/scripts/send-domain-change.ts"

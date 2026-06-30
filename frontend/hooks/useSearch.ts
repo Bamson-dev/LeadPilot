@@ -11,6 +11,7 @@ import {
 } from "@/utils/search-progress-messages";
 import { businessLeadToLead } from "@/types/lead";
 import type { Lead } from "@/types/lead";
+import { normalizeApiBusinessLead, normalizeApiBusinessLeads } from "@/utils/normalize-api-lead";
 
 export type { BusinessLead };
 
@@ -63,27 +64,28 @@ function mergePollLeads(
     byPlace.set(placeIdFromLead(lead), lead);
   }
   for (const lead of incoming) {
-    const key = placeIdFromLead(lead);
+    const normalized = normalizeApiBusinessLead(lead);
+    const key = placeIdFromLead(normalized);
     const prev = byPlace.get(key);
     byPlace.set(
       key,
       prev
         ? {
             ...prev,
-            ...lead,
-            id: prev.id || lead.id,
-            email: lead.email ?? prev.email,
-            emails: lead.emails?.length ? lead.emails : prev.emails,
-            verifiedEmails: lead.verifiedEmails?.length
-              ? lead.verifiedEmails
+            ...normalized,
+            id: prev.id || normalized.id,
+            email: normalized.email ?? prev.email,
+            emails: normalized.emails?.length ? normalized.emails : prev.emails,
+            verifiedEmails: normalized.verifiedEmails?.length
+              ? normalized.verifiedEmails
               : prev.verifiedEmails,
-            predictedEmails: lead.predictedEmails?.length
-              ? lead.predictedEmails
+            predictedEmails: normalized.predictedEmails?.length
+              ? normalized.predictedEmails
               : prev.predictedEmails,
-            emailSource: lead.emailSource ?? prev.emailSource,
-            emailScraped: lead.emailScraped || prev.emailScraped,
+            emailSource: normalized.emailSource ?? prev.emailSource,
+            emailScraped: normalized.emailScraped || prev.emailScraped,
           }
-        : lead
+        : normalized
     );
   }
   return [...byPlace.values()];
@@ -332,15 +334,17 @@ export function useSearch(options?: UseSearchOptions) {
 
       for (const lead of filtered) {
         if (!lead.id) continue;
-        const existing = byId.get(lead.id);
+        const normalized = normalizeApiBusinessLead(lead);
+        const existing = byId.get(normalized.id);
         if (
           !existing ||
-          existing.email !== lead.email ||
-          existing.emailSource !== lead.emailSource ||
-          existing.verifiedEmails.length !== lead.verifiedEmails.length ||
-          existing.predictedEmails.length !== lead.predictedEmails.length
+          existing.email !== normalized.email ||
+          existing.emailSource !== normalized.emailSource ||
+          existing.verifiedEmails.length !== normalized.verifiedEmails.length ||
+          existing.predictedEmails.length !== normalized.predictedEmails.length ||
+          existing.emails.length !== normalized.emails.length
         ) {
-          byId.set(lead.id, lead);
+          byId.set(normalized.id, normalized);
           changed = true;
         }
       }
@@ -393,10 +397,10 @@ export function useSearch(options?: UseSearchOptions) {
   const syncFromApi = useCallback(
     async (searchId: string, replace = false) => {
       if (searchId !== searchIdRef.current) return;
-      const { leads: fetched } = await getResults(searchId, 1, 250);
+      const payload = await pollSearchResults(searchId, 1, 1000);
       if (searchId !== searchIdRef.current) return;
-      if (fetched.length === 0) return;
-      const mapped = fetched.map((l) => leadRowToBusinessLead(l));
+      if (payload.leads.length === 0) return;
+      const mapped = normalizeApiBusinessLeads(payload.leads);
       if (replace) {
         replaceLeads(mapped, searchId);
       } else {
@@ -412,38 +416,36 @@ export function useSearch(options?: UseSearchOptions) {
       const pending = pendingLeadsRef.current.splice(0);
 
       try {
-        const limit = 250;
+        const limit = 1000;
         let page = 1;
-        let fetched: Lead[] = [];
-        let dbCount = 0;
+        let fetched: BusinessLead[] = [];
 
         while (true) {
-          const batch = await getResults(searchId, page, limit);
+          const payload = await pollSearchResults(searchId, page, limit);
           if (searchId !== searchIdRef.current) return;
-          if (page === 1) dbCount = batch.total;
-          fetched = fetched.concat(batch.leads);
-          if (batch.leads.length < limit || fetched.length >= batch.total) break;
+          fetched = fetched.concat(normalizeApiBusinessLeads(payload.leads));
+          if (payload.leads.length < limit || fetched.length >= payload.totalFound) {
+            break;
+          }
           page += 1;
         }
 
-        const job = await getSearch(searchId).catch(() => null);
         if (searchId !== searchIdRef.current) return;
-        const mapped = fetched.map((l) => leadRowToBusinessLead(l));
         const merged =
           pending.length > 0
             ? mergePendingIntoLeads(
-                mapped.length > 0 ? mapped : [],
-                pending,
+                fetched.length > 0 ? fetched : [],
+                pending.map((lead) => normalizeApiBusinessLead(lead)),
                 searchId
               )
-            : mapped;
+            : fetched;
 
         const totalFound = merged.length;
 
         if (merged.length > 0) {
           replaceLeads(merged, searchId);
         } else if (pending.length > 0) {
-          mergeLeads(pending);
+          mergeLeads(pending.map((lead) => normalizeApiBusinessLead(lead)));
         }
 
         setState((prev) => {
@@ -474,7 +476,7 @@ export function useSearch(options?: UseSearchOptions) {
       } catch {
         if (searchId !== searchIdRef.current) return;
         if (pending.length > 0) {
-          mergeLeads(pending);
+          mergeLeads(pending.map((lead) => normalizeApiBusinessLead(lead)));
         }
       }
     },
@@ -484,6 +486,10 @@ export function useSearch(options?: UseSearchOptions) {
   const scheduleFinalResultsFetch = useCallback(
     (searchId: string, delayMs = 3000) => {
       stopFinalFetchTimer();
+      if (delayMs <= 0) {
+        void fetchFinalResults(searchId);
+        return;
+      }
       finalFetchTimerRef.current = setTimeout(() => {
         finalFetchTimerRef.current = null;
         void fetchFinalResults(searchId);
@@ -541,6 +547,7 @@ export function useSearch(options?: UseSearchOptions) {
         };
       });
 
+      scheduleFinalResultsFetch(activeId, 0);
       scheduleFinalResultsFetch(activeId, 3000);
     },
     [stopPolling, stopTimeout, stopScrapingPoll, scheduleFinalResultsFetch, loadSoftRegionSuggestions]
@@ -560,7 +567,10 @@ export function useSearch(options?: UseSearchOptions) {
               if (prev.searchId !== searchId) return prev;
               const merged =
                 payload.leads.length > 0
-                  ? mergePollLeads(prev.leads, payload.leads)
+                  ? mergePollLeads(
+                      prev.leads,
+                      normalizeApiBusinessLeads(payload.leads)
+                    )
                   : prev.leads;
               const count = Math.max(merged.length, payload.totalFound);
               const mapsRunning = payload.scrapingInProgress;
@@ -640,10 +650,10 @@ export function useSearch(options?: UseSearchOptions) {
     async (searchId: string) => {
       if (completedRef.current || searchId !== searchIdRef.current) return;
       try {
-        const { leads: fetched } = await getResults(searchId, 1, 250);
+        const payload = await pollSearchResults(searchId, 1, 1000);
         if (searchId !== searchIdRef.current) return;
-        if (fetched.length > 0) {
-          const mapped = fetched.map((l) => leadRowToBusinessLead(l));
+        if (payload.leads.length > 0) {
+          const mapped = normalizeApiBusinessLeads(payload.leads);
           replaceLeads(mapped, searchId);
           finishSearch(
             mapped.length,
@@ -783,8 +793,9 @@ export function useSearch(options?: UseSearchOptions) {
               const lead = data.data ?? data.lead;
               if (lead) {
                 pendingLeadsRef.current.push({
-                  ...lead,
-                  searchId: lead.searchId ?? searchId,
+                  ...normalizeApiBusinessLead(lead),
+                  searchId:
+                    normalizeApiBusinessLead(lead).searchId || searchId,
                 });
               }
               break;
@@ -793,7 +804,7 @@ export function useSearch(options?: UseSearchOptions) {
             case "email_update": {
               const lead = data.lead ?? data.data;
               if (lead) {
-                mergeLeads([lead]);
+                mergeLeads([normalizeApiBusinessLead(lead)]);
                 break;
               }
               if (data.businessId) {
@@ -1089,11 +1100,12 @@ export function useSearch(options?: UseSearchOptions) {
         const queuePosition = result.queuePosition ?? 0;
 
         if (result.cached && result.status === "completed") {
-          const { leads: cached } = await getResults(result.searchId);
+          const payload = await pollSearchResults(result.searchId, 1, 1000);
           if (result.searchId !== searchIdRef.current) return;
-          const mapped = cached
-            .map((l) => leadRowToBusinessLead(l))
-            .map((l) => ({ ...l, searchId: l.searchId ?? result.searchId }));
+          const mapped = normalizeApiBusinessLeads(payload.leads).map((l) => ({
+            ...l,
+            searchId: l.searchId ?? result.searchId,
+          }));
           const filtered = filterLeadsForSearch(mapped, result.searchId);
           setState((prev) => {
             const merged = accumulate

@@ -10,6 +10,7 @@ import { pollSearchResults } from "@/services/api";
 import { businessLeadToLead } from "@/types/lead";
 import type { Lead } from "@/types/lead";
 import type { BusinessLead } from "@leadthur/shared";
+import { normalizeApiBusinessLeads } from "@/utils/normalize-api-lead";
 import { useLeadStatuses } from "@/hooks/useLeadStatuses";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { hasStoredLicense } from "@/lib/license";
@@ -102,7 +103,10 @@ export default function SearchResultPage() {
         if (cancelled) return;
 
         if (payload.leads.length > 0) {
-          mergedBusinessLeads = mergePollLeads(mergedBusinessLeads, payload.leads);
+          mergedBusinessLeads = mergePollLeads(
+            mergedBusinessLeads,
+            normalizeApiBusinessLeads(payload.leads)
+          );
           setLeads(mergedBusinessLeads.map(businessLeadToLead));
         }
 
