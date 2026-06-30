@@ -270,7 +270,8 @@ export async function probeSearchAccess(
 export async function getSearchSuggestions(
   query: string,
   location: string,
-  totalFound: number
+  totalFound: number,
+  excludeLocations: string[] = []
 ): Promise<{
   suggestions: Array<{ query: string; location: string; label: string }>;
   message: string;
@@ -282,6 +283,10 @@ export async function getSearchSuggestions(
       location,
       totalFound: totalFound.toString(),
     });
+
+    if (excludeLocations.length > 0) {
+      params.set("exclude", excludeLocations.join("|"));
+    }
 
     const res = await fetch(`${getApiUrl()}/search/suggestions?${params}`, {
       headers: getLicenseHeaders(),

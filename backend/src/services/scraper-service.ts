@@ -536,7 +536,6 @@ async function runBackgroundWork(
         );
         if (nearbyCities.length > 0) {
           await updateSearchJob(searchId, { nearbyCities });
-          emit({ type: "suggestions", suggestions: nearbyCities.map((c) => c.city) });
         }
       }
     }

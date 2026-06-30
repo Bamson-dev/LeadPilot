@@ -266,12 +266,12 @@ searchRouter.get(
 );
 
 searchRouter.get("/suggestions", async (req: Request, res: Response) => {
-  // DeepSeek area suggestions — paid dashboard only; trial searches never call this endpoint
   try {
-    const { query, location, totalFound } = req.query as {
+    const { query, location, totalFound, exclude } = req.query as {
       query?: string;
       location?: string;
       totalFound?: string;
+      exclude?: string | string[];
     };
 
     if (!query || !location) {
@@ -280,7 +280,19 @@ searchRouter.get("/suggestions", async (req: Request, res: Response) => {
     }
 
     const found = parseInt(totalFound || "0", 10);
-    const suggestions = await generateAreaSuggestions(query, location, found);
+    const excludeRaw = exclude
+      ? Array.isArray(exclude)
+        ? exclude
+        : exclude.split("|")
+      : [];
+    const excludeLocations = excludeRaw.map((v) => v.trim()).filter(Boolean);
+
+    const suggestions = await generateAreaSuggestions(
+      query,
+      location,
+      found,
+      { excludeLocations }
+    );
 
     if (suggestions.length === 0) {
       res.json({
@@ -288,14 +300,22 @@ searchRouter.get("/suggestions", async (req: Request, res: Response) => {
         message:
           found >= 200
             ? "Great coverage. You already have a large result set for this area."
-            : "",
+            : "Try a nearby city from the suggestions above, or broaden your search location.",
       });
       return;
     }
 
+    const usedNearbyFallback = suggestions.some((s) => {
+      const loc = s.location.toLowerCase();
+      const parent = location.toLowerCase();
+      return !loc.includes(parent.split(",")[0]?.trim() ?? parent);
+    });
+
     res.json({
       suggestions,
-      message: `Split your search across these areas to find more ${query} businesses`,
+      message: usedNearbyFallback
+        ? `Find more ${query} businesses in these nearby cities`
+        : `Split your search across these areas to find more ${query} businesses`,
       totalAreas: suggestions.length,
     });
   } catch (err) {

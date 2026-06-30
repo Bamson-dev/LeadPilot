@@ -59,3 +59,21 @@ export function isScrappableBusinessWebsite(
   if (!websiteUrl?.trim()) return false;
   return !isBlockedEmailScrapeDomain(websiteUrl);
 }
+
+/** Website is a WhatsApp deep link (wa.me / wa.link), not a business-owned domain. */
+export function isWhatsappPlatformWebsite(
+  websiteUrl: string | null | undefined
+): boolean {
+  if (!websiteUrl?.trim()) return false;
+  const host = hostnameFromUrl(websiteUrl);
+  if (!host) return false;
+  return host === "wa.me" || host === "wa.link" || host === "whatsapp.com";
+}
+
+/** Business has a website field but it is only a third-party platform link. */
+export function isPlatformOnlyWebsite(
+  websiteUrl: string | null | undefined
+): boolean {
+  if (!websiteUrl?.trim()) return false;
+  return isBlockedEmailScrapeDomain(websiteUrl);
+}

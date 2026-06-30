@@ -3,8 +3,13 @@
 import { CopyButton } from "@/components/dashboard/copy-button";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { getPredictedEmails, getVerifiedEmails } from "@/utils/get-display-email";
+import { phoneDigitsForWhatsapp } from "@/lib/whatsapp";
 import type { Lead } from "@/types/lead";
 import type { PredictedEmail } from "@leadthur/shared";
+import {
+  isPlatformOnlyWebsite,
+  isWhatsappPlatformWebsite,
+} from "@leadthur/shared";
 
 interface EmailCellProps {
   lead: Lead;
@@ -89,6 +94,40 @@ function EmailRow({
   );
 }
 
+function PlatformEmailFallback({ lead }: { lead: Lead }) {
+  const isWhatsapp = isWhatsappPlatformWebsite(lead.website);
+  const hasPhone = Boolean(lead.phone?.trim());
+  const whatsappUrl =
+    isWhatsapp && hasPhone
+      ? `https://wa.me/${phoneDigitsForWhatsapp(lead.phone)}`
+      : null;
+
+  if (isWhatsapp && whatsappUrl) {
+    return (
+      <div className="leading-snug">
+        <a
+          href={whatsappUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[11px] font-medium text-emerald-400 hover:text-emerald-300 hover:underline"
+          title="Open WhatsApp chat with this business"
+        >
+          No email — message via WhatsApp
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <div className="leading-snug">
+      <span className="text-[11px] text-zinc-400">No email available</span>
+      {hasPhone && (
+        <p className="mt-0.5 text-[10px] text-zinc-500">Reach out by phone</p>
+      )}
+    </div>
+  );
+}
+
 export function EmailCell({ lead, copiedId: copiedIdProp, onCopy: onCopyProp }: EmailCellProps) {
   const internal = useCopyToClipboard();
   const copiedId = copiedIdProp ?? internal.copiedId;
@@ -111,6 +150,12 @@ export function EmailCell({ lead, copiedId: copiedIdProp, onCopy: onCopyProp }: 
   });
 
   if (verifiedUnique.length === 0 && predictedUnique.length === 0) {
+    if (!lead.website?.trim()) {
+      return <span className="text-zinc-500">—</span>;
+    }
+    if (isPlatformOnlyWebsite(lead.website)) {
+      return <PlatformEmailFallback lead={lead} />;
+    }
     return <span className="text-zinc-500">—</span>;
   }
 
