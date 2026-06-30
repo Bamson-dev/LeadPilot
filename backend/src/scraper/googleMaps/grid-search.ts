@@ -32,6 +32,7 @@ export interface NominatimGeocodeHit {
   class?: string;
   displayName?: string;
   address?: Record<string, string>;
+  boundingBox?: [number, number, number, number];
 }
 
 export interface RegionCitySuggestion {
@@ -40,7 +41,9 @@ export interface RegionCitySuggestion {
 }
 
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
-const NOMINATIM_TIMEOUT_MS = 3000;
+const NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse";
+const NOMINATIM_TIMEOUT_MS = 5000;
+const NOMINATIM_GRID_DELAY_MS = 1100;
 const GOOGLE_GEOCODE_TIMEOUT_MS = 5000;
 
 /** Strip business type if it leaked into the location field. */
@@ -187,6 +190,15 @@ function parseNominatimAddress(
     class: hit.class,
     displayName: hit.display_name,
     address: hit.address,
+    boundingBox:
+      hit.boundingbox?.length === 4
+        ? [
+            parseFloat(hit.boundingbox[0]),
+            parseFloat(hit.boundingbox[1]),
+            parseFloat(hit.boundingbox[2]),
+            parseFloat(hit.boundingbox[3]),
+          ]
+        : undefined,
   };
 }
 
@@ -324,9 +336,141 @@ export async function geocodeNominatimDetailed(
   }
 }
 
+async function nominatimFetch(
+  params: URLSearchParams
+): Promise<Array<{
+  display_name?: string;
+  name?: string;
+  type?: string;
+  class?: string;
+  address?: Record<string, string>;
+  importance?: number;
+}>> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), NOMINATIM_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${NOMINATIM_URL}?${params}`, {
+      signal: controller.signal,
+      headers: { "User-Agent": "LeadThur/1.0 (staging search)" },
+    });
+    if (!res.ok) return [];
+    const text = await res.text();
+    if (text.trimStart().startsWith("<")) return [];
+    return JSON.parse(text) as Array<{
+      display_name?: string;
+      name?: string;
+      type?: string;
+      class?: string;
+      address?: Record<string, string>;
+      importance?: number;
+    }>;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function cityLabelFromRow(row: {
+  display_name?: string;
+  name?: string;
+  address?: Record<string, string>;
+}): { city: string; label: string } | null {
+  const state = row.address?.state?.trim();
+  const country = row.address?.country?.trim();
+  const county = row.address?.county?.replace(/\s+County$/i, "").trim();
+
+  const label =
+    row.address?.city ||
+    row.address?.town ||
+    row.address?.village ||
+    county ||
+    row.name ||
+    row.display_name?.split(",")[0]?.trim() ||
+    "";
+
+  let city = row.display_name?.trim() || label;
+  if (label && state && !city.includes(state)) {
+    city = country ? `${label}, ${state}, ${country}` : `${label}, ${state}`;
+  }
+
+  if (!label || !city) return null;
+  if (label.toLowerCase().includes(" county")) return null;
+  return { city, label };
+}
+
+async function nominatimReverseAt(
+  lat: number,
+  lng: number
+): Promise<{ city: string; label: string } | null> {
+  const params = new URLSearchParams({
+    lat: String(lat),
+    lon: String(lng),
+    format: "json",
+    addressdetails: "1",
+    zoom: "12",
+  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), NOMINATIM_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${NOMINATIM_REVERSE_URL}?${params}`, {
+      signal: controller.signal,
+      headers: { "User-Agent": "LeadThur/1.0 (staging search)" },
+    });
+    if (!res.ok) return null;
+    const text = await res.text();
+    if (text.trimStart().startsWith("<")) return null;
+    const row = JSON.parse(text) as {
+      display_name?: string;
+      name?: string;
+      address?: Record<string, string>;
+    };
+    return cityLabelFromRow(row);
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function discoverCitiesFromBoundingBoxGrid(
+  boundingBox: [number, number, number, number],
+  limit = 10,
+  excludeLabels: string[] = []
+): Promise<RegionCitySuggestion[]> {
+  const [south, north, west, east] = boundingBox;
+  if (![south, north, west, east].every(Number.isFinite)) return [];
+
+  const exclude = new Set(excludeLabels.map((l) => l.toLowerCase()));
+  const seen = new Set<string>();
+  const out: RegionCitySuggestion[] = [];
+  const gridRows = 2;
+  const gridCols = 3;
+
+  for (let row = 0; row < gridRows; row++) {
+    for (let col = 0; col < gridCols; col++) {
+      if (out.length >= limit) return out;
+      const lat = south + ((north - south) * (row + 0.5)) / gridRows;
+      const lng = west + ((east - west) * (col + 0.5)) / gridCols;
+      const parsed = await nominatimReverseAt(lat, lng);
+      if (parsed) {
+        const key = parsed.label.toLowerCase();
+        if (!seen.has(key) && !exclude.has(key)) {
+          seen.add(key);
+          out.push(parsed);
+        }
+      }
+      if (row < gridRows - 1 || col < gridCols - 1) {
+        await new Promise((resolve) => setTimeout(resolve, NOMINATIM_GRID_DELAY_MS));
+      }
+    }
+  }
+
+  return out.slice(0, limit);
+}
+
 export async function searchCitiesInNominatimRegion(
   address: Record<string, string>,
-  limit = 10
+  limit = 10,
+  boundingBox?: [number, number, number, number]
 ): Promise<RegionCitySuggestion[]> {
   const country = address.country?.trim();
   const state =
@@ -335,63 +479,94 @@ export async function searchCitiesInNominatimRegion(
     address.province?.trim() ||
     address.state_district?.trim();
 
-  if (!country && !state) return [];
+  const seen = new Set<string>();
+  const out: RegionCitySuggestion[] = [];
+  const excludeLabels = [state, country].filter(Boolean) as string[];
 
-  const params = new URLSearchParams({
-    format: "json",
-    addressdetails: "1",
-    featuretype: "city",
-    limit: String(Math.min(10, Math.max(1, limit))),
-  });
+  const addRow = (row: {
+    display_name?: string;
+    name?: string;
+    address?: Record<string, string>;
+  }) => {
+    const parsed = cityLabelFromRow(row);
+    if (!parsed) return;
+    const key = parsed.label.toLowerCase();
+    if (seen.has(key)) return;
+    if (state && key === state.toLowerCase()) return;
+    if (country && key === country.toLowerCase()) return;
+    seen.add(key);
+    out.push(parsed);
+  };
 
-  if (state) params.set("state", state);
-  if (country) params.set("country", country);
-
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), NOMINATIM_TIMEOUT_MS);
-    const res = await fetch(`${NOMINATIM_URL}?${params}`, {
-      signal: controller.signal,
-      headers: { "User-Agent": "LeadThur/1.0 (staging search)" },
-    });
-    clearTimeout(timeout);
-
-    if (!res.ok) return [];
-
-    const data = (await res.json()) as Array<{
-      display_name?: string;
-      name?: string;
-      address?: Record<string, string>;
-    }>;
-
-    const seen = new Set<string>();
-    const out: RegionCitySuggestion[] = [];
-
-    for (const row of data) {
-      const label =
-        row.address?.city ||
-        row.address?.town ||
-        row.address?.village ||
-        row.name ||
-        row.display_name?.split(",")[0]?.trim() ||
-        "";
-      const city = row.display_name?.trim() || label;
-      if (!label || !city) continue;
-      const key = label.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push({ city, label });
+  if (boundingBox && out.length < limit) {
+    const gridCities = await discoverCitiesFromBoundingBoxGrid(
+      boundingBox,
+      limit,
+      excludeLabels
+    );
+    for (const city of gridCities) {
+      const key = city.label.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        out.push(city);
+      }
+      if (out.length >= limit) return out.slice(0, limit);
     }
-
-    return out;
-  } catch (err) {
-    logger.warn("[search-diag] Nominatim city list failed", {
-      state,
-      country,
-      error: err instanceof Error ? err.message : "unknown",
-    });
-    return [];
   }
+
+  if (boundingBox) {
+    const [south, north, west, east] = boundingBox;
+    if ([south, north, west, east].every(Number.isFinite) && out.length < limit) {
+      const viewParams = new URLSearchParams({
+        format: "json",
+        addressdetails: "1",
+        bounded: "1",
+        featuretype: "city",
+        viewbox: `${west},${north},${east},${south}`,
+        limit: String(Math.min(20, limit + 10)),
+      });
+      const viewboxRows = await nominatimFetch(viewParams);
+      for (const row of viewboxRows) {
+        addRow(row);
+        if (out.length >= limit) return out.slice(0, limit);
+      }
+    }
+  }
+
+  if (out.length < limit && (state || country)) {
+    const params = new URLSearchParams({
+      format: "json",
+      addressdetails: "1",
+      featuretype: "city",
+      limit: String(Math.min(20, limit + 10)),
+    });
+    if (state) params.set("state", state);
+    if (country) params.set("country", country);
+
+    const structuredRows = await nominatimFetch(params);
+    for (const row of structuredRows) {
+      addRow(row);
+      if (out.length >= limit) break;
+    }
+  }
+
+  if (out.length < 3 && (state || country)) {
+    const regionLabel = state ? `${state}, ${country ?? ""}`.trim() : (country ?? "");
+    const qParams = new URLSearchParams({
+      q: regionLabel,
+      format: "json",
+      addressdetails: "1",
+      featuretype: "city",
+      limit: String(Math.min(20, limit + 10)),
+    });
+    const qRows = await nominatimFetch(qParams);
+    for (const row of qRows) {
+      addRow(row);
+      if (out.length >= limit) break;
+    }
+  }
+
+  return out.slice(0, limit);
 }
 
 export async function geocodeNominatimShortened(

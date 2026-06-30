@@ -30,22 +30,50 @@ const CITY_PLACE_TYPES = new Set([
   "locality",
 ]);
 
+function hasCityLevelAddress(address?: Record<string, string>): boolean {
+  if (!address) return false;
+  return Boolean(
+    address.city ||
+      address.town ||
+      address.village ||
+      address.municipality ||
+      address.borough
+  );
+}
+
 export function isCityLevelNominatimHit(
   type?: string,
-  className?: string
+  className?: string,
+  address?: Record<string, string>
 ): boolean {
+  if (hasCityLevelAddress(address)) return true;
   return className === "place" && Boolean(type && CITY_PLACE_TYPES.has(type));
 }
 
 export function isBroadRegionNominatimHit(
   type?: string,
-  className?: string
+  className?: string,
+  address?: Record<string, string>
 ): boolean {
-  if (isCityLevelNominatimHit(type, className)) return false;
+  if (isCityLevelNominatimHit(type, className, address)) return false;
+
+  if (hasCityLevelAddress(address)) return false;
+
   if (type === "country") return true;
+
+  const hasState = Boolean(
+    address?.state || address?.region || address?.province || address?.state_district
+  );
+  const hasCountry = Boolean(address?.country);
+
+  if (hasState && !hasCityLevelAddress(address)) return true;
+  if (hasCountry && !hasState && !hasCityLevelAddress(address)) return true;
+
   if (type === "state" || type === "province" || type === "region") return true;
-  if (className === "boundary") return true;
-  if (className === "place" && type === "state") return true;
+  if (className === "boundary" && type === "administrative" && !hasCityLevelAddress(address)) {
+    return true;
+  }
+
   return false;
 }
 
@@ -63,14 +91,15 @@ export async function checkBroadRegionLocation(
     return { isBroadRegion: false };
   }
 
-  const { type, class: className, displayName, address } = geocoded.hit;
-  const broad = isBroadRegionNominatimHit(type, className);
+  const { type, class: className, displayName, address, boundingBox } = geocoded.hit;
+  const broad = isBroadRegionNominatimHit(type, className, address);
 
   logger.info("[search-diag] Region classification", {
     location: cleaned,
     type,
     class: className,
     displayName,
+    hasCityAddress: hasCityLevelAddress(address),
     isBroadRegion: broad,
   });
 
@@ -78,7 +107,11 @@ export async function checkBroadRegionLocation(
     return { isBroadRegion: false };
   }
 
-  const citySuggestions = await searchCitiesInNominatimRegion(address ?? {}, 10);
+  const citySuggestions = await searchCitiesInNominatimRegion(
+    address ?? {},
+    10,
+    boundingBox
+  );
   if (citySuggestions.length === 0) {
     logger.warn("[search-diag] Broad region detected but no cities returned", {
       location: cleaned,
