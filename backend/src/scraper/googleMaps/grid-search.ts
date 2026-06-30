@@ -33,6 +33,9 @@ export interface NominatimGeocodeHit {
   displayName?: string;
   address?: Record<string, string>;
   boundingBox?: [number, number, number, number];
+  placeRank?: number;
+  importance?: number;
+  osmType?: string;
 }
 
 export interface RegionCitySuggestion {
@@ -178,6 +181,9 @@ function parseNominatimAddress(
     class?: string;
     display_name?: string;
     address?: Record<string, string>;
+    place_rank?: number;
+    importance?: number;
+    osm_type?: string;
   }
 ): NominatimGeocodeHit | null {
   const lat = parseFloat(hit.lat);
@@ -190,6 +196,9 @@ function parseNominatimAddress(
     class: hit.class,
     displayName: hit.display_name,
     address: hit.address,
+    placeRank: hit.place_rank,
+    importance: hit.importance,
+    osmType: hit.osm_type,
     boundingBox:
       hit.boundingbox?.length === 4
         ? [
@@ -322,6 +331,9 @@ export async function geocodeNominatimDetailed(
       class?: string;
       display_name?: string;
       address?: Record<string, string>;
+      place_rank?: number;
+      importance?: number;
+      osm_type?: string;
     }>;
 
     if (!data.length) return null;

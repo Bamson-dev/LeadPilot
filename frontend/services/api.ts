@@ -305,6 +305,49 @@ export async function getSearchSuggestions(
   }
 }
 
+export async function getRegionHint(
+  query: string,
+  location: string,
+  totalFound: number
+): Promise<{
+  showRegionSuggestions: boolean;
+  citySuggestions: Array<{ city: string; label: string }>;
+  message: string;
+}> {
+  try {
+    const params = new URLSearchParams({
+      query,
+      location,
+      totalFound: totalFound.toString(),
+    });
+
+    const res = await fetch(`${getApiUrl()}/search/region-hint?${params}`, {
+      headers: getLicenseHeaders(),
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      return {
+        showRegionSuggestions: false,
+        citySuggestions: [],
+        message: "",
+      };
+    }
+
+    return res.json() as Promise<{
+      showRegionSuggestions: boolean;
+      citySuggestions: Array<{ city: string; label: string }>;
+      message: string;
+    }>;
+  } catch {
+    return {
+      showRegionSuggestions: false,
+      citySuggestions: [],
+      message: "",
+    };
+  }
+}
+
 export async function getRecentActivity(): Promise<{
   activity: Array<{
     query: string;

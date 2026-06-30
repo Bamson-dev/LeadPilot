@@ -686,6 +686,9 @@ export function SearchDashboard() {
             emailScrapingComplete={emailScrapingComplete}
             leads={tableLeads}
           />
+          {status === "completed" &&
+            emailScrapingComplete &&
+            regionCitySuggestions.length > 0 && (
           <RegionCityChips
             suggestions={regionCitySuggestions}
             message={regionSelectionMessage ?? undefined}
@@ -694,6 +697,7 @@ export function SearchDashboard() {
               void runSearchWithRegionCity(city);
             }}
           />
+          )}
           <NearbyCityChips
             show={status === "completed" && emailScrapingComplete && !isSearching}
             cities={nearbyCities}

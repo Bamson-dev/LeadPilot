@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { AreaSuggestion, BusinessLead, CitySelectionSuggestion, NearbyCitySuggestion, SearchStatsSummary } from "@leadthur/shared";
-import { getResults, getSearch, pollSearchResults, probeSearchAccess, SearchLimitError, startSearch } from "@/services/api";
+import { getResults, getRegionHint, getSearch, pollSearchResults, probeSearchAccess, SearchLimitError, startSearch } from "@/services/api";
 import { getApiUrl } from "@/utils/env";
 import { getLicenseQueryString } from "@/services/api";
 import {
@@ -271,6 +271,39 @@ export function useSearch(options?: UseSearchOptions) {
     []
   );
 
+  const loadSoftRegionSuggestions = useCallback(
+    async (query: string, location: string, totalFound: number) => {
+      if (totalFound >= 50) {
+        setState((prev) => ({
+          ...prev,
+          regionCitySuggestions: [],
+          regionSelectionMessage: null,
+        }));
+        return;
+      }
+
+      try {
+        const hint = await getRegionHint(query, location, totalFound);
+        if (hint.showRegionSuggestions && hint.citySuggestions.length > 0) {
+          setState((prev) => ({
+            ...prev,
+            regionCitySuggestions: hint.citySuggestions,
+            regionSelectionMessage: hint.message || null,
+          }));
+        } else {
+          setState((prev) => ({
+            ...prev,
+            regionCitySuggestions: [],
+            regionSelectionMessage: null,
+          }));
+        }
+      } catch {
+        /* optional hint */
+      }
+    },
+    []
+  );
+
   const mergeLeads = useCallback((incoming: BusinessLead[]) => {
     const activeId = searchIdRef.current;
     const filtered = accumulateRef.current
@@ -485,6 +518,11 @@ export function useSearch(options?: UseSearchOptions) {
             locationRef.current,
             totalFound
           );
+          void loadSoftRegionSuggestions(
+            queryRef.current,
+            locationRef.current,
+            totalFound
+          );
         });
         return {
           ...prev,
@@ -505,7 +543,7 @@ export function useSearch(options?: UseSearchOptions) {
 
       scheduleFinalResultsFetch(activeId, 3000);
     },
-    [stopPolling, stopTimeout, stopScrapingPoll, scheduleFinalResultsFetch]
+    [stopPolling, stopTimeout, stopScrapingPoll, scheduleFinalResultsFetch, loadSoftRegionSuggestions]
   );
 
   const startResultsPoll = useCallback(
@@ -1047,22 +1085,6 @@ export function useSearch(options?: UseSearchOptions) {
       try {
         const result = await startSearch(query.trim(), location.trim());
 
-        if (result.requiresCitySelection && result.citySuggestions?.length) {
-          searchIdRef.current = null;
-          setState((prev) => ({
-            ...prev,
-            status: "idle",
-            searchId: null,
-            message: result.message ?? prev.message,
-            regionCitySuggestions: result.citySuggestions ?? [],
-            regionSelectionMessage: result.message ?? null,
-            error: null,
-            scrapingInProgress: false,
-            emailScrapingComplete: true,
-          }));
-          return;
-        }
-
         searchIdRef.current = result.searchId;
         const queuePosition = result.queuePosition ?? 0;
 
@@ -1080,6 +1102,11 @@ export function useSearch(options?: UseSearchOptions) {
             const totalFound = merged.length;
             onCompleteRef.current?.(
               merged,
+              queryRef.current,
+              locationRef.current,
+              totalFound
+            );
+            void loadSoftRegionSuggestions(
               queryRef.current,
               locationRef.current,
               totalFound
@@ -1186,7 +1213,7 @@ export function useSearch(options?: UseSearchOptions) {
         }));
       }
     },
-    [closeStream, connectToStream, startPolling, startResultsPoll, stopTimeout, syncFromApi, finishSearch, progressMessage]
+    [closeStream, connectToStream, startPolling, startResultsPoll, stopTimeout, syncFromApi, finishSearch, progressMessage, loadSoftRegionSuggestions]
   );
 
   const runSearchWithNearbyCity = useCallback(
