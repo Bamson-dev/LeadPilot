@@ -16,7 +16,6 @@ import { SearchHistory } from "@/components/dashboard/search-history";
 import { AffiliateSection } from "@/components/dashboard/affiliate-section";
 import { WelcomeState } from "@/components/dashboard/welcome-state";
 import { SearchQueueCard } from "@/components/dashboard/search-queue-card";
-import { ResultsSummaryBar } from "@/components/dashboard/results-summary-bar";
 import { ScrapingProgressBanner } from "@/components/dashboard/scraping-progress-banner";
 import { NearbyCityChips } from "@/components/dashboard/nearby-city-chips";
 import { ResultsTable } from "@/features/results/results-table";
@@ -665,7 +664,6 @@ export function SearchDashboard() {
             )}
           </div>
           {isSearching && !isQueuedWaiting && <Progress value={progress} className="h-2" />}
-          <ResultsSummaryBar leads={tableLeads} />
           <ScrapingProgressBanner
             scrapingInProgress={scrapingInProgress}
             leads={tableLeads}
