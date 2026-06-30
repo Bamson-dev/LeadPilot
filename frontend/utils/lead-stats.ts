@@ -30,7 +30,6 @@ export function computeLeadStats(leads: Lead[]): LeadStats {
     if (hasEmail) withEmail++;
   }
 
-  const withWebsiteForScrape = leads.filter((l) => hasContactValue(l.website)).length;
   const emailsScrapedFor = leads.filter(
     (l) => hasContactValue(l.website) && l.email_scraped
   ).length;
@@ -41,6 +40,6 @@ export function computeLeadStats(leads: Lead[]): LeadStats {
     withEmail,
     withWebsite,
     emailsFoundFor: withEmail,
-    emailsScrapedFor: Math.max(withWebsiteForScrape, emailsScrapedFor),
+    emailsScrapedFor,
   };
 }

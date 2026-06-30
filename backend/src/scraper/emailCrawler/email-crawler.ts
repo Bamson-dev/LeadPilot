@@ -44,7 +44,17 @@ const SKIP_PREDICTION_DOMAINS = [
 
 /** Simple domain-pattern predictions when the website crawl finds no addresses. */
 export function generatePredictedEmails(websiteUrl: string): string[] {
-  if (!websiteUrl) return [];
+  const domain = extractDomainFromWebsite(websiteUrl);
+  if (!domain) return [];
+  return [`info@${domain}`, `contact@${domain}`, `hello@${domain}`].filter(
+    (email) => isValidEmail(email)
+  );
+}
+
+export function extractDomainFromWebsite(
+  websiteUrl: string | null | undefined
+): string | null {
+  if (!websiteUrl?.trim()) return null;
 
   try {
     let url = websiteUrl.trim();
@@ -57,17 +67,66 @@ export function generatePredictedEmails(websiteUrl: string): string[] {
       domain = domain.slice(4);
     }
 
-    if (SKIP_PREDICTION_DOMAINS.some((skip) => domain.includes(skip))) return [];
+    if (SKIP_PREDICTION_DOMAINS.some((skip) => domain.includes(skip))) return null;
 
     const parts = domain.split(".");
-    if (parts.length < 2) return [];
+    if (parts.length < 2) return null;
 
-    const predictions = [`info@${domain}`, `contact@${domain}`, `hello@${domain}`];
-
-    return predictions.filter((email) => isValidEmail(email));
+    return domain;
   } catch {
-    return [];
+    return null;
   }
+}
+
+/** Build likely contact addresses for a business domain. */
+export function buildDomainEmailCandidates(
+  domain: string,
+  category?: string | null
+): string[] {
+  const prefixes = new Set([
+    "info",
+    "contact",
+    "hello",
+    "support",
+    "enquiries",
+    "admin",
+  ]);
+  const cat = (category ?? "").toLowerCase();
+
+  if (/hotel|resort|hospitality|restaurant|food|cafe|bar|grill|dining/i.test(cat)) {
+    prefixes.add("reservations");
+    prefixes.add("bookings");
+  }
+  if (/salon|beauty|barber|nail/i.test(cat)) {
+    prefixes.add("salon");
+    prefixes.add("bookings");
+  }
+
+  return [...prefixes]
+    .map((prefix) => `${prefix}@${domain}`)
+    .filter((email) => isValidEmail(email));
+}
+
+function matchCandidatesInHtml(html: string, candidates: string[]): string[] {
+  if (!html.trim()) return [];
+  const lower = html.toLowerCase();
+  return candidates.filter((email) => lower.includes(email.toLowerCase()));
+}
+
+function dedupeEmails(emails: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of emails) {
+    const email = raw.toLowerCase().trim();
+    if (!isValidEmail(email) || seen.has(email)) continue;
+    seen.add(email);
+    out.push(email);
+  }
+  return out;
+}
+
+function sortEmailsByPriority(emails: string[]): string[] {
+  return prioritizeEmails(dedupeEmails(emails));
 }
 
 const EMAIL_REGEX = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,6}/g;
@@ -85,6 +144,7 @@ export async function crawlEmailsFromWebsite(
 
   const validEmails = new Set<string>();
   const seenUrls = new Set<string>();
+  const htmlChunks: string[] = [];
   let fetchCount = 0;
 
   try {
@@ -114,13 +174,20 @@ export async function crawlEmailsFromWebsite(
       seenUrls.add(pageUrl);
       fetchCount++;
 
-      const emails = cachedHtml
-        ? parseEmailsFromHtml(cachedHtml, pageUrl)
+      let html = cachedHtml;
+      if (!html) {
+        html = (await fetchPageHtmlBestEffort(pageUrl, EMAIL_FETCH_TIMEOUT_MS)) ?? undefined;
+      }
+      if (html) htmlChunks.push(html);
+
+      const emails = html
+        ? parseEmailsFromHtml(html, pageUrl)
         : await extractEmailsFromPage(pageUrl);
       addEmails(emails);
     };
 
-    const homepageHtml = await fetchPageHtml(baseUrl);
+    const homepageHtml = await fetchPageHtmlBestEffort(baseUrl, EMAIL_FETCH_TIMEOUT_MS);
+    if (homepageHtml) htmlChunks.push(homepageHtml);
     await crawlUrl(baseUrl, homepageHtml ?? undefined);
 
     const discoveredContact = homepageHtml
@@ -142,8 +209,32 @@ export async function crawlEmailsFromWebsite(
     }
 
     const pagesFetched = fetchCount;
+    const domain = extractDomainFromWebsite(websiteUrl);
+    const combinedHtml = htmlChunks.join("\n");
+
+    if (domain) {
+      const patternHits = matchCandidatesInHtml(
+        combinedHtml,
+        buildDomainEmailCandidates(domain)
+      );
+      for (const email of patternHits) {
+        validEmails.add(email);
+      }
+    }
 
     if (validEmails.size === 0) {
+      if (domain) {
+        const fallback = [`info@${domain}`, `contact@${domain}`].filter(isValidEmail);
+        if (fallback.length > 0) {
+          logger.info("No emails found — using domain pattern fallback", {
+            websiteUrl: websiteUrl.substring(0, 50),
+            predicted: fallback,
+            pagesFetched,
+          });
+          return { emails: fallback, predicted: true };
+        }
+      }
+
       const predicted = generatePredictedEmails(websiteUrl);
       if (predicted.length > 0) {
         logger.info("No emails found — using predictions", {
@@ -155,7 +246,7 @@ export async function crawlEmailsFromWebsite(
       }
     }
 
-    const result = prioritizeEmails(Array.from(validEmails));
+    const result = sortEmailsByPriority(Array.from(validEmails));
     logger.info("Email crawl complete", {
       websiteUrl: websiteUrl.substring(0, 50),
       emailsFound: validEmails.size,
@@ -372,7 +463,7 @@ async function findContactPageUrl(baseUrl: string): Promise<string | null> {
   }
 }
 
-function prioritizeEmails(emails: string[]): string[] {
+function prioritizeEmails(emails: string[], max = 15): string[] {
   if (emails.length === 0) return [];
 
   const filtered = emails.filter((email) => isValidEmail(email));
@@ -400,7 +491,7 @@ function prioritizeEmails(emails: string[]): string[] {
     return aScore - bScore;
   });
 
-  return filtered.slice(0, 3);
+  return filtered.slice(0, max);
 }
 
 export async function crawlEmailForWebsite(
@@ -495,22 +586,22 @@ function findContactLinkFromHtml(html: string, baseUrl: string): string | null {
 }
 
 /**
- * Strict website email scrape for background enrichment:
- * mailto → regex → contact page. 10s total timeout per site. No predictions.
+ * Discover emails by combining page scraping with domain pattern matching.
+ * Falls back to info@ and contact@ when nothing is found on the site.
  */
-export async function scrapeBusinessEmailStrict(
-  websiteUrl: string | null | undefined
-): Promise<string[]> {
+export async function discoverBusinessEmails(
+  websiteUrl: string | null | undefined,
+  category?: string | null
+): Promise<WebsiteEmailCrawlResult> {
   const siteLabel = websiteUrl?.trim().substring(0, 80) ?? "(empty)";
-  logger.info("[email-diag] scrapeBusinessEmailStrict start", {
+  logger.info("[email-diag] discoverBusinessEmails start", {
     websiteUrl: siteLabel,
-    method: "http-fetch",
+    category: category?.substring(0, 40) ?? null,
     timeoutMs: EMAIL_FETCH_TIMEOUT_MS,
   });
 
   if (!websiteUrl?.trim()) {
-    logger.info("[email-diag] Skipped — no website URL", { websiteUrl: siteLabel });
-    return [];
+    return { emails: [], predicted: false };
   }
 
   const deadline = Date.now() + EMAIL_FETCH_TIMEOUT_MS;
@@ -522,104 +613,111 @@ export async function scrapeBusinessEmailStrict(
       logger.warn("[email-diag] Could not resolve effective website", {
         websiteUrl: siteLabel,
       });
-      return [];
+      return { emails: [], predicted: false };
     }
-
-    logger.info("[email-diag] Resolved website", {
-      original: siteLabel,
-      resolved: resolved.substring(0, 80),
-    });
 
     let baseUrl = resolved.trim();
     if (!baseUrl.startsWith("http")) baseUrl = `https://${baseUrl}`;
     baseUrl = baseUrl.replace(/\/$/, "");
 
-    const homepageTimeout = Math.max(500, deadline - Date.now());
-    logger.info("[email-diag] Fetching homepage", {
-      baseUrl: baseUrl.substring(0, 80),
-      timeoutMs: homepageTimeout,
-    });
+    const scrapedEmails = new Set<string>();
+    const htmlChunks: string[] = [];
 
-    const homepageHtml = await fetchPageHtmlBestEffort(baseUrl, homepageTimeout);
-    if (timedOut()) {
-      logger.warn("[email-diag] Timed out before homepage loaded", {
-        websiteUrl: siteLabel,
-      });
-      return [];
-    }
-
-    if (!homepageHtml) {
-      logger.warn("[email-diag] Homepage returned empty HTML", {
-        websiteUrl: siteLabel,
-        baseUrl: baseUrl.substring(0, 80),
-      });
-    } else {
-      logger.info("[email-diag] Homepage loaded", {
-        websiteUrl: siteLabel,
-        htmlLength: homepageHtml.length,
-      });
-      const rawHome = extractEmailsFromHtmlStrict(homepageHtml, true);
-      const fromHome = extractEmailsFromHtmlStrict(homepageHtml);
-      logger.info("[email-diag] Homepage email scan", {
-        websiteUrl: siteLabel,
-        rawMatches: rawHome.length,
-        afterFilter: fromHome.length,
-        mailtoFound: homepageHtml.toLowerCase().includes("mailto:"),
-      });
-      if (fromHome.length > 0) {
-        logger.info("[email-diag] Emails found on homepage", {
-          websiteUrl: siteLabel,
-          emails: fromHome.slice(0, 3),
-        });
-        return fromHome.slice(0, 3);
+    const ingestHtml = (html: string | null | undefined, pageUrl: string) => {
+      if (!html) return;
+      htmlChunks.push(html);
+      for (const email of extractEmailsFromHtmlStrict(html)) {
+        scrapedEmails.add(email);
       }
-    }
+      for (const email of parseEmailsFromHtml(html, pageUrl)) {
+        scrapedEmails.add(email);
+      }
+    };
 
-    const contactUrl = homepageHtml
-      ? findContactLinkFromHtml(homepageHtml, baseUrl)
-      : await findContactPageUrl(baseUrl);
+    const homepageHtml = await fetchPageHtmlBestEffort(
+      baseUrl,
+      Math.max(500, deadline - Date.now())
+    );
+    ingestHtml(homepageHtml, baseUrl);
 
-    if (contactUrl && !timedOut()) {
-      logger.info("[email-diag] Fetching contact page", {
-        websiteUrl: siteLabel,
-        contactUrl: contactUrl.substring(0, 80),
-      });
-      const contactHtml = await fetchPageHtmlBestEffort(
+    if (!timedOut()) {
+      const contactUrl = homepageHtml
+        ? findContactLinkFromHtml(homepageHtml, baseUrl)
+        : await findContactPageUrl(baseUrl);
+
+      const pages = [
         contactUrl,
-        Math.max(500, deadline - Date.now())
-      );
-      if (contactHtml) {
-        const rawContact = extractEmailsFromHtmlStrict(contactHtml, true);
-        const fromContact = extractEmailsFromHtmlStrict(contactHtml);
-        logger.info("[email-diag] Contact page email scan", {
-          websiteUrl: siteLabel,
-          rawMatches: rawContact.length,
-          afterFilter: fromContact.length,
-        });
-        if (fromContact.length > 0) {
-          logger.info("[email-diag] Emails found on contact page", {
-            websiteUrl: siteLabel,
-            emails: fromContact.slice(0, 3),
-          });
-          return fromContact.slice(0, 3);
-        }
-      } else {
-        logger.warn("[email-diag] Contact page returned empty HTML", {
-          websiteUrl: siteLabel,
-          contactUrl: contactUrl.substring(0, 80),
-        });
+        `${baseUrl}/contact`,
+        `${baseUrl}/contact-us`,
+        `${baseUrl}/about`,
+        `${baseUrl}/about-us`,
+      ].filter((url): url is string => Boolean(url));
+
+      const seenPages = new Set<string>([baseUrl]);
+      for (const pageUrl of pages) {
+        if (timedOut() || seenPages.has(pageUrl)) continue;
+        seenPages.add(pageUrl);
+        const html = await fetchPageHtmlBestEffort(
+          pageUrl,
+          Math.max(500, deadline - Date.now())
+        );
+        ingestHtml(html, pageUrl);
+        if (scrapedEmails.size >= 12) break;
       }
-    } else if (!contactUrl) {
-      logger.info("[email-diag] No contact page link found", { websiteUrl: siteLabel });
+    }
+
+    const domain = extractDomainFromWebsite(resolved);
+    const combinedHtml = htmlChunks.join("\n");
+    const patternHits =
+      domain && combinedHtml
+        ? matchCandidatesInHtml(
+            combinedHtml,
+            buildDomainEmailCandidates(domain, category)
+          )
+        : [];
+
+    const merged = dedupeEmails([...scrapedEmails, ...patternHits]);
+    if (merged.length > 0) {
+      logger.info("[email-diag] Emails discovered", {
+        websiteUrl: siteLabel,
+        scraped: scrapedEmails.size,
+        patternHits: patternHits.length,
+        total: merged.length,
+        predicted: false,
+      });
+      return { emails: sortEmailsByPriority(merged), predicted: false };
+    }
+
+    if (domain) {
+      const fallback = [`info@${domain}`, `contact@${domain}`].filter(isValidEmail);
+      if (fallback.length > 0) {
+        logger.info("[email-diag] Using domain fallback patterns", {
+          websiteUrl: siteLabel,
+          emails: fallback,
+        });
+        return { emails: fallback, predicted: true };
+      }
     }
 
     logger.info("[email-diag] No emails found", { websiteUrl: siteLabel });
-    return [];
+    return { emails: [], predicted: false };
   } catch (err) {
-    logger.error("[email-diag] scrapeBusinessEmailStrict failed", {
+    logger.error("[email-diag] discoverBusinessEmails failed", {
       websiteUrl: siteLabel,
       error: err instanceof Error ? err.message : "unknown",
     });
-    return [];
+    return { emails: [], predicted: false };
   }
+}
+
+/**
+ * Strict website email scrape for background enrichment.
+ * Combines page scraping with domain pattern generation.
+ */
+export async function scrapeBusinessEmailStrict(
+  websiteUrl: string | null | undefined,
+  category?: string | null
+): Promise<string[]> {
+  const { emails } = await discoverBusinessEmails(websiteUrl, category);
+  return emails;
 }

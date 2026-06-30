@@ -94,7 +94,7 @@ export function applyPredictedEmailsToLead(
   const display = pickBestEmail(
     emails.filter(isValidEmail),
     lead.website,
-    3
+    15
   );
   if (display.length === 0) {
     return { ...lead, emailSource: "none" };

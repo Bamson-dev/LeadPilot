@@ -30,7 +30,7 @@ import { generateAreaSuggestions } from "./suggestion-service";
 import { runBatchEmailScraping } from "./email-batch-scraper";
 import { computeSearchStats } from "./search-stats";
 import { findNearbyCities } from "./nearby-cities";
-import { PHASE1_DEADLINE_MS, MEMORY_SKIP_SCRAPE_PERCENT } from "../scraper/utils/constants";
+import { PHASE1_DEADLINE_MS, MEMORY_SKIP_SCRAPE_PERCENT, EMAIL_SCRAPE_MAX_MS } from "../scraper/utils/constants";
 import type { RawLeadInput } from "../types/scraper";
 import { isMemoryPressureHigh, getMemoryUsagePercent } from "../utils/memory";
 
@@ -275,11 +275,15 @@ async function runBackgroundWork(
         }
       } else {
         logSearchStep(searchId, "email_scraping", { leadCount, memoryPercent });
-        const emailStart = Date.now();
-        await runBatchEmailScraping(searchId, emit, undefined, {
-          totalResultCount: leadCount,
-        });
-        emailTimedOut = Date.now() - emailStart >= 3 * 60 * 1000 - 1000;
+        const emailResult = await runBatchEmailScraping(
+          searchId,
+          emit,
+          EMAIL_SCRAPE_MAX_MS,
+          {
+            totalResultCount: leadCount,
+          }
+        );
+        emailTimedOut = emailResult.timedOut;
       }
     } else {
       const trialLeads = await getAllSearchLeads(searchId);
