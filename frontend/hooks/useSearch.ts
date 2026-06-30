@@ -24,6 +24,7 @@ interface SearchState {
   queuePosition: number;
   error: string | null;
   scrapingInProgress: boolean;
+  emailScrapingComplete: boolean;
   summary: SearchStatsSummary | null;
   nearbyCities: NearbyCitySuggestion[];
 }
@@ -69,6 +70,16 @@ function mergePollLeads(
             ...prev,
             ...lead,
             id: prev.id || lead.id,
+            email: lead.email ?? prev.email,
+            emails: lead.emails?.length ? lead.emails : prev.emails,
+            verifiedEmails: lead.verifiedEmails?.length
+              ? lead.verifiedEmails
+              : prev.verifiedEmails,
+            predictedEmails: lead.predictedEmails?.length
+              ? lead.predictedEmails
+              : prev.predictedEmails,
+            emailSource: lead.emailSource ?? prev.emailSource,
+            emailScraped: lead.emailScraped || prev.emailScraped,
           }
         : lead
     );
@@ -146,6 +157,7 @@ export function useSearch(options?: UseSearchOptions) {
     queuePosition: 0,
     error: null,
     scrapingInProgress: false,
+    emailScrapingComplete: true,
     summary: null,
     nearbyCities: [],
   });
@@ -460,6 +472,7 @@ export function useSearch(options?: UseSearchOptions) {
           queuePosition: 0,
           error: null,
           scrapingInProgress: false,
+          emailScrapingComplete: true,
           message:
             message ??
             (totalFound === 0
@@ -490,26 +503,30 @@ export function useSearch(options?: UseSearchOptions) {
                   ? mergePollLeads(prev.leads, payload.leads)
                   : prev.leads;
               const count = Math.max(merged.length, payload.totalFound);
-              const running = payload.scrapingInProgress;
+              const mapsRunning = payload.scrapingInProgress;
+              const emailDone = payload.emailScrapingComplete;
               return {
                 ...prev,
                 leads: merged,
                 totalFound: count,
                 message: progressMessage(
                   count,
-                  running ? "running" : "completed",
+                  !emailDone || mapsRunning ? "running" : "completed",
                   prev.queuePosition
                 ),
                 queuePosition: payload.queuePosition,
                 summary: payload.summary ?? prev.summary,
                 nearbyCities: payload.nearbyCities ?? prev.nearbyCities,
                 scrapingInProgress: payload.scrapingInProgress,
-                status: running ? "running" : prev.status,
+                emailScrapingComplete: emailDone,
+                status:
+                  !emailDone || mapsRunning ? "running" : prev.status,
               };
             });
 
             if (
               !payload.scrapingInProgress &&
+              payload.emailScrapingComplete &&
               (payload.status === "completed" || payload.totalFound > 0)
             ) {
               const count = Math.max(payload.totalFound, payload.leads.length);
@@ -547,6 +564,7 @@ export function useSearch(options?: UseSearchOptions) {
           queuePosition: 0,
           error: null,
           scrapingInProgress: true,
+          emailScrapingComplete: false,
           message:
             message ??
             progressMessage(totalFound, "running", 0),
@@ -592,7 +610,11 @@ export function useSearch(options?: UseSearchOptions) {
             if (searchId !== searchIdRef.current) return;
             await syncFromApi(searchId);
 
-            if (job.status === "completed" && !job.scrapingInProgress) {
+            if (
+              job.status === "completed" &&
+              !job.scrapingInProgress &&
+              job.emailScrapingComplete
+            ) {
               setState((prev) => {
                 if (prev.searchId !== searchId) return prev;
                 const count = prev.leads.length;
@@ -990,6 +1012,7 @@ export function useSearch(options?: UseSearchOptions) {
         queuePosition: 0,
         error: null,
         scrapingInProgress: false,
+        emailScrapingComplete: false,
         summary: null,
         nearbyCities: [],
       }));
@@ -1027,6 +1050,7 @@ export function useSearch(options?: UseSearchOptions) {
               queuePosition: 0,
               error: null,
               scrapingInProgress: false,
+              emailScrapingComplete: true,
               summary: null,
               nearbyCities: [],
             };
@@ -1040,6 +1064,7 @@ export function useSearch(options?: UseSearchOptions) {
           searchesRemaining: result.searchesRemaining ?? null,
           queuePosition,
           status: "running",
+          emailScrapingComplete: false,
           message: progressMessage(0, queuePosition > 0 ? "queued" : "running", queuePosition),
         }));
 
@@ -1162,6 +1187,7 @@ export function useSearch(options?: UseSearchOptions) {
       queuePosition: 0,
       error: null,
       scrapingInProgress: false,
+      emailScrapingComplete: true,
       summary: null,
       nearbyCities: [],
     });
@@ -1183,6 +1209,7 @@ export function useSearch(options?: UseSearchOptions) {
       queuePosition: 0,
       error: null,
       scrapingInProgress: false,
+      emailScrapingComplete: true,
       summary: null,
       nearbyCities: [],
     }));
@@ -1201,6 +1228,7 @@ export function useSearch(options?: UseSearchOptions) {
       queuePosition: 0,
       error: null,
       scrapingInProgress: false,
+      emailScrapingComplete: true,
       summary: null,
       nearbyCities: [],
     });

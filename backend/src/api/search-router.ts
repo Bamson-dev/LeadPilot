@@ -195,6 +195,13 @@ searchRouter.get("/queue/status", async (_req: Request, res: Response) => {
   res.json(await refreshSearchQueueStatus());
 });
 
+function resolveEmailScrapingComplete(
+  job: Awaited<ReturnType<typeof getSearchJob>>
+): boolean {
+  if (!job) return true;
+  return Boolean(job.emailScrapingComplete);
+}
+
 async function buildSearchResultsPayload(
   searchId: string,
   page: number,
@@ -220,6 +227,7 @@ async function buildSearchResultsPayload(
     total,
     totalFound: total,
     scrapingInProgress: Boolean(job?.scrapingInProgress),
+    emailScrapingComplete: resolveEmailScrapingComplete(job),
     queuePosition,
     summary,
     nearbyCities: job?.nearbyCities ?? [],

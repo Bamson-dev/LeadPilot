@@ -9,6 +9,7 @@ export interface SearchJob {
   processed: number;
   isTrial?: boolean;
   scrapingInProgress?: boolean;
+  emailScrapingComplete?: boolean;
   nearbyCities?: NearbyCitySuggestion[];
   statsSummary?: SearchStatsSummary | null;
   createdAt: string;
@@ -23,6 +24,7 @@ export interface SearchResultsResponse {
   total: number;
   totalFound: number;
   scrapingInProgress: boolean;
+  emailScrapingComplete: boolean;
   queuePosition: number;
   summary: SearchStatsSummary;
   nearbyCities: NearbyCitySuggestion[];

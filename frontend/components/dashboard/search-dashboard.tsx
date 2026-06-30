@@ -122,6 +122,7 @@ export function SearchDashboard() {
     reset,
     loadSavedLeads,
     scrapingInProgress,
+    emailScrapingComplete,
     nearbyCities,
     queuePosition,
   } = useSearch({
@@ -666,10 +667,11 @@ export function SearchDashboard() {
           {isSearching && !isQueuedWaiting && <Progress value={progress} className="h-2" />}
           <ScrapingProgressBanner
             scrapingInProgress={scrapingInProgress}
+            emailScrapingComplete={emailScrapingComplete}
             leads={tableLeads}
           />
           <NearbyCityChips
-            show={status === "completed" && !scrapingInProgress && !isSearching}
+            show={status === "completed" && emailScrapingComplete && !isSearching}
             cities={nearbyCities}
             onSelectCity={(city) => {
               setLocation(city);
@@ -695,6 +697,7 @@ export function SearchDashboard() {
           onStatusFilterChange={setStatusFilter}
           onLeadStatusChange={setLeadStatus}
           onUseTemplate={setTemplateLead}
+          emailScrapingInProgress={!emailScrapingComplete && tableLeads.length > 0}
         />
       )}
 

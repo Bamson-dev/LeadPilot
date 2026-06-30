@@ -157,6 +157,7 @@ async function finalizeSearchAndNotify(
     processed: totalFound,
     status: "completed",
     scrapingInProgress: false,
+    emailScrapingComplete: true,
     statsSummary: { ...stats, total: totalFound },
     error: null,
   });
@@ -251,6 +252,8 @@ async function runBackgroundWork(
       }
     }
 
+    await updateSearchJob(searchId, { scrapingInProgress: false });
+
     if (!isTrial) {
       const leadCount = await countSearchLeads(searchId);
       const memoryPercent = Math.round(getMemoryUsagePercent());
@@ -271,6 +274,7 @@ async function runBackgroundWork(
         for (const lead of pending) {
           await markBusinessLeadEmailScraped(lead.id, []).catch(() => undefined);
         }
+        await updateSearchJob(searchId, { emailScrapingComplete: true });
       } else {
         logSearchStep(searchId, "email_scraping", { leadCount, memoryPercent });
         const emailStart = Date.now();
@@ -284,6 +288,7 @@ async function runBackgroundWork(
           pool.release(emailBrowser);
         }
         emailTimedOut = Date.now() - emailStart >= 3 * 60 * 1000 - 1000;
+        await updateSearchJob(searchId, { emailScrapingComplete: true });
       }
     } else {
       const trialLeads = await getAllSearchLeads(searchId);

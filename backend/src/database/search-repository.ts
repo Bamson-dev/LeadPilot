@@ -16,6 +16,7 @@ interface DbSearchJob {
   is_trial?: boolean | null;
   license_email?: string | null;
   scraping_in_progress?: boolean | null;
+  email_scraping_complete?: boolean | null;
   nearby_cities?: NearbyCitySuggestion[] | null;
   stats_summary?: SearchStatsSummary | null;
   results_email_sent?: boolean | null;
@@ -114,6 +115,7 @@ function mapSearchJob(row: DbSearchJob): SearchJob {
     error: row.error,
     isTrial: Boolean(row.is_trial),
     scrapingInProgress: Boolean(row.scraping_in_progress),
+    emailScrapingComplete: Boolean(row.email_scraping_complete),
     nearbyCities: (row.nearby_cities as NearbyCitySuggestion[] | null) ?? undefined,
     statsSummary: (row.stats_summary as SearchStatsSummary | null) ?? undefined,
   };
@@ -215,6 +217,7 @@ export async function updateSearchJob(
     processed: number;
     error: string | null;
     scrapingInProgress: boolean;
+    emailScrapingComplete: boolean;
     nearbyCities: NearbyCitySuggestion[] | null;
     statsSummary: SearchStatsSummary | null;
     resultsEmailSent: boolean;
@@ -227,6 +230,9 @@ export async function updateSearchJob(
   if (patch.error !== undefined) update.error = patch.error;
   if (patch.scrapingInProgress !== undefined) {
     update.scraping_in_progress = patch.scrapingInProgress;
+  }
+  if (patch.emailScrapingComplete !== undefined) {
+    update.email_scraping_complete = patch.emailScrapingComplete;
   }
   if (patch.nearbyCities !== undefined) update.nearby_cities = patch.nearbyCities;
   if (patch.statsSummary !== undefined) update.stats_summary = patch.statsSummary;
@@ -469,6 +475,8 @@ export async function markSearchComplete(
     status: "completed",
     totalFound,
     processed: totalFound,
+    scrapingInProgress: false,
+    emailScrapingComplete: true,
     error: null,
   });
 }

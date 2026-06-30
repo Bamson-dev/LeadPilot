@@ -1,5 +1,6 @@
 import type { Browser, BrowserContext } from "playwright";
 import type { BusinessLead, PredictedEmail, StreamEvent } from "@leadthur/shared";
+import { isBlockedEmailScrapeDomain } from "@leadthur/shared";
 import {
   createEmailBrowserContext,
   discoverBusinessEmailsCombined,
@@ -67,6 +68,14 @@ async function scrapeOneLeadEmail(
     return lead;
   }
 
+  if (isBlockedEmailScrapeDomain(lead.website)) {
+    logger.info("[email-diag] Skipped blocked platform domain", {
+      businessId: lead.id,
+      website: lead.website.substring(0, 80),
+    });
+    return { ...lead, emailScraped: true, email: null, emails: [], verifiedEmails: [], predictedEmails: [], emailSource: "none" };
+  }
+
   logger.info("[email-diag] Scraping lead email", {
     businessId: lead.id,
     name: lead.name?.substring(0, 60),
@@ -122,9 +131,23 @@ async function runWithTabConcurrency<T>(
   await Promise.all(runners);
 }
 
+async function markBlockedPlatformDomains(searchId: string): Promise<void> {
+  const blocked = (await getAllSearchLeads(searchId)).filter(
+    (lead) => lead.website && !lead.emailScraped && isBlockedEmailScrapeDomain(lead.website)
+  );
+
+  for (const lead of blocked) {
+    await markBusinessLeadEmailScraped(lead.id, []).catch(() => undefined);
+  }
+}
+
 async function markRemainingUnscraped(searchId: string): Promise<void> {
   const remaining = (await getAllSearchLeads(searchId)).filter(
-    (lead) => lead.website && !lead.emailScraped && !leadHasEmail(lead)
+    (lead) =>
+      lead.website &&
+      !lead.emailScraped &&
+      !leadHasEmail(lead) &&
+      !isBlockedEmailScrapeDomain(lead.website)
   );
 
   for (const lead of remaining) {
@@ -164,11 +187,15 @@ export async function runBatchEmailScraping(
     }
 
     browserContext = await createEmailBrowserContext(browser);
+    await markBlockedPlatformDomains(searchId);
 
     while (Date.now() < deadline) {
       const pending = (await getAllSearchLeads(searchId)).filter(
         (lead) =>
-          lead.website && !lead.emailScraped && !leadHasEmail(lead)
+          lead.website &&
+          !lead.emailScraped &&
+          !leadHasEmail(lead) &&
+          !isBlockedEmailScrapeDomain(lead.website)
       );
 
       if (pending.length === 0) break;

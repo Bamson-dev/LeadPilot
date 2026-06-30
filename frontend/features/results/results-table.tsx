@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Loader2 } from "lucide-react";
 import { ContactDots } from "@/components/dashboard/contact-dots";
 import { CopyButton } from "@/components/dashboard/copy-button";
 import { EmailCell } from "@/components/dashboard/email-cell";
@@ -39,6 +39,7 @@ interface ResultsTableProps {
   onLeadStatusChange: (leadId: string, status: string) => void;
   onUseTemplate?: (lead: Lead) => void;
   searchLocation?: string;
+  emailScrapingInProgress?: boolean;
 }
 
 export function ResultsTable({
@@ -56,6 +57,7 @@ export function ResultsTable({
   onStatusFilterChange,
   onLeadStatusChange,
   onUseTemplate,
+  emailScrapingInProgress = false,
 }: ResultsTableProps) {
   const { copiedId, copyToClipboard } = useCopyToClipboard();
   const [sortKey, setSortKey] = useState<SortKey>("business_name");
@@ -402,6 +404,15 @@ export function ResultsTable({
                         <ArrowUpDown className="h-3 w-3 opacity-40" />
                       )}
                     </button>
+                  ) : key === "email" ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      {label}
+                      {emailScrapingInProgress && (
+                        <span title="Finding email addresses">
+                          <Loader2 className="h-3 w-3 animate-spin text-violet-400" />
+                        </span>
+                      )}
+                    </span>
                   ) : (
                     label
                   )}

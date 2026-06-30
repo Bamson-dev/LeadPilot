@@ -5,6 +5,7 @@ import { resolveEffectiveBusinessWebsite } from "../utils/effective-website";
 import { resolveGenerationDomain } from "../utils/domain-utils";
 import { generateEmailsFromWebsite } from "../parsers/email-generator";
 import type { Browser, BrowserContext } from "playwright";
+import { isBlockedEmailScrapeDomain } from "@leadthur/shared";
 
 export interface EmailCrawlResult {
   emails: string[];
@@ -312,6 +313,11 @@ export async function discoverBusinessEmailsCombined(
 
   if (!websiteUrl?.trim()) {
     logger.info("[email-diag] Skipped — no website URL", { websiteUrl: siteLabel });
+    return { verifiedEmails: [], predictedEmails: [] };
+  }
+
+  if (isBlockedEmailScrapeDomain(websiteUrl)) {
+    logger.info("[email-diag] Skipped — blocked platform domain", { websiteUrl: siteLabel });
     return { verifiedEmails: [], predictedEmails: [] };
   }
 
