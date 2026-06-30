@@ -1,12 +1,10 @@
-import { EMAIL_FETCH_TIMEOUT_MS } from "../utils/constants";
+import { EMAIL_FETCH_TIMEOUT_MS, EMAIL_PLAYWRIGHT_IDLE_MS } from "../utils/constants";
 import { isValidEmail, pickBestEmail } from "../parsers/email-validation";
 import { logger } from "../../utils/logger";
 import { resolveEffectiveBusinessWebsite } from "../utils/effective-website";
 import { resolveGenerationDomain } from "../utils/domain-utils";
 import { generateEmailsFromWebsite } from "../parsers/email-generator";
-import { chromium } from "playwright";
-import { acquirePlaywrightSlot } from "../browser/playwright-semaphore";
-import { getChromiumLaunchOptions } from "../browser/chromium-options";
+import type { Browser, BrowserContext } from "playwright";
 
 export interface EmailCrawlResult {
   emails: string[];
@@ -174,56 +172,66 @@ export async function crawlEmailsFromWebsite(
   }
 }
 
-async function fetchPageHtmlWithPlaywright(
+const EMAIL_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
+/** Shared browser context for email scraping — one context, many tabs. */
+export async function createEmailBrowserContext(
+  browser: Browser
+): Promise<BrowserContext> {
+  return browser.newContext({
+    userAgent: EMAIL_USER_AGENT,
+    locale: "en-US",
+    extraHTTPHeaders: { "Accept-Language": "en-US,en;q=0.9" },
+  });
+}
+
+async function fetchRenderedHtmlWithPlaywright(
+  context: BrowserContext,
   pageUrl: string,
-  timeoutMs: number
+  timeoutMs = EMAIL_FETCH_TIMEOUT_MS
 ): Promise<string | null> {
-  const release = await acquirePlaywrightSlot();
-  let browser = null;
+  const page = await context.newPage();
   try {
-    logger.info("[email-diag] Launching Playwright browser for email scrape", {
+    logger.info("[email-diag] Playwright tab opening", {
       pageUrl: pageUrl.substring(0, 80),
       timeoutMs,
     });
-    browser = await chromium.launch(getChromiumLaunchOptions());
-    const page = await browser.newPage({
-      userAgent:
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-    });
-    await page.goto(pageUrl, {
+
+    const response = await page.goto(pageUrl, {
       timeout: timeoutMs,
       waitUntil: "domcontentloaded",
     });
-    await page.waitForTimeout(1500);
+
+    logger.info("[email-diag] Playwright page goto complete", {
+      pageUrl: pageUrl.substring(0, 80),
+      httpStatus: response?.status() ?? null,
+    });
+
+    await Promise.race([
+      page
+        .waitForLoadState("networkidle", { timeout: EMAIL_PLAYWRIGHT_IDLE_MS })
+        .catch(() => undefined),
+      page.waitForTimeout(EMAIL_PLAYWRIGHT_IDLE_MS),
+    ]);
+
     const html = await page.content();
-    logger.info("[email-diag] Playwright page loaded", {
+    logger.info("[email-diag] Playwright rendered HTML retrieved", {
       pageUrl: pageUrl.substring(0, 80),
       htmlLength: html.length,
       mailtoFound: html.toLowerCase().includes("mailto:"),
+      atSymbolCount: (html.match(/@/g) ?? []).length,
     });
     return html;
   } catch (err) {
-    logger.warn("[email-diag] Playwright page load failed", {
+    logger.warn("[email-diag] Playwright tab load failed", {
       pageUrl: pageUrl.substring(0, 80),
       error: err instanceof Error ? err.message : "unknown",
     });
     return null;
   } finally {
-    await browser?.close().catch(() => undefined);
-    release();
+    await page.close().catch(() => undefined);
   }
-}
-
-async function fetchPageHtmlBestEffort(
-  pageUrl: string,
-  timeoutMs: number
-): Promise<string | null> {
-  const httpHtml = await fetchPageHtml(pageUrl, timeoutMs);
-  if (httpHtml && httpHtml.length > 500) return httpHtml;
-
-  const remaining = Math.max(3000, timeoutMs);
-  const playwrightHtml = await fetchPageHtmlWithPlaywright(pageUrl, remaining);
-  return playwrightHtml ?? httpHtml;
 }
 
 export interface CombinedEmailDiscovery {
@@ -268,17 +276,6 @@ export function generateDomainPatternEmails(
     .filter(isValidEmail);
 }
 
-function patternsConfirmedInHtml(html: string, patterns: string[]): string[] {
-  const lower = html.toLowerCase();
-  return patterns.filter((email) => {
-    const normalized = email.toLowerCase();
-    return (
-      lower.includes(normalized) ||
-      lower.includes(`mailto:${normalized}`) ||
-      lower.includes(`mailto%3a${normalized.replace("@", "%40")}`)
-    );
-  });
-}
 
 function dedupeEmails(emails: string[]): string[] {
   const seen = new Set<string>();
@@ -293,12 +290,15 @@ function dedupeEmails(emails: string[]): string[] {
 }
 
 /**
- * Scrape page content plus domain-pattern generation (production behaviour).
- * Confirmed addresses come from the website HTML; likely patterns are predicted.
+ * Playwright-rendered page scrape, then domain patterns only when scrape finds nothing.
  */
 export async function discoverBusinessEmailsCombined(
   websiteUrl: string | null | undefined,
-  options?: { category?: string | null; businessName?: string | null }
+  options?: {
+    category?: string | null;
+    businessName?: string | null;
+    browserContext?: BrowserContext;
+  }
 ): Promise<CombinedEmailDiscovery> {
   const siteLabel = websiteUrl?.trim().substring(0, 80) ?? "(empty)";
   const category = options?.category ?? null;
@@ -306,6 +306,7 @@ export async function discoverBusinessEmailsCombined(
   logger.info("[email-diag] discoverBusinessEmailsCombined start", {
     websiteUrl: siteLabel,
     category,
+    method: "playwright",
     timeoutMs: EMAIL_FETCH_TIMEOUT_MS,
   });
 
@@ -314,59 +315,58 @@ export async function discoverBusinessEmailsCombined(
     return { verifiedEmails: [], predictedEmails: [] };
   }
 
-  const scraped = await scrapePagesForEmails(websiteUrl);
-  const patterns = generateDomainPatternEmails(websiteUrl, category);
-
-  logger.info("[email-diag] Domain pattern generation complete", {
-    websiteUrl: siteLabel,
-    patternCount: patterns.length,
-    samplePatterns: patterns.slice(0, 5),
-    scrapedCount: scraped.emails.length,
-    htmlLength: scraped.htmlLength,
-    mailtoInHtml: scraped.mailtoFound,
-  });
-
-  const confirmedFromPatterns = patternsConfirmedInHtml(scraped.html, patterns);
-  const verified = dedupeEmails([...scraped.emails, ...confirmedFromPatterns]);
-  const verifiedSet = new Set(verified);
-
-  let predicted = patterns.filter((email) => !verifiedSet.has(email.toLowerCase()));
-
-  if (verified.length === 0 && predicted.length === 0) {
-    const domain = resolveGenerationDomain(websiteUrl);
-    if (domain) {
-      predicted = [`info@${domain}`, `contact@${domain}`].filter(isValidEmail);
-      logger.info("[email-diag] No scrape hits — using fallback info@ and contact@", {
-        websiteUrl: siteLabel,
-        predicted,
-      });
-    }
-  } else if (verified.length === 0 && predicted.length > 0) {
-    const domain = resolveGenerationDomain(websiteUrl);
-    if (domain) {
-      for (const fallback of [`info@${domain}`, `contact@${domain}`]) {
-        if (isValidEmail(fallback) && !predicted.includes(fallback)) {
-          predicted.unshift(fallback);
-        }
-      }
-    }
+  if (!options?.browserContext) {
+    logger.warn("[email-diag] No browser context — skipping Playwright scrape", {
+      websiteUrl: siteLabel,
+    });
+    return { verifiedEmails: [], predictedEmails: buildFallbackPredictions(websiteUrl, category) };
   }
 
-  predicted = pickBestEmail(predicted, websiteUrl, 3);
+  const scraped = await scrapePagesForEmailsWithPlaywright(
+    websiteUrl,
+    options.browserContext
+  );
+
+  const verified = dedupeEmails(scraped.emails);
+  let predicted: string[] = [];
+
+  if (verified.length === 0) {
+    predicted = buildFallbackPredictions(websiteUrl, category);
+    logger.info("[email-diag] No verified emails — using domain pattern fallback", {
+      websiteUrl: siteLabel,
+      predictedCount: predicted.length,
+      predicted: predicted.slice(0, 3),
+    });
+  } else {
+    logger.info("[email-diag] Verified emails found via Playwright — skipping predictions", {
+      websiteUrl: siteLabel,
+      verifiedCount: verified.length,
+      verified: verified.slice(0, 3),
+    });
+  }
 
   logger.info("[email-diag] discoverBusinessEmailsCombined result", {
     websiteUrl: siteLabel,
     verifiedCount: verified.length,
     predictedCount: predicted.length,
-    verified: verified.slice(0, 3),
-    predicted: predicted.slice(0, 3),
-    reason:
-      verified.length === 0 && predicted.length === 0
-        ? "no_domain_or_all_blocked"
-        : undefined,
+    htmlLength: scraped.htmlLength,
+    mailtoInHtml: scraped.mailtoFound,
   });
 
   return { verifiedEmails: verified, predictedEmails: predicted };
+}
+
+function buildFallbackPredictions(
+  websiteUrl: string,
+  category?: string | null
+): string[] {
+  const patterns = generateDomainPatternEmails(websiteUrl, category);
+  let predicted = pickBestEmail(patterns, websiteUrl, 3);
+  if (predicted.length > 0) return predicted;
+
+  const domain = resolveGenerationDomain(websiteUrl);
+  if (!domain) return [];
+  return [`info@${domain}`, `contact@${domain}`].filter(isValidEmail);
 }
 
 interface PageScrapeResult {
@@ -376,12 +376,11 @@ interface PageScrapeResult {
   mailtoFound: boolean;
 }
 
-async function scrapePagesForEmails(
-  websiteUrl: string
+async function scrapePagesForEmailsWithPlaywright(
+  websiteUrl: string,
+  context: BrowserContext
 ): Promise<PageScrapeResult> {
   const siteLabel = websiteUrl.trim().substring(0, 80);
-  const deadline = Date.now() + EMAIL_FETCH_TIMEOUT_MS;
-  const timedOut = () => Date.now() >= deadline;
   const htmlChunks: string[] = [];
 
   try {
@@ -397,18 +396,14 @@ async function scrapePagesForEmails(
     if (!baseUrl.startsWith("http")) baseUrl = `https://${baseUrl}`;
     baseUrl = baseUrl.replace(/\/$/, "");
 
-    logger.info("[email-diag] Fetching homepage", {
+    logger.info("[email-diag] Playwright scraping homepage", {
       websiteUrl: siteLabel,
       baseUrl: baseUrl.substring(0, 80),
     });
 
-    const homepageHtml = await fetchPageHtmlBestEffort(
-      baseUrl,
-      Math.max(500, deadline - Date.now())
-    );
-
+    const homepageHtml = await fetchRenderedHtmlWithPlaywright(context, baseUrl);
     if (!homepageHtml) {
-      logger.warn("[email-diag] Homepage returned empty HTML", {
+      logger.warn("[email-diag] Playwright homepage returned empty HTML", {
         websiteUrl: siteLabel,
       });
       return { emails: [], html: "", htmlLength: 0, mailtoFound: false };
@@ -416,7 +411,7 @@ async function scrapePagesForEmails(
 
     htmlChunks.push(homepageHtml);
     const fromHome = extractEmailsFromHtmlStrict(homepageHtml);
-    logger.info("[email-diag] Homepage email scan", {
+    logger.info("[email-diag] Playwright homepage email scan", {
       websiteUrl: siteLabel,
       htmlLength: homepageHtml.length,
       mailtoFound: homepageHtml.toLowerCase().includes("mailto:"),
@@ -424,7 +419,7 @@ async function scrapePagesForEmails(
       emails: fromHome.slice(0, 3),
     });
 
-    if (fromHome.length > 0 && timedOut()) {
+    if (fromHome.length > 0) {
       return {
         emails: fromHome,
         html: homepageHtml,
@@ -436,32 +431,31 @@ async function scrapePagesForEmails(
     const contactUrl = findContactLinkFromHtml(homepageHtml, baseUrl);
     let contactEmails: string[] = [];
 
-    if (contactUrl && !timedOut()) {
-      logger.info("[email-diag] Fetching contact page", {
+    if (contactUrl) {
+      logger.info("[email-diag] Playwright scraping contact page", {
         websiteUrl: siteLabel,
         contactUrl: contactUrl.substring(0, 80),
       });
-      const contactHtml = await fetchPageHtmlBestEffort(
-        contactUrl,
-        Math.max(500, deadline - Date.now())
-      );
+      const contactHtml = await fetchRenderedHtmlWithPlaywright(context, contactUrl);
       if (contactHtml) {
         htmlChunks.push(contactHtml);
         contactEmails = extractEmailsFromHtmlStrict(contactHtml);
-        logger.info("[email-diag] Contact page email scan", {
+        logger.info("[email-diag] Playwright contact page email scan", {
           websiteUrl: siteLabel,
           htmlLength: contactHtml.length,
           emailsFound: contactEmails.length,
           emails: contactEmails.slice(0, 3),
         });
       } else {
-        logger.warn("[email-diag] Contact page returned empty HTML", {
+        logger.warn("[email-diag] Playwright contact page returned empty HTML", {
           websiteUrl: siteLabel,
           contactUrl: contactUrl.substring(0, 80),
         });
       }
-    } else if (!contactUrl) {
-      logger.info("[email-diag] No contact page link found", { websiteUrl: siteLabel });
+    } else {
+      logger.info("[email-diag] No contact page link found in rendered HTML", {
+        websiteUrl: siteLabel,
+      });
     }
 
     const combinedHtml = htmlChunks.join("\n");
@@ -473,7 +467,7 @@ async function scrapePagesForEmails(
       mailtoFound: combinedHtml.toLowerCase().includes("mailto:"),
     };
   } catch (err) {
-    logger.error("[email-diag] scrapePagesForEmails failed", {
+    logger.error("[email-diag] scrapePagesForEmailsWithPlaywright failed", {
       websiteUrl: siteLabel,
       error: err instanceof Error ? err.message : "unknown",
     });
@@ -612,7 +606,7 @@ function parseEmailsFromHtml(html: string, pageUrl?: string): string[] {
 }
 
 async function extractEmailsFromPage(pageUrl: string): Promise<string[]> {
-  const html = await fetchPageHtmlBestEffort(pageUrl, EMAIL_FETCH_TIMEOUT_MS);
+  const html = await fetchPageHtml(pageUrl, EMAIL_FETCH_TIMEOUT_MS);
   if (!html) {
     logger.warn("[email-diag] No HTML retrieved for email extraction", {
       pageUrl: pageUrl.substring(0, 80),
@@ -761,14 +755,14 @@ function extractEmailsFromHtmlStrict(html: string, skipGenericFilter = false): s
 
 function findContactLinkFromHtml(html: string, baseUrl: string): string | null {
   const anchorRegex =
-    /<a[^>]+href=["']([^"']+)["'][^>]*>([^<]*(?:contact|about|reach us)[^<]*)<\/a>/gi;
+    /<a[^>]+href=["']([^"']+)["'][^>]*>([^<]*(?:contact|about|reach|get-in-touch|get in touch)[^<]*)<\/a>/gi;
   let match: RegExpExecArray | null;
   while ((match = anchorRegex.exec(html)) !== null) {
     const href = match[1];
     const text = match[2]?.toLowerCase() ?? "";
     if (
-      /contact|about|reach us/i.test(text) ||
-      /contact|about|reach/i.test(href)
+      /contact|about|reach|get-in-touch|get in touch|enquir/i.test(text) ||
+      /contact|about|reach|get-in-touch|enquir/i.test(href)
     ) {
       return resolveInternalUrl(baseUrl, href);
     }
@@ -782,7 +776,11 @@ function findContactLinkFromHtml(html: string, baseUrl: string): string | null {
  */
 export async function scrapeBusinessEmailStrict(
   websiteUrl: string | null | undefined,
-  options?: { category?: string | null; businessName?: string | null }
+  options?: {
+    category?: string | null;
+    businessName?: string | null;
+    browserContext?: BrowserContext;
+  }
 ): Promise<string[]> {
   const { verifiedEmails, predictedEmails } = await discoverBusinessEmailsCombined(
     websiteUrl,

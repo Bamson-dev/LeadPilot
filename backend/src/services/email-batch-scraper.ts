@@ -1,10 +1,13 @@
+import type { Browser, BrowserContext } from "playwright";
 import type { BusinessLead, PredictedEmail, StreamEvent } from "@leadthur/shared";
-import { discoverBusinessEmailsCombined } from "../scraper/emailCrawler/email-crawler";
 import {
-  EMAIL_SCRAPE_BATCH_SIZE,
-  EMAIL_SCRAPE_BATCH_SIZE_LARGE,
+  createEmailBrowserContext,
+  discoverBusinessEmailsCombined,
+} from "../scraper/emailCrawler/email-crawler";
+import {
   EMAIL_SCRAPE_MAX_MS,
-  LARGE_CITY_RESULT_THRESHOLD,
+  EMAIL_SCRAPE_TAB_CONCURRENCY,
+  EMAIL_SCRAPE_TAB_CONCURRENCY_LARGE,
   MEDIUM_CITY_RESULT_THRESHOLD,
 } from "../scraper/utils/constants";
 import {
@@ -18,7 +21,7 @@ export type ScrapeEmitter = (event: StreamEvent) => void;
 
 export interface BatchEmailScrapeOptions {
   totalResultCount?: number;
-  batchSize?: number;
+  browser?: Browser;
 }
 
 function leadHasEmail(lead: BusinessLead): boolean {
@@ -56,7 +59,10 @@ function buildEnrichedLead(
   };
 }
 
-async function scrapeOneLeadEmail(lead: BusinessLead): Promise<BusinessLead> {
+async function scrapeOneLeadEmail(
+  lead: BusinessLead,
+  browserContext: BrowserContext
+): Promise<BusinessLead> {
   if (!lead.website || leadHasEmail(lead) || lead.emailScraped) {
     return lead;
   }
@@ -70,7 +76,11 @@ async function scrapeOneLeadEmail(lead: BusinessLead): Promise<BusinessLead> {
 
   const { verifiedEmails, predictedEmails } = await discoverBusinessEmailsCombined(
     lead.website,
-    { category: lead.category, businessName: lead.name }
+    {
+      category: lead.category,
+      businessName: lead.name,
+      browserContext,
+    }
   );
 
   if (verifiedEmails.length === 0 && predictedEmails.length === 0) {
@@ -84,12 +94,32 @@ async function scrapeOneLeadEmail(lead: BusinessLead): Promise<BusinessLead> {
   return buildEnrichedLead(lead, verifiedEmails, predictedEmails);
 }
 
-function resolveBatchSize(totalResultCount?: number, override?: number): number {
-  if (override && override > 0) return override;
+function resolveTabConcurrency(totalResultCount?: number): number {
   const count = totalResultCount ?? 0;
-  if (count > LARGE_CITY_RESULT_THRESHOLD) return EMAIL_SCRAPE_BATCH_SIZE_LARGE;
-  if (count < MEDIUM_CITY_RESULT_THRESHOLD) return EMAIL_SCRAPE_BATCH_SIZE;
-  return 5;
+  if (count >= MEDIUM_CITY_RESULT_THRESHOLD) {
+    return EMAIL_SCRAPE_TAB_CONCURRENCY_LARGE;
+  }
+  return EMAIL_SCRAPE_TAB_CONCURRENCY;
+}
+
+async function runWithTabConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<void>
+): Promise<void> {
+  if (items.length === 0) return;
+  const limit = Math.max(1, Math.min(concurrency, items.length));
+  let index = 0;
+
+  const runners = Array.from({ length: limit }, async () => {
+    while (index < items.length) {
+      const current = items[index];
+      index += 1;
+      await worker(current);
+    }
+  });
+
+  await Promise.all(runners);
 }
 
 async function markRemainingUnscraped(searchId: string): Promise<void> {
@@ -109,88 +139,97 @@ export async function runBatchEmailScraping(
   options: BatchEmailScrapeOptions = {}
 ): Promise<{ emailsFound: number; emailsScraped: number }> {
   const deadline = Date.now() + deadlineMs;
-  const batchSize = resolveBatchSize(options.totalResultCount, options.batchSize);
+  const tabConcurrency = resolveTabConcurrency(options.totalResultCount);
   let emailsFound = 0;
   let emailsScraped = 0;
   let websitesAttempted = 0;
 
+  const ownsBrowser = !options.browser;
+  let browser = options.browser ?? null;
+  let browserContext: BrowserContext | null = null;
+
   logger.info("[search-diag] Starting batch email scrape", {
     searchId,
-    batchSize,
+    tabConcurrency,
     totalResultCount: options.totalResultCount ?? null,
     perSiteTimeoutMs: 15000,
     websiteCap: "none",
+    reusingBrowser: Boolean(options.browser),
   });
 
-  while (Date.now() < deadline) {
-    const pending = (await getAllSearchLeads(searchId)).filter(
-      (lead) => lead.website && !lead.emailScraped && !leadHasEmail(lead)
-    );
+  try {
+    if (!browser) {
+      const { getBrowserPool } = await import("../scraper/browser/browser-pool");
+      browser = await getBrowserPool().acquire(60_000);
+    }
 
-    if (pending.length === 0) break;
+    browserContext = await createEmailBrowserContext(browser);
 
-    for (let i = 0; i < pending.length; i += batchSize) {
-      if (Date.now() >= deadline) break;
-
-      const batch = pending.slice(i, i + batchSize);
-      const results = await Promise.allSettled(
-        batch.map((lead) => scrapeOneLeadEmail(lead))
+    while (Date.now() < deadline) {
+      const pending = (await getAllSearchLeads(searchId)).filter(
+        (lead) =>
+          lead.website && !lead.emailScraped && !leadHasEmail(lead)
       );
 
-      for (let j = 0; j < results.length; j++) {
-        const result = results[j];
-        const original = batch[j];
+      if (pending.length === 0) break;
+
+      const context = browserContext;
+      await runWithTabConcurrency(pending, tabConcurrency, async (lead) => {
+        if (Date.now() >= deadline) return;
+
         websitesAttempted++;
         emailsScraped++;
 
-        if (result.status !== "fulfilled") {
-          logger.warn("[email-diag] Website scrape rejected", {
-            searchId,
-            businessId: original.id,
-            website: original.website?.substring(0, 80),
-            error:
-              result.reason instanceof Error
-                ? result.reason.message
-                : "unknown",
-          });
-          await markBusinessLeadEmailScraped(original.id, []).catch(() => undefined);
-          continue;
-        }
+        try {
+          const enriched = await scrapeOneLeadEmail(lead, context);
+          const hasEmails =
+            (enriched.verifiedEmails?.length ?? 0) > 0 ||
+            (enriched.predictedEmails?.length ?? 0) > 0;
 
-        const enriched = result.value;
-        const hasEmails =
-          (enriched.verifiedEmails?.length ?? 0) > 0 ||
-          (enriched.predictedEmails?.length ?? 0) > 0;
+          if (hasEmails) {
+            emailsFound++;
+            await updateBusinessLeadEnrichment(enriched).catch((err) =>
+              logger.warn("[email-diag] Failed to persist enriched email", {
+                searchId,
+                businessId: enriched.id,
+                error: err instanceof Error ? err.message : "unknown",
+              })
+            );
 
-        if (hasEmails) {
-          emailsFound++;
-          await updateBusinessLeadEnrichment(enriched).catch((err) =>
-            logger.warn("[email-diag] Failed to persist enriched email", {
-              searchId,
+            const allEmails = [
+              ...(enriched.verifiedEmails ?? []),
+              ...(enriched.predictedEmails?.map((p) => p.email) ?? []),
+            ];
+
+            emit({
+              type: "email_update",
               businessId: enriched.id,
-              error: err instanceof Error ? err.message : "unknown",
-            })
-          );
-
-          const allEmails = [
-            ...(enriched.verifiedEmails ?? []),
-            ...(enriched.predictedEmails?.map((p) => p.email) ?? []),
-          ];
-
-          emit({
-            type: "email_update",
-            businessId: enriched.id,
-            email: enriched.email,
-            emails: allEmails,
-            emailSource:
-              enriched.emailSource === "predicted" ? "predicted" : "website",
-            lead: enriched,
-            data: enriched,
+              email: enriched.email,
+              emails: allEmails,
+              emailSource:
+                enriched.emailSource === "predicted" ? "predicted" : "website",
+              lead: enriched,
+              data: enriched,
+            });
+          } else {
+            await markBusinessLeadEmailScraped(lead.id, []).catch(() => undefined);
+          }
+        } catch (err) {
+          logger.warn("[email-diag] Website scrape failed", {
+            searchId,
+            businessId: lead.id,
+            website: lead.website?.substring(0, 80),
+            error: err instanceof Error ? err.message : "unknown",
           });
-        } else {
-          await markBusinessLeadEmailScraped(original.id, []).catch(() => undefined);
+          await markBusinessLeadEmailScraped(lead.id, []).catch(() => undefined);
         }
-      }
+      });
+    }
+  } finally {
+    await browserContext?.close().catch(() => undefined);
+    if (ownsBrowser && browser) {
+      const { getBrowserPool } = await import("../scraper/browser/browser-pool");
+      getBrowserPool().release(browser);
     }
   }
 
@@ -201,6 +240,7 @@ export async function runBatchEmailScraping(
     emailsFound,
     emailsScraped,
     websitesAttempted,
+    tabConcurrency,
   });
 
   return { emailsFound, emailsScraped };

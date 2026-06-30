@@ -274,9 +274,15 @@ async function runBackgroundWork(
       } else {
         logSearchStep(searchId, "email_scraping", { leadCount, memoryPercent });
         const emailStart = Date.now();
-        await runBatchEmailScraping(searchId, emit, undefined, {
-          totalResultCount: leadCount,
-        });
+        const emailBrowser = await pool.acquire(60_000);
+        try {
+          await runBatchEmailScraping(searchId, emit, undefined, {
+            totalResultCount: leadCount,
+            browser: emailBrowser,
+          });
+        } finally {
+          pool.release(emailBrowser);
+        }
         emailTimedOut = Date.now() - emailStart >= 3 * 60 * 1000 - 1000;
       }
     } else {
@@ -335,8 +341,8 @@ async function runBackgroundWork(
 
     emit({
       type: "complete",
-      total: stats.total,
-      message: `Search complete. Found ${stats.total} businesses in ${location}.`,
+      total: totalFound,
+      message: `Search complete. Found ${totalFound} businesses in ${location}.`,
     });
 
     if (!isTrial) {

@@ -27,36 +27,34 @@ export function businessLeadToLead(lead: BusinessLead): Lead {
   const verified =
     lead.verifiedEmails?.length > 0
       ? lead.verifiedEmails
-      : lead.email
-        ? lead.email.split(/,\s*/).map((e) => e.trim()).filter(Boolean)
-        : [];
+      : lead.emailSource === "website" && lead.emails?.length > 0
+        ? lead.emails
+        : lead.emailSource !== "predicted" && lead.email
+          ? lead.email.split(/,\s*/).map((e) => e.trim()).filter(Boolean)
+          : [];
 
-  const allEmails =
-    lead.emails?.length > 0 ? lead.emails : verified;
-  const isPredicted = lead.emailSource === "predicted";
+  const predicted = lead.predictedEmails ?? [];
+
+  const displayVerified = verified;
+  const displayPredicted = predicted.map((p) => p.email);
+  const allForLegacy = [...displayVerified, ...displayPredicted];
 
   return {
     id: lead.id,
     search_id: lead.searchId,
     business_name: lead.name,
     phone: lead.phone,
-    email: allEmails.length > 0 ? allEmails.join(", ") : null,
-    emails: allEmails,
-    verified_emails: isPredicted ? [] : allEmails,
-    predicted_emails: isPredicted
-      ? allEmails.map((email) => ({
-          email,
-          confidence: 0,
-          label: "medium" as const,
-          source: "business_pattern" as const,
-        }))
-      : (lead.predictedEmails ?? []),
-    extracted_email: lead.emailSource === "website" ? verified.join(", ") || null : null,
+    email: allForLegacy.length > 0 ? allForLegacy.join(", ") : null,
+    emails: displayVerified,
+    verified_emails: displayVerified,
+    predicted_emails: predicted,
+    extracted_email:
+      displayVerified.length > 0 ? displayVerified.join(", ") : null,
     generated_email: null,
     email_source:
-      lead.emailSource === "website"
+      displayVerified.length > 0
         ? "extracted"
-        : lead.emailSource === "predicted"
+        : displayPredicted.length > 0
           ? "predicted"
           : null,
     website: lead.website,
