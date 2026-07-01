@@ -1,5 +1,6 @@
 import { supabase } from "./client";
 import { getLicenseByKeyAndEmail } from "./license-repository";
+import { countSearchLeads } from "./search-repository";
 import { logger } from "../utils/logger";
 
 export interface UserSearchRow {
@@ -30,6 +31,61 @@ export async function saveUserSearch(params: {
   if (error) {
     logger.error("Failed to save search history", { error: error.message });
   }
+}
+
+/** Persist final lead count after job completion (insert or update by search_id). */
+export async function upsertUserSearchFinalCount(params: {
+  searchId: string;
+  licenseKey?: string | null;
+  query: string;
+  location: string;
+  totalFound: number;
+}): Promise<void> {
+  if (params.totalFound <= 0) return;
+
+  const totalFound =
+    (await countSearchLeads(params.searchId)) || params.totalFound;
+
+  const { data: existing, error: lookupError } = await supabase
+    .from("user_searches")
+    .select("id")
+    .eq("search_id", params.searchId)
+    .limit(1)
+    .maybeSingle();
+
+  if (lookupError) {
+    logger.error("Failed to look up user search row", {
+      searchId: params.searchId,
+      error: lookupError.message,
+    });
+    return;
+  }
+
+  if (existing?.id) {
+    const { error } = await supabase
+      .from("user_searches")
+      .update({ total_found: totalFound })
+      .eq("id", existing.id);
+
+    if (error) {
+      logger.error("Failed to update user search count", {
+        searchId: params.searchId,
+        error: error.message,
+      });
+    }
+    return;
+  }
+
+  const licenseKey = params.licenseKey?.trim();
+  if (!licenseKey) return;
+
+  await saveUserSearch({
+    licenseKey,
+    searchId: params.searchId,
+    query: params.query,
+    location: params.location,
+    totalFound,
+  });
 }
 
 function normalizeLicenseKey(licenseKey: string): string {
@@ -102,5 +158,21 @@ export async function getUserSearchHistory(
     return [];
   }
 
-  return (data ?? []) as UserSearchRow[];
+  const rows = (data ?? []) as UserSearchRow[];
+  const enriched = await Promise.all(
+    rows.map(async (row) => {
+      if (!row.search_id) return row;
+      try {
+        const liveCount = await countSearchLeads(row.search_id);
+        if (liveCount > 0) {
+          return { ...row, total_found: liveCount };
+        }
+      } catch {
+        /* keep stored count */
+      }
+      return row;
+    })
+  );
+
+  return enriched;
 }

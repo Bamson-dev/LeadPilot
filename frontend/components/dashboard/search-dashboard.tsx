@@ -8,10 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { LiveCounter } from "@/components/dashboard/live-counter";
-import {
-  RecentSearchesPanel,
-  recordDashboardSearchHistory,
-} from "@/components/dashboard/recent-searches-panel";
+import { RecentSearchesPanel } from "@/components/dashboard/recent-searches-panel";
 import { SearchHistory } from "@/components/dashboard/search-history";
 import { AffiliateSection } from "@/components/dashboard/affiliate-section";
 import { WelcomeState } from "@/components/dashboard/welcome-state";
@@ -173,20 +170,7 @@ export function SearchDashboard() {
     void fetchSuggestions(query, loc, totalFound, searchedExpansionLocations);
 
     if (totalFound > 0) {
-      const email =
-        typeof window !== "undefined"
-          ? localStorage.getItem("leadthur_email") || ""
-          : "";
-      if (email) {
-        void recordDashboardSearchHistory({
-          email,
-          businessType: query,
-          location: loc,
-          resultsCount: totalFound,
-        }).then(() => {
-          setHistoryRefreshKey((prev) => prev + 1);
-        });
-      }
+      setHistoryRefreshKey((prev) => prev + 1);
     }
   };
 

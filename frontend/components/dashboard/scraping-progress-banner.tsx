@@ -21,19 +21,6 @@ export function ScrapingProgressBanner({
   const emailScrapingActive =
     !emailScrapingComplete && (scrapingInProgress || stats.total > 0);
 
-  if (!emailScrapingActive && stats.total > 0 && emailsTarget > 0 && emailsFound > 0) {
-    const coverage = Math.round((emailsFound / Math.max(emailsTarget, 1)) * 100);
-    return (
-      <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
-        Email coverage complete — found addresses for{" "}
-        <span className="font-semibold text-white">
-          {emailsFound} of {emailsTarget}
-        </span>{" "}
-        businesses with websites ({coverage}%).
-      </div>
-    );
-  }
-
   if (!emailScrapingActive) return null;
 
   const progressPct =
@@ -46,14 +33,6 @@ export function ScrapingProgressBanner({
       <p className="text-sm text-violet-100">
         Finding email addresses for these businesses. This usually takes 1 to 2
         minutes.
-      </p>
-      <p className="text-xs text-violet-200/80">
-        Emails found for{" "}
-        <span className="font-semibold text-white">{emailsFound}</span> of{" "}
-        <span className="font-semibold text-white">
-          {emailsTarget}
-        </span>{" "}
-        businesses with websites.
       </p>
       <Progress value={progressPct} className="h-1.5 bg-violet-950/50" />
     </div>

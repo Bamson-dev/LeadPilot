@@ -14,7 +14,7 @@ import {
   tryClaimResultsEmailSend,
   updateSearchJob,
 } from "../database/search-repository";
-import { saveUserSearch } from "../database/user-search-repository";
+import { upsertUserSearchFinalCount } from "../database/user-search-repository";
 import { recordSearchHistorySafe } from "../database/search-history-repository";
 import { getLicenseEmailBySearchId } from "../database/license-repository";
 import {
@@ -104,7 +104,11 @@ export async function commitPartialSearchResults(
   query: string,
   location: string,
   licenseEmail: string | null,
-  options?: { skipEmailScraping?: boolean; emailTimedOut?: boolean }
+  options?: {
+    skipEmailScraping?: boolean;
+    emailTimedOut?: boolean;
+    licenseKey?: string | null;
+  }
 ): Promise<number> {
   const count = await countSearchLeads(searchId);
   if (count <= 0) return 0;
@@ -120,7 +124,10 @@ export async function commitPartialSearchResults(
     location,
     licenseEmail,
     options?.emailTimedOut ?? true,
-    { skipEmailScraping: options?.skipEmailScraping }
+    {
+      skipEmailScraping: options?.skipEmailScraping,
+      licenseKey: options?.licenseKey,
+    }
   );
 
   return count;
@@ -132,7 +139,7 @@ export async function forceFinalizeSearchJob(
   location: string,
   licenseEmail: string | null,
   emailTimedOut: boolean,
-  options?: { skipEmailScraping?: boolean }
+  options?: { skipEmailScraping?: boolean; licenseKey?: string | null }
 ): Promise<void> {
   await finalizeSearchAndNotify(
     searchId,
@@ -150,7 +157,7 @@ async function finalizeSearchAndNotify(
   location: string,
   licenseEmail: string | null,
   emailTimedOut: boolean,
-  notifyOptions?: { skipEmailScraping?: boolean }
+  notifyOptions?: { skipEmailScraping?: boolean; licenseKey?: string | null }
 ): Promise<void> {
   const leads = await getAllSearchLeads(searchId);
   const totalFound = await countSearchLeads(searchId);
@@ -164,6 +171,14 @@ async function finalizeSearchAndNotify(
     emailScrapingComplete: true,
     statsSummary: { ...stats, total: totalFound },
     error: null,
+  });
+
+  void upsertUserSearchFinalCount({
+    searchId,
+    licenseKey: notifyOptions?.licenseKey,
+    query,
+    location,
+    totalFound,
   });
 
   if (licenseEmail && totalFound > 0) {
@@ -368,7 +383,11 @@ export async function recoverSearchJobEmailScraping(
   query: string,
   location: string,
   emit: ScrapeEmitter,
-  options?: { licenseEmail?: string | null; jobStartedAt?: number }
+  options?: {
+    licenseEmail?: string | null;
+    jobStartedAt?: number;
+    licenseKey?: string | null;
+  }
 ): Promise<void> {
   const job = await getSearchJob(searchId);
   if (job?.emailScrapingComplete) {
@@ -409,7 +428,10 @@ export async function recoverSearchJobEmailScraping(
     location,
     licenseEmail,
     phase2.emailTimedOut,
-    { skipEmailScraping: phase2.skipEmailScraping }
+    {
+      skipEmailScraping: phase2.skipEmailScraping,
+      licenseKey: options?.licenseKey,
+    }
   );
 
   emit({
@@ -558,7 +580,7 @@ async function runBackgroundWork(
       location,
       licenseEmail,
       emailTimedOut,
-      { skipEmailScraping }
+      { skipEmailScraping, licenseKey: options?.licenseKey }
     );
 
     emit({
@@ -612,7 +634,7 @@ async function runBackgroundWork(
         location,
         licenseEmail,
         true,
-        { skipEmailScraping }
+        { skipEmailScraping, licenseKey: options?.licenseKey }
       ).catch(() => undefined);
       emit({
         type: "complete",
@@ -812,16 +834,6 @@ export async function runScraperJob(
       message: `Found ${phase1Total} businesses. Finding email addresses in the background...`,
     });
 
-    if (options?.licenseKey) {
-      await saveUserSearch({
-        licenseKey: options.licenseKey,
-        searchId,
-        query,
-        location,
-        totalFound: phase1Total,
-      });
-    }
-
     const licenseEmail =
       options?.licenseEmail?.toLowerCase().trim() ||
       (await resolveLicenseEmail());
@@ -859,7 +871,7 @@ export async function runScraperJob(
             query,
             location,
             emit,
-            { licenseEmail, jobStartedAt }
+            { licenseEmail, jobStartedAt, licenseKey: options?.licenseKey }
           );
         } catch (phase2Err) {
           logger.error("[search-job] Phase 2 recovery failed in main catch", {
@@ -872,7 +884,7 @@ export async function runScraperJob(
             query,
             location,
             licenseEmail,
-            { emailTimedOut: true }
+            { emailTimedOut: true, licenseKey: options?.licenseKey }
           );
         }
       } else {
@@ -881,7 +893,7 @@ export async function runScraperJob(
           query,
           location,
           licenseEmail,
-          { emailTimedOut: true }
+          { emailTimedOut: true, licenseKey: options?.licenseKey }
         );
         emit({
           type: "complete",
