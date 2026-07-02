@@ -104,6 +104,7 @@ async function processSearchJob(job: Job<SearchQueueJobData>): Promise<void> {
       await recoverSearchJobEmailScraping(searchId, query, location, emit, {
         licenseEmail,
         jobStartedAt,
+        licenseKey,
       });
       return;
     }
@@ -150,7 +151,7 @@ export function startSearchWorker(): Worker<SearchQueueJobData> | null {
 
   worker.on("failed", async (job, err) => {
     if (!job) return;
-    const { searchId, query, location, licenseEmail } = job.data;
+    const { searchId, query, location, licenseEmail, licenseKey } = job.data;
     const attempts = job.opts.attempts ?? 1;
     const isFinalFailure = job.attemptsMade >= attempts;
 
@@ -182,6 +183,7 @@ export function startSearchWorker(): Worker<SearchQueueJobData> | null {
     if (leadsCollected > 0 && !existing?.emailScrapingComplete) {
       await recoverSearchJobEmailScraping(searchId, query, location, emit, {
         licenseEmail,
+        licenseKey,
       }).catch((recoverErr) =>
         logger.error("[search-worker] Phase 2 recovery in failed handler failed", {
           searchId,

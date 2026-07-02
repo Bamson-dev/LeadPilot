@@ -30,8 +30,10 @@ export function SearchHistory({
   const [loading, setLoading] = useState(true);
   const [exportingId, setExportingId] = useState<string | null>(null);
   const [historyExpanded, setHistoryExpanded] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem("lp_history_expanded") === "true";
+    if (typeof window === "undefined") return true;
+    const stored = localStorage.getItem("lp_history_expanded");
+    if (stored === "false") return false;
+    return true;
   });
 
   useEffect(() => {
@@ -53,7 +55,13 @@ export function SearchHistory({
     localStorage.setItem("lp_history_expanded", String(newVal));
   }
 
-  if (loading || history.length === 0) return null;
+  if (loading) {
+    return (
+      <div className="glass rounded-2xl px-6 py-4">
+        <div className="text-sm text-[#6B6B80]">Loading search history…</div>
+      </div>
+    );
+  }
 
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString(undefined, {
@@ -121,7 +129,9 @@ export function SearchHistory({
             Search History
           </div>
           <div style={{ color: "#6B6B80", fontSize: 12 }}>
-            {history.length} saved searches — view or export anytime
+            {history.length > 0
+              ? `${history.length} saved searches — view or export anytime`
+              : "Your completed searches will appear here"}
           </div>
         </div>
         <span
@@ -138,7 +148,11 @@ export function SearchHistory({
 
       {historyExpanded && (
         <div className="mt-4 pb-4">
-          {isMobile ? (
+          {history.length === 0 ? (
+            <p className="pb-2 text-sm text-[#6B6B80]">
+              No saved searches yet. Run a search above and it will show up here when complete.
+            </p>
+          ) : isMobile ? (
             <div className="flex flex-col gap-2.5">
               {history.map((item) => (
                 <div

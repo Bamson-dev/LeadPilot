@@ -1,5 +1,5 @@
 import { supabase } from "./client";
-import { getLicenseByKeyAndEmail } from "./license-repository";
+import { getLicenseByKeyAndEmail, getLicenseEmailBySearchId, getLicenseKeyByEmail } from "./license-repository";
 import { countSearchLeads } from "./search-repository";
 import { logger } from "../utils/logger";
 
@@ -46,6 +46,15 @@ export async function upsertUserSearchFinalCount(params: {
   const totalFound =
     (await countSearchLeads(params.searchId)) || params.totalFound;
 
+  let licenseKey = params.licenseKey?.trim() || null;
+  if (!licenseKey) {
+    const licenseEmail = await getLicenseEmailBySearchId(params.searchId);
+    if (licenseEmail) {
+      const license = await getLicenseKeyByEmail(licenseEmail);
+      licenseKey = license?.key?.trim() || null;
+    }
+  }
+
   const { data: existing, error: lookupError } = await supabase
     .from("user_searches")
     .select("id")
@@ -76,8 +85,12 @@ export async function upsertUserSearchFinalCount(params: {
     return;
   }
 
-  const licenseKey = params.licenseKey?.trim();
-  if (!licenseKey) return;
+  if (!licenseKey) {
+    logger.warn("Skipping user search insert — no license key for search", {
+      searchId: params.searchId,
+    });
+    return;
+  }
 
   await saveUserSearch({
     licenseKey,

@@ -14,7 +14,7 @@ import {
   tryClaimResultsEmailSend,
   updateSearchJob,
 } from "../database/search-repository";
-import { upsertUserSearchFinalCount } from "../database/user-search-repository";
+import { upsertUserSearchFinalCount, saveUserSearch } from "../database/user-search-repository";
 import { recordSearchHistorySafe } from "../database/search-history-repository";
 import { getLicenseEmailBySearchId } from "../database/license-repository";
 import {
@@ -833,6 +833,16 @@ export async function runScraperJob(
       total: phase1Total,
       message: `Found ${phase1Total} businesses. Finding email addresses in the background...`,
     });
+
+    if (options?.licenseKey) {
+      await saveUserSearch({
+        licenseKey: options.licenseKey,
+        searchId,
+        query,
+        location,
+        totalFound: phase1Total,
+      });
+    }
 
     const licenseEmail =
       options?.licenseEmail?.toLowerCase().trim() ||

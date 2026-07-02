@@ -87,7 +87,7 @@ class InlineSearchQueue {
           job.data.query,
           job.data.location,
           emit,
-          { licenseEmail: job.data.licenseEmail, jobStartedAt }
+          { licenseEmail: job.data.licenseEmail, jobStartedAt, licenseKey: job.data.licenseKey }
         );
         job.resolve();
       } catch (recoverErr) {
