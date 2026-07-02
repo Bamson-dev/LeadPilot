@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ResultsTable } from "@/features/results/results-table";
 import { ResultsSummaryBar } from "@/components/dashboard/results-summary-bar";
-import { ScrapingProgressBanner } from "@/components/dashboard/scraping-progress-banner";
 import { NearbyCityChips } from "@/components/dashboard/nearby-city-chips";
 import { pollSearchResults } from "@/services/api";
 import { businessLeadToLead } from "@/types/lead";
@@ -73,7 +72,6 @@ export default function SearchResultPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [scrapingInProgress, setScrapingInProgress] = useState(false);
   const [emailScrapingComplete, setEmailScrapingComplete] = useState(true);
   const [nearbyCities, setNearbyCities] = useState<
     Awaited<ReturnType<typeof pollSearchResults>>["nearbyCities"]
@@ -110,7 +108,6 @@ export default function SearchResultPage() {
           setLeads(mergedBusinessLeads.map(businessLeadToLead));
         }
 
-        setScrapingInProgress(payload.scrapingInProgress);
         setEmailScrapingComplete(payload.emailScrapingComplete);
         setNearbyCities(payload.nearbyCities ?? []);
         setNotFound(false);
@@ -161,11 +158,6 @@ export default function SearchResultPage() {
       </div>
 
       <ResultsSummaryBar leads={leads} />
-      <ScrapingProgressBanner
-        scrapingInProgress={scrapingInProgress}
-        emailScrapingComplete={emailScrapingComplete}
-        leads={leads}
-      />
       <NearbyCityChips
         show={emailScrapingComplete && !loading}
         cities={nearbyCities}
