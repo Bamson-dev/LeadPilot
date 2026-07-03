@@ -1,3 +1,5 @@
+import { emailButton, emailSignature } from "./email-template";
+
 export const TRIAL_STEP_HOURS_FROM_SIGNUP: Record<number, number> = {
   1: 0,
   2: 24,
@@ -34,8 +36,8 @@ export const TRIAL_EMAIL_SUBJECTS: Record<number, string> = {
   15: "My last message to you",
 };
 
-const CTA = `<a href="https://leadthur.com" class="btn">Go to LeadThur</a>`;
-const SIG = `<div class="sig"><strong>Bamidele</strong>Founder, LeadThur</div>`;
+const CTA = emailButton("Go to LeadThur", "https://leadthur.com");
+const SIG = emailSignature();
 
 export function getTrialEmailBody(step: number): string {
   const bodies: Record<number, string> = {

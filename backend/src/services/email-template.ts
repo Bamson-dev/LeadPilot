@@ -58,6 +58,7 @@ const EMAIL_STYLES = `
   .stat-label { font-size: 14px; color: ${TEXT_MUTED}; }
   .detail-row { display: block; padding: 10px 0; border-bottom: 1px solid #EEEEEE; font-size: 14px; color: ${TEXT_BODY}; }
   .detail-row strong { color: ${TEXT_PRIMARY}; }
+  a.email-btn-fallback { display: inline-block; background-color: ${BRAND_PURPLE}; color: #ffffff !important; font-weight: 600; text-decoration: none; padding: 14px 28px; border-radius: 8px; }
   @media only screen and (max-width: 620px) {
     .email-container { width: 100% !important; }
     .content-cell { padding-left: 24px !important; padding-right: 24px !important; }
