@@ -16,7 +16,6 @@ import {
   sendAccessEmail,
   sendDirectEmailHtml,
   sendDirectMessageEmail,
-  sendEmail,
   sendPayoutPaidEmail,
   sendSearchResultsReadyEmailPreview,
   sendTrialBroadcastEmail,
@@ -1838,49 +1837,6 @@ adminRouter.get("/email-performance", requireAdminAuth, async (_req: Request, re
 const testEmailEnabled =
   process.env.ENABLE_TEST_EMAIL === "true" ||
   process.env.FRONTEND_URL?.includes("staging.leadthur.com") === true;
-
-adminRouter.post("/test-zeptomail", requireAdminAuth, async (req: Request, res: Response) => {
-  try {
-    const to = typeof req.body?.to === "string" ? req.body.to.trim() : "";
-    if (!to) {
-      res.status(400).json({ error: "to is required" });
-      return;
-    }
-
-    const { buildEmailHtml, emailButton, emailHeading, emailParagraph } = await import(
-      "../services/email-template"
-    );
-    const html = buildEmailHtml({
-      body: `
-        ${emailHeading("LeadThur email delivery test")}
-        ${emailParagraph("If you received this, ZeptoMail delivery via sendEmail is working on staging.")}
-        ${emailButton("Go to LeadThur", "https://leadthur.com")}
-      `,
-      recipientEmail: to,
-    });
-
-    const sent = await sendEmail({
-      to,
-      subject: "LeadThur ZeptoMail test",
-      html,
-    });
-
-    if (!sent) {
-      res.status(502).json({
-        success: false,
-        error: "Both ZeptoMail and Resend failed. Check backend logs and env vars.",
-      });
-      return;
-    }
-
-    res.json({ success: true, message: `Test email sent to ${to}` });
-  } catch (error) {
-    logger.error("POST /admin/test-zeptomail failed", {
-      error: error instanceof Error ? error.message : "unknown",
-    });
-    res.status(500).json({ success: false, error: "Failed to send test email" });
-  }
-});
 
 adminRouter.post("/test-email-design", requireAdminAuth, async (req: Request, res: Response) => {
   try {
