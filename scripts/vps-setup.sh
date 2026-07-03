@@ -3,7 +3,7 @@
 set -euo pipefail
 
 APP_DIR="${1:-/opt/leadthur}"
-REPO_URL="${2:-https://github.com/Bamson-dev/LeadThur.git}"
+REPO_URL="${2:-https://github.com/Bamson-dev/LeadPilot.git}"
 
 echo "==> Installing Docker if missing..."
 if ! command -v docker &>/dev/null; then

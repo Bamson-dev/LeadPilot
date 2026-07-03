@@ -1,5 +1,4 @@
 import { chromium, type Browser } from "playwright";
-import { getEnv } from "../../config/env";
 import { logger } from "../../utils/logger";
 import { getChromiumLaunchOptions } from "./chromium-options";
 import { acquirePlaywrightSlot } from "./playwright-semaphore";
@@ -12,7 +11,8 @@ export class BrowserPool {
   private initPromise: Promise<void> | null = null;
 
   constructor(size?: number) {
-    this.size = size ?? getEnv().SCRAPER_CONCURRENCY;
+    const fromEnv = parseInt(process.env.SCRAPER_CONCURRENCY || "5", 10);
+    this.size = size ?? (Number.isFinite(fromEnv) ? fromEnv : 5);
   }
 
   async init(): Promise<void> {

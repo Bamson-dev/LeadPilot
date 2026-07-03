@@ -3,7 +3,14 @@ import { COMMISSION_NGN, COMMISSION_USD, MIN_PAYOUT_NGN } from "../constants/pri
 import { config } from "../config/env";
 import { displayCityFromLocation } from "../scraper/googleMaps/grid-search";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let resendClient: Resend | null = null;
+
+function getResendClient(): Resend | null {
+  const key = process.env.RESEND_API_KEY?.trim();
+  if (!key) return null;
+  if (!resendClient) resendClient = new Resend(key);
+  return resendClient;
+}
 
 // Transactional email — set RESEND_API_KEY and EMAIL_FROM in backend env (Coolify / .env).
 const FROM = process.env.EMAIL_FROM || "access@leadthur.com";
@@ -65,7 +72,8 @@ function wrapper(body: string): string {
 }
 
 async function deliver(params: { to: string; subject: string; html: string }): Promise<void> {
-  if (!process.env.RESEND_API_KEY) {
+  const resend = getResendClient();
+  if (!resend) {
     console.warn("RESEND_API_KEY not set — skipping email", { to: params.to, subject: params.subject });
     return;
   }
