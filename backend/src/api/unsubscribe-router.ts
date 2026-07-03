@@ -51,7 +51,7 @@ function unsubscribeHtml(message: string, success: boolean): string {
 </head>
 <body>
   <div class="card">
-    <div class="logo">LeadThur</div>
+    <div class="logo">Lead<span style="color:#7C3AED;">Thur</span></div>
     ${success ? '<div class="ok">Unsubscribed</div>' : ""}
     <h1>${success ? "You have been unsubscribed" : "Unable to unsubscribe"}</h1>
     <p>${message}</p>

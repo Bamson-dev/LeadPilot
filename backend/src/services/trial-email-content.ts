@@ -73,7 +73,7 @@ ${SIG}`,
 <div class="highlight">No more dry months. No more starting from zero every time work slows down. You generate opportunities on demand.</div>
 <p>If you want steady income, you need a steady list of people to pitch. This is how you build it.</p>
 ${CTA}
-<p class="meta">See how others use LeadThur on <a href="https://www.instagram.com/leadthur" style="color:#111111">Instagram</a> and on X at <a href="https://x.com/LeadThur" style="color:#111111">@LeadThur</a>.</p>
+<p class="meta" style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#666666;">See how others use LeadThur on <a href="https://www.instagram.com/leadthur" style="color:#7C3AED;text-decoration:underline;">Instagram</a> and on X at <a href="https://x.com/LeadThur" style="color:#7C3AED;text-decoration:underline;">@LeadThur</a>.</p>
 ${SIG}`,
 
     5: `
@@ -137,7 +137,7 @@ ${SIG}`,
 <div class="highlight">That kind of visibility gives you options. Options lead to more conversations, more closes, and calmer income.</div>
 <p>This is the daily reality LeadThur is built to create. One search. Any city. Direct contact details included.</p>
 ${CTA}
-<p class="meta">See real examples on <a href="https://www.instagram.com/leadthur" style="color:#111111">Instagram</a> and on X at <a href="https://x.com/LeadThur" style="color:#111111">@LeadThur</a>.</p>
+<p class="meta" style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#666666;">See real examples on <a href="https://www.instagram.com/leadthur" style="color:#7C3AED;text-decoration:underline;">Instagram</a> and on X at <a href="https://x.com/LeadThur" style="color:#7C3AED;text-decoration:underline;">@LeadThur</a>.</p>
 ${SIG}`,
 
     12: `
