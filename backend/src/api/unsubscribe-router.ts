@@ -40,21 +40,22 @@ function unsubscribeHtml(message: string, success: boolean): string {
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Unsubscribe — LeadThur</title>
   <style>
-    body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #f4f4f5; font-family: -apple-system, 'Segoe UI', Inter, sans-serif; padding: 24px; }
-    .card { max-width: 420px; background: #fff; border-radius: 12px; padding: 40px; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
-    h1 { font-size: 20px; color: #09090b; margin: 0 0 12px; }
-    p { font-size: 15px; color: #3f3f46; line-height: 1.6; margin: 0; }
-    .logo { font-size: 16px; font-weight: 800; margin-bottom: 24px; color: #09090b; }
-    .logo span { color: #7C3AED; }
-    .ok { color: #10B981; font-size: 32px; margin-bottom: 16px; }
+    body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 24px; color: #111111; }
+    .card { max-width: 420px; background: #fff; border: 1px solid #e5e5e5; border-radius: 4px; padding: 40px; text-align: center; }
+    h1 { font-size: 20px; color: #111111; margin: 0 0 12px; font-weight: 700; }
+    p { font-size: 15px; color: #444444; line-height: 1.7; margin: 0; }
+    .logo { font-size: 18px; font-weight: 700; margin-bottom: 24px; color: #111111; }
+    .ok { color: #111111; font-size: 24px; margin-bottom: 16px; }
+    .footer { margin-top: 24px; font-size: 12px; color: #777777; line-height: 1.6; }
   </style>
 </head>
 <body>
   <div class="card">
-    <div class="logo">Lead<span>Thur</span></div>
-    ${success ? '<div class="ok">✓</div>' : ""}
-    <h1>${success ? "Unsubscribed" : "Unable to unsubscribe"}</h1>
+    <div class="logo">LeadThur</div>
+    ${success ? '<div class="ok">Unsubscribed</div>' : ""}
+    <h1>${success ? "You have been unsubscribed" : "Unable to unsubscribe"}</h1>
     <p>${message}</p>
+    <p class="footer">Pdigital Marketstore Ltd · RC 8015428 · Lagos, Nigeria</p>
   </div>
 </body>
 </html>`;

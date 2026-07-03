@@ -18,7 +18,9 @@ import {
   sendDirectMessageEmail,
   sendEmail,
   sendPayoutPaidEmail,
+  sendSearchResultsReadyEmailPreview,
   sendTrialBroadcastEmail,
+  sendTrialEmailPreview,
 } from "../services/email";
 import { SALE_PRICE_NGN } from "../constants/pricing";
 import { listTrialSignups } from "../database/free-trial-repository";
@@ -1845,10 +1847,22 @@ adminRouter.post("/test-zeptomail", requireAdminAuth, async (req: Request, res: 
       return;
     }
 
+    const { buildEmailHtml, emailButton, emailHeading, emailParagraph } = await import(
+      "../services/email-template"
+    );
+    const html = buildEmailHtml({
+      body: `
+        ${emailHeading("LeadThur email delivery test")}
+        ${emailParagraph("If you received this, ZeptoMail delivery via sendEmail is working on staging.")}
+        ${emailButton("Go to LeadThur", "https://leadthur.com")}
+      `,
+      recipientEmail: to,
+    });
+
     const sent = await sendEmail({
       to,
       subject: "LeadThur ZeptoMail test",
-      html: `<p>If you received this, ZeptoMail delivery via sendEmail is working on staging.</p>`,
+      html,
     });
 
     if (!sent) {
@@ -1865,6 +1879,52 @@ adminRouter.post("/test-zeptomail", requireAdminAuth, async (req: Request, res: 
       error: error instanceof Error ? error.message : "unknown",
     });
     res.status(500).json({ success: false, error: "Failed to send test email" });
+  }
+});
+
+adminRouter.post("/test-email-design", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const to = typeof req.body?.to === "string" ? req.body.to.trim() : "";
+    const type = typeof req.body?.type === "string" ? req.body.type.trim() : "";
+
+    if (!to) {
+      res.status(400).json({ error: "to is required" });
+      return;
+    }
+
+    let sent = false;
+    let label = "";
+
+    if (type === "trial-1") {
+      sent = await sendTrialEmailPreview(to, 1);
+      label = "trial email 1";
+    } else if (type === "trial-9") {
+      sent = await sendTrialEmailPreview(to, 9);
+      label = "trial email 9";
+    } else if (type === "results-ready") {
+      sent = await sendSearchResultsReadyEmailPreview(to);
+      label = "results ready email";
+    } else {
+      res.status(400).json({
+        error: 'type is required and must be one of: "trial-1", "trial-9", "results-ready"',
+      });
+      return;
+    }
+
+    if (!sent) {
+      res.status(502).json({
+        success: false,
+        error: `Failed to send ${label}. Check backend logs and email env vars.`,
+      });
+      return;
+    }
+
+    res.json({ success: true, message: `${label} sent to ${to}` });
+  } catch (error) {
+    logger.error("POST /admin/test-email-design failed", {
+      error: error instanceof Error ? error.message : "unknown",
+    });
+    res.status(500).json({ success: false, error: "Failed to send design test email" });
   }
 });
 
