@@ -2,6 +2,8 @@ import { Resend } from "resend";
 import { COMMISSION_NGN, COMMISSION_USD, MIN_PAYOUT_NGN } from "../constants/pricing";
 import { config } from "../config/env";
 import { displayCityFromLocation } from "../scraper/googleMaps/grid-search";
+import { logger } from "../utils/logger";
+import { sendViaZeptoMail, type EmailSendResult } from "./zeptomail";
 
 let resendClient: Resend | null = null;
 
@@ -12,8 +14,90 @@ function getResendClient(): Resend | null {
   return resendClient;
 }
 
-// Transactional email — set RESEND_API_KEY and EMAIL_FROM in backend env (Coolify / .env).
+// Transactional email — ZeptoMail primary (Coolify env), Resend fallback.
 const FROM = process.env.EMAIL_FROM || "access@leadthur.com";
+
+async function sendViaResend(params: {
+  to: string;
+  subject: string;
+  html: string;
+}): Promise<EmailSendResult> {
+  const resend = getResendClient();
+  if (!resend) {
+    return { success: false, error: "Resend is not configured" };
+  }
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: params.to,
+      subject: params.subject,
+      html: params.html,
+    });
+
+    if (error) {
+      logger.error("Resend send failed", {
+        to: params.to,
+        subject: params.subject,
+        error: error.message,
+      });
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err) {
+    const error = err instanceof Error ? err.message : "unknown error";
+    logger.error("Resend send failed", {
+      to: params.to,
+      subject: params.subject,
+      error,
+    });
+    return { success: false, error };
+  }
+}
+
+export async function sendEmail(params: {
+  to: string;
+  subject: string;
+  html: string;
+  replyTo?: string;
+  toName?: string;
+}): Promise<boolean> {
+  const zeptoResult = await sendViaZeptoMail({
+    to: params.to,
+    subject: params.subject,
+    htmlBody: params.html,
+    replyTo: params.replyTo,
+    toName: params.toName,
+  });
+
+  if (zeptoResult.success) {
+    return true;
+  }
+
+  logger.warn("ZeptoMail send failed, falling back to Resend", {
+    to: params.to,
+    subject: params.subject,
+    error: zeptoResult.success ? undefined : zeptoResult.error,
+  });
+
+  const resendResult = await sendViaResend({
+    to: params.to,
+    subject: params.subject,
+    html: params.html,
+  });
+
+  if (resendResult.success) {
+    return true;
+  }
+
+  logger.error("Email send failed", {
+    to: params.to,
+    subject: params.subject,
+    error: resendResult.success ? undefined : resendResult.error,
+  });
+  return false;
+}
 
 const baseStyle = `
   font-family: Inter, -apple-system, sans-serif;
@@ -72,18 +156,15 @@ function wrapper(body: string): string {
 }
 
 async function deliver(params: { to: string; subject: string; html: string }): Promise<void> {
-  const resend = getResendClient();
-  if (!resend) {
-    console.warn("RESEND_API_KEY not set — skipping email", { to: params.to, subject: params.subject });
-    return;
+  try {
+    await sendEmail(params);
+  } catch (err) {
+    logger.error("Unexpected email delivery error", {
+      to: params.to,
+      subject: params.subject,
+      error: err instanceof Error ? err.message : "unknown",
+    });
   }
-
-  await resend.emails.send({
-    from: FROM,
-    to: params.to,
-    subject: params.subject,
-    html: params.html,
-  });
 }
 
 export async function sendAccessEmail(to: string, licenseKey: string): Promise<void> {

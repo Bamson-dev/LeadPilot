@@ -16,6 +16,7 @@ import {
   sendAccessEmail,
   sendDirectEmailHtml,
   sendDirectMessageEmail,
+  sendEmail,
   sendPayoutPaidEmail,
   sendTrialBroadcastEmail,
 } from "../services/email";
@@ -1835,6 +1836,37 @@ adminRouter.get("/email-performance", requireAdminAuth, async (_req: Request, re
 const testEmailEnabled =
   process.env.ENABLE_TEST_EMAIL === "true" ||
   process.env.FRONTEND_URL?.includes("staging.leadthur.com") === true;
+
+adminRouter.post("/test-zeptomail", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const to = typeof req.body?.to === "string" ? req.body.to.trim() : "";
+    if (!to) {
+      res.status(400).json({ error: "to is required" });
+      return;
+    }
+
+    const sent = await sendEmail({
+      to,
+      subject: "LeadThur ZeptoMail test",
+      html: `<p>If you received this, ZeptoMail delivery via sendEmail is working on staging.</p>`,
+    });
+
+    if (!sent) {
+      res.status(502).json({
+        success: false,
+        error: "Both ZeptoMail and Resend failed. Check backend logs and env vars.",
+      });
+      return;
+    }
+
+    res.json({ success: true, message: `Test email sent to ${to}` });
+  } catch (error) {
+    logger.error("POST /admin/test-zeptomail failed", {
+      error: error instanceof Error ? error.message : "unknown",
+    });
+    res.status(500).json({ success: false, error: "Failed to send test email" });
+  }
+});
 
 if (testEmailEnabled) {
   adminRouter.post("/test-email", async (req: Request, res: Response) => {
