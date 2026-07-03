@@ -11,6 +11,7 @@ import {
   emailParagraph,
   emailSignature,
   escapeHtml,
+  formatPlaceForSubject,
   getFrontendUrl,
 } from "./email-template";
 
@@ -146,7 +147,7 @@ export async function sendAccessEmail(to: string, licenseKey: string): Promise<v
 
   await deliver({
     to,
-    subject: "Your LeadThur access is ready",
+    subject: "Your LeadThur Access Is Ready",
     html: wrapTransactional(body, to),
   });
 }
@@ -164,7 +165,7 @@ export async function sendWelcomeEmail(to: string): Promise<void> {
 
   await deliver({
     to,
-    subject: "Start finding clients in 60 seconds",
+    subject: "Start Finding Clients in 60 Seconds",
     html: wrapTransactional(body, to),
   });
 }
@@ -184,7 +185,7 @@ export async function sendPaymentConfirmationEmail(to: string, amount: string): 
 
   await deliver({
     to,
-    subject: "Payment confirmed — LeadThur lifetime access activated",
+    subject: "Payment Confirmed — LeadThur Lifetime Access Activated",
     html: wrapTransactional(body, to),
   });
 }
@@ -199,7 +200,7 @@ export async function sendPasswordResetEmail(to: string, resetLink: string): Pro
 
   await deliver({
     to,
-    subject: "Reset your LeadThur password",
+    subject: "Reset Your LeadThur Password",
     html: wrapTransactional(body, to),
   });
 }
@@ -215,7 +216,7 @@ export async function sendTrialWelcomeEmail(to: string): Promise<void> {
 
   await deliver({
     to,
-    subject: "Your LeadThur free trial is ready",
+    subject: "Your LeadThur Free Trial Is Ready",
     html: wrapTransactional(body, to),
   });
 }
@@ -285,7 +286,7 @@ export async function sendCommissionNotification(
 
   await deliver({
     to: referrerEmail,
-    subject: `You just earned $${commissionUsd.toFixed(2)} — LeadThur commission`,
+    subject: `You Just Earned $${commissionUsd.toFixed(2)} — LeadThur Commission`,
     html: wrapTransactional(body, referrerEmail),
   });
 }
@@ -310,7 +311,7 @@ export async function sendPayoutRequestedEmail(
 
   await deliver({
     to: email,
-    subject: "Your payout request is being processed — LeadThur",
+    subject: "Your Payout Request Is Being Processed — LeadThur",
     html: wrapTransactional(body, email),
   });
 }
@@ -336,7 +337,7 @@ export async function sendPayoutPaidEmail(
 
   await deliver({
     to: email,
-    subject: `Your ₦${amountNgn.toLocaleString()} payout has been sent — LeadThur`,
+    subject: `Your ₦${amountNgn.toLocaleString()} Payout Has Been Sent — LeadThur`,
     html: wrapTransactional(body, email),
   });
 }
@@ -351,7 +352,7 @@ export async function sendDomainChangeEmail(email: string): Promise<void> {
 
   await deliver({
     to: email,
-    subject: "We have a new name and a new home",
+    subject: "We Have a New Name and a New Home",
     html: wrapTransactional(body, email),
   });
 }
@@ -374,7 +375,7 @@ export async function sendSearchCompleteEmail(
 
   await deliver({
     to: email,
-    subject: `Your search found ${totalFound} businesses — LeadThur`,
+    subject: `Your Search Found ${totalFound} Businesses — LeadThur`,
     html: wrapTransactional(body, email),
   });
 }
@@ -395,7 +396,7 @@ export async function sendSearchResultsReadyEmail(
   options?: { timedOut?: boolean; skipEmailScraping?: boolean }
 ): Promise<void> {
   const resultsUrl = `${getFrontendUrl()}/dashboard/search/${searchId}`;
-  const city = displayCityFromLocation(location);
+  const city = formatPlaceForSubject(displayCityFromLocation(location));
   const countLabel = stats.total.toLocaleString("en-US");
 
   const skipEmailNote = options?.skipEmailScraping
@@ -414,7 +415,7 @@ export async function sendSearchResultsReadyEmail(
 
   await deliver({
     to: email,
-    subject: `We found ${countLabel} potential clients for you in ${city}`,
+    subject: `We Found ${countLabel} Potential Clients for You in ${city}`,
     html: wrapTransactional(body, email),
   });
 }
@@ -433,7 +434,7 @@ export async function sendSearchRunningEmail(
 
   await deliver({
     to: email,
-    subject: "Your LeadThur search is still running — we will notify you when done",
+    subject: "Your LeadThur Search Is Still Running — We Will Notify You When Done",
     html: wrapTransactional(body, email),
   });
 }
@@ -452,7 +453,7 @@ export async function sendSearchFailedEmail(
 
   await deliver({
     to: email,
-    subject: "Your LeadThur search did not complete — here is what to try",
+    subject: "Your LeadThur Search Did Not Complete — Here Is What to Try",
     html: wrapTransactional(body, email),
   });
 }
@@ -471,7 +472,7 @@ export async function sendSearchQueueFailureEmail(
 
   await deliver({
     to: email,
-    subject: "Your search ran into a problem, please try again",
+    subject: "Your Search Ran Into a Problem — Please Try Again",
     html: wrapTransactional(body, email),
   });
 }
@@ -485,7 +486,7 @@ export async function sendLimitReachedEmail(email: string, resetDate: string): P
 
   await deliver({
     to: email,
-    subject: "Your LeadThur search limit has been reached",
+    subject: "Your LeadThur Search Limit Has Been Reached",
     html: wrapTransactional(body, email),
   });
 }
@@ -511,7 +512,7 @@ export async function sendTopUpConfirmationEmail({
 
   await deliver({
     to: email,
-    subject: "Your search credits have been added",
+    subject: "Your Search Credits Have Been Added",
     html: wrapTransactional(body, email),
   });
 }
@@ -574,7 +575,7 @@ export async function sendSearchResultsReadyEmailPreview(email: string): Promise
   `;
   return sendEmail({
     to: email,
-    subject: `We found ${countLabel} potential clients for you in ${city}`,
+    subject: `We Found ${countLabel} Potential Clients for You in ${city}`,
     html: wrapTransactional(body, email),
   });
 }

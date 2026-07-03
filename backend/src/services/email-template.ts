@@ -5,7 +5,7 @@ const FONT_STACK =
 
 export const BRAND_PURPLE = "#7C3AED";
 /** Bump when template changes — check via POST /admin/test-email-design response. */
-export const EMAIL_TEMPLATE_VERSION = "purple-branded-v2";
+export const EMAIL_TEMPLATE_VERSION = "purple-branded-v3";
 const BRAND_PURPLE_DARK = "#6D28D9";
 const TEXT_PRIMARY = "#111111";
 const TEXT_BODY = "#444444";
@@ -187,6 +187,11 @@ export function emailSignature(): string {
   return `<div class="sig" style="margin-top:28px;padding-top:20px;border-top:1px solid ${BORDER_COLOR};font-family:${FONT_STACK};font-size:15px;line-height:1.6;color:${TEXT_BODY};"><strong style="display:block;margin-bottom:2px;color:${TEXT_PRIMARY};">Bamidele</strong>Founder, LeadThur</div>`;
 }
 
-export function emailLink(label: string, href: string): string {
-  return `<a href="${escapeHtml(href)}" style="color:${BRAND_PURPLE};text-decoration:underline;">${escapeHtml(label)}</a>`;
+/** Title-case place names for email subjects (e.g. "garki abuja" → "Garki Abuja"). */
+export function formatPlaceForSubject(place: string): string {
+  return place
+    .trim()
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
 }
