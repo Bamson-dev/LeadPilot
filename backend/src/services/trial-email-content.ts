@@ -21,19 +21,19 @@ export const TRIAL_STEP_HOURS_FROM_SIGNUP: Record<number, number> = {
 export const TRIAL_EMAIL_SUBJECTS: Record<number, string> = {
   1: "You Are 60 Seconds From Your First Client List",
   2: "You Have Not Run Your First Search Yet",
-  3: "She Landed a Client in Six Days With One Search",
-  4: "What a Full Client Pipeline Actually Looks Like",
-  5: "The Three Reasons People Hesitate (And What to Do)",
-  6: "Finding Clients Is the Bottleneck, Not Your Skill",
+  3: "She Landed A Client In Six Days With One Search",
+  4: "What A Full Client Pipeline Actually Looks Like",
+  5: "The Three Reasons People Hesitate (And What To Do)",
+  6: "Finding Clients Is The Bottleneck, Not Your Skill",
   7: "What Users Say After They Stop Hunting Manually",
-  8: "One Week In: What Do You Want Next Month to Look Like?",
-  9: "One Closed Client Pays for Lifetime Access Many Times Over",
+  8: "One Week In: What Do You Want Next Month To Look Like?",
+  9: "One Closed Client Pays For Lifetime Access Many Times Over",
   10: "Why Consistent Outreach Beats Random Effort",
   11: "Picture Your Pipeline Full Tomorrow Morning",
-  12: "The Lifetime Deal Is Moving to a Yearly Plan",
+  12: "The Lifetime Deal Is Moving To A Yearly Plan",
   13: "Can I Ask You Something Direct?",
   14: "The Price Changes Tomorrow",
-  15: "My Last Message to You",
+  15: "My Last Message To You",
 };
 
 const CTA = emailButton("Go to LeadThur", "https://leadthur.com");

@@ -11,6 +11,7 @@ import {
   emailParagraph,
   emailSignature,
   escapeHtml,
+  capitalizeSubjectWords,
   formatPlaceForSubject,
   getFrontendUrl,
 } from "./email-template";
@@ -72,9 +73,11 @@ export async function sendEmail(params: {
   replyTo?: string;
   toName?: string;
 }): Promise<boolean> {
+  const subject = capitalizeSubjectWords(params.subject);
+
   const zeptoResult = await sendViaZeptoMail({
     to: params.to,
-    subject: params.subject,
+    subject,
     htmlBody: params.html,
     replyTo: params.replyTo,
     toName: params.toName,
@@ -86,13 +89,13 @@ export async function sendEmail(params: {
 
   logger.warn("ZeptoMail send failed, falling back to Resend", {
     to: params.to,
-    subject: params.subject,
+    subject,
     error: zeptoResult.success ? undefined : zeptoResult.error,
   });
 
   const resendResult = await sendViaResend({
     to: params.to,
-    subject: params.subject,
+    subject,
     html: params.html,
   });
 
@@ -102,7 +105,7 @@ export async function sendEmail(params: {
 
   logger.error("Email send failed", {
     to: params.to,
-    subject: params.subject,
+    subject,
     error: resendResult.success ? undefined : resendResult.error,
   });
   return false;
