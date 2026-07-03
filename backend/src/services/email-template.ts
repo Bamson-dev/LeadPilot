@@ -4,6 +4,8 @@ const FONT_STACK =
   "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
 export const BRAND_PURPLE = "#7C3AED";
+/** Bump when template changes — check via POST /admin/test-email-design response. */
+export const EMAIL_TEMPLATE_VERSION = "purple-branded-v2";
 const BRAND_PURPLE_DARK = "#6D28D9";
 const TEXT_PRIMARY = "#111111";
 const TEXT_BODY = "#444444";
@@ -156,22 +158,14 @@ export function buildEmailHtml(options: EmailTemplateOptions): string {
 </html>`;
 }
 
-/** Bulletproof CTA button — works in Gmail, Outlook, and Apple Mail. */
+/** Bulletproof CTA button — purple brand, Gmail/Outlook/Apple Mail safe. */
 export function emailButton(label: string, href: string): string {
   const safeHref = escapeHtml(href);
   const safeLabel = escapeHtml(label);
   return `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:24px 0;">
   <tr>
-    <td align="left">
-      <!--[if mso]>
-      <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${safeHref}" style="height:48px;v-text-anchor:middle;width:240px;" arcsize="12%" strokecolor="${BRAND_PURPLE}" fillcolor="${BRAND_PURPLE}">
-        <w:anchorlock/>
-        <center style="color:#ffffff;font-family:${FONT_STACK};font-size:15px;font-weight:600;">${safeLabel}</center>
-      </v:roundrect>
-      <![endif]-->
-      <!--[if !mso]><!-->
-      <a href="${safeHref}" target="_blank" style="display:inline-block;background-color:${BRAND_PURPLE};color:#ffffff !important;font-family:${FONT_STACK};font-size:15px;font-weight:600;line-height:48px;text-decoration:none;padding:0 28px;border-radius:8px;mso-hide:all;">${safeLabel}</a>
-      <!--<![endif]-->
+    <td align="left" bgcolor="${BRAND_PURPLE}" style="background-color:${BRAND_PURPLE};border-radius:8px;mso-padding-alt:14px 28px;">
+      <a href="${safeHref}" target="_blank" style="display:inline-block;background-color:${BRAND_PURPLE};color:#ffffff;font-family:${FONT_STACK};font-size:15px;font-weight:600;line-height:1.2;text-decoration:none;padding:14px 28px;border-radius:8px;border:1px solid ${BRAND_PURPLE};">${safeLabel}</a>
     </td>
   </tr>
 </table>`;

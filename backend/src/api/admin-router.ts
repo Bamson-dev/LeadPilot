@@ -1919,7 +1919,13 @@ adminRouter.post("/test-email-design", requireAdminAuth, async (req: Request, re
       return;
     }
 
-    res.json({ success: true, message: `${label} sent to ${to}` });
+    res.json({
+      success: true,
+      message: `${label} sent to ${to}`,
+      templateVersion: (
+        await import("../services/email-template")
+      ).EMAIL_TEMPLATE_VERSION,
+    });
   } catch (error) {
     logger.error("POST /admin/test-email-design failed", {
       error: error instanceof Error ? error.message : "unknown",
