@@ -231,6 +231,7 @@ export default function SearchResultPage() {
         selectedLeads={selectedLeads}
         sendPanelOpen={sendPanelOpen}
         onCloseSendPanel={() => setSendPanelOpen(false)}
+        onSendComplete={() => setSelectedLeadIds(new Set())}
         targetBusinessType={searchBusinessType}
       >
         <ResultsTable
