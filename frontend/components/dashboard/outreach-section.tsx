@@ -80,7 +80,13 @@ export function OutreachSection({
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <section className="space-y-4 sm:space-y-6" aria-label="Email outreach">
+      <div>
+        <h2 className="text-lg font-bold text-[#F4F4FF]">Email outreach</h2>
+        <p className="mt-1 text-sm text-[#6B6B80]">
+          Connect Gmail, check your send balance, and email leads from your search results.
+        </p>
+      </div>
       <OutreachBalanceBanner
         balance={balance}
         hasMailbox={hasMailbox}
@@ -103,6 +109,6 @@ export function OutreachSection({
         onClose={onCloseSendPanel}
         onSent={handleSent}
       />
-    </div>
+    </section>
   );
 }

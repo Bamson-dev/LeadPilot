@@ -27,7 +27,28 @@ export function OutreachBalanceBanner({
     );
   }
 
-  if (!balance) return null;
+  if (!balance) {
+    return (
+      <div
+        className="glass rounded-2xl p-4 sm:p-5"
+        style={{ border: "1px solid rgba(124,58,237,0.2)" }}
+      >
+        <p className="text-xs font-medium uppercase tracking-wide text-[#6B6B80]">
+          Email outreach balance
+        </p>
+        <p className="mt-2 text-sm text-[#A1A1B5]">
+          Could not load send balance. Check that{" "}
+          <code className="text-[#F4F4FF]">NEXT_PUBLIC_API_URL</code> points at the
+          staging backend, then refresh.
+        </p>
+        {!hasMailbox && (
+          <p className="mt-3 text-sm text-[#F4F4FF]">
+            {OUTREACH_FREE_SENDS_ON_CONNECT} free sends unlock when you connect Gmail below.
+          </p>
+        )}
+      </div>
+    );
+  }
 
   const subscription = formatSubscriptionLabel(
     balance.subscription_tier,
