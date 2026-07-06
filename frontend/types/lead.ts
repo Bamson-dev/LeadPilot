@@ -1,4 +1,5 @@
 import type { BusinessLead, PredictedEmail } from "@leadthur/shared";
+import { getLeadSelectionId } from "@/lib/lead-selection";
 
 /** Dashboard-compatible lead shape */
 export interface Lead {
@@ -54,8 +55,7 @@ export function businessLeadToLead(lead: BusinessLead): Lead {
   const displayPredicted = predicted.map((p) => p.email);
   const allForLegacy = [...displayVerified, ...displayPredicted];
 
-  return {
-    id: lead.id,
+  const base: Omit<Lead, "id"> = {
     search_id: lead.searchId,
     business_name: lead.name,
     phone: lead.phone,
@@ -80,6 +80,19 @@ export function businessLeadToLead(lead: BusinessLead): Lead {
     google_maps_url: lead.googleMapsUrl,
     created_at: lead.createdAt,
     email_scraped: lead.emailScraped ?? false,
+  };
+
+  return {
+    ...base,
+    id: lead.id?.trim()
+      ? lead.id.trim()
+      : getLeadSelectionId({
+          id: "",
+          google_maps_url: lead.googleMapsUrl ?? null,
+          business_name: lead.name,
+          phone: lead.phone,
+          address: lead.address,
+        }),
   };
 }
 

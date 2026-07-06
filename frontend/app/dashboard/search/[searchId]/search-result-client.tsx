@@ -20,7 +20,7 @@ import { normalizeApiBusinessLeads } from "@/utils/normalize-api-lead";
 import { useLeadStatuses } from "@/hooks/useLeadStatuses";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { hasStoredLicense } from "@/lib/license";
-import { hasAnyEmail } from "@/utils/get-display-email";
+import { getLeadSelectionId } from "@/lib/lead-selection";
 
 const POLL_MS = 3000;
 
@@ -96,7 +96,7 @@ export default function SearchResultPage() {
     useLeadStatuses(leads);
 
   const selectedLeads = useMemo(
-    () => leads.filter((lead) => selectedLeadIds.has(lead.id)),
+    () => leads.filter((lead) => selectedLeadIds.has(getLeadSelectionId(lead))),
     [leads, selectedLeadIds]
   );
 
@@ -236,10 +236,7 @@ export default function SearchResultPage() {
           totalLeadCount={leads.length}
           emailScrapingInProgress={!emailScrapingComplete && leads.length > 0}
           selectedLeadIds={selectedLeadIds}
-          onToggleLeadSelect={(leadId) => {
-            const lead = leads.find((l) => l.id === leadId);
-            if (lead && hasAnyEmail(lead)) toggleLeadSelect(leadId);
-          }}
+          onToggleLeadSelect={toggleLeadSelect}
           onSendSelected={() => setSendPanelOpen(true)}
           hasMailbox={outreach.hasMailbox}
           onNoMailboxClick={scrollToMailboxes}

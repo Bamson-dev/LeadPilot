@@ -38,7 +38,7 @@ import type { Lead } from "@/types/lead";
 import { applyRatingFilter, type RatingFilterValue } from "@/lib/rating-filter";
 import { applyStatusFilter } from "@/lib/lead-status";
 import { getQueryVariations } from "@/utils/query-variations";
-import { hasAnyEmail } from "@/utils/get-display-email";
+import { getLeadSelectionId } from "@/lib/lead-selection";
 
 interface ActivityItem {
   query: string;
@@ -255,7 +255,10 @@ export function SearchDashboard() {
   );
 
   const selectedLeads = useMemo(
-    () => statusFilteredTableLeads.filter((lead) => selectedLeadIds.has(lead.id)),
+    () =>
+      statusFilteredTableLeads.filter((lead) =>
+        selectedLeadIds.has(getLeadSelectionId(lead))
+      ),
     [statusFilteredTableLeads, selectedLeadIds]
   );
 
@@ -745,10 +748,7 @@ export function SearchDashboard() {
             onUseTemplate={setTemplateLead}
             emailScrapingInProgress={!emailScrapingComplete && tableLeads.length > 0}
             selectedLeadIds={selectedLeadIds}
-            onToggleLeadSelect={(leadId) => {
-              const lead = statusFilteredTableLeads.find((l) => l.id === leadId);
-              if (lead && hasAnyEmail(lead)) toggleLeadSelect(leadId);
-            }}
+            onToggleLeadSelect={toggleLeadSelect}
             onSendSelected={openSendPanel}
             hasMailbox={outreach.hasMailbox}
             onNoMailboxClick={scrollToMailboxes}

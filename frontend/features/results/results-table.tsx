@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowDown, ArrowUp, ArrowUpDown, Loader2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Check, Loader2, Mail } from "lucide-react";
 import { ContactDots } from "@/components/dashboard/contact-dots";
 import { CopyButton } from "@/components/dashboard/copy-button";
 import { EmailCell } from "@/components/dashboard/email-cell";
@@ -13,7 +13,9 @@ import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { LeadStatusSelect } from "@/components/dashboard/lead-status-select";
 import { PipelineSummary } from "@/components/dashboard/pipeline-summary";
 import { RatingFilter } from "@/components/dashboard/rating-filter";
+import { Button } from "@/components/ui/button";
 import type { RatingFilterValue } from "@/lib/rating-filter";
+import { getLeadSelectionId } from "@/lib/lead-selection";
 import type { Lead } from "@/types/lead";
 import { hasAnyEmail } from "@/utils/get-display-email";
 
@@ -52,26 +54,35 @@ interface ResultsTableProps {
   onNoMailboxClick?: () => void;
 }
 
-function EmailSelectCheckbox({
+function SelectToggle({
   checked,
   disabled,
   onChange,
-  id,
+  label,
 }: {
   checked: boolean;
   disabled?: boolean;
   onChange: () => void;
-  id?: string;
+  label: string;
 }) {
   return (
-    <input
-      id={id}
-      type="checkbox"
-      checked={checked}
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!disabled) onChange();
+      }}
       disabled={disabled}
-      onChange={onChange}
-      className="h-[18px] w-[18px] shrink-0 cursor-pointer rounded border-2 border-violet-400/70 bg-[#16161E] accent-violet-500 disabled:cursor-not-allowed disabled:border-white/15 disabled:opacity-40"
-    />
+      aria-label={label}
+      aria-pressed={checked}
+      className="flex h-6 w-6 items-center justify-center rounded-md border-2 transition-colors disabled:cursor-not-allowed disabled:opacity-35"
+      style={{
+        borderColor: checked ? "#A855F7" : "rgba(168,85,247,0.45)",
+        background: checked ? "rgba(124,58,237,0.85)" : "rgba(22,22,30,0.95)",
+      }}
+    >
+      {checked ? <Check className="h-3.5 w-3.5 text-white" strokeWidth={3} /> : null}
+    </button>
   );
 }
 
@@ -154,7 +165,10 @@ export function ResultsTable({
   const pipelineLeads = summaryLeads ?? leads;
 
   const selectableIds = useMemo(
-    () => sorted.filter((lead) => hasAnyEmail(lead)).map((l) => l.id),
+    () =>
+      sorted
+        .filter((lead) => hasAnyEmail(lead))
+        .map((lead) => getLeadSelectionId(lead)),
     [sorted]
   );
 
@@ -177,7 +191,9 @@ export function ResultsTable({
 
   const emailableSelectedCount = useMemo(() => {
     if (!selectedLeadIds) return 0;
-    return sorted.filter((lead) => selectedLeadIds.has(lead.id) && hasAnyEmail(lead)).length;
+    return sorted.filter(
+      (lead) => selectedLeadIds.has(getLeadSelectionId(lead)) && hasAnyEmail(lead)
+    ).length;
   }, [sorted, selectedLeadIds]);
 
   function handleSendClick() {
@@ -190,42 +206,55 @@ export function ResultsTable({
   }
 
   const sendToolbar = showEmailSelection && onSendSelected && (
-    <div className="flex flex-col gap-2">
-      {!hasMailbox && (
-        <p className="text-xs text-[#A855F7]">
-          Connect a Gmail mailbox in Email outreach above before you can send.{" "}
-          {onNoMailboxClick && (
-            <button
-              type="button"
-              onClick={onNoMailboxClick}
-              className="underline text-[#F4F4FF]"
-            >
-              Go to mailboxes
-            </button>
+    <div
+      className="w-full rounded-xl border px-4 py-3 sm:flex-1 sm:min-w-[280px]"
+      style={{
+        borderColor: "rgba(124,58,237,0.35)",
+        background: "rgba(124,58,237,0.08)",
+      }}
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 text-sm font-semibold text-[#F4F4FF]">
+            <Mail className="h-4 w-4 text-[#A855F7]" />
+            Send outreach email
+          </p>
+          <p className="mt-1 text-xs text-[#A1A1B5] leading-relaxed">
+            {emailableSelectedCount === 0 ? (
+              <>
+                <strong className="text-[#F4F4FF]">Step 1:</strong> Tick the purple{" "}
+                <strong className="text-[#F4F4FF]">Select</strong> boxes on the left (
+                {selectableIds.length} leads have email).{" "}
+                <strong className="text-[#F4F4FF]">Step 2:</strong> Click Send email.
+              </>
+            ) : (
+              <>
+                {emailableSelectedCount} lead{emailableSelectedCount === 1 ? "" : "s"} selected
+                — click Send email to compose your message.
+              </>
+            )}
+          </p>
+          {!hasMailbox && (
+            <p className="mt-2 text-xs text-[#A855F7]">
+              Connect Gmail in Email outreach above first.{" "}
+              {onNoMailboxClick && (
+                <button type="button" onClick={onNoMailboxClick} className="underline text-[#F4F4FF]">
+                  Go to mailboxes
+                </button>
+              )}
+            </p>
           )}
-        </p>
-      )}
-      <button
-        type="button"
-        onClick={handleSendClick}
-        disabled={emailableSelectedCount === 0}
-        style={{
-          background:
-            emailableSelectedCount > 0
-              ? "rgba(124,58,237,0.2)"
-              : "rgba(255,255,255,0.04)",
-          border: "1px solid rgba(124,58,237,0.35)",
-          color: emailableSelectedCount > 0 ? "#F4F4FF" : "#6B6B80",
-          borderRadius: 8,
-          padding: "7px 14px",
-          fontSize: 12,
-          fontWeight: 700,
-          cursor: emailableSelectedCount > 0 ? "pointer" : "not-allowed",
-          opacity: !hasMailbox && emailableSelectedCount > 0 ? 0.65 : 1,
-        }}
-      >
-        Send email ({emailableSelectedCount})
-      </button>
+        </div>
+        <Button
+          type="button"
+          variant={emailableSelectedCount > 0 ? "glow" : "outline"}
+          disabled={emailableSelectedCount === 0}
+          onClick={handleSendClick}
+          className="shrink-0 w-full sm:w-auto"
+        >
+          Send email ({emailableSelectedCount})
+        </Button>
+      </div>
     </div>
   );
 
@@ -313,11 +342,13 @@ export function ResultsTable({
                 status={leadStatuses[lead.id] || "new"}
                 onStatusChange={onLeadStatusChange}
                 selectable={showEmailSelection}
-                selected={selectedLeadIds?.has(lead.id) ?? false}
+                selected={selectedLeadIds?.has(getLeadSelectionId(lead)) ?? false}
                 canSelect={hasAnyEmail(lead)}
                 onToggleSelect={
                   onToggleLeadSelect
-                    ? () => hasAnyEmail(lead) && onToggleLeadSelect(lead.id)
+                    ? () => {
+                        if (hasAnyEmail(lead)) onToggleLeadSelect(getLeadSelectionId(lead));
+                      }
                     : undefined
                 }
                 onUseTemplate={onUseTemplate}
@@ -332,8 +363,9 @@ export function ResultsTable({
   }
 
   const renderRow = (lead: Lead) => {
+    const selectionId = getLeadSelectionId(lead);
     const canSelect = hasAnyEmail(lead);
-    const isSelected = selectedLeadIds?.has(lead.id) ?? false;
+    const isSelected = selectedLeadIds?.has(selectionId) ?? false;
 
     return (
       <motion.tr
@@ -351,17 +383,17 @@ export function ResultsTable({
         }}
       >
         {showEmailSelection && (
-          <td className={`px-3 py-3 align-middle w-[72px] min-w-[72px] ${STICKY_SELECT_CLASS}`}>
-            <div className="flex flex-col items-center gap-1">
-              <EmailSelectCheckbox
-                checked={isSelected}
-                disabled={!canSelect}
-                onChange={() => canSelect && onToggleLeadSelect?.(lead.id)}
-              />
-              <span className="text-[9px] font-medium uppercase tracking-wide text-[#6B6B80]">
-                Email
-              </span>
-            </div>
+          <td className={`px-3 py-3 align-middle w-[56px] min-w-[56px] ${STICKY_SELECT_CLASS}`}>
+            <SelectToggle
+              checked={isSelected}
+              disabled={!canSelect}
+              onChange={() => onToggleLeadSelect?.(selectionId)}
+              label={
+                canSelect
+                  ? `Select ${lead.business_name} for email`
+                  : `${lead.business_name} has no email`
+              }
+            />
           </td>
         )}
         <td className="px-4 py-3 align-top" style={{ padding: "12px 8px" }}>
@@ -469,7 +501,7 @@ export function ResultsTable({
         statusFilter={statusFilter}
         onFilterChange={onStatusFilterChange}
       />
-      <div className="flex flex-col gap-2 border-b border-white/[0.08] px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+      <div className="flex flex-col gap-3 border-b border-white/[0.08] px-4 py-3 lg:flex-row lg:flex-wrap lg:items-stretch lg:gap-3">
         {sendToolbar}
         {onRatingFilterChange && (
           <RatingFilter
@@ -522,16 +554,17 @@ export function ResultsTable({
             <tr className="border-b border-white/[0.08]">
               {showEmailSelection && (
                 <th
-                  className={`px-3 py-3 text-left w-[72px] min-w-[72px] ${STICKY_SELECT_CLASS}`}
+                  className={`px-3 py-3 text-center w-[56px] min-w-[56px] ${STICKY_SELECT_CLASS}`}
                 >
-                  <div className="flex flex-col items-center gap-1">
-                    <EmailSelectCheckbox
+                  <div className="flex flex-col items-center gap-1.5">
+                    <SelectToggle
                       checked={allSelectableSelected}
                       disabled={selectableIds.length === 0}
                       onChange={toggleSelectAll}
+                      label="Select all leads with email"
                     />
                     <span className="text-[9px] font-semibold uppercase tracking-wide text-[#A855F7]">
-                      Email
+                      Select
                     </span>
                   </div>
                 </th>

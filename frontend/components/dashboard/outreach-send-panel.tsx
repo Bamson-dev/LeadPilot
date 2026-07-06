@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import type { Lead } from "@/types/lead";
 import type { OutreachEmailTemplate, OutreachMailbox, QueueSendResponse } from "@/types/outreach";
-import { getVerifiedEmails, hasAnyEmail } from "@/utils/get-display-email";
+import { getAllEmailsForDisplay, hasAnyEmail } from "@/utils/get-display-email";
 import { applyBusinessNameMerge } from "@/lib/outreach-utils";
 import { fetchEmailTemplates, queueOutreachSend } from "@/services/outreach-api";
 
@@ -52,7 +52,7 @@ export function OutreachSendPanel({
   const recipients = useMemo(() => {
     return selectedLeads
       .map((lead) => {
-        const emails = getVerifiedEmails(lead);
+        const emails = getAllEmailsForDisplay(lead);
         const email = emails[0]?.trim();
         if (!email) return null;
         return {

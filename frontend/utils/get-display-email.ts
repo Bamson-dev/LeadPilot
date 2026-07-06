@@ -52,7 +52,13 @@ export function getAllEmailsForDisplay(
 export function hasAnyEmail(
   lead: Pick<Lead, "email" | "extracted_email" | "verified_emails" | "predicted_emails" | "emails">
 ): boolean {
-  return getVerifiedEmails(lead).length > 0 || getPredictedEmails(lead).length > 0;
+  return getAllEmailsForDisplay(lead).length > 0;
+}
+
+export { getLeadSelectionId } from "@/lib/lead-selection";
+
+export function canSelectLeadForEmail(lead: Parameters<typeof hasAnyEmail>[0]): boolean {
+  return hasAnyEmail(lead);
 }
 
 /** @deprecated Use getVerifiedEmails / getPredictedEmails */

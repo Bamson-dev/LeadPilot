@@ -46,16 +46,24 @@ export function MobileLeadCard({
       <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 10 }}>
         {selectable && (
           <div className="flex flex-col items-center gap-1 shrink-0">
-            <input
-              type="checkbox"
-              checked={selected}
+            <button
+              type="button"
+              onClick={onToggleSelect}
               disabled={!canSelect}
-              onChange={onToggleSelect}
+              aria-pressed={selected}
               aria-label={`Select ${lead.business_name} for email`}
-              className="mt-1 h-[18px] w-[18px] shrink-0 cursor-pointer rounded border-2 border-violet-400/70 bg-[#16161E] accent-violet-500 disabled:cursor-not-allowed disabled:border-white/15 disabled:opacity-40"
-            />
-            <span className="text-[9px] font-medium uppercase tracking-wide text-[#6B6B80]">
-              Email
+              className="flex h-6 w-6 items-center justify-center rounded-md border-2 disabled:cursor-not-allowed disabled:opacity-35"
+              style={{
+                borderColor: selected ? "#A855F7" : "rgba(168,85,247,0.45)",
+                background: selected ? "rgba(124,58,237,0.85)" : "rgba(22,22,30,0.95)",
+              }}
+            >
+              {selected ? (
+                <span className="text-[11px] font-bold text-white">✓</span>
+              ) : null}
+            </button>
+            <span className="text-[9px] font-semibold uppercase tracking-wide text-[#A855F7]">
+              Select
             </span>
           </div>
         )}
