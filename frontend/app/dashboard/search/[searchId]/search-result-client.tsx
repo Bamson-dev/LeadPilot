@@ -5,6 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { ResultsTable } from "@/features/results/results-table";
 import { ResultsSummaryBar } from "@/components/dashboard/results-summary-bar";
 import { NearbyCityChips } from "@/components/dashboard/nearby-city-chips";
+import { DashboardHistorySections } from "@/components/dashboard/dashboard-history-sections";
+import { ResultsActionsBar } from "@/components/dashboard/results-actions-bar";
 import {
   OutreachWorkspace,
   requestMailboxesTab,
@@ -20,6 +22,7 @@ import { useLeadStatuses } from "@/hooks/useLeadStatuses";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { hasStoredLicense } from "@/lib/license";
 import { getLeadSelectionId } from "@/lib/lead-selection";
+import { exportToCSV } from "@/features/export/csv-export";
 
 const POLL_MS = 3000;
 
@@ -71,6 +74,18 @@ function mergePollLeads(
   return [...byPlace.values()];
 }
 
+function dashboardSearchUrl(
+  businessType: string,
+  location: string,
+  options?: { accumulate?: boolean }
+): string {
+  const params = new URLSearchParams();
+  if (businessType.trim()) params.set("businessType", businessType.trim());
+  params.set("location", location.trim());
+  if (options?.accumulate) params.set("accumulate", "1");
+  return `/dashboard?${params.toString()}`;
+}
+
 export default function SearchResultPage() {
   const params = useParams();
   const router = useRouter();
@@ -117,10 +132,35 @@ export default function SearchResultPage() {
     const bt = businessType.trim();
     const loc = location.trim();
     if (!bt || !loc) return;
-    router.push(
-      `/dashboard?businessType=${encodeURIComponent(bt)}&location=${encodeURIComponent(loc)}`
-    );
+    router.push(dashboardSearchUrl(bt, loc));
   }, [businessType, location, router]);
+
+  const handleSearchAgain = useCallback(
+    (bt: string, loc: string) => {
+      router.push(dashboardSearchUrl(bt, loc, { accumulate: true }));
+    },
+    [router]
+  );
+
+  const handleDownload = useCallback(() => {
+    const bt = businessType.trim() || "search";
+    const loc = location.trim() || searchId;
+    exportToCSV(leads, `leadthur-${bt}-${loc}-${Date.now()}.csv`);
+  }, [businessType, location, leads, searchId]);
+
+  const handleClearResults = useCallback(() => {
+    router.push("/dashboard");
+  }, [router]);
+
+  const handleNearbyCity = useCallback(
+    (city: string) => {
+      setLocation(city);
+      router.push(
+        dashboardSearchUrl(businessType.trim() || "businesses", city, { accumulate: true })
+      );
+    },
+    [businessType, router]
+  );
 
   useEffect(() => {
     setUserEmail(localStorage.getItem("leadthur_email") || "");
@@ -211,7 +251,7 @@ export default function SearchResultPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-xl font-bold text-white">Your search results</h1>
       </div>
@@ -229,23 +269,7 @@ export default function SearchResultPage() {
         onCloseSendPanel={() => setSendPanelOpen(false)}
         onSendComplete={() => setSelectedLeadIds(new Set())}
         targetBusinessType={businessType}
-        resultsHeader={
-          <>
-            <ResultsSummaryBar leads={leads} />
-            <NearbyCityChips
-              show={emailScrapingComplete && !loading}
-              cities={nearbyCities}
-              onSelectCity={(city) => {
-                setLocation(city);
-                const bt = businessType.trim();
-                const params = new URLSearchParams();
-                if (bt) params.set("businessType", bt);
-                params.set("location", city);
-                router.push(`/dashboard?${params.toString()}`);
-              }}
-            />
-          </>
-        }
+        resultsHeader={<ResultsSummaryBar leads={leads} />}
         resultsContent={
           <ResultsTable
             leads={leads}
@@ -265,6 +289,26 @@ export default function SearchResultPage() {
             onNoMailboxClick={scrollToMailboxes}
           />
         }
+        resultsFooter={
+          <div className="space-y-4">
+            <NearbyCityChips
+              show={emailScrapingComplete && !loading}
+              cities={nearbyCities}
+              onSelectCity={handleNearbyCity}
+            />
+            <ResultsActionsBar
+              exportCount={leads.length}
+              onDownload={handleDownload}
+              onClear={handleClearResults}
+              isMobile={isMobile}
+            />
+          </div>
+        }
+      />
+
+      <DashboardHistorySections
+        isMobile={isMobile}
+        onSearchAgain={handleSearchAgain}
       />
 
       <WhatsappTemplateModal

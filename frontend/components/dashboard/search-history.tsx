@@ -19,13 +19,12 @@ export interface HistoryItem {
 interface SearchHistoryProps {
   isMobile?: boolean;
   refreshKey?: number;
-  onViewResults: (leads: Lead[], meta: { query: string; location: string; date: string }) => void;
+  onViewResults?: (leads: Lead[], meta: { query: string; location: string; date: string }) => void;
 }
 
 export function SearchHistory({
   isMobile = false,
   refreshKey = 0,
-  onViewResults,
 }: SearchHistoryProps) {
   const router = useRouter();
   const [history, setHistory] = useState<HistoryItem[]>([]);

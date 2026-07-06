@@ -34,6 +34,7 @@ interface OutreachWorkspaceProps {
   searchDisabled?: boolean;
   resultsContent: ReactNode;
   resultsHeader?: ReactNode;
+  resultsFooter?: ReactNode;
   selectedLeads: Lead[];
   sendPanelOpen: boolean;
   onCloseSendPanel: () => void;
@@ -53,6 +54,7 @@ export function OutreachWorkspace({
   searchDisabled = false,
   resultsContent,
   resultsHeader,
+  resultsFooter,
   selectedLeads,
   sendPanelOpen,
   onCloseSendPanel,
@@ -164,6 +166,7 @@ export function OutreachWorkspace({
         <div role="tabpanel" hidden={activeTab !== "results"} className={activeTab === "results" ? "space-y-4" : "hidden"}>
           {resultsHeader}
           <div data-outreach-results-table>{resultsContent}</div>
+          {resultsFooter}
         </div>
 
         <div role="tabpanel" hidden={activeTab !== "sends"} className={activeTab === "sends" ? undefined : "hidden"}>

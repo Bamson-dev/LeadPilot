@@ -1,14 +1,14 @@
 "use client";
 
-import { Download, RotateCcw, Trash2, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BusinessLead } from "@leadthur/shared";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { LiveCounter } from "@/components/dashboard/live-counter";
-import { RecentSearchesPanel } from "@/components/dashboard/recent-searches-panel";
-import { SearchHistory } from "@/components/dashboard/search-history";
 import { AffiliateSection } from "@/components/dashboard/affiliate-section";
+import { DashboardHistorySections } from "@/components/dashboard/dashboard-history-sections";
+import { ResultsActionsBar } from "@/components/dashboard/results-actions-bar";
 import { OutreachWorkspace, requestMailboxesTab } from "@/components/dashboard/outreach-workspace";
 import { useOutreach } from "@/hooks/useOutreach";
 import { WelcomeState } from "@/components/dashboard/welcome-state";
@@ -122,8 +122,6 @@ export function SearchDashboard() {
     searchedExpansionLocations,
     setSuggestions,
     clearResults,
-    reset,
-    loadSavedLeads,
     scrapingInProgress,
     emailScrapingComplete,
     nearbyCities,
@@ -147,7 +145,8 @@ export function SearchDashboard() {
       setLocation(loc);
       setSavedBanner(null);
       setRatingFilter("all");
-      void runSearch(bt, loc);
+      const accumulate = params.get("accumulate") === "1";
+      void runSearch(bt, loc, accumulate ? { accumulate: true } : undefined);
       window.history.replaceState({}, "", "/dashboard");
     }
   }, [runSearch]);
@@ -346,31 +345,6 @@ export function SearchDashboard() {
     void runSearch(queryVariant, locationValue, { accumulate: true });
   };
 
-  const handleViewSavedResults = useCallback(
-    (savedLeads: Lead[], meta: { query: string; location: string; date: string }) => {
-      loadSavedLeads(savedLeads);
-      setBusinessType(meta.query);
-      setLocation(meta.location);
-      setSavedBanner(`Showing saved results from ${meta.date}`);
-      setRatingFilter("all");
-    },
-    [loadSavedLeads]
-  );
-
-  const startNewSession = () => {
-    searchAgainVariationRef.current = 0;
-    reset();
-    setSuggestionsMessage("");
-    setSavedBanner(null);
-    setBusinessType("");
-    setLocation("");
-    setRatingFilter("all");
-  };
-
-  const handleNewSearch = () => {
-    startNewSession();
-  };
-
   const handleClearResults = () => {
     clearResults();
     setSuggestionsMessage("");
@@ -496,51 +470,6 @@ export function SearchDashboard() {
           </div>
         )}
 
-        <div
-          className="mt-4 gap-2.5"
-          style={{
-            display: "flex",
-            flexDirection: isMobile ? "column" : "row",
-            flexWrap: isMobile ? "nowrap" : "wrap",
-            gap: 10,
-            marginTop: 10,
-          }}
-        >
-          <Button
-            variant="outline"
-            onClick={handleDownload}
-            disabled={exportCount === 0}
-            className={[
-              isMobile ? "w-full" : "",
-              exportPulse ? "export-pulse-btn" : "",
-            ].join(" ")}
-            style={isMobile ? { flex: 1, width: "100%" } : undefined}
-          >
-            <Download className="h-4 w-4" />
-            Download {exportCount > 0 ? exportCount : ""} Leads
-          </Button>
-          {(tableLeads.length > 0 || isSearching) && (
-            <>
-              <Button
-                variant="ghost"
-                onClick={handleNewSearch}
-                className={isMobile ? "w-full" : ""}
-                style={isMobile ? { flex: 1, width: "100%" } : undefined}
-              >
-                <RotateCcw className="h-4 w-4" /> New Search
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={handleClearResults}
-                className={isMobile ? "w-full" : ""}
-                style={isMobile ? { flex: 1, width: "100%" } : undefined}
-              >
-                <Trash2 className="h-4 w-4" /> Clear Results
-              </Button>
-            </>
-          )}
-        </div>
-
         {showSuccess && (
           <div
             className="success-banner-fade mt-4"
@@ -644,6 +573,12 @@ export function SearchDashboard() {
                     }}
                   />
                 )}
+            </div>
+          ) : null
+        }
+        resultsFooter={
+          (isSearching || tableLeads.length > 0 || savedBanner) ? (
+            <div className="space-y-4">
               <NearbyCityChips
                 show={status === "completed" && emailScrapingComplete && !isSearching}
                 cities={nearbyCities}
@@ -651,6 +586,13 @@ export function SearchDashboard() {
                   setLocation(city);
                   void runSearchWithNearbyCity(city);
                 }}
+              />
+              <ResultsActionsBar
+                exportCount={exportCount}
+                onDownload={handleDownload}
+                onClear={handleClearResults}
+                exportPulse={exportPulse}
+                isMobile={isMobile}
               />
             </div>
           ) : null
@@ -687,15 +629,10 @@ export function SearchDashboard() {
         }
       />
 
-      <RecentSearchesPanel
-        refreshKey={historyRefreshKey}
-        onSearchAgain={handleSearchAgain}
-      />
-
-      <SearchHistory
+      <DashboardHistorySections
         isMobile={isMobile}
         refreshKey={historyRefreshKey}
-        onViewResults={handleViewSavedResults}
+        onSearchAgain={handleSearchAgain}
       />
 
       {loadingSuggestions && status === "completed" && (
@@ -813,44 +750,6 @@ export function SearchDashboard() {
         </div>
       )}
 
-      {isMobile && exportCount > 0 && (
-        <>
-          <div style={{ height: 80 }} />
-          <div
-            style={{
-              position: "fixed",
-              bottom: 0,
-              left: 0,
-              right: 0,
-              padding: "12px 16px",
-              background: "rgba(7,7,10,0.95)",
-              backdropFilter: "blur(20px)",
-              borderTop: "1px solid rgba(255,255,255,0.07)",
-              zIndex: 50,
-            }}
-          >
-            <button
-              type="button"
-              onClick={handleDownload}
-              className={exportPulse ? "export-pulse-btn" : ""}
-              style={{
-                width: "100%",
-                background: "#7C3AED",
-                color: "white",
-                border: "none",
-                padding: "14px",
-                borderRadius: 10,
-                fontSize: 15,
-                fontWeight: 700,
-                cursor: "pointer",
-                fontFamily: "Figtree, sans-serif",
-              }}
-            >
-              Download {exportCount} Leads
-            </button>
-          </div>
-        </>
-      )}
       {showLimitModal && userEmail && (
         <SearchLimitModal email={userEmail} onClose={() => setShowLimitModal(false)} />
       )}
