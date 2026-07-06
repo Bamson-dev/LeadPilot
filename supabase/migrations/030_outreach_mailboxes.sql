@@ -1,5 +1,7 @@
 -- In-platform outreach: accounts, mailboxes, credits ledger, sent log, suppression, templates
 
+create extension if not exists "pgcrypto";
+
 create table if not exists outreach_accounts (
   user_id uuid primary key references users(id) on delete cascade,
   subscription_status text not null default 'none'
@@ -128,25 +130,25 @@ from (values
   (
     'No website found',
     'Quick idea for [Business Name]',
-    'Hi [Business Name], I came across your business while researching your area and noticed you don''t have a website yet. I help businesses like yours get a clean, mobile friendly site that brings in more customers. Would you be open to a quick chat about it?',
+    $body_web_design$Hi [Business Name], I came across your business while researching your area and noticed you do not have a website yet. I help businesses like yours get a clean, mobile friendly site that brings in more clients. Would you be open to a quick chat about it?$body_web_design$,
     'web_design'
   ),
   (
     'Low Instagram activity',
     'Idea for [Business Name] on social',
-    'Hi [Business Name], I noticed your Instagram isn''t very active. I help businesses like yours stay consistent on social media and bring in more foot traffic. Want me to show you what that could look like for you?',
+    $body_social_media$Hi [Business Name], I noticed your Instagram is not very active. I help businesses like yours stay consistent on social media and bring in more foot traffic. Want me to show you what that could look like for you?$body_social_media$,
     'social_media'
   ),
   (
     'Low Google rating',
     'Quick note on [Business Name] online visibility',
-    'Hi [Business Name], I came across your business and noticed your Google rating could use some attention. I help businesses improve how they show up online and attract more customers. Open to a quick conversation?',
+    $body_seo$Hi [Business Name], I came across your business and noticed your Google rating could use some attention. I help businesses improve how they show up online and attract more clients. Open to a quick conversation?$body_seo$,
     'seo'
   ),
   (
     'Weak website copy',
     'Your website copy for [Business Name]',
-    'Hi [Business Name], I checked out your website and think the messaging could do a lot more to convert visitors into customers. I help businesses with copy that actually gets people to take action. Want to see some examples?',
+    $body_copywriting$Hi [Business Name], I checked out your website and think the messaging could do a lot more to convert visitors. I help businesses with copy that actually gets people to take action. Want to see some examples?$body_copywriting$,
     'copywriting'
   )
 ) as v(name, subject, body, niche)
