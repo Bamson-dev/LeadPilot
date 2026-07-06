@@ -5,3 +5,4 @@ export * from "./types/export";
 export * from "./utils/formatters";
 export * from "./utils/validators";
 export * from "./utils/blocked-website-domains";
+export * from "./utils/outreach-recipient";

@@ -194,7 +194,7 @@ async function runTests() {
       "x-license-key": licenseKey,
     },
     body: JSON.stringify({
-      targets: [{ recipient_email: recipient, business_name: businessName }],
+      targets: [{ recipient_email: recipient, business_name: businessName, email_kind: "verified" }],
       subject: "Question for [Business Name]",
       body: "Hi [Business Name],\n\nI noticed your shop on Google Maps and wanted to reach out.",
       send_mode: "auto",
@@ -329,7 +329,7 @@ async function runTests() {
       "x-license-key": licenseKey,
     },
     body: JSON.stringify({
-      targets: [{ recipient_email: recipient, business_name: businessName }],
+      targets: [{ recipient_email: recipient, business_name: businessName, email_kind: "verified" }],
       subject: "Follow up",
       body: "Second try",
       send_mode: "auto",

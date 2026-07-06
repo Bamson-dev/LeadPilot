@@ -103,10 +103,17 @@ async function startApp() {
 }
 
 async function postSend(base, headers, body) {
+  const normalized = {
+    ...body,
+    targets: (body.targets ?? []).map((t) => ({
+      ...t,
+      email_kind: t.email_kind ?? "verified",
+    })),
+  };
   const res = await fetch(`${base}/send`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
-    body: JSON.stringify(body),
+    body: JSON.stringify(normalized),
   });
   return { status: res.status, body: await res.json().catch(() => ({})) };
 }

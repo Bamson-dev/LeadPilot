@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import type { Lead } from "@/types/lead";
 import type { OutreachEmailTemplate, OutreachEmailTone, OutreachMailbox, QueueSendResponse } from "@/types/outreach";
-import { getAllEmailsForDisplay, hasAnyEmail } from "@/utils/get-display-email";
+import { hasAnyEmail } from "@/utils/get-display-email";
+import { buildOutreachSendTargetsFromLeads } from "@leadthur/shared";
 import { applyBusinessNameMerge } from "@/lib/outreach-utils";
 import { fetchEmailTemplates, generateOutreachEmail, queueOutreachSend } from "@/services/outreach-api";
 
@@ -64,34 +65,32 @@ export function OutreachSendPanel({
 
   const activeMailboxes = mailboxes.filter((m) => m.status === "active");
 
-  const recipients = useMemo(() => {
-    return selectedLeads
-      .map((lead) => {
-        const emails = getAllEmailsForDisplay(lead);
-        const email = emails[0]?.trim();
-        if (!email) return null;
-        return {
-          lead,
-          recipient_email: email,
-          business_name: lead.business_name,
-        };
-      })
-      .filter(Boolean) as Array<{
-      lead: Lead;
-      recipient_email: string;
-      business_name: string;
-    }>;
+  const { recipients, sendableRecipients, skippedNoVerifiedPreview } = useMemo(() => {
+    const { targets, skippedNoVerifiedPreview: skipped } =
+      buildOutreachSendTargetsFromLeads(selectedLeads);
+    const withLeads = targets.map((target) => {
+      const lead =
+        selectedLeads.find((l) => l.id === target.business_id) ??
+        selectedLeads.find((l) => l.business_name === target.business_name);
+      return { lead: lead ?? selectedLeads[0]!, ...target };
+    });
+    const sendableRecipients = withLeads.filter((r) => r.email_kind === "verified");
+    return {
+      recipients: withLeads,
+      sendableRecipients,
+      skippedNoVerifiedPreview: skipped,
+    };
   }, [selectedLeads]);
 
   const firstPreview = useMemo(() => {
-    const first = recipients[0];
+    const first = sendableRecipients[0];
     if (!first) return null;
     return {
       business_name: first.business_name,
       subject: applyBusinessNameMerge(subject, first.business_name),
       body: applyBusinessNameMerge(body, first.business_name),
     };
-  }, [recipients, subject, body]);
+  }, [sendableRecipients, subject, body]);
 
   useEffect(() => {
     setMounted(true);
@@ -125,7 +124,7 @@ export function OutreachSendPanel({
   }, [open, isMobile]);
 
   const blockedZeroBalance = hasMailbox && sendBalance <= 0;
-  const sendCount = recipients.length;
+  const sendCount = sendableRecipients.length;
   const composeDisabled = sending || blockedZeroBalance || generating;
 
   async function handleGenerate() {
@@ -185,8 +184,14 @@ export function OutreachSendPanel({
       setError("Subject and body are required.");
       return;
     }
-    if (recipients.length === 0) {
-      setError("Select at least one lead with an email address.");
+    if (sendableRecipients.length === 0) {
+      if (skippedNoVerifiedPreview > 0) {
+        setError(
+          "No selected leads have a verified email. Predicted addresses are shown in results but cannot be sent automatically."
+        );
+      } else {
+        setError("Select at least one lead with a verified email address.");
+      }
       return;
     }
     if (sendMode === "manual" && !mailboxId) {
@@ -200,6 +205,8 @@ export function OutreachSendPanel({
         targets: recipients.map((r) => ({
           recipient_email: r.recipient_email,
           business_name: r.business_name,
+          business_id: r.business_id,
+          email_kind: r.email_kind,
         })),
         subject: subject.trim(),
         body: body.trim(),
@@ -248,7 +255,10 @@ export function OutreachSendPanel({
               <div className="min-w-0">
                 <h2 className="text-lg font-bold text-[#F4F4FF]">Compose email</h2>
                 <p className="mt-1 text-sm text-[#6B6B80]">
-                  {sendCount} lead{sendCount === 1 ? "" : "s"} selected
+                  {sendCount} verified email{sendCount === 1 ? "" : "s"} to send
+                  {skippedNoVerifiedPreview > 0
+                    ? ` · ${skippedNoVerifiedPreview} skipped (no verified email)`
+                    : ""}
                 </p>
                 <p className="mt-1 truncate text-xs text-[#A855F7]">From: {mailboxLabel}</p>
               </div>
@@ -512,7 +522,12 @@ export function leadHasSelectableEmail(lead: Lead): boolean {
 
 /** @internal exported for tests */
 export function buildSendPayload(input: {
-  recipients: Array<{ recipient_email: string; business_name: string }>;
+  recipients: Array<{
+    recipient_email: string;
+    business_name: string;
+    business_id?: string;
+    email_kind?: "verified" | "predicted";
+  }>;
   subject: string;
   body: string;
   templateId: string;
@@ -523,6 +538,8 @@ export function buildSendPayload(input: {
     targets: input.recipients.map((r) => ({
       recipient_email: r.recipient_email,
       business_name: r.business_name,
+      business_id: r.business_id,
+      email_kind: r.email_kind,
     })),
     subject: input.subject.trim(),
     body: input.body.trim(),

@@ -15,7 +15,12 @@ sendRouter.post("/", requireLicense, async (req: Request, res: Response) => {
     }
 
     const body = req.body as {
-      targets?: Array<{ recipient_email?: string; business_name?: string }>;
+      targets?: Array<{
+        recipient_email?: string;
+        business_name?: string;
+        business_id?: string;
+        email_kind?: "verified" | "predicted";
+      }>;
       subject?: string;
       body?: string;
       template_id?: string;
@@ -45,6 +50,8 @@ sendRouter.post("/", requireLicense, async (req: Request, res: Response) => {
       targets: targets.map((t) => ({
         recipient_email: String(t.recipient_email || ""),
         business_name: t.business_name,
+        business_id: t.business_id?.trim() || undefined,
+        email_kind: t.email_kind === "predicted" ? "predicted" : t.email_kind === "verified" ? "verified" : undefined,
       })),
       subject: body.subject.trim(),
       body: body.body.trim(),
@@ -56,6 +63,7 @@ sendRouter.post("/", requireLicense, async (req: Request, res: Response) => {
     res.status(202).json({
       queued: result.queued,
       skipped_suppression: result.skipped_suppression,
+      skipped_no_verified_email: result.skipped_no_verified_email,
       short_credits: result.short_credits,
       sent_email_ids: result.sent_email_ids,
     });

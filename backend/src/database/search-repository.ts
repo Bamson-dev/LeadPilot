@@ -385,6 +385,18 @@ export async function markBusinessLeadEmailScraped(
   if (error) throw new Error(error.message);
 }
 
+export async function getVerifiedEmailsForBusinessId(businessId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("business_leads")
+    .select("verified_email, email, email_source, predicted_email, predicted_email_secondary")
+    .eq("id", businessId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) return [];
+  return parseVerifiedEmails(data as DbBusinessLead);
+}
+
 export async function getLeadsNeedingEmailScrape(
   searchId: string
 ): Promise<BusinessLead[]> {

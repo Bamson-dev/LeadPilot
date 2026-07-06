@@ -25,11 +25,14 @@ import {
 } from "../database/outreach-repository";
 import { enqueueOutreachSendJob } from "../queue/outreach-send-queue";
 import type { OutreachSendMode } from "../queue/outreach-send-queue-types";
+import { getVerifiedEmailsForBusinessId } from "../database/search-repository";
 import { logger } from "../utils/logger";
 
 export interface SendLeadTarget {
   recipient_email: string;
   business_name?: string;
+  business_id?: string;
+  email_kind?: "verified" | "predicted";
 }
 
 export interface QueueSendBatchParams {
@@ -45,6 +48,7 @@ export interface QueueSendBatchParams {
 export interface QueueSendBatchResult {
   queued: number;
   skipped_suppression: number;
+  skipped_no_verified_email: number;
   short_credits: number;
   sent_email_ids: string[];
 }
@@ -80,6 +84,21 @@ function generateTrackingToken(): string {
   return randomBytes(24).toString("hex");
 }
 
+async function recipientIsVerifiedForSend(target: SendLeadTarget): Promise<boolean> {
+  if (target.email_kind === "predicted") return false;
+
+  const recipient = target.recipient_email?.toLowerCase().trim();
+  if (!recipient) return false;
+
+  const businessId = target.business_id?.trim();
+  if (businessId) {
+    const verifiedEmails = await getVerifiedEmailsForBusinessId(businessId);
+    return verifiedEmails.some((email) => email.toLowerCase().trim() === recipient);
+  }
+
+  return target.email_kind === "verified";
+}
+
 export async function queueSendBatch(params: QueueSendBatchParams): Promise<QueueSendBatchResult> {
   const account = await ensureOutreachAccount(params.userId);
   let available = computeAvailableSends(account);
@@ -98,6 +117,7 @@ export async function queueSendBatch(params: QueueSendBatchParams): Promise<Queu
   const result: QueueSendBatchResult = {
     queued: 0,
     skipped_suppression: 0,
+    skipped_no_verified_email: 0,
     short_credits: 0,
     sent_email_ids: [],
   };
@@ -105,6 +125,11 @@ export async function queueSendBatch(params: QueueSendBatchParams): Promise<Queu
   for (const target of params.targets) {
     const recipient = target.recipient_email?.toLowerCase().trim();
     if (!recipient) continue;
+
+    if (!(await recipientIsVerifiedForSend(target))) {
+      result.skipped_no_verified_email += 1;
+      continue;
+    }
 
     if (await isRecipientSuppressed(params.userId, recipient)) {
       result.skipped_suppression += 1;

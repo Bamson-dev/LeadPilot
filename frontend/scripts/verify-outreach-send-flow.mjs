@@ -8,6 +8,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
+import { buildOutreachSendTargetsFromLeads } from "@leadthur/shared";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const STAGING =
@@ -83,6 +84,8 @@ function buildSendPayload(input) {
     targets: input.recipients.map((r) => ({
       recipient_email: r.recipient_email,
       business_name: r.business_name,
+      business_id: r.business_id,
+      email_kind: r.email_kind,
     })),
     subject: input.subject.trim(),
     body: input.body.trim(),
@@ -168,8 +171,40 @@ async function main() {
   if (preview === "Hi Acme Ltd,") pass("Preview fills business name merge field");
   else fail("Merge preview", preview);
 
+  const verifiedBatch = buildOutreachSendTargetsFromLeads([
+    {
+      id: "v1",
+      business_name: "Verified Co",
+      verifiedEmails: ["found@verified.co"],
+      predictedEmails: [{ email: "guess@verified.co", confidence: 0.5, label: "low", source: "business_pattern" }],
+    },
+    {
+      id: "p1",
+      business_name: "Predicted Co",
+      predictedEmails: [{ email: "info@predicted.co", confidence: 0.5, label: "low", source: "category_pattern" }],
+    },
+  ]);
+  if (
+    verifiedBatch.skippedNoVerifiedPreview === 1 &&
+    verifiedBatch.targets.some((t) => t.email_kind === "verified" && t.recipient_email === "found@verified.co") &&
+    verifiedBatch.targets.some((t) => t.email_kind === "predicted")
+  ) {
+    pass(
+      "Compose uses verified-only send targets",
+      `verified=found@verified.co, skipped=${verifiedBatch.skippedNoVerifiedPreview}`
+    );
+  } else {
+    fail("Compose uses verified-only send targets", JSON.stringify(verifiedBatch));
+  }
+
   const payload = buildSendPayload({
-    recipients: [{ recipient_email: "x@y.com", business_name: "Acme" }],
+    recipients: [
+      {
+        recipient_email: "x@y.com",
+        business_name: "Acme",
+        email_kind: "verified",
+      },
+    ],
     subject: "Hello",
     body: "Hi [Business Name]",
     templateId: "tpl-1",
@@ -180,7 +215,8 @@ async function main() {
     payload.send_mode === "auto" &&
     payload.template_id === "tpl-1" &&
     payload.mailbox_id === undefined &&
-    payload.targets[0].business_name === "Acme"
+    payload.targets[0].business_name === "Acme" &&
+    payload.targets[0].email_kind === "verified"
   ) {
     pass("Send payload shape for auto spread", JSON.stringify(payload));
   } else fail("Send payload shape", JSON.stringify(payload));
@@ -233,12 +269,23 @@ async function main() {
         }),
       });
       const sendJson = await sendRes.json();
-      const fields = ["queued", "skipped_suppression", "short_credits"];
-      if (fields.every((f) => typeof sendJson[f] === "number")) {
-        pass(
-          "POST /send response summary",
-          `queued=${sendJson.queued} skipped=${sendJson.skipped_suppression} short=${sendJson.short_credits}`
-        );
+      const baseFields = ["queued", "skipped_suppression", "short_credits"];
+      if (baseFields.every((f) => typeof sendJson[f] === "number")) {
+        if (typeof sendJson.skipped_no_verified_email === "number") {
+          pass(
+            "POST /send response summary",
+            `queued=${sendJson.queued} skipped=${sendJson.skipped_suppression} no_verified=${sendJson.skipped_no_verified_email} short=${sendJson.short_credits}`
+          );
+        } else {
+          skip(
+            "POST /send skipped_no_verified_email field",
+            "staging backend not yet deployed with verified-only send"
+          );
+          pass(
+            "POST /send response summary",
+            `queued=${sendJson.queued} skipped=${sendJson.skipped_suppression} short=${sendJson.short_credits}`
+          );
+        }
       } else if (typeof sendJson.error === "string") {
         pass("POST /send blocked with message", sendJson.error.slice(0, 80));
       } else {

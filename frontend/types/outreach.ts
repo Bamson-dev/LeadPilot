@@ -36,11 +36,14 @@ export interface OutreachEmailTemplate {
 export interface OutreachSendTarget {
   recipient_email: string;
   business_name?: string;
+  business_id?: string;
+  email_kind?: "verified" | "predicted";
 }
 
 export interface QueueSendResponse {
   queued: number;
   skipped_suppression: number;
+  skipped_no_verified_email: number;
   short_credits: number;
   sent_email_ids: string[];
 }

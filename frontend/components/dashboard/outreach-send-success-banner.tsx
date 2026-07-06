@@ -16,6 +16,7 @@ export function OutreachSendSuccessBanner({
 }: OutreachSendSuccessBannerProps) {
   const queued = result.queued;
   const skipped = result.skipped_suppression;
+  const skippedNoVerified = result.skipped_no_verified_email;
   const short = result.short_credits;
 
   return (
@@ -37,11 +38,17 @@ export function OutreachSendSuccessBanner({
           Your outreach to {recipientCount} selected lead{recipientCount === 1 ? "" : "s"} is
           processing. Track delivery and opens in the sends report below.
         </p>
-        {(skipped > 0 || short > 0) && (
+        {(skipped > 0 || skippedNoVerified > 0 || short > 0) && (
           <p className="mt-2 text-xs text-[#6EE7B7]">
             {skipped > 0 && (
               <span>
                 {skipped} skipped (suppressed)
+                {skippedNoVerified > 0 || short > 0 ? " · " : ""}
+              </span>
+            )}
+            {skippedNoVerified > 0 && (
+              <span>
+                {skippedNoVerified} skipped (no verified email)
                 {short > 0 ? " · " : ""}
               </span>
             )}
