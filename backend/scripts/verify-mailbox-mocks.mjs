@@ -35,6 +35,7 @@ function makeQuery(table) {
     head: false,
     countExact: false,
     limitN: null,
+    range: null,
     order: null,
     isNullCol: null,
   };
@@ -86,6 +87,14 @@ function makeQuery(table) {
       state.isNullCol = { col, val };
       return api;
     },
+    not(col, op, val) {
+      state.filters.push({ col, op: "not", subOp: op, val });
+      return api;
+    },
+    range(from, to) {
+      state.range = { from, to };
+      return api;
+    },
     order(col, opts = {}) {
       state.order = { col, ascending: opts.ascending !== false };
       return api;
@@ -124,6 +133,9 @@ function makeQuery(table) {
           if (f.op === "neq") return row[f.col] !== f.val;
           if (f.op === "lt") return row[f.col] != null && row[f.col] < f.val;
           if (f.op === "in") return Array.isArray(f.val) && f.val.includes(row[f.col]);
+          if (f.op === "not" && f.subOp === "is" && f.val === null) {
+            return row[f.col] != null;
+          }
           return true;
         });
 
@@ -312,6 +324,11 @@ function makeQuery(table) {
           }
           const finished = finish(rows);
           if (finished.count !== undefined) return finished;
+          if (state.range) {
+            rows = rows.slice(state.range.from, state.range.to + 1);
+          } else if (state.limitN != null) {
+            rows = rows.slice(0, state.limitN);
+          }
           if (state.columns && state.columns !== "*") {
             rows = rows.map((r) => pick(r, state.columns));
           }
@@ -1022,6 +1039,59 @@ export async function registerMailboxMocks({
             grace_until: account.grace_until ?? null,
             free_sends_expire_at: account.free_sends_expire_at ?? null,
           };
+        },
+        getSentEmailsSummary: async (userId) => {
+          const sentRows = sentEmails.filter((r) => r.user_id === userId && r.status === "sent");
+          const total_sent = sentRows.length;
+          const total_opened = sentRows.filter((r) => r.opened_at != null).length;
+          const open_rate =
+            total_sent > 0 ? Math.round((total_opened / total_sent) * 1000) / 10 : 0;
+          return { total_sent, total_opened, open_rate };
+        },
+        listSentEmails: async (userId, options = {}) => {
+          const limit = Math.min(100, Math.max(1, options.limit ?? 25));
+          const offset = Math.max(0, options.offset ?? 0);
+          const statusFilter =
+            options.status && options.status !== "all" ? options.status : null;
+          const orderCol = options.sort === "sent_at" ? "sent_at" : "created_at";
+
+          let rows = sentEmails.filter((r) => r.user_id === userId);
+          if (statusFilter) rows = rows.filter((r) => r.status === statusFilter);
+          rows = [...rows].sort((a, b) =>
+            String(b[orderCol] ?? "").localeCompare(String(a[orderCol] ?? ""))
+          );
+
+          const mailboxMap = new Map(mailboxes.map((m) => [m.id, m.email_address]));
+          const sentRows = sentEmails.filter((r) => r.user_id === userId && r.status === "sent");
+          const total_sent = sentRows.length;
+          const total_opened = sentRows.filter((r) => r.opened_at != null).length;
+          const open_rate =
+            total_sent > 0 ? Math.round((total_opened / total_sent) * 1000) / 10 : 0;
+
+          return {
+            sends: rows.slice(offset, offset + limit).map((row) => ({
+              id: row.id,
+              recipient_email: row.recipient_email,
+              business_name: row.business_name ?? null,
+              subject: row.subject,
+              status: row.status,
+              error_message: row.error_message ?? null,
+              opened_at: row.opened_at ?? null,
+              open_count: row.open_count ?? 0,
+              sent_at: row.sent_at ?? null,
+              created_at: row.created_at,
+              mailbox_id: row.mailbox_id ?? null,
+              mailbox_email: row.mailbox_id ? mailboxMap.get(row.mailbox_id) ?? null : null,
+            })),
+            total: rows.length,
+            summary: { total_sent, total_opened, open_rate },
+          };
+        },
+        listRecentSentEmails: async (userId, limit = 50) => {
+          return sentEmails
+            .filter((r) => r.user_id === userId)
+            .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+            .slice(0, limit);
         },
       };
     }

@@ -1,9 +1,19 @@
 import { Router, type Request, type Response } from "express";
-import { listRecentSentEmails } from "../database/outreach-repository";
+import { listSentEmails } from "../database/outreach-repository";
 import { requireLicense } from "../middleware/require-license";
 import { logger } from "../utils/logger";
 
 export const sendsRouter = Router();
+
+const VALID_STATUSES = new Set([
+  "all",
+  "queued",
+  "sending",
+  "sent",
+  "failed",
+  "bounced",
+  "suppressed",
+]);
 
 sendsRouter.get("/", requireLicense, async (req: Request, res: Response) => {
   try {
@@ -13,25 +23,28 @@ sendsRouter.get("/", requireLicense, async (req: Request, res: Response) => {
       return;
     }
 
-    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
-    const sends = await listRecentSentEmails(userId, limit);
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 25));
+    const offset = Math.max(0, Number(req.query.offset) || 0);
+    const statusRaw = typeof req.query.status === "string" ? req.query.status : "all";
+    const status = VALID_STATUSES.has(statusRaw) ? statusRaw : "all";
+    const sortRaw = typeof req.query.sort === "string" ? req.query.sort : "recent";
+    const sort = sortRaw === "sent_at" ? "sent_at" : "recent";
+
+    const result = await listSentEmails(userId, {
+      limit,
+      offset,
+      status: status === "all" ? null : status,
+      sort,
+    });
 
     res.json({
-      sends: sends.map((row) => ({
-        id: row.id,
-        recipient_email: row.recipient_email,
-        business_name: row.business_name,
-        subject: row.subject,
-        status: row.status,
-        credit_bucket: row.credit_bucket,
-        provider_message_id: row.provider_message_id,
-        error_message: row.error_message,
-        opened_at: row.opened_at,
-        open_count: row.open_count,
-        sent_at: row.sent_at,
-        created_at: row.created_at,
-        mailbox_id: row.mailbox_id,
-      })),
+      sends: result.sends,
+      pagination: {
+        limit,
+        offset,
+        total: result.total,
+      },
+      summary: result.summary,
     });
   } catch (error) {
     logger.error("GET /sends failed", {

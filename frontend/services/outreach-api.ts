@@ -5,7 +5,9 @@ import type {
   OutreachEmailTemplate,
   OutreachMailbox,
   OutreachSendTarget,
+  OutreachSendsReport,
   OutreachSentEmail,
+  FetchSendsReportParams,
   QueueSendResponse,
 } from "@/types/outreach";
 
@@ -83,11 +85,27 @@ export async function queueOutreachSend(input: {
 }
 
 export async function fetchRecentSends(limit = 50): Promise<OutreachSentEmail[]> {
-  const res = await fetch(`${getApiUrl()}/sends?limit=${limit}`, {
+  const report = await fetchSendsReport({ limit, offset: 0 });
+  return report.sends;
+}
+
+export async function fetchSendsReport(
+  params: FetchSendsReportParams = {}
+): Promise<OutreachSendsReport> {
+  const search = new URLSearchParams();
+  search.set("limit", String(params.limit ?? 25));
+  search.set("offset", String(params.offset ?? 0));
+  if (params.status && params.status !== "all") {
+    search.set("status", params.status);
+  }
+  if (params.sort) {
+    search.set("sort", params.sort);
+  }
+
+  const res = await fetch(`${getApiUrl()}/sends?${search.toString()}`, {
     headers: getLicenseHeaders(),
     cache: "no-store",
   });
   if (!res.ok) throw new Error(await parseError(res));
-  const data = (await res.json()) as { sends?: OutreachSentEmail[] };
-  return data.sends ?? [];
+  return (await res.json()) as OutreachSendsReport;
 }

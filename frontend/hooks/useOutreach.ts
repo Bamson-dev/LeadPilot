@@ -1,19 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { OutreachBalance, OutreachMailbox, OutreachSentEmail } from "@/types/outreach";
-import {
-  fetchMailboxes,
-  fetchOutreachBalance,
-  fetchRecentSends,
-} from "@/services/outreach-api";
+import type { OutreachBalance, OutreachMailbox } from "@/types/outreach";
+import { fetchMailboxes, fetchOutreachBalance } from "@/services/outreach-api";
 
 export function useOutreach() {
   const [balance, setBalance] = useState<OutreachBalance | null>(null);
   const [mailboxes, setMailboxes] = useState<OutreachMailbox[]>([]);
-  const [sends, setSends] = useState<OutreachSentEmail[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sendsLoading, setSendsLoading] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -29,22 +23,9 @@ export function useOutreach() {
     }
   }, []);
 
-  const refreshSends = useCallback(async () => {
-    setSendsLoading(true);
-    try {
-      const rows = await fetchRecentSends(30);
-      setSends(rows);
-    } catch {
-      setSends([]);
-    } finally {
-      setSendsLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
     void refresh();
-    void refreshSends();
-  }, [refresh, refreshSends]);
+  }, [refresh]);
 
   const activeMailboxes = mailboxes.filter((m) => m.status === "active");
   const hasMailbox = activeMailboxes.length > 0;
@@ -54,10 +35,7 @@ export function useOutreach() {
     mailboxes,
     activeMailboxes,
     hasMailbox,
-    sends,
     loading,
-    sendsLoading,
     refresh,
-    refreshSends,
   };
 }

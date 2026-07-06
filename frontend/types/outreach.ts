@@ -51,14 +51,47 @@ export interface OutreachSentEmail {
   business_name: string | null;
   subject: string;
   status: string;
-  credit_bucket: string | null;
-  provider_message_id: string | null;
+  credit_bucket?: string | null;
+  provider_message_id?: string | null;
   error_message: string | null;
   opened_at: string | null;
   open_count: number;
   sent_at: string | null;
   created_at: string;
   mailbox_id: string | null;
+  mailbox_email?: string | null;
+}
+
+export interface OutreachSendsSummary {
+  total_sent: number;
+  total_opened: number;
+  open_rate: number;
+}
+
+export interface OutreachSendsPagination {
+  limit: number;
+  offset: number;
+  total: number;
+}
+
+export interface OutreachSendsReport {
+  sends: OutreachSentEmail[];
+  pagination: OutreachSendsPagination;
+  summary: OutreachSendsSummary;
+}
+
+export type OutreachSendStatusFilter =
+  | "all"
+  | "queued"
+  | "sending"
+  | "sent"
+  | "failed";
+
+export interface FetchSendsReportParams {
+  limit?: number;
+  offset?: number;
+  status?: OutreachSendStatusFilter;
+  sort?: "recent" | "sent_at";
 }
 
 export const OUTREACH_FREE_SENDS_ON_CONNECT = 200;

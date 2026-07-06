@@ -1,11 +1,11 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import type { Lead } from "@/types/lead";
 import type { OutreachMailbox } from "@/types/outreach";
 import { OutreachSendPanel, OUTREACH_COMPOSE_PANEL_WIDTH } from "@/components/dashboard/outreach-send-panel";
-import { OutreachSendStatus } from "@/components/dashboard/outreach-send-status";
+import { OutreachSendsReport } from "@/components/dashboard/outreach-sends-report";
 import type { useOutreach } from "@/hooks/useOutreach";
 
 type OutreachData = ReturnType<typeof useOutreach>;
@@ -26,10 +26,11 @@ export function ResultsOutreachShell({
   onCloseSendPanel,
 }: ResultsOutreachShellProps) {
   const isMobile = useIsMobile();
+  const [sendsRefreshKey, setSendsRefreshKey] = useState(0);
 
   function handleSent() {
     void outreach.refresh();
-    void outreach.refreshSends();
+    setSendsRefreshKey((key) => key + 1);
   }
 
   const shiftTable = sendPanelOpen && !isMobile;
@@ -42,10 +43,7 @@ export function ResultsOutreachShell({
       >
         {children}
         <div className="mt-4">
-          <OutreachSendStatus
-            sends={outreach.sends}
-            loading={outreach.sendsLoading}
-          />
+          <OutreachSendsReport refreshKey={sendsRefreshKey} />
         </div>
       </div>
 

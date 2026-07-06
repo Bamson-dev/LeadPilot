@@ -270,15 +270,162 @@ export async function listRecentSentEmails(
   userId: string,
   limit = 50
 ): Promise<SentEmail[]> {
-  const { data, error } = await supabase
+  const result = await listSentEmails(userId, { limit, offset: 0 });
+  return result.sends.map((row) => ({
+    id: row.id,
+    user_id: userId,
+    mailbox_id: row.mailbox_id,
+    lead_id: null,
+    search_id: null,
+    recipient_email: row.recipient_email,
+    business_name: row.business_name,
+    subject: row.subject,
+    body: "",
+    status: row.status,
+    credit_bucket: null,
+    provider_message_id: null,
+    tracking_token: null,
+    error_message: row.error_message,
+    opened_at: row.opened_at,
+    open_count: row.open_count,
+    sent_at: row.sent_at,
+    created_at: row.created_at,
+  }));
+}
+
+export interface SentEmailListItem {
+  id: string;
+  recipient_email: string;
+  business_name: string | null;
+  subject: string;
+  status: string;
+  error_message: string | null;
+  opened_at: string | null;
+  open_count: number;
+  sent_at: string | null;
+  created_at: string;
+  mailbox_id: string | null;
+  mailbox_email: string | null;
+}
+
+export interface SentEmailsSummary {
+  total_sent: number;
+  total_opened: number;
+  open_rate: number;
+}
+
+export interface ListSentEmailsOptions {
+  limit?: number;
+  offset?: number;
+  status?: string | null;
+  sort?: "recent" | "sent_at";
+}
+
+export interface ListSentEmailsResult {
+  sends: SentEmailListItem[];
+  total: number;
+  summary: SentEmailsSummary;
+}
+
+export async function getSentEmailsSummary(userId: string): Promise<SentEmailsSummary> {
+  const { count: totalSent, error } = await supabase
+    .from("sent_emails")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("status", "sent");
+
+  if (error) throw new Error(error.message);
+
+  const { count: totalOpened, error: openErr } = await supabase
+    .from("sent_emails")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("status", "sent")
+    .not("opened_at", "is", null);
+
+  if (openErr) throw new Error(openErr.message);
+
+  const sent = totalSent ?? 0;
+  const opened = totalOpened ?? 0;
+  const open_rate = sent > 0 ? Math.round((opened / sent) * 1000) / 10 : 0;
+
+  return { total_sent: sent, total_opened: opened, open_rate };
+}
+
+export async function listSentEmails(
+  userId: string,
+  options: ListSentEmailsOptions = {}
+): Promise<ListSentEmailsResult> {
+  const limit = Math.min(100, Math.max(1, options.limit ?? 25));
+  const offset = Math.max(0, options.offset ?? 0);
+  const statusFilter =
+    options.status && options.status !== "all" ? options.status : null;
+  const orderCol = options.sort === "sent_at" ? "sent_at" : "created_at";
+
+  let countQuery = supabase
+    .from("sent_emails")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId);
+
+  if (statusFilter) {
+    countQuery = countQuery.eq("status", statusFilter);
+  }
+
+  const { count: total, error: countErr } = await countQuery;
+  if (countErr) throw new Error(countErr.message);
+
+  let listQuery = supabase
     .from("sent_emails")
     .select("*")
     .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(limit);
+    .order(orderCol, { ascending: false, nullsFirst: false })
+    .range(offset, offset + limit - 1);
 
+  if (statusFilter) {
+    listQuery = listQuery.eq("status", statusFilter);
+  }
+
+  const { data, error } = await listQuery;
   if (error) throw new Error(error.message);
-  return (data ?? []) as SentEmail[];
+
+  const rows = (data ?? []) as SentEmail[];
+  const mailboxIds = [
+    ...new Set(rows.map((row) => row.mailbox_id).filter(Boolean)),
+  ] as string[];
+
+  const mailboxMap = new Map<string, string>();
+  if (mailboxIds.length > 0) {
+    const { data: mailboxes, error: mbErr } = await supabase
+      .from("connected_mailboxes")
+      .select("id, email_address")
+      .in("id", mailboxIds);
+
+    if (mbErr) throw new Error(mbErr.message);
+    for (const mailbox of mailboxes ?? []) {
+      mailboxMap.set(mailbox.id, mailbox.email_address);
+    }
+  }
+
+  const summary = await getSentEmailsSummary(userId);
+
+  return {
+    sends: rows.map((row) => ({
+      id: row.id,
+      recipient_email: row.recipient_email,
+      business_name: row.business_name,
+      subject: row.subject,
+      status: row.status,
+      error_message: row.error_message,
+      opened_at: row.opened_at,
+      open_count: row.open_count,
+      sent_at: row.sent_at,
+      created_at: row.created_at,
+      mailbox_id: row.mailbox_id,
+      mailbox_email: row.mailbox_id ? mailboxMap.get(row.mailbox_id) ?? null : null,
+    })),
+    total: total ?? 0,
+    summary,
+  };
 }
 
 export async function createQueuedSentEmail(params: {
