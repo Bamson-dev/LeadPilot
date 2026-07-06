@@ -6,7 +6,6 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends curl \
   && rm -rf /var/lib/apt/lists/*
 
-ENV NODE_ENV=production
 ENV PORT=3000
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
@@ -16,7 +15,7 @@ COPY package.json package-lock.json ./
 COPY backend/package.json ./backend/
 COPY shared/package.json ./shared/
 
-RUN npm ci --workspace=backend --workspace=shared --ignore-scripts
+RUN npm ci --workspace=backend --workspace=shared --ignore-scripts --include=dev
 
 COPY shared/ ./shared/
 COPY backend/ ./backend/
@@ -24,6 +23,8 @@ COPY backend/ ./backend/
 RUN npm run build --workspace=shared
 RUN npm run build --workspace=backend
 RUN npm prune --omit=dev
+
+ENV NODE_ENV=production
 
 WORKDIR /app/backend
 
