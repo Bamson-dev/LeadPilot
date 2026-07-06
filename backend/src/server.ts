@@ -21,6 +21,7 @@ import aiMessageRouter from "./routes/aiMessage";
 import { mailboxesRouter } from "./routes/mailboxes";
 import { sendRouter } from "./routes/send";
 import { outreachTrackingRouter } from "./routes/outreach-tracking";
+import { outreachGenerateRouter } from "./routes/outreach-generate";
 import { outreachCheckoutRouter } from "./routes/outreach-checkout";
 import { balanceRouter } from "./routes/balance";
 import { emailTemplatesRouter } from "./routes/email-templates";
@@ -122,6 +123,7 @@ function registerRoutes(): void {
   app.use("/mailboxes", rateLimit, mailboxesRouter);
   app.use("/send", rateLimit, sendRouter);
   app.use("/outreach", outreachTrackingRouter);
+  app.use("/outreach", rateLimit, outreachGenerateRouter);
   app.use("/checkout", rateLimit, outreachCheckoutRouter);
   app.use("/balance", rateLimit, balanceRouter);
   app.use("/email-templates", rateLimit, emailTemplatesRouter);

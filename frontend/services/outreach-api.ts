@@ -8,6 +8,8 @@ import type {
   OutreachSendsReport,
   OutreachSentEmail,
   FetchSendsReportParams,
+  GenerateOutreachEmailInput,
+  GenerateOutreachEmailResult,
   QueueSendResponse,
 } from "@/types/outreach";
 
@@ -108,4 +110,16 @@ export async function fetchSendsReport(
   });
   if (!res.ok) throw new Error(await parseError(res));
   return (await res.json()) as OutreachSendsReport;
+}
+
+export async function generateOutreachEmail(
+  input: GenerateOutreachEmailInput
+): Promise<GenerateOutreachEmailResult> {
+  const res = await fetch(`${getApiUrl()}/outreach/generate-email`, {
+    method: "POST",
+    headers: getLicenseHeaders(),
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as GenerateOutreachEmailResult;
 }

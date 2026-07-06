@@ -16,6 +16,7 @@ interface ResultsOutreachShellProps {
   selectedLeads: Lead[];
   sendPanelOpen: boolean;
   onCloseSendPanel: () => void;
+  targetBusinessType?: string;
 }
 
 export function ResultsOutreachShell({
@@ -24,6 +25,7 @@ export function ResultsOutreachShell({
   selectedLeads,
   sendPanelOpen,
   onCloseSendPanel,
+  targetBusinessType,
 }: ResultsOutreachShellProps) {
   const isMobile = useIsMobile();
   const [sendsRefreshKey, setSendsRefreshKey] = useState(0);
@@ -53,6 +55,7 @@ export function ResultsOutreachShell({
         mailboxes={outreach.mailboxes as OutreachMailbox[]}
         sendBalance={outreach.balance?.send_balance ?? 0}
         hasMailbox={outreach.hasMailbox}
+        targetBusinessType={targetBusinessType}
         onClose={onCloseSendPanel}
         onSent={handleSent}
       />

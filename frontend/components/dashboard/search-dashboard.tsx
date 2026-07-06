@@ -730,6 +730,7 @@ export function SearchDashboard() {
           selectedLeads={selectedLeads}
           sendPanelOpen={sendPanelOpen}
           onCloseSendPanel={() => setSendPanelOpen(false)}
+          targetBusinessType={query}
         >
           <ResultsTable
             leads={statusFilteredTableLeads}

@@ -12,7 +12,7 @@ import {
 import { ResultsOutreachShell } from "@/components/dashboard/results-outreach-shell";
 import { WhatsappTemplateModal } from "@/components/dashboard/whatsapp-template-modal";
 import { useOutreach } from "@/hooks/useOutreach";
-import { pollSearchResults, getLicenseUsage } from "@/services/api";
+import { pollSearchResults, getLicenseUsage, getSearch } from "@/services/api";
 import { businessLeadToLead } from "@/types/lead";
 import type { Lead } from "@/types/lead";
 import type { BusinessLead } from "@leadthur/shared";
@@ -91,6 +91,7 @@ export default function SearchResultPage() {
   const [userEmail, setUserEmail] = useState("");
   const [creditsRemaining, setCreditsRemaining] = useState(0);
   const [searchLocation] = useState("");
+  const [searchBusinessType, setSearchBusinessType] = useState("");
 
   const { leadStatuses, setLeadStatus, statusFilter, setStatusFilter } =
     useLeadStatuses(leads);
@@ -147,8 +148,15 @@ export default function SearchResultPage() {
 
     const load = async () => {
       try {
-        const payload = await pollSearchResults(searchId);
+        const [payload, job] = await Promise.all([
+          pollSearchResults(searchId),
+          getSearch(searchId).catch(() => null),
+        ]);
         if (cancelled) return;
+
+        if (job?.query) {
+          setSearchBusinessType(job.query);
+        }
 
         if (payload.leads.length > 0) {
           mergedBusinessLeads = mergePollLeads(
@@ -223,6 +231,7 @@ export default function SearchResultPage() {
         selectedLeads={selectedLeads}
         sendPanelOpen={sendPanelOpen}
         onCloseSendPanel={() => setSendPanelOpen(false)}
+        targetBusinessType={searchBusinessType}
       >
         <ResultsTable
           leads={leads}

@@ -94,4 +94,17 @@ export interface FetchSendsReportParams {
   sort?: "recent" | "sent_at";
 }
 
+export type OutreachEmailTone = "direct" | "friendly" | "consultative" | "bold";
+
+export interface GenerateOutreachEmailInput {
+  service_description: string;
+  target_business_type: string;
+  tone?: OutreachEmailTone | null;
+}
+
+export interface GenerateOutreachEmailResult {
+  subject: string;
+  body: string;
+}
+
 export const OUTREACH_FREE_SENDS_ON_CONNECT = 200;

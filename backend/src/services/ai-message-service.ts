@@ -1,7 +1,5 @@
 import { logger } from "../utils/logger";
-import { getDeepseekApiKey } from "../utils/deepseek-config";
-
-const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions";
+import { callDeepSeekChat } from "./deepseek-client";
 
 const OPENING_OBSERVATION_INSTRUCTIONS = [
   "Phrase step 1 as a casual aside, like you noticed it while scrolling, not a formal introduction.",
@@ -103,58 +101,9 @@ async function callDeepSeek(prompt: string): Promise<
       reason: "missing_key" | "api_error" | "auth_error" | "empty_response";
     }
 > {
-  const apiKey = getDeepseekApiKey();
-  if (!apiKey) {
-    logger.warn("DEEPSEEK_API_KEY not set — cannot generate AI message");
-    return { ok: false, reason: "missing_key" };
-  }
-
-  try {
-    const response = await fetch(DEEPSEEK_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "deepseek-chat",
-        messages: [{ role: "user", content: prompt }],
-        max_tokens: 220,
-        temperature: 0.85,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorBody = await response.text().catch(() => "");
-      logger.error("DeepSeek AI message generation failed", {
-        status: response.status,
-        body: errorBody.slice(0, 500),
-      });
-
-      const isAuthError =
-        response.status === 401 ||
-        errorBody.toLowerCase().includes("authentication");
-
-      return { ok: false, reason: isAuthError ? "auth_error" : "api_error" };
-    }
-
-    const data = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-
-    const content = data.choices?.[0]?.message?.content?.trim();
-    if (!content) {
-      logger.error("DeepSeek AI message generation returned empty content");
-      return { ok: false, reason: "empty_response" };
-    }
-
-    return { ok: true, message: sanitizeGeneratedMessage(content) };
-  } catch (err) {
-    logger.error("DeepSeek AI message generation error", {
-      error: err instanceof Error ? err.message : "unknown",
-    });
-    return { ok: false, reason: "api_error" };
-  }
+  const result = await callDeepSeekChat(prompt, { max_tokens: 220, temperature: 0.85 });
+  if (!result.ok) return result;
+  return { ok: true, message: sanitizeGeneratedMessage(result.content) };
 }
 
 export async function generateAiWhatsappMessage(params: {

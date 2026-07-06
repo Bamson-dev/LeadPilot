@@ -3,16 +3,24 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { Loader2, Send, X } from "lucide-react";
+import { Loader2, Send, Sparkles, X } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import type { Lead } from "@/types/lead";
-import type { OutreachEmailTemplate, OutreachMailbox, QueueSendResponse } from "@/types/outreach";
+import type { OutreachEmailTemplate, OutreachEmailTone, OutreachMailbox, QueueSendResponse } from "@/types/outreach";
 import { getAllEmailsForDisplay, hasAnyEmail } from "@/utils/get-display-email";
 import { applyBusinessNameMerge } from "@/lib/outreach-utils";
-import { fetchEmailTemplates, queueOutreachSend } from "@/services/outreach-api";
+import { fetchEmailTemplates, generateOutreachEmail, queueOutreachSend } from "@/services/outreach-api";
+
+const TONE_OPTIONS: Array<{ value: OutreachEmailTone | ""; label: string }> = [
+  { value: "", label: "Default (direct)" },
+  { value: "direct", label: "Direct" },
+  { value: "friendly", label: "Friendly" },
+  { value: "consultative", label: "Consultative" },
+  { value: "bold", label: "Bold" },
+];
 
 export const OUTREACH_COMPOSE_PANEL_WIDTH = "28rem";
 
@@ -22,6 +30,7 @@ interface OutreachSendPanelProps {
   mailboxes: OutreachMailbox[];
   sendBalance: number;
   hasMailbox: boolean;
+  targetBusinessType?: string;
   onClose: () => void;
   onSent: (result: QueueSendResponse) => void;
 }
@@ -32,6 +41,7 @@ export function OutreachSendPanel({
   mailboxes,
   sendBalance,
   hasMailbox,
+  targetBusinessType = "",
   onClose,
   onSent,
 }: OutreachSendPanelProps) {
@@ -41,6 +51,11 @@ export function OutreachSendPanel({
   const [body, setBody] = useState("Hi [Business Name],\n\n");
   const [templateId, setTemplateId] = useState("");
   const [templates, setTemplates] = useState<OutreachEmailTemplate[]>([]);
+  const [serviceDescription, setServiceDescription] = useState("");
+  const [businessType, setBusinessType] = useState(targetBusinessType);
+  const [tone, setTone] = useState<OutreachEmailTone | "">("");
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
   const [sendMode, setSendMode] = useState<"auto" | "manual">("auto");
   const [mailboxId, setMailboxId] = useState("");
   const [sending, setSending] = useState(false);
@@ -86,10 +101,12 @@ export function OutreachSendPanel({
     if (!open) return;
     setError(null);
     setResult(null);
+    setGenerateError(null);
+    setBusinessType(targetBusinessType);
     void fetchEmailTemplates()
       .then(setTemplates)
       .catch(() => setTemplates([]));
-  }, [open]);
+  }, [open, targetBusinessType]);
 
   useEffect(() => {
     if (!open) return;
@@ -109,6 +126,49 @@ export function OutreachSendPanel({
 
   const blockedZeroBalance = hasMailbox && sendBalance <= 0;
   const sendCount = recipients.length;
+  const composeDisabled = sending || blockedZeroBalance || generating;
+
+  async function handleGenerate() {
+    setGenerateError(null);
+    if (!serviceDescription.trim()) {
+      setGenerateError("Describe your service first so the AI can write the email.");
+      return;
+    }
+    if (!businessType.trim()) {
+      setGenerateError("Add the type of business you are targeting.");
+      return;
+    }
+
+    setGenerating(true);
+    try {
+      const generated = await generateOutreachEmail({
+        service_description: serviceDescription.trim(),
+        target_business_type: businessType.trim(),
+        tone: tone || undefined,
+      });
+      setSubject(generated.subject);
+      setBody(generated.body);
+      setTemplateId("");
+    } catch (err) {
+      setGenerateError(
+        err instanceof Error
+          ? err.message
+          : "Generation failed. Try again or write your email manually."
+      );
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  function applyTemplate(id: string) {
+    setTemplateId(id);
+    const tpl = templates.find((t) => t.id === id);
+    if (tpl) {
+      setSubject(tpl.subject);
+      setBody(tpl.body);
+      setGenerateError(null);
+    }
+  }
 
   const mailboxLabel =
     activeMailboxes.length === 1
@@ -219,7 +279,7 @@ export function OutreachSendPanel({
                         setMailboxId(v);
                       }
                     }}
-                    disabled={sending || blockedZeroBalance}
+                    disabled={composeDisabled}
                     className="w-full rounded-md border border-white/10 bg-[#16161E] px-3 py-2 text-sm text-[#F4F4FF]"
                   >
                     <option value="auto">Auto spread across mailboxes</option>
@@ -232,25 +292,89 @@ export function OutreachSendPanel({
                 </div>
               )}
 
+              <div className="rounded-xl border border-[#A855F7]/25 bg-[#16161E] p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-[#A855F7]" />
+                  <p className="text-sm font-semibold text-[#F4F4FF]">AI email writer</p>
+                </div>
+                <p className="text-xs text-[#6B6B80]">
+                  Describe your offer and we&apos;ll draft a personalized cold email. You can edit
+                  before sending.
+                </p>
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-[#6B6B80]">
+                    Your service
+                  </label>
+                  <textarea
+                    value={serviceDescription}
+                    onChange={(e) => setServiceDescription(e.target.value)}
+                    rows={3}
+                    disabled={composeDisabled}
+                    placeholder="e.g. I build fast mobile-friendly websites for local restaurants"
+                    className="w-full rounded-md border border-white/10 bg-[#0F0F14] px-3 py-2 text-sm text-[#F4F4FF] resize-y"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-[#6B6B80]">
+                    Target business type
+                  </label>
+                  <Input
+                    value={businessType}
+                    onChange={(e) => setBusinessType(e.target.value)}
+                    placeholder="e.g. restaurants, salons, gyms"
+                    disabled={composeDisabled}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-[#6B6B80]">
+                    Tone (optional)
+                  </label>
+                  <select
+                    value={tone}
+                    onChange={(e) => setTone(e.target.value as OutreachEmailTone | "")}
+                    disabled={composeDisabled}
+                    className="w-full rounded-md border border-white/10 bg-[#0F0F14] px-3 py-2 text-sm text-[#F4F4FF]"
+                  >
+                    {TONE_OPTIONS.map((opt) => (
+                      <option key={opt.label} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full border-[#A855F7]/40 text-[#E9D5FF] hover:bg-[#A855F7]/10"
+                  disabled={composeDisabled}
+                  onClick={() => void handleGenerate()}
+                >
+                  {generating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" /> Generating…
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-4 w-4" /> Generate email
+                    </>
+                  )}
+                </Button>
+                {generateError && (
+                  <p className="text-xs text-red-300">{generateError}</p>
+                )}
+              </div>
+
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-[#6B6B80]">
-                  Template
+                  Quick template
                 </label>
                 <select
                   value={templateId}
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    setTemplateId(id);
-                    const tpl = templates.find((t) => t.id === id);
-                    if (tpl) {
-                      setSubject(tpl.subject);
-                      setBody(tpl.body);
-                    }
-                  }}
-                  disabled={sending || blockedZeroBalance}
+                  onChange={(e) => applyTemplate(e.target.value)}
+                  disabled={composeDisabled}
                   className="w-full rounded-md border border-white/10 bg-[#16161E] px-3 py-2 text-sm text-[#F4F4FF]"
                 >
-                  <option value="">Custom message</option>
+                  <option value="">Choose a template</option>
                   {templates.map((tpl) => (
                     <option key={tpl.id} value={tpl.id}>
                       {tpl.name}
@@ -267,7 +391,7 @@ export function OutreachSendPanel({
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
                   placeholder="Subject line"
-                  disabled={sending || blockedZeroBalance}
+                  disabled={composeDisabled}
                 />
               </div>
 
@@ -285,9 +409,9 @@ export function OutreachSendPanel({
                 <textarea
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
-                  rows={8}
-                  disabled={sending || blockedZeroBalance}
-                  className="w-full rounded-md border border-white/10 bg-[#16161E] px-3 py-2 text-sm text-[#F4F4FF] resize-y"
+                  rows={14}
+                  disabled={composeDisabled}
+                  className="min-h-[280px] w-full rounded-md border border-white/10 bg-[#16161E] px-3 py-2 text-sm text-[#F4F4FF] resize-y"
                 />
               </div>
 
@@ -353,6 +477,7 @@ export function OutreachSendPanel({
                 className="w-full"
                 disabled={
                   sending ||
+                  generating ||
                   blockedZeroBalance ||
                   sendCount === 0 ||
                   !hasMailbox
