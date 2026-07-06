@@ -119,7 +119,17 @@ begin
 end;
 $$ language plpgsql;
 
-drop trigger if exists outreach_accounts_updated_at on outreach_accounts;
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.tables
+    where table_schema = 'public' and table_name = 'outreach_accounts'
+  ) then
+    drop trigger if exists outreach_accounts_updated_at on outreach_accounts;
+  end if;
+end $$;
+
 create trigger outreach_accounts_updated_at
 before update on outreach_accounts
 for each row execute function update_outreach_accounts_timestamp();
