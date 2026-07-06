@@ -47,7 +47,21 @@ async function processSearchJob(job: Job<SearchQueueJobData>): Promise<void> {
   };
 
   const jobRecord = await getSearchJob(searchId);
-  const trial = isTrial ?? jobRecord?.isTrial ?? false;
+  if (!jobRecord) {
+    logger.warn(
+      "[search-worker] Dropping stale queue job — search_jobs row missing (likely pre-DB-recreate)",
+      {
+        searchId,
+        bullJobId: job.id,
+        query,
+        location,
+      }
+    );
+    await job.remove().catch(() => undefined);
+    return;
+  }
+
+  const trial = isTrial ?? jobRecord.isTrial ?? false;
 
   logSearchLifecycle("job_dequeued", searchId, {
     queue: "bullmq",

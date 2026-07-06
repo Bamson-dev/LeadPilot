@@ -11,6 +11,7 @@ import { logSearchLifecycle } from "../utils/search-job-lifecycle";
 import {
   BULLMQ_LOCK_DURATION_MS,
 } from "../scraper/utils/constants";
+import { pruneStaleSearchQueueJobs } from "./search-queue-prune";
 import {
   SEARCH_QUEUE_NAME,
   type AdminQueueMetrics,
@@ -47,6 +48,21 @@ export async function initSearchQueue(): Promise<void> {
       removeOnFail: { age: 86_400, count: 200 },
     },
   });
+
+  try {
+    const { checked, removed } = await pruneStaleSearchQueueJobs(bullQueue);
+    if (checked > 0 || removed > 0) {
+      logger.info("Search queue startup prune", {
+        queue: SEARCH_QUEUE_NAME,
+        checked,
+        removed,
+      });
+    }
+  } catch (err) {
+    logger.error("Search queue startup prune failed — worker will still start", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+  }
 
   startSearchWorker();
   logger.info("BullMQ search queue initialized", {
