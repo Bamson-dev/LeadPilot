@@ -250,7 +250,10 @@ export async function processOutreachSendJob(data: {
 
   let creditBucket: CreditBucket | null = null;
   try {
-    const appPassword = decryptMailboxSecret(mailbox.encrypted_app_password);
+    const appPassword =
+      process.env.MOCK_OUTREACH_SEND === "1"
+        ? "mock-not-used"
+        : decryptMailboxSecret(mailbox.encrypted_app_password);
     const trackingUrl = getOutreachOpenTrackingUrl(sentEmail.tracking_token!);
     const html = buildEmailHtml({
       body: sentEmail.body,
