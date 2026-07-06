@@ -12,6 +12,7 @@ interface MobileLeadCardProps {
   onCopy: (text: string, id: string) => void;
   status?: string;
   onStatusChange?: (leadId: string, status: string) => void;
+  onUseTemplate?: (lead: Lead) => void;
   selectable?: boolean;
   selected?: boolean;
   canSelect?: boolean;
@@ -24,6 +25,7 @@ export function MobileLeadCard({
   onCopy,
   status = "new",
   onStatusChange,
+  onUseTemplate,
   selectable = false,
   selected = false,
   canSelect = true,
@@ -43,14 +45,19 @@ export function MobileLeadCard({
     >
       <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 10 }}>
         {selectable && (
-          <input
-            type="checkbox"
-            checked={selected}
-            disabled={!canSelect}
-            onChange={onToggleSelect}
-            aria-label={`Select ${lead.business_name}`}
-            className="mt-1 h-4 w-4 shrink-0 accent-violet-500 disabled:opacity-30"
-          />
+          <div className="flex flex-col items-center gap-1 shrink-0">
+            <input
+              type="checkbox"
+              checked={selected}
+              disabled={!canSelect}
+              onChange={onToggleSelect}
+              aria-label={`Select ${lead.business_name} for email`}
+              className="mt-1 h-[18px] w-[18px] shrink-0 cursor-pointer rounded border-2 border-violet-400/70 bg-[#16161E] accent-violet-500 disabled:cursor-not-allowed disabled:border-white/15 disabled:opacity-40"
+            />
+            <span className="text-[9px] font-medium uppercase tracking-wide text-[#6B6B80]">
+              Email
+            </span>
+          </div>
         )}
         <div className="min-w-0 flex-1">
         <div
@@ -201,13 +208,33 @@ export function MobileLeadCard({
       )}
 
       {onStatusChange && (
-        <div style={{ marginTop: 10 }}>
+        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
           <LeadStatusSelect
             leadId={lead.id}
             status={status}
             onChange={onStatusChange}
             fullWidth
           />
+          {onUseTemplate && (
+            <button
+              type="button"
+              onClick={() => onUseTemplate(lead)}
+              style={{
+                width: "100%",
+                background: "rgba(37,211,102,0.1)",
+                border: "1px solid rgba(37,211,102,0.25)",
+                color: "#25D366",
+                borderRadius: 8,
+                padding: "10px 12px",
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: "pointer",
+                fontFamily: "Inter, sans-serif",
+              }}
+            >
+              WhatsApp template
+            </button>
+          )}
         </div>
       )}
     </div>

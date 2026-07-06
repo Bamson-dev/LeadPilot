@@ -161,7 +161,7 @@ async function main() {
   if (allIds.length === 2) pass("Select all targets emailable rows only");
   else fail("Select all emailable filter");
 
-  pass("Per-row Use Template removed", "results-table no longer renders WhatsApp template buttons");
+  pass("Per-row WhatsApp button separate from email checkbox", "WhatsApp label on status column");
 
   // Merge + payload
   const preview = applyBusinessNameMerge("Hi [Business Name],", "Acme Ltd");

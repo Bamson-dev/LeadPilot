@@ -23,6 +23,9 @@ type SortKey = keyof Pick<
 >;
 type SortDir = "asc" | "desc";
 
+const STICKY_SELECT_CLASS =
+  "sticky left-0 z-20 bg-[#0F0F14] shadow-[4px_0_12px_rgba(0,0,0,0.35)]";
+
 interface ResultsTableProps {
   leads: Lead[];
   isLoading: boolean;
@@ -38,13 +41,38 @@ interface ResultsTableProps {
   statusFilter: string;
   onStatusFilterChange: (value: string) => void;
   onLeadStatusChange: (leadId: string, status: string) => void;
+  onUseTemplate?: (lead: Lead) => void;
   searchLocation?: string;
   emailScrapingInProgress?: boolean;
+  /** When provided, renders the email selection checkbox column */
   selectedLeadIds?: Set<string>;
   onToggleLeadSelect?: (leadId: string) => void;
   onSendSelected?: () => void;
   hasMailbox?: boolean;
   onNoMailboxClick?: () => void;
+}
+
+function EmailSelectCheckbox({
+  checked,
+  disabled,
+  onChange,
+  id,
+}: {
+  checked: boolean;
+  disabled?: boolean;
+  onChange: () => void;
+  id?: string;
+}) {
+  return (
+    <input
+      id={id}
+      type="checkbox"
+      checked={checked}
+      disabled={disabled}
+      onChange={onChange}
+      className="h-[18px] w-[18px] shrink-0 cursor-pointer rounded border-2 border-violet-400/70 bg-[#16161E] accent-violet-500 disabled:cursor-not-allowed disabled:border-white/15 disabled:opacity-40"
+    />
+  );
 }
 
 export function ResultsTable({
@@ -61,6 +89,7 @@ export function ResultsTable({
   statusFilter,
   onStatusFilterChange,
   onLeadStatusChange,
+  onUseTemplate,
   emailScrapingInProgress = false,
   selectedLeadIds,
   onToggleLeadSelect,
@@ -73,6 +102,9 @@ export function ResultsTable({
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [hasWebsite, setHasWebsite] = useState<boolean | null>(null);
   const parentRef = useRef<HTMLDivElement>(null);
+
+  /** Selection column shows whenever parent passes selectedLeadIds (email outreach mode). */
+  const showEmailSelection = selectedLeadIds !== undefined;
 
   const filtered = useMemo(() => {
     return leads.filter((lead) => {
@@ -157,7 +189,7 @@ export function ResultsTable({
     onSendSelected?.();
   }
 
-  const sendToolbar = onSendSelected && selectedLeadIds && (
+  const sendToolbar = showEmailSelection && onSendSelected && (
     <div className="flex flex-col gap-2">
       {!hasMailbox && (
         <p className="text-xs text-[#A855F7]">
@@ -280,7 +312,7 @@ export function ResultsTable({
                 onCopy={copyToClipboard}
                 status={leadStatuses[lead.id] || "new"}
                 onStatusChange={onLeadStatusChange}
-                selectable={Boolean(onToggleLeadSelect)}
+                selectable={showEmailSelection}
                 selected={selectedLeadIds?.has(lead.id) ?? false}
                 canSelect={hasAnyEmail(lead)}
                 onToggleSelect={
@@ -288,6 +320,7 @@ export function ResultsTable({
                     ? () => hasAnyEmail(lead) && onToggleLeadSelect(lead.id)
                     : undefined
                 }
+                onUseTemplate={onUseTemplate}
               />
             ))}
           </div>
@@ -303,103 +336,130 @@ export function ResultsTable({
     const isSelected = selectedLeadIds?.has(lead.id) ?? false;
 
     return (
-    <motion.tr
-      key={lead.id}
-      initial={{ opacity: 0, backgroundColor: "rgba(124,58,237,0.12)" }}
-      animate={{ opacity: 1, backgroundColor: "transparent" }}
-      transition={{ duration: 0.35 }}
-      className="border-b border-white/[0.04] transition-all duration-200"
-      style={{ borderColor: "rgba(255,255,255,0.07)" }}
-      onMouseOver={(e) => {
-        e.currentTarget.style.background = "rgba(124,58,237,0.04)";
-      }}
-      onMouseOut={(e) => {
-        e.currentTarget.style.background = "transparent";
-      }}
-    >
-      {onToggleLeadSelect && (
-        <td className="px-3 py-3 align-top w-10">
-          <input
-            type="checkbox"
-            checked={isSelected}
-            disabled={!canSelect}
-            onChange={() => canSelect && onToggleLeadSelect(lead.id)}
-            aria-label={`Select ${lead.business_name}`}
-            className="h-4 w-4 accent-violet-500 disabled:opacity-30"
-          />
+      <motion.tr
+        key={lead.id}
+        initial={{ opacity: 0, backgroundColor: "rgba(124,58,237,0.12)" }}
+        animate={{ opacity: 1, backgroundColor: "transparent" }}
+        transition={{ duration: 0.35 }}
+        className="border-b border-white/[0.04] transition-all duration-200"
+        style={{ borderColor: "rgba(255,255,255,0.07)" }}
+        onMouseOver={(e) => {
+          e.currentTarget.style.background = "rgba(124,58,237,0.04)";
+        }}
+        onMouseOut={(e) => {
+          e.currentTarget.style.background = "transparent";
+        }}
+      >
+        {showEmailSelection && (
+          <td className={`px-3 py-3 align-middle w-[72px] min-w-[72px] ${STICKY_SELECT_CLASS}`}>
+            <div className="flex flex-col items-center gap-1">
+              <EmailSelectCheckbox
+                checked={isSelected}
+                disabled={!canSelect}
+                onChange={() => canSelect && onToggleLeadSelect?.(lead.id)}
+              />
+              <span className="text-[9px] font-medium uppercase tracking-wide text-[#6B6B80]">
+                Email
+              </span>
+            </div>
+          </td>
+        )}
+        <td className="px-4 py-3 align-top" style={{ padding: "12px 8px" }}>
+          <div
+            style={{
+              color: "#F4F4FF",
+              fontWeight: 700,
+              fontSize: 13,
+              fontFamily: "Bricolage Grotesque, sans-serif",
+              lineHeight: 1.3,
+            }}
+          >
+            {lead.business_name}
+          </div>
+          {lead.category && (
+            <div style={{ color: "#6B6B80", fontSize: 11, marginTop: 2 }}>
+              {lead.category}
+            </div>
+          )}
+          <div className="mt-1.5">
+            <ContactDots lead={lead} />
+          </div>
         </td>
-      )}
-      <td className="px-4 py-3 align-top" style={{ padding: "12px 8px" }}>
-        <div
-          style={{
-            color: "#F4F4FF",
-            fontWeight: 700,
-            fontSize: 13,
-            fontFamily: "Bricolage Grotesque, sans-serif",
-            lineHeight: 1.3,
-          }}
-        >
-          {lead.business_name}
-        </div>
-        {lead.category && (
-          <div style={{ color: "#6B6B80", fontSize: 11, marginTop: 2 }}>
-            {lead.category}
-          </div>
-        )}
-        <div className="mt-1.5">
-          <ContactDots lead={lead} />
-        </div>
-      </td>
-      <td className="px-4 py-3 text-[#6B6B80] max-w-[180px] truncate align-top">
-        {lead.address ?? "—"}
-      </td>
-      <td className="px-4 py-3 align-top">
-        {lead.phone ? (
-          <div className="group flex items-center gap-1">
-            <a
-              href={`tel:${lead.phone}`}
-              style={{
-                color: "#F4F4FF",
-                textDecoration: "none",
-                fontSize: 12,
-              }}
-              className="hover:underline"
-            >
-              {lead.phone}
-            </a>
-            <CopyButton
-              value={lead.phone}
-              copyId={`phone-${lead.id}`}
-              copiedId={copiedId}
-              onCopy={copyToClipboard}
+        <td className="px-4 py-3 text-[#6B6B80] max-w-[180px] truncate align-top">
+          {lead.address ?? "—"}
+        </td>
+        <td className="px-4 py-3 align-top">
+          {lead.phone ? (
+            <div className="group flex items-center gap-1">
+              <a
+                href={`tel:${lead.phone}`}
+                style={{
+                  color: "#F4F4FF",
+                  textDecoration: "none",
+                  fontSize: 12,
+                }}
+                className="hover:underline"
+              >
+                {lead.phone}
+              </a>
+              <CopyButton
+                value={lead.phone}
+                copyId={`phone-${lead.id}`}
+                copiedId={copiedId}
+                onCopy={copyToClipboard}
+              />
+            </div>
+          ) : (
+            "—"
+          )}
+        </td>
+        <td className="px-4 py-3 min-w-[200px] align-top">
+          <EmailCell lead={lead} copiedId={copiedId} onCopy={copyToClipboard} />
+        </td>
+        <td className="px-4 py-3 align-top">
+          {lead.website ? <WebsiteLink website={lead.website} /> : "—"}
+        </td>
+        <td className="px-4 py-3 text-amber-400 align-top">
+          {lead.rating != null ? `★ ${lead.rating}` : "—"}
+        </td>
+        <td className="px-4 py-3 align-top min-w-[140px]">
+          <div className="flex flex-col gap-2">
+            <LeadStatusSelect
+              leadId={lead.id}
+              status={leadStatuses[lead.id] || "new"}
+              onChange={onLeadStatusChange}
             />
+            {onUseTemplate && (
+              <button
+                type="button"
+                onClick={() => onUseTemplate(lead)}
+                title="Open WhatsApp message template for this lead"
+                style={{
+                  background: "rgba(37,211,102,0.1)",
+                  border: "1px solid rgba(37,211,102,0.25)",
+                  color: "#25D366",
+                  borderRadius: 6,
+                  padding: "5px 8px",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  fontFamily: "Inter, sans-serif",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                WhatsApp
+              </button>
+            )}
           </div>
-        ) : (
-          "—"
-        )}
-      </td>
-      <td className="px-4 py-3 min-w-[200px] align-top">
-        <EmailCell lead={lead} copiedId={copiedId} onCopy={copyToClipboard} />
-      </td>
-      <td className="px-4 py-3 align-top">
-        {lead.website ? <WebsiteLink website={lead.website} /> : "—"}
-      </td>
-      <td className="px-4 py-3 text-amber-400 align-top">
-        {lead.rating != null ? `★ ${lead.rating}` : "—"}
-      </td>
-      <td style={{ padding: "12px 8px" }}>
-        <LeadStatusSelect
-          leadId={lead.id}
-          status={leadStatuses[lead.id] || "new"}
-          onChange={onLeadStatusChange}
-        />
-      </td>
-      <td className="px-4 py-3 text-[#6B6B80] align-top">
-        {lead.reviews_count ?? "—"}
-      </td>
-    </motion.tr>
+        </td>
+        <td className="px-4 py-3 text-[#6B6B80] align-top">
+          {lead.reviews_count ?? "—"}
+        </td>
+      </motion.tr>
     );
   };
+
+  const colCount = showEmailSelection ? 9 : 8;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0F0F14]">
@@ -458,18 +518,22 @@ export function ResultsTable({
 
       <div ref={parentRef} className="max-h-[600px] overflow-auto">
         <table className="w-full min-w-[900px] text-sm">
-          <thead className="sticky top-0 z-10 bg-[#0F0F14]/95 backdrop-blur">
+          <thead className="sticky top-0 z-30 bg-[#0F0F14]/95 backdrop-blur">
             <tr className="border-b border-white/[0.08]">
-              {onToggleLeadSelect && (
-                <th className="px-3 py-3 text-left w-10">
-                  <input
-                    type="checkbox"
-                    checked={allSelectableSelected}
-                    onChange={toggleSelectAll}
-                    disabled={selectableIds.length === 0}
-                    aria-label="Select all leads with email"
-                    className="h-4 w-4 accent-violet-500 disabled:opacity-30"
-                  />
+              {showEmailSelection && (
+                <th
+                  className={`px-3 py-3 text-left w-[72px] min-w-[72px] ${STICKY_SELECT_CLASS}`}
+                >
+                  <div className="flex flex-col items-center gap-1">
+                    <EmailSelectCheckbox
+                      checked={allSelectableSelected}
+                      disabled={selectableIds.length === 0}
+                      onChange={toggleSelectAll}
+                    />
+                    <span className="text-[9px] font-semibold uppercase tracking-wide text-[#A855F7]">
+                      Email
+                    </span>
+                  </div>
                 </th>
               )}
               {(
@@ -525,7 +589,7 @@ export function ResultsTable({
             {isLoading && leads.length === 0
               ? Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i}>
-                    <td colSpan={onToggleLeadSelect ? 9 : 8} className="px-4 py-3">
+                    <td colSpan={colCount} className="px-4 py-3">
                       <div className="skeleton h-4 rounded" />
                     </td>
                   </tr>
@@ -548,4 +612,9 @@ export function ResultsTable({
       </div>
     </div>
   );
+}
+
+/** @internal exported for tests */
+export function emailSelectionColumnVisible(selectedLeadIds?: Set<string>): boolean {
+  return selectedLeadIds !== undefined;
 }

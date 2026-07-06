@@ -19,6 +19,7 @@ import { SearchQueueCard } from "@/components/dashboard/search-queue-card";
 import { NearbyCityChips } from "@/components/dashboard/nearby-city-chips";
 import { RegionCityChips } from "@/components/dashboard/region-city-chips";
 import { ResultsTable } from "@/features/results/results-table";
+import { WhatsappTemplateModal } from "@/components/dashboard/whatsapp-template-modal";
 import { useSearch } from "@/hooks/useSearch";
 import { useLeadStatuses } from "@/hooks/useLeadStatuses";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -61,6 +62,7 @@ export function SearchDashboard() {
   const [userStats, setUserStats] = useState<LicenseUsage | null>(null);
   const [ratingFilter, setRatingFilter] = useState<RatingFilterValue>("all");
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const [templateLead, setTemplateLead] = useState<Lead | null>(null);
   const [showCreditDeduction, setShowCreditDeduction] = useState(false);
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(() => new Set());
   const [sendPanelOpen, setSendPanelOpen] = useState(false);
@@ -85,6 +87,15 @@ export function SearchDashboard() {
     window.addEventListener("leadthur:topup-success", onTopUpSuccess);
     return () => window.removeEventListener("leadthur:topup-success", onTopUpSuccess);
   }, [loadUserStats]);
+
+  const handleCreditsUpdated = useCallback((balance: number) => {
+    setUserStats((prev) => (prev ? { ...prev, search_credits: balance } : prev));
+  }, []);
+
+  const handleCreditDeducted = useCallback(() => {
+    setShowCreditDeduction(true);
+    window.setTimeout(() => setShowCreditDeduction(false), 2000);
+  }, []);
 
   const onSearchCompleteRef = useRef<
     | ((
@@ -731,6 +742,7 @@ export function SearchDashboard() {
             statusFilter={statusFilter}
             onStatusFilterChange={setStatusFilter}
             onLeadStatusChange={setLeadStatus}
+            onUseTemplate={setTemplateLead}
             emailScrapingInProgress={!emailScrapingComplete && tableLeads.length > 0}
             selectedLeadIds={selectedLeadIds}
             onToggleLeadSelect={(leadId) => {
@@ -911,6 +923,17 @@ export function SearchDashboard() {
       {showLimitModal && userEmail && (
         <SearchLimitModal email={userEmail} onClose={() => setShowLimitModal(false)} />
       )}
+
+      <WhatsappTemplateModal
+        lead={templateLead}
+        searchLocation={loc}
+        userEmail={userEmail}
+        creditsRemaining={creditsRemaining}
+        onClose={() => setTemplateLead(null)}
+        onCreditsUpdated={handleCreditsUpdated}
+        onCreditDeducted={handleCreditDeducted}
+        onGetMoreCredits={() => setShowLimitModal(true)}
+      />
     </div>
   );
 }

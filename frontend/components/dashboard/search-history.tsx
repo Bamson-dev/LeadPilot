@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { getSearchHistory, getResults } from "@/services/api";
 import { exportToCSV } from "@/features/export/csv-export";
 import type { Lead } from "@/types/lead";
@@ -26,6 +27,7 @@ export function SearchHistory({
   refreshKey = 0,
   onViewResults,
 }: SearchHistoryProps) {
+  const router = useRouter();
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [exportingId, setExportingId] = useState<string | null>(null);
@@ -74,16 +76,7 @@ export function SearchHistory({
 
   const handleView = async (item: HistoryItem) => {
     if (!item.search_id) return;
-    try {
-      const { leads } = await getResults(item.search_id);
-      onViewResults(leads, {
-        query: item.query,
-        location: item.location,
-        date: formatDate(item.created_at),
-      });
-    } catch {
-      window.alert("Could not load this search. Try running it again from the dashboard.");
-    }
+    router.push(`/dashboard/search/${encodeURIComponent(item.search_id)}`);
   };
 
   const handleExport = async (item: HistoryItem) => {

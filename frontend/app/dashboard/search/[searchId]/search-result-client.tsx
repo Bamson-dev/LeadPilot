@@ -10,8 +10,9 @@ import {
   GMAIL_MAILBOXES_SECTION_ID,
 } from "@/components/dashboard/outreach-section";
 import { ResultsOutreachShell } from "@/components/dashboard/results-outreach-shell";
+import { WhatsappTemplateModal } from "@/components/dashboard/whatsapp-template-modal";
 import { useOutreach } from "@/hooks/useOutreach";
-import { pollSearchResults } from "@/services/api";
+import { pollSearchResults, getLicenseUsage } from "@/services/api";
 import { businessLeadToLead } from "@/types/lead";
 import type { Lead } from "@/types/lead";
 import type { BusinessLead } from "@leadthur/shared";
@@ -86,6 +87,10 @@ export default function SearchResultPage() {
   >([]);
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(() => new Set());
   const [sendPanelOpen, setSendPanelOpen] = useState(false);
+  const [templateLead, setTemplateLead] = useState<Lead | null>(null);
+  const [userEmail, setUserEmail] = useState("");
+  const [creditsRemaining, setCreditsRemaining] = useState(0);
+  const [searchLocation] = useState("");
 
   const { leadStatuses, setLeadStatus, statusFilter, setStatusFilter } =
     useLeadStatuses(leads);
@@ -108,6 +113,20 @@ export default function SearchResultPage() {
     document.getElementById(GMAIL_MAILBOXES_SECTION_ID)?.scrollIntoView({
       behavior: "smooth",
       block: "start",
+    });
+  }, []);
+
+  useEffect(() => {
+    setUserEmail(localStorage.getItem("leadthur_email") || "");
+    void getLicenseUsage().then((usage) => {
+      if (usage) setCreditsRemaining(usage.search_credits);
+    });
+  }, []);
+
+  useEffect(() => {
+    setUserEmail(localStorage.getItem("leadthur_email") || "");
+    void getLicenseUsage().then((usage) => {
+      if (usage) setCreditsRemaining(usage.search_credits);
     });
   }, []);
 
@@ -213,6 +232,7 @@ export default function SearchResultPage() {
           statusFilter={statusFilter}
           onStatusFilterChange={setStatusFilter}
           onLeadStatusChange={setLeadStatus}
+          onUseTemplate={setTemplateLead}
           totalLeadCount={leads.length}
           emailScrapingInProgress={!emailScrapingComplete && leads.length > 0}
           selectedLeadIds={selectedLeadIds}
@@ -225,6 +245,17 @@ export default function SearchResultPage() {
           onNoMailboxClick={scrollToMailboxes}
         />
       </ResultsOutreachShell>
+
+      <WhatsappTemplateModal
+        lead={templateLead}
+        searchLocation={searchLocation}
+        userEmail={userEmail}
+        creditsRemaining={creditsRemaining}
+        onClose={() => setTemplateLead(null)}
+        onCreditsUpdated={(balance) => setCreditsRemaining(balance)}
+        onCreditDeducted={() => {}}
+        onGetMoreCredits={() => router.push("/dashboard")}
+      />
     </div>
   );
 }
