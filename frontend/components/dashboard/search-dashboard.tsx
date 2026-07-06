@@ -11,13 +11,14 @@ import { LiveCounter } from "@/components/dashboard/live-counter";
 import { RecentSearchesPanel } from "@/components/dashboard/recent-searches-panel";
 import { SearchHistory } from "@/components/dashboard/search-history";
 import { AffiliateSection } from "@/components/dashboard/affiliate-section";
-import { OutreachSection } from "@/components/dashboard/outreach-section";
+import { OutreachSection, GMAIL_MAILBOXES_SECTION_ID } from "@/components/dashboard/outreach-section";
+import { ResultsOutreachShell } from "@/components/dashboard/results-outreach-shell";
+import { useOutreach } from "@/hooks/useOutreach";
 import { WelcomeState } from "@/components/dashboard/welcome-state";
 import { SearchQueueCard } from "@/components/dashboard/search-queue-card";
 import { NearbyCityChips } from "@/components/dashboard/nearby-city-chips";
 import { RegionCityChips } from "@/components/dashboard/region-city-chips";
 import { ResultsTable } from "@/features/results/results-table";
-import { WhatsappTemplateModal } from "@/components/dashboard/whatsapp-template-modal";
 import { useSearch } from "@/hooks/useSearch";
 import { useLeadStatuses } from "@/hooks/useLeadStatuses";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -60,10 +61,10 @@ export function SearchDashboard() {
   const [userStats, setUserStats] = useState<LicenseUsage | null>(null);
   const [ratingFilter, setRatingFilter] = useState<RatingFilterValue>("all");
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
-  const [templateLead, setTemplateLead] = useState<Lead | null>(null);
   const [showCreditDeduction, setShowCreditDeduction] = useState(false);
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(() => new Set());
   const [sendPanelOpen, setSendPanelOpen] = useState(false);
+  const outreach = useOutreach();
   const searchAgainVariationRef = useRef(0);
 
   const loadUserStats = useCallback(async () => {
@@ -84,15 +85,6 @@ export function SearchDashboard() {
     window.addEventListener("leadthur:topup-success", onTopUpSuccess);
     return () => window.removeEventListener("leadthur:topup-success", onTopUpSuccess);
   }, [loadUserStats]);
-
-  const handleCreditsUpdated = useCallback((balance: number) => {
-    setUserStats((prev) => (prev ? { ...prev, search_credits: balance } : prev));
-  }, []);
-
-  const handleCreditDeducted = useCallback(() => {
-    setShowCreditDeduction(true);
-    window.setTimeout(() => setShowCreditDeduction(false), 2000);
-  }, []);
 
   const onSearchCompleteRef = useRef<
     | ((
@@ -263,6 +255,17 @@ export function SearchDashboard() {
       else next.add(leadId);
       return next;
     });
+  }, []);
+
+  const scrollToMailboxes = useCallback(() => {
+    document.getElementById(GMAIL_MAILBOXES_SECTION_ID)?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }, []);
+
+  const openSendPanel = useCallback(() => {
+    setSendPanelOpen(true);
   }, []);
 
   const leadsToExport = leads;
@@ -654,12 +657,7 @@ export function SearchDashboard() {
         )}
       </div>
 
-      <OutreachSection
-        selectedLeads={selectedLeads}
-        sendPanelOpen={sendPanelOpen}
-        onCloseSendPanel={() => setSendPanelOpen(false)}
-        onRequestSendPanel={() => setSendPanelOpen(true)}
-      />
+      <OutreachSection outreach={outreach} />
 
       <AffiliateSection />
 
@@ -713,29 +711,37 @@ export function SearchDashboard() {
       )}
 
       {(isSearching || tableLeads.length > 0 || savedBanner) && (
-        <ResultsTable
-          leads={statusFilteredTableLeads}
-          isLoading={isSearching && tableLeads.length === 0}
-          isMobile={isMobile}
-          hideEmptyPlaceholder={showWelcome}
-          ratingFilter={ratingFilter}
-          onRatingFilterChange={setRatingFilter}
-          totalLeadCount={tableLeads.length}
-          ratingMatchCount={ratingFilteredTableLeads.length}
-          summaryLeads={ratingFilteredTableLeads}
-          leadStatuses={leadStatuses}
-          statusFilter={statusFilter}
-          onStatusFilterChange={setStatusFilter}
-          onLeadStatusChange={setLeadStatus}
-          onUseTemplate={setTemplateLead}
-          emailScrapingInProgress={!emailScrapingComplete && tableLeads.length > 0}
-          selectedLeadIds={selectedLeadIds}
-          onToggleLeadSelect={(leadId) => {
-            const lead = statusFilteredTableLeads.find((l) => l.id === leadId);
-            if (lead && hasAnyEmail(lead)) toggleLeadSelect(leadId);
-          }}
-          onSendSelected={() => setSendPanelOpen(true)}
-        />
+        <ResultsOutreachShell
+          outreach={outreach}
+          selectedLeads={selectedLeads}
+          sendPanelOpen={sendPanelOpen}
+          onCloseSendPanel={() => setSendPanelOpen(false)}
+        >
+          <ResultsTable
+            leads={statusFilteredTableLeads}
+            isLoading={isSearching && tableLeads.length === 0}
+            isMobile={isMobile}
+            hideEmptyPlaceholder={showWelcome}
+            ratingFilter={ratingFilter}
+            onRatingFilterChange={setRatingFilter}
+            totalLeadCount={tableLeads.length}
+            ratingMatchCount={ratingFilteredTableLeads.length}
+            summaryLeads={ratingFilteredTableLeads}
+            leadStatuses={leadStatuses}
+            statusFilter={statusFilter}
+            onStatusFilterChange={setStatusFilter}
+            onLeadStatusChange={setLeadStatus}
+            emailScrapingInProgress={!emailScrapingComplete && tableLeads.length > 0}
+            selectedLeadIds={selectedLeadIds}
+            onToggleLeadSelect={(leadId) => {
+              const lead = statusFilteredTableLeads.find((l) => l.id === leadId);
+              if (lead && hasAnyEmail(lead)) toggleLeadSelect(leadId);
+            }}
+            onSendSelected={openSendPanel}
+            hasMailbox={outreach.hasMailbox}
+            onNoMailboxClick={scrollToMailboxes}
+          />
+        </ResultsOutreachShell>
       )}
 
       <RecentSearchesPanel
@@ -905,17 +911,6 @@ export function SearchDashboard() {
       {showLimitModal && userEmail && (
         <SearchLimitModal email={userEmail} onClose={() => setShowLimitModal(false)} />
       )}
-
-      <WhatsappTemplateModal
-        lead={templateLead}
-        searchLocation={loc}
-        userEmail={userEmail}
-        creditsRemaining={creditsRemaining}
-        onClose={() => setTemplateLead(null)}
-        onCreditsUpdated={handleCreditsUpdated}
-        onCreditDeducted={handleCreditDeducted}
-        onGetMoreCredits={() => setShowLimitModal(true)}
-      />
     </div>
   );
 }

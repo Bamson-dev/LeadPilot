@@ -38,13 +38,13 @@ interface ResultsTableProps {
   statusFilter: string;
   onStatusFilterChange: (value: string) => void;
   onLeadStatusChange: (leadId: string, status: string) => void;
-  onUseTemplate?: (lead: Lead) => void;
   searchLocation?: string;
   emailScrapingInProgress?: boolean;
   selectedLeadIds?: Set<string>;
   onToggleLeadSelect?: (leadId: string) => void;
   onSendSelected?: () => void;
-  sendSelectionDisabled?: boolean;
+  hasMailbox?: boolean;
+  onNoMailboxClick?: () => void;
 }
 
 export function ResultsTable({
@@ -61,12 +61,12 @@ export function ResultsTable({
   statusFilter,
   onStatusFilterChange,
   onLeadStatusChange,
-  onUseTemplate,
   emailScrapingInProgress = false,
   selectedLeadIds,
   onToggleLeadSelect,
   onSendSelected,
-  sendSelectionDisabled = false,
+  hasMailbox = true,
+  onNoMailboxClick,
 }: ResultsTableProps) {
   const { copiedId, copyToClipboard } = useCopyToClipboard();
   const [sortKey, setSortKey] = useState<SortKey>("business_name");
@@ -143,6 +143,60 @@ export function ResultsTable({
     }
   }
 
+  const emailableSelectedCount = useMemo(() => {
+    if (!selectedLeadIds) return 0;
+    return sorted.filter((lead) => selectedLeadIds.has(lead.id) && hasAnyEmail(lead)).length;
+  }, [sorted, selectedLeadIds]);
+
+  function handleSendClick() {
+    if (emailableSelectedCount === 0) return;
+    if (!hasMailbox) {
+      onNoMailboxClick?.();
+      return;
+    }
+    onSendSelected?.();
+  }
+
+  const sendToolbar = onSendSelected && selectedLeadIds && (
+    <div className="flex flex-col gap-2">
+      {!hasMailbox && (
+        <p className="text-xs text-[#A855F7]">
+          Connect a Gmail mailbox in Email outreach above before you can send.{" "}
+          {onNoMailboxClick && (
+            <button
+              type="button"
+              onClick={onNoMailboxClick}
+              className="underline text-[#F4F4FF]"
+            >
+              Go to mailboxes
+            </button>
+          )}
+        </p>
+      )}
+      <button
+        type="button"
+        onClick={handleSendClick}
+        disabled={emailableSelectedCount === 0}
+        style={{
+          background:
+            emailableSelectedCount > 0
+              ? "rgba(124,58,237,0.2)"
+              : "rgba(255,255,255,0.04)",
+          border: "1px solid rgba(124,58,237,0.35)",
+          color: emailableSelectedCount > 0 ? "#F4F4FF" : "#6B6B80",
+          borderRadius: 8,
+          padding: "7px 14px",
+          fontSize: 12,
+          fontWeight: 700,
+          cursor: emailableSelectedCount > 0 ? "pointer" : "not-allowed",
+          opacity: !hasMailbox && emailableSelectedCount > 0 ? 0.65 : 1,
+        }}
+      >
+        Send email ({emailableSelectedCount})
+      </button>
+    </div>
+  );
+
   if (!isLoading && leads.length === 0 && !hideEmptyPlaceholder) {
     return null;
   }
@@ -156,32 +210,7 @@ export function ResultsTable({
           statusFilter={statusFilter}
           onFilterChange={onStatusFilterChange}
         />
-        {onSendSelected && selectedLeadIds && (
-          <button
-            type="button"
-            onClick={onSendSelected}
-            disabled={sendSelectionDisabled || selectedLeadIds.size === 0}
-            style={{
-              background:
-                selectedLeadIds.size > 0 && !sendSelectionDisabled
-                  ? "rgba(124,58,237,0.2)"
-                  : "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(124,58,237,0.35)",
-              color: selectedLeadIds.size > 0 && !sendSelectionDisabled ? "#F4F4FF" : "#6B6B80",
-              borderRadius: 8,
-              padding: "7px 14px",
-              fontSize: 12,
-              fontWeight: 700,
-              cursor:
-                selectedLeadIds.size > 0 && !sendSelectionDisabled
-                  ? "pointer"
-                  : "not-allowed",
-              width: "100%",
-            }}
-          >
-            Send email ({selectedLeadIds.size})
-          </button>
-        )}
+        {sendToolbar}
         <div className="flex flex-wrap gap-2 px-1">
           {onRatingFilterChange && (
             <RatingFilter
@@ -251,7 +280,14 @@ export function ResultsTable({
                 onCopy={copyToClipboard}
                 status={leadStatuses[lead.id] || "new"}
                 onStatusChange={onLeadStatusChange}
-                onUseTemplate={onUseTemplate}
+                selectable={Boolean(onToggleLeadSelect)}
+                selected={selectedLeadIds?.has(lead.id) ?? false}
+                canSelect={hasAnyEmail(lead)}
+                onToggleSelect={
+                  onToggleLeadSelect
+                    ? () => hasAnyEmail(lead) && onToggleLeadSelect(lead.id)
+                    : undefined
+                }
               />
             ))}
           </div>
@@ -352,33 +388,11 @@ export function ResultsTable({
         {lead.rating != null ? `★ ${lead.rating}` : "—"}
       </td>
       <td style={{ padding: "12px 8px" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <LeadStatusSelect
-            leadId={lead.id}
-            status={leadStatuses[lead.id] || "new"}
-            onChange={onLeadStatusChange}
-          />
-          {onUseTemplate && (
-            <button
-              type="button"
-              onClick={() => onUseTemplate(lead)}
-              style={{
-                background: "rgba(37,211,102,0.1)",
-                border: "1px solid rgba(37,211,102,0.25)",
-                color: "#25D366",
-                borderRadius: 6,
-                padding: "4px 8px",
-                fontSize: 10,
-                fontWeight: 700,
-                cursor: "pointer",
-                fontFamily: "Inter, sans-serif",
-                whiteSpace: "nowrap",
-              }}
-            >
-              Use Template
-            </button>
-          )}
-        </div>
+        <LeadStatusSelect
+          leadId={lead.id}
+          status={leadStatuses[lead.id] || "new"}
+          onChange={onLeadStatusChange}
+        />
       </td>
       <td className="px-4 py-3 text-[#6B6B80] align-top">
         {lead.reviews_count ?? "—"}
@@ -396,31 +410,7 @@ export function ResultsTable({
         onFilterChange={onStatusFilterChange}
       />
       <div className="flex flex-col gap-2 border-b border-white/[0.08] px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-        {onSendSelected && selectedLeadIds && (
-          <button
-            type="button"
-            onClick={onSendSelected}
-            disabled={sendSelectionDisabled || selectedLeadIds.size === 0}
-            style={{
-              background:
-                selectedLeadIds.size > 0 && !sendSelectionDisabled
-                  ? "rgba(124,58,237,0.2)"
-                  : "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(124,58,237,0.35)",
-              color: selectedLeadIds.size > 0 && !sendSelectionDisabled ? "#F4F4FF" : "#6B6B80",
-              borderRadius: 8,
-              padding: "7px 14px",
-              fontSize: 12,
-              fontWeight: 700,
-              cursor:
-                selectedLeadIds.size > 0 && !sendSelectionDisabled
-                  ? "pointer"
-                  : "not-allowed",
-            }}
-          >
-            Send email ({selectedLeadIds.size})
-          </button>
-        )}
+        {sendToolbar}
         {onRatingFilterChange && (
           <RatingFilter
             value={ratingFilter}

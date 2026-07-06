@@ -5,7 +5,12 @@ import { useParams, useRouter } from "next/navigation";
 import { ResultsTable } from "@/features/results/results-table";
 import { ResultsSummaryBar } from "@/components/dashboard/results-summary-bar";
 import { NearbyCityChips } from "@/components/dashboard/nearby-city-chips";
-import { OutreachSection } from "@/components/dashboard/outreach-section";
+import {
+  OutreachSection,
+  GMAIL_MAILBOXES_SECTION_ID,
+} from "@/components/dashboard/outreach-section";
+import { ResultsOutreachShell } from "@/components/dashboard/results-outreach-shell";
+import { useOutreach } from "@/hooks/useOutreach";
 import { pollSearchResults } from "@/services/api";
 import { businessLeadToLead } from "@/types/lead";
 import type { Lead } from "@/types/lead";
@@ -71,6 +76,7 @@ export default function SearchResultPage() {
   const router = useRouter();
   const searchId = String(params.searchId ?? "");
   const isMobile = useIsMobile();
+  const outreach = useOutreach();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -95,6 +101,13 @@ export default function SearchResultPage() {
       if (next.has(leadId)) next.delete(leadId);
       else next.add(leadId);
       return next;
+    });
+  }, []);
+
+  const scrollToMailboxes = useCallback(() => {
+    document.getElementById(GMAIL_MAILBOXES_SECTION_ID)?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
     });
   }, []);
 
@@ -175,12 +188,7 @@ export default function SearchResultPage() {
         <h1 className="text-xl font-bold text-white">Your search results</h1>
       </div>
 
-      <OutreachSection
-        selectedLeads={selectedLeads}
-        sendPanelOpen={sendPanelOpen}
-        onCloseSendPanel={() => setSendPanelOpen(false)}
-        onRequestSendPanel={() => setSendPanelOpen(true)}
-      />
+      <OutreachSection outreach={outreach} />
 
       <ResultsSummaryBar leads={leads} />
       <NearbyCityChips
@@ -191,23 +199,32 @@ export default function SearchResultPage() {
         }
       />
 
-      <ResultsTable
-        leads={leads}
-        isLoading={loading}
-        isMobile={isMobile}
-        leadStatuses={leadStatuses}
-        statusFilter={statusFilter}
-        onStatusFilterChange={setStatusFilter}
-        onLeadStatusChange={setLeadStatus}
-        totalLeadCount={leads.length}
-        emailScrapingInProgress={!emailScrapingComplete && leads.length > 0}
-        selectedLeadIds={selectedLeadIds}
-        onToggleLeadSelect={(leadId) => {
-          const lead = leads.find((l) => l.id === leadId);
-          if (lead && hasAnyEmail(lead)) toggleLeadSelect(leadId);
-        }}
-        onSendSelected={() => setSendPanelOpen(true)}
-      />
+      <ResultsOutreachShell
+        outreach={outreach}
+        selectedLeads={selectedLeads}
+        sendPanelOpen={sendPanelOpen}
+        onCloseSendPanel={() => setSendPanelOpen(false)}
+      >
+        <ResultsTable
+          leads={leads}
+          isLoading={loading}
+          isMobile={isMobile}
+          leadStatuses={leadStatuses}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
+          onLeadStatusChange={setLeadStatus}
+          totalLeadCount={leads.length}
+          emailScrapingInProgress={!emailScrapingComplete && leads.length > 0}
+          selectedLeadIds={selectedLeadIds}
+          onToggleLeadSelect={(leadId) => {
+            const lead = leads.find((l) => l.id === leadId);
+            if (lead && hasAnyEmail(lead)) toggleLeadSelect(leadId);
+          }}
+          onSendSelected={() => setSendPanelOpen(true)}
+          hasMailbox={outreach.hasMailbox}
+          onNoMailboxClick={scrollToMailboxes}
+        />
+      </ResultsOutreachShell>
     </div>
   );
 }

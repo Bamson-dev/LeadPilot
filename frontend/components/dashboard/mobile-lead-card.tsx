@@ -12,7 +12,10 @@ interface MobileLeadCardProps {
   onCopy: (text: string, id: string) => void;
   status?: string;
   onStatusChange?: (leadId: string, status: string) => void;
-  onUseTemplate?: (lead: Lead) => void;
+  selectable?: boolean;
+  selected?: boolean;
+  canSelect?: boolean;
+  onToggleSelect?: () => void;
 }
 
 export function MobileLeadCard({
@@ -21,7 +24,10 @@ export function MobileLeadCard({
   onCopy,
   status = "new",
   onStatusChange,
-  onUseTemplate,
+  selectable = false,
+  selected = false,
+  canSelect = true,
+  onToggleSelect,
 }: MobileLeadCardProps) {
   const emails = getAllEmailsForDisplay(lead);
   const isPredicted = lead.email_source === "predicted";
@@ -35,7 +41,18 @@ export function MobileLeadCard({
         padding: 16,
       }}
     >
-      <div style={{ marginBottom: 10 }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 10 }}>
+        {selectable && (
+          <input
+            type="checkbox"
+            checked={selected}
+            disabled={!canSelect}
+            onChange={onToggleSelect}
+            aria-label={`Select ${lead.business_name}`}
+            className="mt-1 h-4 w-4 shrink-0 accent-violet-500 disabled:opacity-30"
+          />
+        )}
+        <div className="min-w-0 flex-1">
         <div
           style={{
             color: "#F4F4FF",
@@ -50,6 +67,7 @@ export function MobileLeadCard({
         {lead.category && (
           <div style={{ color: "#6B6B80", fontSize: 12 }}>{lead.category}</div>
         )}
+        </div>
       </div>
 
       {lead.rating != null && (
@@ -183,33 +201,13 @@ export function MobileLeadCard({
       )}
 
       {onStatusChange && (
-        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ marginTop: 10 }}>
           <LeadStatusSelect
             leadId={lead.id}
             status={status}
             onChange={onStatusChange}
             fullWidth
           />
-          {onUseTemplate && (
-            <button
-              type="button"
-              onClick={() => onUseTemplate(lead)}
-              style={{
-                width: "100%",
-                background: "rgba(37,211,102,0.1)",
-                border: "1px solid rgba(37,211,102,0.25)",
-                color: "#25D366",
-                borderRadius: 8,
-                padding: "10px 12px",
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: "pointer",
-                fontFamily: "Inter, sans-serif",
-              }}
-            >
-              Use Template
-            </button>
-          )}
         </div>
       )}
     </div>
