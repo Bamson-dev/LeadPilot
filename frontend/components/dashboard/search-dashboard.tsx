@@ -1,18 +1,15 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { Search, Download, RotateCcw, Trash2, Loader2 } from "lucide-react";
+import { Download, RotateCcw, Trash2, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BusinessLead } from "@leadthur/shared";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { LiveCounter } from "@/components/dashboard/live-counter";
 import { RecentSearchesPanel } from "@/components/dashboard/recent-searches-panel";
 import { SearchHistory } from "@/components/dashboard/search-history";
 import { AffiliateSection } from "@/components/dashboard/affiliate-section";
-import { OutreachSection, GMAIL_MAILBOXES_SECTION_ID } from "@/components/dashboard/outreach-section";
-import { ResultsOutreachShell } from "@/components/dashboard/results-outreach-shell";
+import { OutreachWorkspace, requestMailboxesTab } from "@/components/dashboard/outreach-workspace";
 import { useOutreach } from "@/hooks/useOutreach";
 import { WelcomeState } from "@/components/dashboard/welcome-state";
 import { SearchQueueCard } from "@/components/dashboard/search-queue-card";
@@ -140,6 +137,20 @@ export function SearchDashboard() {
       void loadUserStats();
     },
   });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const bt = params.get("businessType")?.trim();
+    const loc = params.get("location")?.trim();
+    if (bt && loc) {
+      setBusinessType(bt);
+      setLocation(loc);
+      setSavedBanner(null);
+      setRatingFilter("all");
+      void runSearch(bt, loc);
+      window.history.replaceState({}, "", "/dashboard");
+    }
+  }, [runSearch]);
 
   const fetchSuggestions = useCallback(
     async (
@@ -272,10 +283,7 @@ export function SearchDashboard() {
   }, []);
 
   const scrollToMailboxes = useCallback(() => {
-    document.getElementById(GMAIL_MAILBOXES_SECTION_ID)?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
+    requestMailboxesTab();
   }, []);
 
   const openSendPanel = useCallback(() => {
@@ -320,10 +328,6 @@ export function SearchDashboard() {
     setBusinessType(s.query);
     setLocation(s.location);
     runSearchWithSuggestion(s);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") handleSearch();
   };
 
   const handleDownload = () => {
@@ -435,7 +439,8 @@ export function SearchDashboard() {
           Discover Prospects
         </h1>
         <p className="mt-1 text-sm text-[#6B6B80]">
-          Type a niche. Pick a city. Get contacts in seconds.
+          Type a niche. Pick a city. Get contacts in seconds. Use the search box in the
+          outreach workspace below to run or refine a search.
         </p>
 
         {totalDiscovered > 0 && (
@@ -459,73 +464,6 @@ export function SearchDashboard() {
             </span>
           </div>
         )}
-
-        <div
-          className="mt-6 gap-3"
-          style={{
-            display: "flex",
-            flexDirection: isMobile ? "column" : "row",
-            gap: isMobile ? 10 : 12,
-          }}
-        >
-          <div className={isMobile ? "w-full" : "flex-1 min-w-0"}>
-            <label className="mb-1.5 block text-xs font-medium text-[#6B6B80]">
-              Business type
-            </label>
-            <Input
-              placeholder="e.g. restaurants, dentists, gyms"
-              value={businessType}
-              onChange={(e) => setBusinessType(e.target.value)}
-              onKeyDown={handleKeyDown}
-              disabled={isSearching}
-              className="w-full"
-            />
-          </div>
-          <div className={isMobile ? "w-full" : "flex-1 min-w-0"}>
-            <label className="mb-1.5 block text-xs font-medium text-[#6B6B80]">
-              Location
-            </label>
-            <Input
-              placeholder="e.g. Lagos Nigeria, London UK, California USA"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              onKeyDown={handleKeyDown}
-              disabled={isSearching}
-              className="w-full"
-            />
-            {location.length > 0 &&
-              [
-                "china",
-                "usa",
-                "uk",
-                "india",
-                "australia",
-                "canada",
-                "france",
-                "germany",
-                "japan",
-                "brazil",
-                "russia",
-                "mexico",
-                "indonesia",
-                "nigeria",
-              ].some((country) => location.toLowerCase().trim() === country) && (
-                <p
-                  style={{
-                    fontSize: 11,
-                    color: "#FBBF24",
-                    marginTop: 4,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 4,
-                  }}
-                >
-                  ⚠️ Tip: Use a specific city for better results. Try Beijing, Shanghai, or
-                  Guangzhou instead of China.
-                </p>
-              )}
-          </div>
-        </div>
 
         {activity.length > 0 && status === "idle" && !isSearching && (
           <div
@@ -568,21 +506,6 @@ export function SearchDashboard() {
             marginTop: 10,
           }}
         >
-          <Button
-            type="button"
-            variant="glow"
-            onClick={handleSearch}
-            disabled={isSearching}
-            className={isMobile ? "w-full" : ""}
-            style={isMobile ? { flex: 1, width: "100%" } : undefined}
-          >
-            {isSearching ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Search className="h-4 w-4" />
-            )}
-            Search
-          </Button>
           <Button
             variant="outline"
             onClick={handleDownload}
@@ -671,92 +594,98 @@ export function SearchDashboard() {
         )}
       </div>
 
-      <OutreachSection outreach={outreach} />
-
       <AffiliateSection />
 
       {showWelcome && <WelcomeState onExampleSearch={handleExampleSearch} />}
 
-      {(isSearching || tableLeads.length > 0 || isQueuedWaiting) && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-4"
-        >
-          {isQueuedWaiting && <SearchQueueCard queuePosition={queuePosition} />}
-          {savedBanner && (
-            <div className="rounded-lg border border-violet-500/30 bg-violet-500/10 px-4 py-3 text-sm text-[#A1A1B5]">
-              {savedBanner}
-            </div>
-          )}
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <LiveCounter count={displayCount} isSearching={isSearching} />
-            {(isSearching || phaseMessage) && !isQueuedWaiting && (
-              <span className="flex items-center gap-2 text-sm text-[#A1A1B5] sm:max-w-[65%]">
-                {isSearching && !isQueuedWaiting && (
-                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#A855F7]" />
+      <OutreachWorkspace
+        outreach={outreach}
+        businessType={businessType}
+        location={location}
+        onBusinessTypeChange={setBusinessType}
+        onLocationChange={setLocation}
+        onSearch={handleSearch}
+        searchDisabled={isSearching}
+        selectedLeads={selectedLeads}
+        sendPanelOpen={sendPanelOpen}
+        onCloseSendPanel={() => setSendPanelOpen(false)}
+        onSendComplete={() => setSelectedLeadIds(new Set())}
+        targetBusinessType={query}
+        resultsHeader={
+          (isSearching || tableLeads.length > 0 || isQueuedWaiting || savedBanner) ? (
+            <div className="space-y-4">
+              {isQueuedWaiting && <SearchQueueCard queuePosition={queuePosition} />}
+              {savedBanner && (
+                <div className="rounded-lg border border-violet-500/30 bg-violet-500/10 px-4 py-3 text-sm text-[#A1A1B5]">
+                  {savedBanner}
+                </div>
+              )}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <LiveCounter count={displayCount} isSearching={isSearching} />
+                {(isSearching || phaseMessage) && !isQueuedWaiting && (
+                  <span className="flex items-center gap-2 text-sm text-[#A1A1B5] sm:max-w-[65%]">
+                    {isSearching && !isQueuedWaiting && (
+                      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#A855F7]" />
+                    )}
+                    {phaseMessage}
+                  </span>
                 )}
-                {phaseMessage}
-              </span>
-            )}
-          </div>
-          {isSearching && !isQueuedWaiting && <Progress value={progress} className="h-2" />}
-          {status === "completed" &&
-            emailScrapingComplete &&
-            regionCitySuggestions.length > 0 && (
-          <RegionCityChips
-            suggestions={regionCitySuggestions}
-            message={regionSelectionMessage ?? undefined}
-            onSelectCity={(city) => {
-              setLocation(city);
-              void runSearchWithRegionCity(city);
-            }}
-          />
-          )}
-          <NearbyCityChips
-            show={status === "completed" && emailScrapingComplete && !isSearching}
-            cities={nearbyCities}
-            onSelectCity={(city) => {
-              setLocation(city);
-              void runSearchWithNearbyCity(city);
-            }}
-          />
-        </motion.div>
-      )}
-
-      {(isSearching || tableLeads.length > 0 || savedBanner) && (
-        <ResultsOutreachShell
-          outreach={outreach}
-          selectedLeads={selectedLeads}
-          sendPanelOpen={sendPanelOpen}
-          onCloseSendPanel={() => setSendPanelOpen(false)}
-          onSendComplete={() => setSelectedLeadIds(new Set())}
-          targetBusinessType={query}
-        >
-          <ResultsTable
-            leads={statusFilteredTableLeads}
-            isLoading={isSearching && tableLeads.length === 0}
-            isMobile={isMobile}
-            hideEmptyPlaceholder={showWelcome}
-            ratingFilter={ratingFilter}
-            onRatingFilterChange={setRatingFilter}
-            totalLeadCount={tableLeads.length}
-            ratingMatchCount={ratingFilteredTableLeads.length}
-            summaryLeads={ratingFilteredTableLeads}
-            leadStatuses={leadStatuses}
-            statusFilter={statusFilter}
-            onStatusFilterChange={setStatusFilter}
-            onLeadStatusChange={setLeadStatus}
-            onUseTemplate={setTemplateLead}
-            emailScrapingInProgress={!emailScrapingComplete && tableLeads.length > 0}
-            selectedLeadIds={selectedLeadIds}
-            onToggleLeadSelect={toggleLeadSelect}
-            onSendSelected={openSendPanel}
-            hasMailbox={outreach.hasMailbox}
-            onNoMailboxClick={scrollToMailboxes}
-          />
-        </ResultsOutreachShell>
-      )}
+              </div>
+              {isSearching && !isQueuedWaiting && <Progress value={progress} className="h-2" />}
+              {status === "completed" &&
+                emailScrapingComplete &&
+                regionCitySuggestions.length > 0 && (
+                  <RegionCityChips
+                    suggestions={regionCitySuggestions}
+                    message={regionSelectionMessage ?? undefined}
+                    onSelectCity={(city) => {
+                      setLocation(city);
+                      void runSearchWithRegionCity(city);
+                    }}
+                  />
+                )}
+              <NearbyCityChips
+                show={status === "completed" && emailScrapingComplete && !isSearching}
+                cities={nearbyCities}
+                onSelectCity={(city) => {
+                  setLocation(city);
+                  void runSearchWithNearbyCity(city);
+                }}
+              />
+            </div>
+          ) : null
+        }
+        resultsContent={
+          (isSearching || tableLeads.length > 0 || savedBanner) ? (
+            <ResultsTable
+              leads={statusFilteredTableLeads}
+              isLoading={isSearching && tableLeads.length === 0}
+              isMobile={isMobile}
+              hideEmptyPlaceholder={showWelcome}
+              ratingFilter={ratingFilter}
+              onRatingFilterChange={setRatingFilter}
+              totalLeadCount={tableLeads.length}
+              ratingMatchCount={ratingFilteredTableLeads.length}
+              summaryLeads={ratingFilteredTableLeads}
+              leadStatuses={leadStatuses}
+              statusFilter={statusFilter}
+              onStatusFilterChange={setStatusFilter}
+              onLeadStatusChange={setLeadStatus}
+              onUseTemplate={setTemplateLead}
+              emailScrapingInProgress={!emailScrapingComplete && tableLeads.length > 0}
+              selectedLeadIds={selectedLeadIds}
+              onToggleLeadSelect={toggleLeadSelect}
+              onSendSelected={openSendPanel}
+              hasMailbox={outreach.hasMailbox}
+              onNoMailboxClick={scrollToMailboxes}
+            />
+          ) : (
+            <div className="rounded-xl border border-white/[0.08] bg-[#0F0F14]/40 px-4 py-8 text-center text-sm text-[#6B6B80]">
+              Run a search above to discover leads, then select rows and send outreach from here.
+            </div>
+          )
+        }
+      />
 
       <RecentSearchesPanel
         refreshKey={historyRefreshKey}

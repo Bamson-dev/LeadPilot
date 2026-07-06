@@ -6,10 +6,9 @@ import { ResultsTable } from "@/features/results/results-table";
 import { ResultsSummaryBar } from "@/components/dashboard/results-summary-bar";
 import { NearbyCityChips } from "@/components/dashboard/nearby-city-chips";
 import {
-  OutreachSection,
-  GMAIL_MAILBOXES_SECTION_ID,
-} from "@/components/dashboard/outreach-section";
-import { ResultsOutreachShell } from "@/components/dashboard/results-outreach-shell";
+  OutreachWorkspace,
+  requestMailboxesTab,
+} from "@/components/dashboard/outreach-workspace";
 import { WhatsappTemplateModal } from "@/components/dashboard/whatsapp-template-modal";
 import { useOutreach } from "@/hooks/useOutreach";
 import { pollSearchResults, getLicenseUsage, getSearch } from "@/services/api";
@@ -90,8 +89,8 @@ export default function SearchResultPage() {
   const [templateLead, setTemplateLead] = useState<Lead | null>(null);
   const [userEmail, setUserEmail] = useState("");
   const [creditsRemaining, setCreditsRemaining] = useState(0);
-  const [searchLocation] = useState("");
-  const [searchBusinessType, setSearchBusinessType] = useState("");
+  const [businessType, setBusinessType] = useState("");
+  const [location, setLocation] = useState("");
 
   const { leadStatuses, setLeadStatus, statusFilter, setStatusFilter } =
     useLeadStatuses(leads);
@@ -111,18 +110,17 @@ export default function SearchResultPage() {
   }, []);
 
   const scrollToMailboxes = useCallback(() => {
-    document.getElementById(GMAIL_MAILBOXES_SECTION_ID)?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
+    requestMailboxesTab();
   }, []);
 
-  useEffect(() => {
-    setUserEmail(localStorage.getItem("leadthur_email") || "");
-    void getLicenseUsage().then((usage) => {
-      if (usage) setCreditsRemaining(usage.search_credits);
-    });
-  }, []);
+  const handleSearch = useCallback(() => {
+    const bt = businessType.trim();
+    const loc = location.trim();
+    if (!bt || !loc) return;
+    router.push(
+      `/dashboard?businessType=${encodeURIComponent(bt)}&location=${encodeURIComponent(loc)}`
+    );
+  }, [businessType, location, router]);
 
   useEffect(() => {
     setUserEmail(localStorage.getItem("leadthur_email") || "");
@@ -155,7 +153,10 @@ export default function SearchResultPage() {
         if (cancelled) return;
 
         if (job?.query) {
-          setSearchBusinessType(job.query);
+          setBusinessType(job.query);
+        }
+        if (job?.location) {
+          setLocation(job.location);
         }
 
         if (payload.leads.length > 0) {
@@ -215,47 +216,60 @@ export default function SearchResultPage() {
         <h1 className="text-xl font-bold text-white">Your search results</h1>
       </div>
 
-      <OutreachSection outreach={outreach} />
-
-      <ResultsSummaryBar leads={leads} />
-      <NearbyCityChips
-        show={emailScrapingComplete && !loading}
-        cities={nearbyCities}
-        onSelectCity={(city) =>
-          router.push(`/dashboard?location=${encodeURIComponent(city)}`)
-        }
-      />
-
-      <ResultsOutreachShell
+      <OutreachWorkspace
         outreach={outreach}
+        businessType={businessType}
+        location={location}
+        onBusinessTypeChange={setBusinessType}
+        onLocationChange={setLocation}
+        onSearch={handleSearch}
+        searchDisabled={loading}
         selectedLeads={selectedLeads}
         sendPanelOpen={sendPanelOpen}
         onCloseSendPanel={() => setSendPanelOpen(false)}
         onSendComplete={() => setSelectedLeadIds(new Set())}
-        targetBusinessType={searchBusinessType}
-      >
-        <ResultsTable
-          leads={leads}
-          isLoading={loading}
-          isMobile={isMobile}
-          leadStatuses={leadStatuses}
-          statusFilter={statusFilter}
-          onStatusFilterChange={setStatusFilter}
-          onLeadStatusChange={setLeadStatus}
-          onUseTemplate={setTemplateLead}
-          totalLeadCount={leads.length}
-          emailScrapingInProgress={!emailScrapingComplete && leads.length > 0}
-          selectedLeadIds={selectedLeadIds}
-          onToggleLeadSelect={toggleLeadSelect}
-          onSendSelected={() => setSendPanelOpen(true)}
-          hasMailbox={outreach.hasMailbox}
-          onNoMailboxClick={scrollToMailboxes}
-        />
-      </ResultsOutreachShell>
+        targetBusinessType={businessType}
+        resultsHeader={
+          <>
+            <ResultsSummaryBar leads={leads} />
+            <NearbyCityChips
+              show={emailScrapingComplete && !loading}
+              cities={nearbyCities}
+              onSelectCity={(city) => {
+                setLocation(city);
+                const bt = businessType.trim();
+                const params = new URLSearchParams();
+                if (bt) params.set("businessType", bt);
+                params.set("location", city);
+                router.push(`/dashboard?${params.toString()}`);
+              }}
+            />
+          </>
+        }
+        resultsContent={
+          <ResultsTable
+            leads={leads}
+            isLoading={loading}
+            isMobile={isMobile}
+            leadStatuses={leadStatuses}
+            statusFilter={statusFilter}
+            onStatusFilterChange={setStatusFilter}
+            onLeadStatusChange={setLeadStatus}
+            onUseTemplate={setTemplateLead}
+            totalLeadCount={leads.length}
+            emailScrapingInProgress={!emailScrapingComplete && leads.length > 0}
+            selectedLeadIds={selectedLeadIds}
+            onToggleLeadSelect={toggleLeadSelect}
+            onSendSelected={() => setSendPanelOpen(true)}
+            hasMailbox={outreach.hasMailbox}
+            onNoMailboxClick={scrollToMailboxes}
+          />
+        }
+      />
 
       <WhatsappTemplateModal
         lead={templateLead}
-        searchLocation={searchLocation}
+        searchLocation={location}
         userEmail={userEmail}
         creditsRemaining={creditsRemaining}
         onClose={() => setTemplateLead(null)}
