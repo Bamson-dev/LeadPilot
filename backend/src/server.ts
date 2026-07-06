@@ -23,6 +23,8 @@ import { sendRouter } from "./routes/send";
 import { outreachTrackingRouter } from "./routes/outreach-tracking";
 import { outreachCheckoutRouter } from "./routes/outreach-checkout";
 import { balanceRouter } from "./routes/balance";
+import { emailTemplatesRouter } from "./routes/email-templates";
+import { sendsRouter } from "./routes/sends";
 import { rateLimit } from "./middleware/rate-limit";
 import { getBrowserPool } from "./scraper/browser/browser-pool";
 import { logger } from "./utils/logger";
@@ -122,6 +124,8 @@ function registerRoutes(): void {
   app.use("/outreach", outreachTrackingRouter);
   app.use("/checkout", rateLimit, outreachCheckoutRouter);
   app.use("/balance", rateLimit, balanceRouter);
+  app.use("/email-templates", rateLimit, emailTemplatesRouter);
+  app.use("/sends", rateLimit, sendsRouter);
 
   app.use(
     (err: Error & { type?: string; status?: number }, _req: Request, res: Response, _next: NextFunction) => {

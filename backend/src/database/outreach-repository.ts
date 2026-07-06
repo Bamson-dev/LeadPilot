@@ -234,6 +234,25 @@ export async function isRecipientSuppressed(
   return Boolean(data);
 }
 
+export interface EmailTemplateRow {
+  id: string;
+  name: string;
+  subject: string;
+  body: string;
+  niche: string | null;
+}
+
+export async function listSystemEmailTemplates(): Promise<EmailTemplateRow[]> {
+  const { data, error } = await supabase
+    .from("email_templates")
+    .select("id, name, subject, body, niche")
+    .is("user_id", null)
+    .order("name", { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as EmailTemplateRow[];
+}
+
 export async function getEmailTemplateById(
   templateId: string
 ): Promise<{ subject: string; body: string } | null> {
@@ -245,6 +264,21 @@ export async function getEmailTemplateById(
 
   if (error) throw new Error(error.message);
   return data as { subject: string; body: string } | null;
+}
+
+export async function listRecentSentEmails(
+  userId: string,
+  limit = 50
+): Promise<SentEmail[]> {
+  const { data, error } = await supabase
+    .from("sent_emails")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as SentEmail[];
 }
 
 export async function createQueuedSentEmail(params: {

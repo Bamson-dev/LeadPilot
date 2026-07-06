@@ -15,6 +15,7 @@ import { PipelineSummary } from "@/components/dashboard/pipeline-summary";
 import { RatingFilter } from "@/components/dashboard/rating-filter";
 import type { RatingFilterValue } from "@/lib/rating-filter";
 import type { Lead } from "@/types/lead";
+import { hasAnyEmail } from "@/utils/get-display-email";
 
 type SortKey = keyof Pick<
   Lead,
@@ -40,6 +41,10 @@ interface ResultsTableProps {
   onUseTemplate?: (lead: Lead) => void;
   searchLocation?: string;
   emailScrapingInProgress?: boolean;
+  selectedLeadIds?: Set<string>;
+  onToggleLeadSelect?: (leadId: string) => void;
+  onSendSelected?: () => void;
+  sendSelectionDisabled?: boolean;
 }
 
 export function ResultsTable({
@@ -58,6 +63,10 @@ export function ResultsTable({
   onLeadStatusChange,
   onUseTemplate,
   emailScrapingInProgress = false,
+  selectedLeadIds,
+  onToggleLeadSelect,
+  onSendSelected,
+  sendSelectionDisabled = false,
 }: ResultsTableProps) {
   const { copiedId, copyToClipboard } = useCopyToClipboard();
   const [sortKey, setSortKey] = useState<SortKey>("business_name");
@@ -112,6 +121,28 @@ export function ResultsTable({
 
   const pipelineLeads = summaryLeads ?? leads;
 
+  const selectableIds = useMemo(
+    () => sorted.filter((lead) => hasAnyEmail(lead)).map((l) => l.id),
+    [sorted]
+  );
+
+  const allSelectableSelected =
+    selectableIds.length > 0 &&
+    selectableIds.every((id) => selectedLeadIds?.has(id));
+
+  function toggleSelectAll() {
+    if (!onToggleLeadSelect || !selectedLeadIds) return;
+    if (allSelectableSelected) {
+      for (const id of selectableIds) {
+        if (selectedLeadIds.has(id)) onToggleLeadSelect(id);
+      }
+    } else {
+      for (const id of selectableIds) {
+        if (!selectedLeadIds.has(id)) onToggleLeadSelect(id);
+      }
+    }
+  }
+
   if (!isLoading && leads.length === 0 && !hideEmptyPlaceholder) {
     return null;
   }
@@ -125,6 +156,32 @@ export function ResultsTable({
           statusFilter={statusFilter}
           onFilterChange={onStatusFilterChange}
         />
+        {onSendSelected && selectedLeadIds && (
+          <button
+            type="button"
+            onClick={onSendSelected}
+            disabled={sendSelectionDisabled || selectedLeadIds.size === 0}
+            style={{
+              background:
+                selectedLeadIds.size > 0 && !sendSelectionDisabled
+                  ? "rgba(124,58,237,0.2)"
+                  : "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(124,58,237,0.35)",
+              color: selectedLeadIds.size > 0 && !sendSelectionDisabled ? "#F4F4FF" : "#6B6B80",
+              borderRadius: 8,
+              padding: "7px 14px",
+              fontSize: 12,
+              fontWeight: 700,
+              cursor:
+                selectedLeadIds.size > 0 && !sendSelectionDisabled
+                  ? "pointer"
+                  : "not-allowed",
+              width: "100%",
+            }}
+          >
+            Send email ({selectedLeadIds.size})
+          </button>
+        )}
         <div className="flex flex-wrap gap-2 px-1">
           {onRatingFilterChange && (
             <RatingFilter
@@ -205,7 +262,11 @@ export function ResultsTable({
     );
   }
 
-  const renderRow = (lead: Lead) => (
+  const renderRow = (lead: Lead) => {
+    const canSelect = hasAnyEmail(lead);
+    const isSelected = selectedLeadIds?.has(lead.id) ?? false;
+
+    return (
     <motion.tr
       key={lead.id}
       initial={{ opacity: 0, backgroundColor: "rgba(124,58,237,0.12)" }}
@@ -220,6 +281,18 @@ export function ResultsTable({
         e.currentTarget.style.background = "transparent";
       }}
     >
+      {onToggleLeadSelect && (
+        <td className="px-3 py-3 align-top w-10">
+          <input
+            type="checkbox"
+            checked={isSelected}
+            disabled={!canSelect}
+            onChange={() => canSelect && onToggleLeadSelect(lead.id)}
+            aria-label={`Select ${lead.business_name}`}
+            className="h-4 w-4 accent-violet-500 disabled:opacity-30"
+          />
+        </td>
+      )}
       <td className="px-4 py-3 align-top" style={{ padding: "12px 8px" }}>
         <div
           style={{
@@ -311,7 +384,8 @@ export function ResultsTable({
         {lead.reviews_count ?? "—"}
       </td>
     </motion.tr>
-  );
+    );
+  };
 
   return (
     <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0F0F14]">
@@ -322,6 +396,31 @@ export function ResultsTable({
         onFilterChange={onStatusFilterChange}
       />
       <div className="flex flex-col gap-2 border-b border-white/[0.08] px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+        {onSendSelected && selectedLeadIds && (
+          <button
+            type="button"
+            onClick={onSendSelected}
+            disabled={sendSelectionDisabled || selectedLeadIds.size === 0}
+            style={{
+              background:
+                selectedLeadIds.size > 0 && !sendSelectionDisabled
+                  ? "rgba(124,58,237,0.2)"
+                  : "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(124,58,237,0.35)",
+              color: selectedLeadIds.size > 0 && !sendSelectionDisabled ? "#F4F4FF" : "#6B6B80",
+              borderRadius: 8,
+              padding: "7px 14px",
+              fontSize: 12,
+              fontWeight: 700,
+              cursor:
+                selectedLeadIds.size > 0 && !sendSelectionDisabled
+                  ? "pointer"
+                  : "not-allowed",
+            }}
+          >
+            Send email ({selectedLeadIds.size})
+          </button>
+        )}
         {onRatingFilterChange && (
           <RatingFilter
             value={ratingFilter}
@@ -371,6 +470,18 @@ export function ResultsTable({
         <table className="w-full min-w-[900px] text-sm">
           <thead className="sticky top-0 z-10 bg-[#0F0F14]/95 backdrop-blur">
             <tr className="border-b border-white/[0.08]">
+              {onToggleLeadSelect && (
+                <th className="px-3 py-3 text-left w-10">
+                  <input
+                    type="checkbox"
+                    checked={allSelectableSelected}
+                    onChange={toggleSelectAll}
+                    disabled={selectableIds.length === 0}
+                    aria-label="Select all leads with email"
+                    className="h-4 w-4 accent-violet-500 disabled:opacity-30"
+                  />
+                </th>
+              )}
               {(
                 [
                   ["business_name", "Business"],
@@ -424,7 +535,7 @@ export function ResultsTable({
             {isLoading && leads.length === 0
               ? Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i}>
-                    <td colSpan={8} className="px-4 py-3">
+                    <td colSpan={onToggleLeadSelect ? 9 : 8} className="px-4 py-3">
                       <div className="skeleton h-4 rounded" />
                     </td>
                   </tr>

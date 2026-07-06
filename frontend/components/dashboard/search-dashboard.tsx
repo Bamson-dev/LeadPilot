@@ -11,6 +11,7 @@ import { LiveCounter } from "@/components/dashboard/live-counter";
 import { RecentSearchesPanel } from "@/components/dashboard/recent-searches-panel";
 import { SearchHistory } from "@/components/dashboard/search-history";
 import { AffiliateSection } from "@/components/dashboard/affiliate-section";
+import { OutreachSection } from "@/components/dashboard/outreach-section";
 import { WelcomeState } from "@/components/dashboard/welcome-state";
 import { SearchQueueCard } from "@/components/dashboard/search-queue-card";
 import { NearbyCityChips } from "@/components/dashboard/nearby-city-chips";
@@ -35,6 +36,7 @@ import type { Lead } from "@/types/lead";
 import { applyRatingFilter, type RatingFilterValue } from "@/lib/rating-filter";
 import { applyStatusFilter } from "@/lib/lead-status";
 import { getQueryVariations } from "@/utils/query-variations";
+import { hasAnyEmail } from "@/utils/get-display-email";
 
 interface ActivityItem {
   query: string;
@@ -60,6 +62,8 @@ export function SearchDashboard() {
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [templateLead, setTemplateLead] = useState<Lead | null>(null);
   const [showCreditDeduction, setShowCreditDeduction] = useState(false);
+  const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(() => new Set());
+  const [sendPanelOpen, setSendPanelOpen] = useState(false);
   const searchAgainVariationRef = useRef(0);
 
   const loadUserStats = useCallback(async () => {
@@ -246,6 +250,20 @@ export function SearchDashboard() {
     () => applyStatusFilter(ratingFilteredTableLeads, statusFilter, leadStatuses),
     [ratingFilteredTableLeads, statusFilter, leadStatuses]
   );
+
+  const selectedLeads = useMemo(
+    () => statusFilteredTableLeads.filter((lead) => selectedLeadIds.has(lead.id)),
+    [statusFilteredTableLeads, selectedLeadIds]
+  );
+
+  const toggleLeadSelect = useCallback((leadId: string) => {
+    setSelectedLeadIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(leadId)) next.delete(leadId);
+      else next.add(leadId);
+      return next;
+    });
+  }, []);
 
   const leadsToExport = leads;
 
@@ -636,6 +654,13 @@ export function SearchDashboard() {
         )}
       </div>
 
+      <OutreachSection
+        selectedLeads={selectedLeads}
+        sendPanelOpen={sendPanelOpen}
+        onCloseSendPanel={() => setSendPanelOpen(false)}
+        onRequestSendPanel={() => setSendPanelOpen(true)}
+      />
+
       <AffiliateSection />
 
       {showWelcome && <WelcomeState onExampleSearch={handleExampleSearch} />}
@@ -704,6 +729,12 @@ export function SearchDashboard() {
           onLeadStatusChange={setLeadStatus}
           onUseTemplate={setTemplateLead}
           emailScrapingInProgress={!emailScrapingComplete && tableLeads.length > 0}
+          selectedLeadIds={selectedLeadIds}
+          onToggleLeadSelect={(leadId) => {
+            const lead = statusFilteredTableLeads.find((l) => l.id === leadId);
+            if (lead && hasAnyEmail(lead)) toggleLeadSelect(leadId);
+          }}
+          onSendSelected={() => setSendPanelOpen(true)}
         />
       )}
 
