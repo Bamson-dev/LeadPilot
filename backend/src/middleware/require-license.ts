@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { getLicenseByKeyAndEmail } from "../database/license-repository";
+import { ensureUserIdForEmail } from "../database/outreach-repository";
 
 export async function requireLicense(
   req: Request,
@@ -35,9 +36,12 @@ export async function requireLicense(
       return;
     }
 
+    const userId = await ensureUserIdForEmail(email);
+
     req.licenseEmail = email;
     req.licenseId = license.id;
     req.licenseKey = licenseKey;
+    req.user = { id: userId };
     next();
   } catch {
     res.status(500).json({ error: "License verification failed" });
