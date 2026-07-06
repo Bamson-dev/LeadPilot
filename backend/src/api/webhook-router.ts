@@ -13,6 +13,8 @@ import { fulfillTopUpPayment, getTopUpTier, isTopUpPaymentReference, parseTopUpT
 import {
   fulfillFlutterwaveCharge,
   fulfillPaystackCharge,
+  isOutreachPaystackMetadata,
+  processOutreachPaystackWebhookEvent,
 } from "../services/payment-fulfillment";
 import {
   handleMailthurPaystackForward,
@@ -70,8 +72,32 @@ webhookRouter.post(
           reference?: string;
           amount?: number;
           metadata?: Record<string, unknown> | string;
+          subscription?: Record<string, unknown>;
+          subscription_code?: string;
+          next_payment_date?: string;
         };
       };
+
+      const eventMetadata = event.data?.metadata;
+      const isOutreachEvent =
+        isOutreachPaystackMetadata(eventMetadata) ||
+        event.event === "subscription.create" ||
+        event.event === "subscription.enable" ||
+        event.event === "invoice.payment_failed" ||
+        event.event === "subscription.disable";
+
+      if (isOutreachEvent) {
+        res.status(200).send("ok");
+        setImmediate(() => {
+          void processOutreachPaystackWebhookEvent(event).catch((err) => {
+            logger.error("Outreach Paystack webhook processing failed", {
+              event: event.event,
+              error: err instanceof Error ? err.message : "unknown",
+            });
+          });
+        });
+        return;
+      }
 
       if (isMailthurPaystackEvent(event.data?.metadata)) {
         const forwardResult = await handleMailthurPaystackForward({

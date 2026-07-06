@@ -1,7 +1,7 @@
 import express, { type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
 import type { Server } from "http";
-import { getEnv, loadEnv } from "./config/env";
+import { getEnv, loadEnv, config } from "./config/env";
 import { searchRouter, handleFreeTrialSearch } from "./api/search-router";
 import { adminRouter } from "./api/admin-router";
 import { authRouter } from "./api/auth-router";
@@ -19,12 +19,19 @@ import leadStatusRouter from "./routes/leadStatus";
 import whatsappTemplatesRouter from "./routes/whatsappTemplates";
 import aiMessageRouter from "./routes/aiMessage";
 import { mailboxesRouter } from "./routes/mailboxes";
+import { sendRouter } from "./routes/send";
+import { outreachTrackingRouter } from "./routes/outreach-tracking";
+import { outreachCheckoutRouter } from "./routes/outreach-checkout";
+import { balanceRouter } from "./routes/balance";
 import { rateLimit } from "./middleware/rate-limit";
 import { getBrowserPool } from "./scraper/browser/browser-pool";
 import { logger } from "./utils/logger";
 import { getDeepseekKeyFingerprint, isDeepseekConfigured } from "./utils/deepseek-config";
 import { startTrialSequenceScheduler } from "./services/trial-sequence";
 import { initSearchQueue, shutdownSearchQueue } from "./queue/search-queue";
+import { initOutreachSendQueue, shutdownOutreachSendQueue } from "./queue/outreach-send-queue";
+import { ensureOutreachPaystackPlans } from "./services/outreach-paystack-plans";
+import { startOutreachGraceScheduler } from "./services/outreach-grace-scheduler";
 
 export const app = express();
 
@@ -111,6 +118,10 @@ function registerRoutes(): void {
   app.use("/whatsapp-templates", rateLimit, whatsappTemplatesRouter);
   app.use("/ai-message", rateLimit, aiMessageRouter);
   app.use("/mailboxes", rateLimit, mailboxesRouter);
+  app.use("/send", rateLimit, sendRouter);
+  app.use("/outreach", outreachTrackingRouter);
+  app.use("/checkout", rateLimit, outreachCheckoutRouter);
+  app.use("/balance", rateLimit, balanceRouter);
 
   app.use(
     (err: Error & { type?: string; status?: number }, _req: Request, res: Response, _next: NextFunction) => {
@@ -197,6 +208,15 @@ async function start(): Promise<void> {
     });
     startTrialSequenceScheduler();
     await initSearchQueue();
+    await initOutreachSendQueue();
+    startOutreachGraceScheduler();
+    if (config.PAYSTACK_SECRET_KEY) {
+      void ensureOutreachPaystackPlans().catch((err) => {
+        logger.error("Outreach Paystack plan setup failed", {
+          error: err instanceof Error ? err.message : "unknown",
+        });
+      });
+    }
   } catch (err) {
     logger.error("Backend configuration failed — /health works, API routes disabled", {
       error: err instanceof Error ? err.message : "unknown",
@@ -223,6 +243,7 @@ async function start(): Promise<void> {
     if (routesRegistered) {
       try {
         await shutdownSearchQueue();
+        await shutdownOutreachSendQueue();
         await getBrowserPool().shutdown();
       } catch (err) {
         logger.error("Browser pool shutdown error", {

@@ -113,3 +113,65 @@ export async function initiateTransfer(params: {
     reference: params.reference,
   });
 }
+
+export interface PaystackPlanRecord {
+  id: number;
+  name: string;
+  plan_code: string;
+  amount: number;
+  interval: string;
+}
+
+export async function listPaystackPlans(params?: {
+  perPage?: number;
+  page?: number;
+}): Promise<PaystackPlanRecord[]> {
+  const data = await paystackHttp<PaystackPlanRecord[] | PaystackPlanRecord>(
+    "GET",
+    "/plan",
+    undefined,
+    {
+      perPage: String(params?.perPage ?? 100),
+      page: String(params?.page ?? 1),
+    }
+  );
+  return Array.isArray(data) ? data : [data];
+}
+
+export async function createPaystackPlan(params: {
+  name: string;
+  amountKobo: number;
+  interval?: "monthly";
+  description?: string;
+}): Promise<PaystackPlanRecord> {
+  return paystackHttp<PaystackPlanRecord>("POST", "/plan", {
+    name: params.name,
+    amount: params.amountKobo,
+    interval: params.interval ?? "monthly",
+    description: params.description,
+  });
+}
+
+export async function initializePaystackTransaction(params: {
+  email: string;
+  amountKobo: number;
+  reference: string;
+  callbackUrl: string;
+  metadata: Record<string, unknown>;
+  planCode?: string;
+  channels?: string[];
+}): Promise<{ authorization_url: string; access_code: string; reference: string }> {
+  const body: Record<string, unknown> = {
+    email: params.email.toLowerCase().trim(),
+    amount: params.amountKobo,
+    currency: "NGN",
+    reference: params.reference,
+    callback_url: params.callbackUrl,
+    metadata: params.metadata,
+    channels: params.channels ?? ["card", "bank", "ussd", "bank_transfer"],
+  };
+  if (params.planCode) {
+    body.plan = params.planCode;
+  }
+  return paystackHttp("POST", "/transaction/initialize", body);
+}
