@@ -1,7 +1,7 @@
 import { randomBytes } from "crypto";
 import { config } from "../config/env";
 import { decryptMailboxSecret } from "../utils/mailbox-crypto";
-import { buildEmailHtml } from "./email-template";
+import { buildOutreachEmailContent } from "./outreach-email-template";
 import { sendOutreachEmail } from "./outreach-send-smtp";
 import {
   assignSentEmailMailbox,
@@ -65,6 +65,10 @@ function getOutreachTrackingBaseUrl(): string {
 
 export function getOutreachOpenTrackingUrl(trackingToken: string): string {
   return `${getOutreachTrackingBaseUrl()}/outreach/open/${encodeURIComponent(trackingToken)}`;
+}
+
+export function getOutreachUnsubscribeUrl(trackingToken: string): string {
+  return `${getOutreachTrackingBaseUrl()}/outreach/unsubscribe?token=${encodeURIComponent(trackingToken)}`;
 }
 
 function applyBusinessName(text: string, businessName?: string | null): string {
@@ -255,10 +259,11 @@ export async function processOutreachSendJob(data: {
         ? "mock-not-used"
         : decryptMailboxSecret(mailbox.encrypted_app_password);
     const trackingUrl = getOutreachOpenTrackingUrl(sentEmail.tracking_token!);
-    const html = buildEmailHtml({
+    const unsubscribeUrl = getOutreachUnsubscribeUrl(sentEmail.tracking_token!);
+    const { html, text } = buildOutreachEmailContent({
       body: sentEmail.body,
-      recipientEmail: sentEmail.recipient_email,
       trackingPixelUrl: trackingUrl,
+      unsubscribeUrl,
     });
 
     creditBucket = await deductOneSendCredit(data.userId);
@@ -273,6 +278,7 @@ export async function processOutreachSendJob(data: {
       to: sentEmail.recipient_email,
       subject: sentEmail.subject,
       html,
+      text,
       appPassword,
     });
 

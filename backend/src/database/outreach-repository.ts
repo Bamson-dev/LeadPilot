@@ -685,6 +685,42 @@ export async function recordOutreachEmailOpen(trackingToken: string): Promise<vo
   if (error) throw new Error(error.message);
 }
 
+export interface SentEmailByTrackingToken {
+  id: string;
+  user_id: string;
+  recipient_email: string;
+}
+
+export async function getSentEmailByTrackingToken(
+  trackingToken: string
+): Promise<SentEmailByTrackingToken | null> {
+  const { data, error } = await supabase
+    .from("sent_emails")
+    .select("id, user_id, recipient_email")
+    .eq("tracking_token", trackingToken)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function suppressRecipientForUser(
+  userId: string,
+  recipientEmail: string
+): Promise<void> {
+  const normalized = recipientEmail.toLowerCase().trim();
+  const { error } = await supabase.from("email_suppression").upsert(
+    {
+      user_id: userId,
+      recipient_email: normalized,
+      unsubscribed_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id,recipient_email" }
+  );
+
+  if (error) throw new Error(error.message);
+}
+
 export async function grantFirstMailboxTrialCredits(userId: string): Promise<void> {
   const expireAt = new Date();
   expireAt.setDate(expireAt.getDate() + 30);

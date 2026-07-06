@@ -9,6 +9,7 @@ export interface OutreachSmtpPayload {
   to: string;
   subject: string;
   html: string;
+  text: string;
   appPassword: string;
 }
 
@@ -40,6 +41,7 @@ export async function sendOutreachEmail(payload: OutreachSmtpPayload): Promise<s
       from: payload.from,
       to: payload.to,
       subject: payload.subject,
+      text: payload.text,
       html: payload.html,
     });
     return info.messageId || randomUUID();

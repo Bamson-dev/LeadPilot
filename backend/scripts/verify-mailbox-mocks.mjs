@@ -9,6 +9,7 @@ const ledger = [];
 const sentEmails = [];
 const suppressions = [];
 const outreachPaystackPlans = new Map();
+const lastSmtpPayloads = [];
 const systemTemplates = [
   { niche: "web_design", name: "No website found" },
   { niche: "social_media", name: "Low Instagram activity" },
@@ -406,6 +407,24 @@ function makeQuery(table) {
           suppressions.push(row);
           return { data: row, error: null };
         }
+        if (state.op === "upsert") {
+          const normalized = state.payload.recipient_email.toLowerCase().trim();
+          let row = suppressions.find(
+            (s) => s.user_id === state.payload.user_id && s.recipient_email === normalized
+          );
+          if (row) {
+            Object.assign(row, state.payload, { recipient_email: normalized });
+          } else {
+            row = {
+              id: randomUUID(),
+              unsubscribed_at: new Date().toISOString(),
+              ...state.payload,
+              recipient_email: normalized,
+            };
+            suppressions.push(row);
+          }
+          return { data: row, error: null };
+        }
         if (state.op === "delete") {
           for (let i = suppressions.length - 1; i >= 0; i--) {
             if (match(suppressions[i])) suppressions.splice(i, 1);
@@ -499,6 +518,13 @@ export function insertSuppression(userId, recipientEmail) {
   return row;
 }
 
+export function isRecipientSuppressedInMock(userId, recipientEmail) {
+  const normalized = recipientEmail.toLowerCase().trim();
+  return suppressions.some(
+    (s) => s.user_id === userId && s.recipient_email === normalized
+  );
+}
+
 export function getMailboxById(id) {
   return mailboxes.find((row) => row.id === id) ?? null;
 }
@@ -566,6 +592,11 @@ export function resetMailboxMocks() {
   ledger.length = 0;
   sentEmails.length = 0;
   suppressions.length = 0;
+  lastSmtpPayloads.length = 0;
+}
+
+export function getLastSmtpPayloads() {
+  return [...lastSmtpPayloads];
 }
 
 export async function registerMailboxMocks({
@@ -873,6 +904,31 @@ export async function registerMailboxMocks({
           row.open_count = (row.open_count ?? 0) + 1;
           if (!row.opened_at) row.opened_at = new Date().toISOString();
         },
+        getSentEmailByTrackingToken: async (trackingToken) => {
+          const row = sentEmails.find((r) => r.tracking_token === trackingToken);
+          if (!row) return null;
+          return {
+            id: row.id,
+            user_id: row.user_id,
+            recipient_email: row.recipient_email,
+          };
+        },
+        suppressRecipientForUser: async (userId, recipientEmail) => {
+          const normalized = recipientEmail.toLowerCase().trim();
+          let row = suppressions.find(
+            (s) => s.user_id === userId && s.recipient_email === normalized
+          );
+          if (row) {
+            row.unsubscribed_at = new Date().toISOString();
+          } else {
+            suppressions.push({
+              id: randomUUID(),
+              user_id: userId,
+              recipient_email: normalized,
+              unsubscribed_at: new Date().toISOString(),
+            });
+          }
+        },
         getOutreachPaystackPlanCode: async (tier) => outreachPaystackPlans.get(tier) ?? null,
         upsertOutreachPaystackPlan: async (row) => {
           const record = {
@@ -1133,6 +1189,7 @@ export async function registerMailboxMocks({
           if (failFor && (failFor === payload.to || failFor === "throw")) {
             throw new Error("Mock outreach send failure");
           }
+          lastSmtpPayloads.push({ ...payload });
           return `mock-${randomUUID()}`;
         },
       };
