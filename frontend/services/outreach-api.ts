@@ -55,7 +55,14 @@ export async function connectMailbox(input: {
     headers: getLicenseHeaders(),
     body: JSON.stringify(input),
   });
-  if (!res.ok) throw new Error(await parseError(res));
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+    const err = new Error(data.error ?? `Request failed (${res.status})`) as Error & {
+      code?: string;
+    };
+    err.code = data.code;
+    throw err;
+  }
 }
 
 export async function disconnectMailbox(mailboxId: string): Promise<void> {

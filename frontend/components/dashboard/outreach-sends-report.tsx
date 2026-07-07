@@ -71,8 +71,10 @@ export function OutreachSendsReport({
   const [offset, setOffset] = useState(0);
   const [markingReplyId, setMarkingReplyId] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const data = await fetchSendsReport({
@@ -83,17 +85,34 @@ export function OutreachSendsReport({
       });
       setReport(data);
     } catch (err) {
-      setReport(null);
+      if (!options?.silent) {
+        setReport(null);
+      }
       setError(err instanceof Error ? err.message : "Failed to load sends report");
     } finally {
-      setLoading(false);
+      if (!options?.silent) {
+        setLoading(false);
+      }
     }
   }, [offset, statusFilter]);
 
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive) {
+      setLoading(false);
+      return;
+    }
     void load();
   }, [isActive, load, refreshKey]);
+
+  const inProgress = report?.summary.in_progress ?? 0;
+
+  useEffect(() => {
+    if (!isActive || inProgress <= 0) return;
+    const timer = window.setInterval(() => {
+      void load({ silent: true });
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [isActive, inProgress, load]);
 
   const total = report?.pagination.total ?? 0;
   const pageStart = total === 0 ? 0 : offset + 1;
@@ -129,10 +148,19 @@ export function OutreachSendsReport({
       </div>
 
       {report && (
-        <div className="mb-4 grid gap-3 md:grid-cols-3">
+        <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-xl border border-white/10 bg-[#111118] p-4">
             <p className="text-xs uppercase tracking-wide text-[#8888A8]">Total sent</p>
             <p className="mt-1 text-2xl font-bold text-[#F4F4FF]">{report.summary.total_sent}</p>
+            {report.summary.in_progress > 0 && (
+              <p className="mt-1 text-xs text-[#FBBF24]">
+                {report.summary.in_progress} delivering…
+              </p>
+            )}
+          </div>
+          <div className="rounded-xl border border-white/10 bg-[#111118] p-4">
+            <p className="text-xs uppercase tracking-wide text-[#8888A8]">Delivering now</p>
+            <p className="mt-1 text-2xl font-bold text-[#FBBF24]">{report.summary.in_progress}</p>
           </div>
           <div className="rounded-xl border border-white/10 bg-[#111118] p-4">
             <p className="text-xs uppercase tracking-wide text-[#8888A8]">Total opened</p>
@@ -176,7 +204,7 @@ export function OutreachSendsReport({
         <p className="text-sm text-[#8888A8]">Loading sends report…</p>
       ) : error ? (
         <p className="text-sm text-red-400">{error}</p>
-      ) : !report || report.sends.length === 0 ? (
+      ) : !report || total === 0 ? (
         <div className="rounded-xl border border-white/10 bg-[#111118] px-6 py-14 text-center">
           <p className="text-sm text-[#C0C0D8]">
             No emails match this filter yet. Select leads with an email and use Send email above.

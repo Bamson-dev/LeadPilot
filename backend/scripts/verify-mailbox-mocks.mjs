@@ -1310,9 +1310,12 @@ export async function registerMailboxMocks({
           const sentRows = sentEmails.filter((r) => r.user_id === userId && r.status === "sent");
           const total_sent = sentRows.length;
           const total_opened = sentRows.filter((r) => r.opened_at != null).length;
+          const in_progress = sentEmails.filter(
+            (r) => r.user_id === userId && (r.status === "queued" || r.status === "sending")
+          ).length;
           const open_rate =
             total_sent > 0 ? Math.round((total_opened / total_sent) * 1000) / 10 : 0;
-          return { total_sent, total_opened, open_rate };
+          return { total_sent, total_opened, open_rate, in_progress };
         },
         listSentEmails: async (userId, options = {}) => {
           const limit = Math.min(100, Math.max(1, options.limit ?? 25));
@@ -1331,6 +1334,9 @@ export async function registerMailboxMocks({
           const sentRows = sentEmails.filter((r) => r.user_id === userId && r.status === "sent");
           const total_sent = sentRows.length;
           const total_opened = sentRows.filter((r) => r.opened_at != null).length;
+          const in_progress = sentEmails.filter(
+            (r) => r.user_id === userId && (r.status === "queued" || r.status === "sending")
+          ).length;
           const open_rate =
             total_sent > 0 ? Math.round((total_opened / total_sent) * 1000) / 10 : 0;
 
@@ -1350,7 +1356,7 @@ export async function registerMailboxMocks({
               mailbox_email: row.mailbox_id ? mailboxMap.get(row.mailbox_id) ?? null : null,
             })),
             total: rows.length,
-            summary: { total_sent, total_opened, open_rate },
+            summary: { total_sent, total_opened, open_rate, in_progress },
           };
         },
         listRecentSentEmails: async (userId, limit = 50) => {

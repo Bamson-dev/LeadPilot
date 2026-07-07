@@ -38,13 +38,17 @@ export interface ConnectedMailbox {
 
 export async function ensureUserIdForEmail(email: string): Promise<string> {
   const normalized = email.toLowerCase().trim();
-  const { data: existing, error: lookupError } = await supabase
+  const { data: existingRows, error: lookupError } = await supabase
     .from("users")
-    .select("id")
-    .eq("email", normalized)
-    .maybeSingle();
+    .select("id, email")
+    .ilike("email", normalized)
+    .limit(2);
 
   if (lookupError) throw new Error(lookupError.message);
+
+  const existing = (existingRows ?? []).find(
+    (row) => String(row.email ?? "").toLowerCase().trim() === normalized
+  );
   if (existing?.id) return existing.id;
 
   const { data: created, error: insertError } = await supabase
@@ -339,6 +343,7 @@ export interface SentEmailsSummary {
   total_sent: number;
   total_opened: number;
   open_rate: number;
+  in_progress: number;
 }
 
 export interface ListSentEmailsOptions {
@@ -438,29 +443,43 @@ export async function stopThreadFollowups(
   if (error) throw new Error(error.message);
 }
 
-export async function getSentEmailsSummary(userId: string): Promise<SentEmailsSummary> {
-  const { count: totalSent, error } = await supabase
+async function countSentEmailsForUser(
+  userId: string,
+  filters: { status?: string; opened?: boolean } = {}
+): Promise<number> {
+  let query = supabase
     .from("sent_emails")
     .select("id", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .eq("status", "sent");
+    .eq("user_id", userId);
 
+  if (filters.status) {
+    query = query.eq("status", filters.status);
+  }
+  if (filters.opened === true) {
+    query = query.not("opened_at", "is", null);
+  }
+
+  const { count, error } = await query;
   if (error) throw new Error(error.message);
+  return count ?? 0;
+}
 
-  const { count: totalOpened, error: openErr } = await supabase
-    .from("sent_emails")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .eq("status", "sent")
-    .not("opened_at", "is", null);
+export async function getSentEmailsSummary(userId: string): Promise<SentEmailsSummary> {
+  const [sent, opened, queued, sending] = await Promise.all([
+    countSentEmailsForUser(userId, { status: "sent" }),
+    countSentEmailsForUser(userId, { status: "sent", opened: true }),
+    countSentEmailsForUser(userId, { status: "queued" }),
+    countSentEmailsForUser(userId, { status: "sending" }),
+  ]);
 
-  if (openErr) throw new Error(openErr.message);
-
-  const sent = totalSent ?? 0;
-  const opened = totalOpened ?? 0;
   const open_rate = sent > 0 ? Math.round((opened / sent) * 1000) / 10 : 0;
 
-  return { total_sent: sent, total_opened: opened, open_rate };
+  return {
+    total_sent: sent,
+    total_opened: opened,
+    open_rate,
+    in_progress: queued + sending,
+  };
 }
 
 export async function listSentEmails(

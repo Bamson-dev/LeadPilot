@@ -111,6 +111,7 @@ export interface OutreachSendsSummary {
   total_sent: number;
   total_opened: number;
   open_rate: number;
+  in_progress: number;
 }
 
 export interface OutreachSendsPagination {

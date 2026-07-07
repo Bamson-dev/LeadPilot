@@ -12,7 +12,7 @@ import {
 import { encryptMailboxSecret } from "../utils/mailbox-crypto";
 import {
   dailyCapForAccountType,
-  GMAIL_CONNECT_HELP,
+  classifyMailboxVerifyError,
   verifyGmailMailboxCredentials,
 } from "./mailbox-smtp";
 
@@ -42,7 +42,8 @@ export async function connectMailbox(params: {
   if (!APP_PASSWORD_RE.test(appPassword)) {
     throw new MailboxConnectError(
       "App password must be exactly 16 characters with no spaces.",
-      400
+      400,
+      "INVALID_APP_PASSWORD_LENGTH"
     );
   }
 
@@ -58,8 +59,9 @@ export async function connectMailbox(params: {
 
   try {
     await verifyGmailMailboxCredentials(emailAddress, appPassword);
-  } catch {
-    throw new MailboxConnectError(GMAIL_CONNECT_HELP, 400, "SMTP_VERIFY_FAILED");
+  } catch (err) {
+    const classified = classifyMailboxVerifyError(err);
+    throw new MailboxConnectError(classified.message, 400, classified.code);
   }
 
   const firstConnect = (await countAllMailboxes(params.userId)) === 0;

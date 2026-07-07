@@ -181,7 +181,8 @@ async function runTests() {
     listJson.summary &&
     typeof listJson.summary.total_sent === "number" &&
     typeof listJson.summary.total_opened === "number" &&
-    typeof listJson.summary.open_rate === "number"
+    typeof listJson.summary.open_rate === "number" &&
+    typeof listJson.summary.in_progress === "number"
   ) {
     pass(
       "GET /sends summary",

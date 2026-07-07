@@ -99,6 +99,7 @@ export function OutreachWorkspace({
 
     if (result.queued > 0) {
       onCloseSendPanel();
+      setActiveTab("sends");
       setSendNotice({ result, recipientCount: selectedLeads.length });
       onSendComplete?.(result);
     }
