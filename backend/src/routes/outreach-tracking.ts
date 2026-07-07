@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import {
   getSentEmailByTrackingToken,
   recordOutreachEmailOpen,
+  stopFollowupsForRecipient,
   suppressRecipientForUser,
 } from "../database/outreach-repository";
 import { logger } from "../utils/logger";
@@ -74,6 +75,11 @@ outreachTrackingRouter.get("/unsubscribe", async (req: Request, res: Response) =
     }
 
     await suppressRecipientForUser(sentEmail.user_id, sentEmail.recipient_email);
+    await stopFollowupsForRecipient({
+      userId: sentEmail.user_id,
+      recipientEmail: sentEmail.recipient_email,
+      reason: "unsubscribed",
+    });
     res.send(
       outreachUnsubscribeHtml("You will not receive further messages from this sender.", true)
     );

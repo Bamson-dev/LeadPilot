@@ -26,6 +26,15 @@ sendRouter.post("/", requireLicense, async (req: Request, res: Response) => {
       template_id?: string;
       mailbox_id?: string;
       send_mode?: string;
+      followups?: {
+        enabled?: boolean;
+        steps?: Array<{
+          step_number?: number;
+          gap_days?: number;
+          subject?: string;
+          body?: string;
+        }>;
+      };
     };
 
     const targets = body.targets ?? [];
@@ -45,6 +54,36 @@ sendRouter.post("/", requireLicense, async (req: Request, res: Response) => {
       return;
     }
 
+    const followupsEnabled = Boolean(body.followups?.enabled);
+    const followupSteps =
+      body.followups?.steps?.map((step, idx) => ({
+        stepNumber: Number(step.step_number ?? idx + 1),
+        gapDays: Number(step.gap_days ?? 0),
+        subject: String(step.subject ?? "").trim(),
+        body: String(step.body ?? "").trim(),
+      })) ?? [];
+
+    if (followupsEnabled) {
+      if (followupSteps.length > 3) {
+        res.status(400).json({ error: "A batch can have at most 3 follow ups" });
+        return;
+      }
+      for (const step of followupSteps) {
+        if (step.gapDays < 2) {
+          res.status(400).json({
+            error: `Follow up ${step.stepNumber} must have at least 2 days gap`,
+          });
+          return;
+        }
+        if (!step.subject || !step.body) {
+          res.status(400).json({
+            error: `Follow up ${step.stepNumber} subject and body are required`,
+          });
+          return;
+        }
+      }
+    }
+
     const result = await queueSendBatch({
       userId,
       targets: targets.map((t) => ({
@@ -58,6 +97,10 @@ sendRouter.post("/", requireLicense, async (req: Request, res: Response) => {
       templateId: body.template_id,
       mailboxId: body.mailbox_id,
       sendMode,
+      followups: {
+        enabled: followupsEnabled,
+        steps: followupSteps,
+      },
     });
 
     res.status(202).json({

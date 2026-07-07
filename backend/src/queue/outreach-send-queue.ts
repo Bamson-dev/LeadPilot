@@ -85,11 +85,23 @@ async function drainInlineQueue(): Promise<void> {
   }
 }
 
-export async function enqueueOutreachSendJob(data: OutreachSendJobData): Promise<void> {
+export async function enqueueOutreachSendJob(
+  data: OutreachSendJobData,
+  options?: { delayMs?: number }
+): Promise<void> {
   if (bullQueue && isRedisQueueEnabled()) {
     await bullQueue.add("send-outreach-email", data, {
       jobId: `outreach-${data.sentEmailId}`,
+      delay: Math.max(0, options?.delayMs ?? 0),
     });
+    return;
+  }
+
+  if ((options?.delayMs ?? 0) > 0) {
+    setTimeout(() => {
+      inlinePending.push(data);
+      void drainInlineQueue();
+    }, options?.delayMs);
     return;
   }
 

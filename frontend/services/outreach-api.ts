@@ -13,6 +13,7 @@ import type {
   FetchSendsReportParams,
   GenerateOutreachEmailInput,
   GenerateOutreachEmailResult,
+  OutreachFollowupConfigInput,
   QueueSendResponse,
 } from "@/types/outreach";
 
@@ -79,6 +80,7 @@ export async function queueOutreachSend(input: {
   template_id?: string;
   mailbox_id?: string;
   send_mode: "auto" | "manual";
+  followups?: OutreachFollowupConfigInput;
 }): Promise<QueueSendResponse> {
   const res = await fetch(`${getApiUrl()}/send`, {
     method: "POST",
@@ -87,6 +89,23 @@ export async function queueOutreachSend(input: {
   });
   if (!res.ok) throw new Error(await parseError(res));
   return (await res.json()) as QueueSendResponse;
+}
+
+export async function markSentEmailReplied(sentEmailId: string): Promise<void> {
+  const res = await fetch(`${getApiUrl()}/sends/${encodeURIComponent(sentEmailId)}/replied`, {
+    method: "POST",
+    headers: getLicenseHeaders(),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+}
+
+export async function markRecipientReplied(recipientEmail: string): Promise<void> {
+  const res = await fetch(`${getApiUrl()}/sends/replied-by-recipient`, {
+    method: "POST",
+    headers: getLicenseHeaders(),
+    body: JSON.stringify({ recipient_email: recipientEmail }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
 }
 
 export async function fetchRecentSends(limit = 50): Promise<OutreachSentEmail[]> {

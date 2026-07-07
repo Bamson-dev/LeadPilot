@@ -21,6 +21,7 @@ import { useSearch } from "@/hooks/useSearch";
 import { useLeadStatuses } from "@/hooks/useLeadStatuses";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { exportToCSV } from "@/features/export/csv-export";
+import { markRecipientReplied } from "@/services/outreach-api";
 import SearchLimitModal from "@/components/SearchLimitModal";
 import SearchUpgradeBanner from "@/components/SearchUpgradeBanner";
 import {
@@ -614,6 +615,13 @@ export function SearchDashboard() {
               onSendSelected={openSendPanel}
               hasMailbox={outreach.hasMailbox}
               onNoMailboxClick={scrollToMailboxes}
+              onMarkReplied={(lead) => {
+                const recipient = (lead.verified_emails?.[0] || lead.email || "").trim();
+                if (!recipient) return;
+                void markRecipientReplied(recipient).then(() => {
+                  setLeadStatus(lead.id, "interested");
+                });
+              }}
             />
           ) : (
             <div className="rounded-xl border border-white/[0.08] bg-[#0F0F14]/40 px-4 py-8 text-center text-sm text-[#6B6B80]">

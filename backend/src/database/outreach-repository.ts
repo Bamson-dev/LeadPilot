@@ -211,6 +211,14 @@ export interface SentEmail {
   open_count: number;
   sent_at: string | null;
   created_at: string;
+  send_kind?: "initial" | "followup";
+  followup_batch_id?: string | null;
+  root_sent_email_id?: string | null;
+  followup_step_number?: number | null;
+  followup_due_at?: string | null;
+  followup_stopped_at?: string | null;
+  followup_stop_reason?: string | null;
+  replied_at?: string | null;
 }
 
 export interface ConnectedMailboxWithSecret extends ConnectedMailbox {
@@ -320,6 +328,11 @@ export interface SentEmailListItem {
   created_at: string;
   mailbox_id: string | null;
   mailbox_email: string | null;
+  send_kind?: "initial" | "followup";
+  followup_step_number?: number | null;
+  followup_due_at?: string | null;
+  followup_stop_reason?: string | null;
+  replied_at?: string | null;
 }
 
 export interface SentEmailsSummary {
@@ -339,6 +352,90 @@ export interface ListSentEmailsResult {
   sends: SentEmailListItem[];
   total: number;
   summary: SentEmailsSummary;
+}
+
+export interface FollowupStepWrite {
+  stepNumber: number;
+  gapDays: number;
+  subject: string;
+  body: string;
+}
+
+export async function createFollowupBatch(params: {
+  userId: string;
+  sendMode: "auto" | "manual";
+  mailboxId?: string;
+  totalTargets: number;
+  enabled: boolean;
+  steps: FollowupStepWrite[];
+}): Promise<string | null> {
+  if (!params.enabled || params.steps.length === 0) return null;
+
+  const { data, error } = await supabase
+    .from("outreach_followup_batches")
+    .insert({
+      user_id: params.userId,
+      send_mode: params.sendMode,
+      mailbox_id: params.mailboxId ?? null,
+      followup_enabled: true,
+      total_targets: params.totalTargets,
+    })
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
+  const batchId = data.id as string;
+
+  const { error: stepsErr } = await supabase.from("outreach_followup_steps").insert(
+    params.steps.map((step) => ({
+      batch_id: batchId,
+      step_number: step.stepNumber,
+      gap_days: step.gapDays,
+      subject: step.subject,
+      body: step.body,
+    }))
+  );
+  if (stepsErr) throw new Error(stepsErr.message);
+  return batchId;
+}
+
+export async function getFollowupStep(
+  batchId: string,
+  stepNumber: number
+): Promise<{ step_number: number; gap_days: number; subject: string; body: string } | null> {
+  const { data, error } = await supabase
+    .from("outreach_followup_steps")
+    .select("step_number, gap_days, subject, body")
+    .eq("batch_id", batchId)
+    .eq("step_number", stepNumber)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function stopThreadFollowups(
+  rootSentEmailId: string,
+  reason:
+    | "replied"
+    | "bounced"
+    | "unsubscribed"
+    | "suppressed"
+    | "paused"
+    | "cancelled"
+    | "completed"
+): Promise<void> {
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("sent_emails")
+    .update({
+      status: "suppressed",
+      followup_stopped_at: now,
+      followup_stop_reason: reason,
+      error_message: `Follow ups stopped: ${reason}`,
+    })
+    .eq("root_sent_email_id", rootSentEmailId)
+    .in("status", ["queued", "sending"]);
+
+  if (error) throw new Error(error.message);
 }
 
 export async function getSentEmailsSummary(userId: string): Promise<SentEmailsSummary> {
@@ -436,6 +533,11 @@ export async function listSentEmails(
       created_at: row.created_at,
       mailbox_id: row.mailbox_id,
       mailbox_email: row.mailbox_id ? mailboxMap.get(row.mailbox_id) ?? null : null,
+      send_kind: row.send_kind ?? "initial",
+      followup_step_number: row.followup_step_number ?? null,
+      followup_due_at: row.followup_due_at ?? null,
+      followup_stop_reason: row.followup_stop_reason ?? null,
+      replied_at: row.replied_at ?? null,
     })),
     total: total ?? 0,
     summary,
@@ -449,6 +551,11 @@ export async function createQueuedSentEmail(params: {
   subject: string;
   body: string;
   trackingToken: string;
+  sendKind?: "initial" | "followup";
+  followupBatchId?: string | null;
+  rootSentEmailId?: string | null;
+  followupStepNumber?: number | null;
+  followupDueAt?: string | null;
 }): Promise<SentEmail> {
   const { data, error } = await supabase
     .from("sent_emails")
@@ -460,6 +567,11 @@ export async function createQueuedSentEmail(params: {
       body: params.body,
       status: "queued",
       tracking_token: params.trackingToken,
+      send_kind: params.sendKind ?? "initial",
+      followup_batch_id: params.followupBatchId ?? null,
+      root_sent_email_id: params.rootSentEmailId ?? null,
+      followup_step_number: params.followupStepNumber ?? null,
+      followup_due_at: params.followupDueAt ?? null,
     })
     .select("*")
     .single();
@@ -477,6 +589,14 @@ export async function getSentEmailById(sentEmailId: string): Promise<SentEmail |
 
   if (error) throw new Error(error.message);
   return (data as SentEmail | null) ?? null;
+}
+
+export async function setSentEmailRoot(sentEmailId: string, rootSentEmailId: string): Promise<void> {
+  const { error } = await supabase
+    .from("sent_emails")
+    .update({ root_sent_email_id: rootSentEmailId })
+    .eq("id", sentEmailId);
+  if (error) throw new Error(error.message);
 }
 
 export async function getMailboxWithSecret(
@@ -593,6 +713,48 @@ export async function markSentEmailFailed(sentEmailId: string, errorMessage: str
   if (error) throw new Error(error.message);
 }
 
+export async function markThreadReplied(sentEmailId: string): Promise<void> {
+  const sent = await getSentEmailById(sentEmailId);
+  if (!sent) return;
+  const rootId = sent.root_sent_email_id ?? sent.id;
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("sent_emails")
+    .update({
+      replied_at: now,
+      followup_stopped_at: now,
+      followup_stop_reason: "replied",
+      status: "suppressed",
+      error_message: "Lead marked as replied; follow ups stopped",
+    })
+    .eq("root_sent_email_id", rootId)
+    .in("status", ["queued", "sending"]);
+
+  if (error) throw new Error(error.message);
+}
+
+export async function markRecipientRepliedForUser(
+  userId: string,
+  recipientEmail: string
+): Promise<void> {
+  const now = new Date().toISOString();
+  const normalized = recipientEmail.toLowerCase().trim();
+  const { error } = await supabase
+    .from("sent_emails")
+    .update({
+      replied_at: now,
+      followup_stopped_at: now,
+      followup_stop_reason: "replied",
+      status: "suppressed",
+      error_message: "Lead marked as replied; follow ups stopped",
+    })
+    .eq("user_id", userId)
+    .eq("recipient_email", normalized)
+    .in("status", ["queued", "sending"]);
+
+  if (error) throw new Error(error.message);
+}
+
 export async function markSentEmailBounced(
   sentEmailId: string,
   errorMessage: string
@@ -602,6 +764,24 @@ export async function markSentEmailBounced(
     .update({
       status: "bounced",
       error_message: errorMessage,
+    })
+    .eq("id", sentEmailId);
+
+  if (error) throw new Error(error.message);
+}
+
+export async function markSentEmailSuppressed(
+  sentEmailId: string,
+  errorMessage: string,
+  stopReason: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("sent_emails")
+    .update({
+      status: "suppressed",
+      error_message: errorMessage,
+      followup_stopped_at: new Date().toISOString(),
+      followup_stop_reason: stopReason,
     })
     .eq("id", sentEmailId);
 
@@ -762,6 +942,27 @@ export async function suppressRecipientForUser(
     { onConflict: "user_id,recipient_email" }
   );
 
+  if (error) throw new Error(error.message);
+}
+
+export async function stopFollowupsForRecipient(params: {
+  userId: string;
+  recipientEmail: string;
+  reason: "replied" | "bounced" | "unsubscribed" | "suppressed" | "paused" | "cancelled";
+}): Promise<void> {
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("sent_emails")
+    .update({
+      status: "suppressed",
+      followup_stopped_at: now,
+      followup_stop_reason: params.reason,
+      error_message: `Follow ups stopped: ${params.reason}`,
+    })
+    .eq("user_id", params.userId)
+    .eq("recipient_email", params.recipientEmail.toLowerCase().trim())
+    .eq("send_kind", "followup")
+    .in("status", ["queued", "sending"]);
   if (error) throw new Error(error.message);
 }
 

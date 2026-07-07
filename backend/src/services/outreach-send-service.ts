@@ -7,11 +7,13 @@ import {
   assignSentEmailMailbox,
   computeAvailableSends,
   createQueuedSentEmail,
+  createFollowupBatch,
   deductOneSendCredit,
   ensureOutreachAccount,
   getEmailTemplateById,
   getMailboxWithSecret,
   getSentEmailById,
+  getFollowupStep,
   incrementMailboxSendCount,
   isRecipientSuppressed,
   listActiveMailboxesWithSecrets,
@@ -19,11 +21,15 @@ import {
   markSentEmailBounced,
   markSentEmailFailed,
   markSentEmailSent,
+  markSentEmailSuppressed,
   pauseMailboxForBounceRate,
   refundSendCredit,
   resetMailboxDailyCountIfNeeded,
+  setSentEmailRoot,
+  stopThreadFollowups,
   type ConnectedMailboxWithSecret,
   type CreditBucket,
+  type FollowupStepWrite,
 } from "../database/outreach-repository";
 import { isGloballyInvalidEmail } from "../database/global-invalid-email-repository";
 import { enqueueOutreachSendJob } from "../queue/outreach-send-queue";
@@ -52,6 +58,10 @@ export interface QueueSendBatchParams {
   templateId?: string;
   mailboxId?: string;
   sendMode: OutreachSendMode;
+  followups?: {
+    enabled: boolean;
+    steps: FollowupStepWrite[];
+  };
 }
 
 export interface QueueSendBatchResult {
@@ -61,6 +71,10 @@ export interface QueueSendBatchResult {
   skipped_invalid_email: number;
   short_credits: number;
   sent_email_ids: string[];
+}
+
+function clampFollowupGapDays(value: number): number {
+  return Math.max(2, Math.floor(value || 0));
 }
 
 function getOutreachTrackingBaseUrl(): string {
@@ -124,6 +138,25 @@ export async function queueSendBatch(params: QueueSendBatchParams): Promise<Queu
     }
   }
 
+  const normalizedFollowups: FollowupStepWrite[] = (params.followups?.steps ?? [])
+    .slice(0, 3)
+    .map((step, idx) => ({
+      stepNumber: idx + 1,
+      gapDays: clampFollowupGapDays(step.gapDays),
+      subject: step.subject.trim(),
+      body: step.body.trim(),
+    }))
+    .filter((step) => step.subject.trim() && step.body.trim());
+
+  const followupBatchId = await createFollowupBatch({
+    userId: params.userId,
+    sendMode: params.sendMode,
+    mailboxId: params.mailboxId,
+    totalTargets: params.targets.length,
+    enabled: Boolean(params.followups?.enabled) && normalizedFollowups.length > 0,
+    steps: normalizedFollowups,
+  });
+
   const result: QueueSendBatchResult = {
     queued: 0,
     skipped_suppression: 0,
@@ -168,7 +201,10 @@ export async function queueSendBatch(params: QueueSendBatchParams): Promise<Queu
       subject: personalizedSubject,
       body: personalizedBody,
       trackingToken,
+      sendKind: "initial",
+      followupBatchId,
     });
+    await setSentEmailRoot(row.id, row.id);
 
     await enqueueOutreachSendJob({
       sentEmailId: row.id,
@@ -275,6 +311,54 @@ async function handleMailboxHardBounce(mailboxId: string): Promise<void> {
   }
 }
 
+function gapDaysToMs(days: number): number {
+  return Math.max(2, days) * 24 * 60 * 60 * 1000;
+}
+
+async function scheduleNextFollowup(params: {
+  sentEmail: Awaited<ReturnType<typeof getSentEmailById>>;
+  userId: string;
+  mailboxId: string;
+}): Promise<void> {
+  const sentEmail = params.sentEmail;
+  if (!sentEmail?.followup_batch_id) return;
+  if (sentEmail.followup_stop_reason || sentEmail.replied_at) return;
+
+  const nextStep = (sentEmail.followup_step_number ?? 0) + 1;
+  const step = await getFollowupStep(sentEmail.followup_batch_id, nextStep);
+  if (!step) {
+    if (sentEmail.root_sent_email_id) {
+      await stopThreadFollowups(sentEmail.root_sent_email_id, "completed");
+    }
+    return;
+  }
+
+  const dueAt = new Date(Date.now() + gapDaysToMs(step.gap_days)).toISOString();
+  const rootId = sentEmail.root_sent_email_id ?? sentEmail.id;
+  const followup = await createQueuedSentEmail({
+    userId: params.userId,
+    recipientEmail: sentEmail.recipient_email,
+    businessName: sentEmail.business_name,
+    subject: applyBusinessName(step.subject, sentEmail.business_name),
+    body: applyBusinessName(step.body, sentEmail.business_name),
+    trackingToken: generateTrackingToken(),
+    sendKind: "followup",
+    followupBatchId: sentEmail.followup_batch_id,
+    rootSentEmailId: rootId,
+    followupStepNumber: step.step_number,
+    followupDueAt: dueAt,
+  });
+  await enqueueOutreachSendJob(
+    {
+      sentEmailId: followup.id,
+      userId: params.userId,
+      sendMode: "manual",
+      mailboxId: params.mailboxId,
+    },
+    { delayMs: Math.max(0, new Date(dueAt).getTime() - Date.now()) }
+  );
+}
+
 export async function processOutreachSendJob(data: {
   sentEmailId: string;
   userId: string;
@@ -295,11 +379,43 @@ export async function processOutreachSendJob(data: {
       sentEmail.id,
       "Recipient address is globally invalid (hard bounce recorded previously)"
     );
+    if (sentEmail.root_sent_email_id) {
+      await stopThreadFollowups(sentEmail.root_sent_email_id, "bounced");
+    }
     return {
       action: "bounced",
       sentEmailId: sentEmail.id,
       mailboxId: sentEmail.mailbox_id ?? "",
       error: "Recipient address is globally invalid",
+    };
+  }
+
+  if (sentEmail.replied_at) {
+    await markSentEmailSuppressed(
+      sentEmail.id,
+      "Lead replied; follow ups stopped",
+      "replied"
+    );
+    return {
+      action: "failed",
+      sentEmailId: sentEmail.id,
+      error: "Lead already replied",
+    };
+  }
+
+  if (await isRecipientSuppressed(data.userId, sentEmail.recipient_email)) {
+    await markSentEmailSuppressed(
+      sentEmail.id,
+      "Recipient is unsubscribed/suppressed for this sender",
+      "suppressed"
+    );
+    if (sentEmail.root_sent_email_id) {
+      await stopThreadFollowups(sentEmail.root_sent_email_id, "suppressed");
+    }
+    return {
+      action: "failed",
+      sentEmailId: sentEmail.id,
+      error: "Recipient suppressed",
     };
   }
 
@@ -376,6 +492,11 @@ export async function processOutreachSendJob(data: {
       creditBucket,
     });
     await incrementMailboxSendCount(mailbox.id);
+    await scheduleNextFollowup({
+      sentEmail,
+      userId: data.userId,
+      mailboxId: mailbox.id,
+    });
     markMailboxSendComplete(mailbox.id, releaseSpacing);
 
     return { action: "sent", sentEmailId: sentEmail.id, mailboxId: mailbox.id, creditBucket };
@@ -392,6 +513,9 @@ export async function processOutreachSendJob(data: {
         smtpCode: err.smtpCode,
         reason: err.message,
       });
+      if (sentEmail.root_sent_email_id) {
+        await stopThreadFollowups(sentEmail.root_sent_email_id, "bounced");
+      }
       await handleMailboxHardBounce(mailbox.id);
       markMailboxSendComplete(mailbox.id, releaseSpacing);
       return { action: "bounced", sentEmailId: sentEmail.id, mailboxId: mailbox.id, error: err.message };

@@ -44,6 +44,7 @@ interface ResultsTableProps {
   onStatusFilterChange: (value: string) => void;
   onLeadStatusChange: (leadId: string, status: string) => void;
   onUseTemplate?: (lead: Lead) => void;
+  onMarkReplied?: (lead: Lead) => void;
   searchLocation?: string;
   emailScrapingInProgress?: boolean;
   /** When provided, renders the email selection checkbox column */
@@ -101,6 +102,7 @@ export function ResultsTable({
   onStatusFilterChange,
   onLeadStatusChange,
   onUseTemplate,
+  onMarkReplied,
   emailScrapingInProgress = false,
   selectedLeadIds,
   onToggleLeadSelect,
@@ -480,6 +482,27 @@ export function ResultsTable({
                 }}
               >
                 WhatsApp
+              </button>
+            )}
+            {onMarkReplied && hasAnyEmail(lead) && (
+              <button
+                type="button"
+                onClick={() => onMarkReplied(lead)}
+                title="Mark this lead as replied and stop pending follow ups"
+                style={{
+                  background: "rgba(16,185,129,0.1)",
+                  border: "1px solid rgba(16,185,129,0.25)",
+                  color: "#10B981",
+                  borderRadius: 6,
+                  padding: "5px 8px",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  fontFamily: "Inter, sans-serif",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Mark replied
               </button>
             )}
           </div>

@@ -23,6 +23,7 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { hasStoredLicense } from "@/lib/license";
 import { getLeadSelectionId } from "@/lib/lead-selection";
 import { exportToCSV } from "@/features/export/csv-export";
+import { markRecipientReplied } from "@/services/outreach-api";
 
 const POLL_MS = 3000;
 
@@ -287,6 +288,13 @@ export default function SearchResultPage() {
             onSendSelected={() => setSendPanelOpen(true)}
             hasMailbox={outreach.hasMailbox}
             onNoMailboxClick={scrollToMailboxes}
+            onMarkReplied={(lead) => {
+              const recipient = (lead.verified_emails?.[0] || lead.email || "").trim();
+              if (!recipient) return;
+              void markRecipientReplied(recipient).then(() => {
+                setLeadStatus(lead.id, "interested");
+              });
+            }}
           />
         }
         resultsFooter={

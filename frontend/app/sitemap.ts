@@ -3,8 +3,11 @@ import { MetadataRoute } from "next";
 async function getBlogPosts() {
   try {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-    const res = await fetch(`${apiUrl}/public/blog/posts?limit=500`, {
-      next: { revalidate: 3600 },
+    if (!apiUrl) return [];
+    const res = await fetch(`${apiUrl}/public/blog/posts?limit=120`, {
+      // Avoid Next build-time data cache over 2MB and fail gracefully on slow origin.
+      cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
     });
     if (!res.ok) return [];
     const data = await res.json();

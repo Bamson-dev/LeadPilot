@@ -73,6 +73,18 @@ export interface QueueSendResponse {
   sent_email_ids: string[];
 }
 
+export interface OutreachFollowupStepInput {
+  step_number: number;
+  gap_days: number;
+  subject: string;
+  body: string;
+}
+
+export interface OutreachFollowupConfigInput {
+  enabled: boolean;
+  steps: OutreachFollowupStepInput[];
+}
+
 export interface OutreachSentEmail {
   id: string;
   recipient_email: string;
@@ -88,6 +100,11 @@ export interface OutreachSentEmail {
   created_at: string;
   mailbox_id: string | null;
   mailbox_email?: string | null;
+  send_kind?: "initial" | "followup";
+  followup_step_number?: number | null;
+  followup_due_at?: string | null;
+  followup_stop_reason?: string | null;
+  replied_at?: string | null;
 }
 
 export interface OutreachSendsSummary {

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { fetchSendsReport } from "@/services/outreach-api";
+import { fetchSendsReport, markSentEmailReplied } from "@/services/outreach-api";
 import type { OutreachSendStatusFilter, OutreachSendsReport } from "@/types/outreach";
 
 const PAGE_SIZE = 25;
@@ -69,6 +69,7 @@ export function OutreachSendsReport({
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<OutreachSendStatusFilter>("all");
   const [offset, setOffset] = useState(0);
+  const [markingReplyId, setMarkingReplyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -99,6 +100,15 @@ export function OutreachSendsReport({
   const pageEnd = Math.min(offset + PAGE_SIZE, total);
   const canPrev = offset > 0;
   const canNext = offset + PAGE_SIZE < total;
+  async function markReplied(id: string) {
+    setMarkingReplyId(id);
+    try {
+      await markSentEmailReplied(id);
+      await load();
+    } finally {
+      setMarkingReplyId(null);
+    }
+  }
 
   return (
     <section className="glass rounded-2xl p-4 sm:p-6">
@@ -184,6 +194,8 @@ export function OutreachSendsReport({
                 <th className="px-3 py-2">Sent</th>
                 <th className="px-3 py-2">Open status</th>
                 <th className="px-3 py-2">Mailbox</th>
+                <th className="px-3 py-2">Follow up</th>
+                <th className="px-3 py-2">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -219,6 +231,30 @@ export function OutreachSendsReport({
                   </td>
                   <td className="px-3 py-3 text-[#8888A8]">
                     {row.mailbox_email || "—"}
+                  </td>
+                  <td className="px-3 py-3 text-xs text-[#A1A1B5]">
+                    {row.send_kind === "followup"
+                      ? `Step ${row.followup_step_number ?? "?"}`
+                      : "Initial"}
+                    <div className="mt-1 text-[#6B6B80]">
+                      Next:{" "}
+                      {row.followup_due_at
+                        ? new Date(row.followup_due_at).toLocaleString()
+                        : "—"}
+                    </div>
+                    <div className="mt-1 text-[#FCA5A5]">
+                      Stop: {row.followup_stop_reason ?? "—"}
+                    </div>
+                  </td>
+                  <td className="px-3 py-3">
+                    <button
+                      type="button"
+                      disabled={markingReplyId === row.id}
+                      onClick={() => void markReplied(row.id)}
+                      className="rounded-md border border-white/10 px-2 py-1 text-xs text-[#C0C0D8] hover:bg-white/5 disabled:opacity-50"
+                    >
+                      {markingReplyId === row.id ? "Saving..." : "Mark replied"}
+                    </button>
                   </td>
                 </tr>
               ))}

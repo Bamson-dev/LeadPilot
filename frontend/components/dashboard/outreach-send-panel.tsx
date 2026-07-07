@@ -14,6 +14,7 @@ import { hasAnyEmail } from "@/utils/get-display-email";
 import { buildOutreachSendTargetsFromLeads } from "@leadthur/shared";
 import { applyBusinessNameMerge } from "@/lib/outreach-utils";
 import { fetchEmailTemplates, generateOutreachEmail, queueOutreachSend } from "@/services/outreach-api";
+import type { OutreachFollowupStepInput } from "@/types/outreach";
 
 const TONE_OPTIONS: Array<{ value: OutreachEmailTone | ""; label: string }> = [
   { value: "", label: "Default (direct)" },
@@ -62,6 +63,14 @@ export function OutreachSendPanel({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<QueueSendResponse | null>(null);
+  const [followupsEnabled, setFollowupsEnabled] = useState(false);
+  const [followupSteps, setFollowupSteps] = useState<OutreachFollowupStepInput[]>([
+    { step_number: 1, gap_days: 3, subject: "Quick follow up for [Business Name]", body: "Hi [Business Name],\n\nJust following up on my last email.\n\nBest,\n" },
+    { step_number: 2, gap_days: 3, subject: "Just checking in, [Business Name]", body: "Hi [Business Name],\n\nWanted to check if you had a chance to see my previous note.\n\nBest,\n" },
+    { step_number: 3, gap_days: 4, subject: "Final follow up for [Business Name]", body: "Hi [Business Name],\n\nFinal quick nudge in case this is useful for your team.\n\nBest,\n" },
+  ]);
+  const [followupCount, setFollowupCount] = useState(0);
+  const [followupError, setFollowupError] = useState<string | null>(null);
 
   const activeMailboxes = mailboxes.filter((m) => m.status === "active");
 
@@ -125,6 +134,13 @@ export function OutreachSendPanel({
 
   const blockedZeroBalance = hasMailbox && sendBalance <= 0;
   const sendCount = sendableRecipients.length;
+  const totalPotentialCredits =
+    sendCount * (1 + (followupsEnabled ? Math.min(3, followupCount) : 0));
+  const selectedMailbox =
+    sendMode === "manual"
+      ? activeMailboxes.find((m) => m.id === mailboxId) ?? activeMailboxes[0]
+      : activeMailboxes[0];
+  const showNewAccountWarning = followupsEnabled && (selectedMailbox?.daily_send_count ?? 0) < 20;
   const composeDisabled = sending || blockedZeroBalance || generating;
 
   async function handleGenerate() {
@@ -198,6 +214,20 @@ export function OutreachSendPanel({
       setError("Choose a mailbox for manual send.");
       return;
     }
+    if (followupsEnabled && followupCount > 3) {
+      setFollowupError("You can set at most 3 follow ups.");
+      return;
+    }
+    if (followupsEnabled) {
+      for (let i = 0; i < followupCount; i++) {
+        const step = followupSteps[i];
+        if (!step) continue;
+        if (step.gap_days < 2) {
+          setFollowupError(`Follow up ${i + 1} gap must be at least 2 days.`);
+          return;
+        }
+      }
+    }
 
     setSending(true);
     try {
@@ -213,6 +243,14 @@ export function OutreachSendPanel({
         template_id: templateId || undefined,
         mailbox_id: sendMode === "manual" ? mailboxId : undefined,
         send_mode: sendMode,
+        followups: {
+          enabled: followupsEnabled && followupCount > 0,
+          steps: followupSteps.slice(0, Math.min(3, followupCount)).map((step, idx) => ({
+            ...step,
+            step_number: idx + 1,
+            gap_days: Math.max(2, step.gap_days),
+          })),
+        },
       });
       setResult(response);
       onSent(response);
@@ -391,6 +429,123 @@ export function OutreachSendPanel({
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-[#6B6B80]">
+                  Follow up sequence
+                </label>
+                <div className="rounded-xl border border-white/[0.08] bg-[#16161E] p-3 space-y-3">
+                  <label className="flex items-center justify-between text-sm text-[#F4F4FF]">
+                    <span>Enable follow ups for this batch</span>
+                    <input
+                      type="checkbox"
+                      checked={followupsEnabled}
+                      onChange={(e) => {
+                        setFollowupsEnabled(e.target.checked);
+                        setFollowupError(null);
+                      }}
+                      disabled={composeDisabled}
+                    />
+                  </label>
+                  <p className="text-xs text-[#6B6B80]">
+                    Toggle is off by default. Each follow up is a real send and spends one credit per lead.
+                  </p>
+                  {followupsEnabled && (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <label className="text-xs text-[#A1A1B5]">
+                          Number of follow ups (0-3)
+                          <input
+                            type="number"
+                            min={0}
+                            max={3}
+                            value={followupCount}
+                            onChange={(e) => {
+                              const next = Math.min(3, Math.max(0, Number(e.target.value) || 0));
+                              setFollowupCount(next);
+                              setFollowupError(null);
+                            }}
+                            className="mt-1 w-full rounded-md border border-white/10 bg-[#0F0F14] px-2 py-1 text-sm text-[#F4F4FF]"
+                          />
+                        </label>
+                      </div>
+                      <p className="text-xs text-[#A1A1B5]">
+                        Potential credit spend: up to{" "}
+                        <strong className="text-[#F4F4FF]">{totalPotentialCredits}</strong> (for {sendCount} lead
+                        {sendCount === 1 ? "" : "s"} across {1 + followupCount} total touches).
+                      </p>
+                      {showNewAccountWarning && (
+                        <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                          This mailbox is still new in LeadThur. Sending many cold emails too quickly can get it flagged.
+                          Start with a smaller batch first.
+                        </p>
+                      )}
+                      {Array.from({ length: followupCount }).map((_, idx) => {
+                        const step = followupSteps[idx]!;
+                        return (
+                          <div key={idx} className="rounded-lg border border-white/10 bg-[#0F0F14] p-3 space-y-2">
+                            <p className="text-xs font-semibold text-[#F4F4FF]">Follow up {idx + 1}</p>
+                            <label className="text-xs text-[#A1A1B5] block">
+                              Gap (days, minimum 2)
+                              <input
+                                type="number"
+                                min={2}
+                                value={step.gap_days}
+                                onChange={(e) => {
+                                  const raw = Number(e.target.value) || 0;
+                                  const value = Math.max(2, raw);
+                                  setFollowupSteps((prev) =>
+                                    prev.map((item, sidx) =>
+                                      sidx === idx ? { ...item, gap_days: value } : item
+                                    )
+                                  );
+                                  if (raw < 2) {
+                                    setFollowupError(`Follow up ${idx + 1} was clamped to 2 days.`);
+                                  } else {
+                                    setFollowupError(null);
+                                  }
+                                }}
+                                className="mt-1 w-full rounded-md border border-white/10 bg-[#16161E] px-2 py-1 text-sm text-[#F4F4FF]"
+                              />
+                            </label>
+                            <label className="text-xs text-[#A1A1B5] block">
+                              Subject
+                              <input
+                                type="text"
+                                value={step.subject}
+                                onChange={(e) =>
+                                  setFollowupSteps((prev) =>
+                                    prev.map((item, sidx) =>
+                                      sidx === idx ? { ...item, subject: e.target.value } : item
+                                    )
+                                  )
+                                }
+                                className="mt-1 w-full rounded-md border border-white/10 bg-[#16161E] px-2 py-1 text-sm text-[#F4F4FF]"
+                              />
+                            </label>
+                            <label className="text-xs text-[#A1A1B5] block">
+                              Body
+                              <textarea
+                                value={step.body}
+                                onChange={(e) =>
+                                  setFollowupSteps((prev) =>
+                                    prev.map((item, sidx) =>
+                                      sidx === idx ? { ...item, body: e.target.value } : item
+                                    )
+                                  )
+                                }
+                                rows={3}
+                                className="mt-1 w-full rounded-md border border-white/10 bg-[#16161E] px-2 py-1 text-sm text-[#F4F4FF]"
+                              />
+                            </label>
+                          </div>
+                        );
+                      })}
+                      {followupError && <p className="text-xs text-amber-300">{followupError}</p>}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div>

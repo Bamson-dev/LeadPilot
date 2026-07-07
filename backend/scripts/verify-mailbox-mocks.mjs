@@ -8,6 +8,8 @@ const mailboxes = [];
 const ledger = [];
 const sentEmails = [];
 const suppressions = [];
+const followupBatches = [];
+const followupSteps = [];
 const globalInvalidEmails = new Map();
 const domainEmailCache = new Map();
 const outreachPaystackPlans = new Map();
@@ -651,6 +653,8 @@ export function resetMailboxMocks() {
   ledger.length = 0;
   sentEmails.length = 0;
   suppressions.length = 0;
+  followupBatches.length = 0;
+  followupSteps.length = 0;
   globalInvalidEmails.clear();
   domainEmailCache.clear();
   lastSmtpPayloads.length = 0;
@@ -876,6 +880,14 @@ export async function registerMailboxMocks({
             body: params.body,
             status: "queued",
             tracking_token: params.trackingToken,
+            send_kind: params.sendKind ?? "initial",
+            followup_batch_id: params.followupBatchId ?? null,
+            root_sent_email_id: params.rootSentEmailId ?? null,
+            followup_step_number: params.followupStepNumber ?? null,
+            followup_due_at: params.followupDueAt ?? null,
+            followup_stop_reason: null,
+            followup_stopped_at: null,
+            replied_at: null,
             credit_bucket: null,
             provider_message_id: null,
             error_message: null,
@@ -888,6 +900,39 @@ export async function registerMailboxMocks({
           return row;
         },
         getSentEmailById: async (id) => sentEmails.find((r) => r.id === id) ?? null,
+        setSentEmailRoot: async (id, rootId) => {
+          const row = sentEmails.find((r) => r.id === id);
+          if (row) row.root_sent_email_id = rootId;
+        },
+        createFollowupBatch: async (params) => {
+          if (!params.enabled || (params.steps?.length ?? 0) === 0) return null;
+          const id = randomUUID();
+          followupBatches.push({
+            id,
+            user_id: params.userId,
+            send_mode: params.sendMode,
+            mailbox_id: params.mailboxId ?? null,
+            followup_enabled: true,
+            total_targets: params.totalTargets,
+            created_at: new Date().toISOString(),
+          });
+          for (const step of params.steps ?? []) {
+            followupSteps.push({
+              id: randomUUID(),
+              batch_id: id,
+              step_number: step.stepNumber,
+              gap_days: step.gapDays,
+              subject: step.subject,
+              body: step.body,
+              created_at: new Date().toISOString(),
+            });
+          }
+          return id;
+        },
+        getFollowupStep: async (batchId, stepNumber) =>
+          followupSteps.find(
+            (s) => s.batch_id === batchId && s.step_number === stepNumber
+          ) ?? null,
         getMailboxWithSecret: async (mailboxId, userId) =>
           mailboxes.find(
             (m) => m.id === mailboxId && m.user_id === userId && m.status === "active"
@@ -930,11 +975,56 @@ export async function registerMailboxMocks({
             row.error_message = errorMessage;
           }
         },
+        markSentEmailSuppressed: async (sentEmailId, errorMessage, stopReason) => {
+          const row = sentEmails.find((r) => r.id === sentEmailId);
+          if (row) {
+            row.status = "suppressed";
+            row.error_message = errorMessage;
+            row.followup_stop_reason = stopReason;
+            row.followup_stopped_at = new Date().toISOString();
+          }
+        },
         markSentEmailBounced: async (sentEmailId, errorMessage) => {
           const row = sentEmails.find((r) => r.id === sentEmailId);
           if (row) {
             row.status = "bounced";
             row.error_message = errorMessage;
+          }
+        },
+        stopThreadFollowups: async (rootSentEmailId, reason) => {
+          for (const row of sentEmails) {
+            if (row.root_sent_email_id === rootSentEmailId && ["queued", "sending"].includes(row.status)) {
+              row.status = "suppressed";
+              row.error_message = `Follow ups stopped: ${reason}`;
+              row.followup_stop_reason = reason;
+              row.followup_stopped_at = new Date().toISOString();
+            }
+          }
+        },
+        markThreadReplied: async (sentEmailId) => {
+          const row = sentEmails.find((r) => r.id === sentEmailId);
+          if (!row) return;
+          const rootId = row.root_sent_email_id ?? row.id;
+          for (const target of sentEmails) {
+            if (target.root_sent_email_id === rootId || target.id === rootId) {
+              if (["queued", "sending"].includes(target.status)) {
+                target.status = "suppressed";
+              }
+              target.replied_at = new Date().toISOString();
+              target.followup_stop_reason = "replied";
+              target.followup_stopped_at = new Date().toISOString();
+            }
+          }
+        },
+        markRecipientRepliedForUser: async (userId, recipientEmail) => {
+          const normalized = recipientEmail.toLowerCase().trim();
+          for (const target of sentEmails) {
+            if (target.user_id === userId && target.recipient_email === normalized) {
+              if (["queued", "sending"].includes(target.status)) target.status = "suppressed";
+              target.replied_at = new Date().toISOString();
+              target.followup_stop_reason = "replied";
+              target.followup_stopped_at = new Date().toISOString();
+            }
           }
         },
         pauseMailboxForBounceRate: async (mailboxId, reason) => {
@@ -1031,6 +1121,22 @@ export async function registerMailboxMocks({
               recipient_email: normalized,
               unsubscribed_at: new Date().toISOString(),
             });
+          }
+        },
+        stopFollowupsForRecipient: async ({ userId, recipientEmail, reason }) => {
+          const normalized = recipientEmail.toLowerCase().trim();
+          for (const row of sentEmails) {
+            if (
+              row.user_id === userId &&
+              row.recipient_email === normalized &&
+              row.send_kind === "followup" &&
+              ["queued", "sending"].includes(row.status)
+            ) {
+              row.status = "suppressed";
+              row.followup_stop_reason = reason;
+              row.followup_stopped_at = new Date().toISOString();
+              row.error_message = `Follow ups stopped: ${reason}`;
+            }
           }
         },
         getOutreachPaystackPlanCode: async (tier) => outreachPaystackPlans.get(tier) ?? null,
