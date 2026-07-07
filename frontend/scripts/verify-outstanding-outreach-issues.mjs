@@ -37,6 +37,15 @@ check(
     sendsReport.includes("if (!isActive) return;")
 );
 check(
+  "sends report supports manual refresh",
+  sendsReport.includes("onClick={() => void load()}") && sendsReport.includes("Refresh")
+);
+check(
+  "completed send refresh key triggers report refetch when tab active",
+  sendsReport.includes("[isActive, load, refreshKey]") &&
+    workspace.includes("setSendsRefreshKey((key) => key + 1)")
+);
+check(
   "sends report has no polling loop",
   !sendsReport.includes("setInterval(") && !sendsReport.includes("setTimeout(")
 );
