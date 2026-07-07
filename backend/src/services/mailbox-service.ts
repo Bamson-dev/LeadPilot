@@ -5,6 +5,7 @@ import {
   ensureOutreachAccount,
   grantFirstMailboxTrialCredits,
   listActiveMailboxes,
+  listConnectedMailboxes,
   upsertConnectedMailbox,
   type ConnectedMailbox,
 } from "../database/outreach-repository";
@@ -79,7 +80,7 @@ export async function connectMailbox(params: {
 }
 
 export async function listMailboxesForUser(userId: string): Promise<ConnectedMailbox[]> {
-  return listActiveMailboxes(userId);
+  return listConnectedMailboxes(userId);
 }
 
 export async function disconnectMailboxForUser(userId: string, mailboxId: string): Promise<void> {

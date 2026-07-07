@@ -29,6 +29,7 @@ export function OutreachMailboxSection({
   const [removingId, setRemovingId] = useState<string | null>(null);
 
   const activeMailboxes = mailboxes.filter((m) => m.status === "active");
+  const pausedMailboxes = mailboxes.filter((m) => m.status === "paused_bounce");
 
   async function handleConnect(e: React.FormEvent) {
     e.preventDefault();
@@ -182,7 +183,26 @@ export function OutreachMailboxSection({
       )}
 
       <div className="mt-5 space-y-3">
-        {activeMailboxes.length === 0 ? (
+        {pausedMailboxes.map((mailbox) => (
+          <div
+            key={mailbox.id}
+            className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4"
+          >
+            <p className="font-semibold text-[#F4F4FF]">{mailbox.email_address}</p>
+            <p className="mt-1 text-sm text-amber-200">
+              Sending paused — high bounce rate detected on this mailbox.
+            </p>
+            {mailbox.last_error && (
+              <p className="mt-2 text-xs text-amber-100/90">{mailbox.last_error}</p>
+            )}
+            <p className="mt-2 text-xs text-[#8888A8]">
+              Remove bad addresses from your list, then disconnect and reconnect this mailbox to
+              resume sending.
+            </p>
+          </div>
+        ))}
+
+        {activeMailboxes.length === 0 && pausedMailboxes.length === 0 ? (
           <p className="text-sm text-[#6B6B80]">
             No Gmail mailbox connected yet. Connect one to unlock your free sends and start
             emailing leads.

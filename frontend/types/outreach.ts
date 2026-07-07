@@ -44,6 +44,7 @@ export interface QueueSendResponse {
   queued: number;
   skipped_suppression: number;
   skipped_no_verified_email: number;
+  skipped_invalid_email: number;
   short_credits: number;
   sent_email_ids: string[];
 }
@@ -88,7 +89,8 @@ export type OutreachSendStatusFilter =
   | "queued"
   | "sending"
   | "sent"
-  | "failed";
+  | "failed"
+  | "bounced";
 
 export interface FetchSendsReportParams {
   limit?: number;

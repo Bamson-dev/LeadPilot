@@ -15,6 +15,8 @@ function statusColor(status: string): string {
   switch (status) {
     case "sent":
       return "#10B981";
+    case "bounced":
+      return "#FB7185";
     case "failed":
       return "#F87171";
     case "queued":
@@ -23,6 +25,12 @@ function statusColor(status: string): string {
     default:
       return "#6B6B80";
   }
+}
+
+function statusLabel(status: string): string {
+  if (status === "bounced") return "bounced (address dead)";
+  if (status === "failed") return "failed (may retry)";
+  return status;
 }
 
 function rateColor(rate: number): string {
@@ -142,7 +150,8 @@ export function OutreachSendsReport({ refreshKey = 0 }: OutreachSendsReportProps
             <option value="queued">Queued</option>
             <option value="sending">Sending</option>
             <option value="sent">Sent</option>
-            <option value="failed">Failed</option>
+            <option value="bounced">Bounced (dead address)</option>
+            <option value="failed">Failed (temporary)</option>
           </select>
         </label>
         <span className="text-xs text-[#6B6B80]">Sorted by most recent</span>
@@ -182,7 +191,7 @@ export function OutreachSendsReport({ refreshKey = 0 }: OutreachSendsReportProps
                   </td>
                   <td className="px-3 py-3">
                     <span style={{ color: statusColor(row.status), fontWeight: 600 }}>
-                      {row.status}
+                      {statusLabel(row.status)}
                     </span>
                     {row.error_message && (
                       <p className="mt-0.5 max-w-[180px] truncate text-xs text-red-400">

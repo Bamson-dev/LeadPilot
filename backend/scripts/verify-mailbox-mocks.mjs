@@ -8,6 +8,8 @@ const mailboxes = [];
 const ledger = [];
 const sentEmails = [];
 const suppressions = [];
+const globalInvalidEmails = new Map();
+const domainEmailCache = new Map();
 const outreachPaystackPlans = new Map();
 const lastSmtpPayloads = [];
 const systemTemplates = [
@@ -433,6 +435,61 @@ function makeQuery(table) {
         }
       }
 
+      if (state.table === "global_invalid_emails") {
+        if (state.op === "select") {
+          const rows = [...globalInvalidEmails.values()].filter(match);
+          const finished = finish(rows);
+          if (finished.count !== undefined) return finished;
+          const row = rows[0];
+          return { data: row ? pick(row, state.columns) : null, error: null };
+        }
+        if (state.op === "insert" || state.op === "upsert") {
+          const email = state.payload.email.toLowerCase().trim();
+          const row = {
+            email,
+            smtp_code: state.payload.smtp_code ?? null,
+            reason: state.payload.reason,
+            bounced_at: state.payload.bounced_at ?? new Date().toISOString(),
+          };
+          globalInvalidEmails.set(email, row);
+          return { data: row, error: null };
+        }
+      }
+
+      if (state.table === "domain_email_cache") {
+        if (state.op === "select") {
+          const rows = [...domainEmailCache.values()].filter(match);
+          const finished = finish(rows);
+          if (finished.count !== undefined) return finished;
+          const row = rows[0];
+          return { data: row ? pick(row, state.columns) : null, error: null };
+        }
+        if (state.op === "insert" || state.op === "upsert") {
+          const domain = state.payload.domain.toLowerCase().trim();
+          const existing = domainEmailCache.get(domain);
+          const row = {
+            domain,
+            email: state.payload.email,
+            email_secondary: state.payload.email_secondary ?? null,
+            source: state.payload.source ?? "scraped",
+            confidence: state.payload.confidence ?? 0,
+            confidence_secondary: state.payload.confidence_secondary ?? null,
+            dead_emails: state.payload.dead_emails ?? existing?.dead_emails ?? [],
+            discovered_at: state.payload.discovered_at ?? existing?.discovered_at ?? new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+          domainEmailCache.set(domain, row);
+          return { data: row, error: null };
+        }
+        if (state.op === "update") {
+          const row = [...domainEmailCache.values()].find(match);
+          if (!row) return { data: null, error: { message: "not found" } };
+          Object.assign(row, state.payload, { updated_at: new Date().toISOString() });
+          domainEmailCache.set(row.domain, row);
+          return { data: row, error: null };
+        }
+      }
+
       return { data: null, error: { message: `Unhandled ${state.table} ${state.op}`, code: "42P01" } };
     },
   };
@@ -529,6 +586,8 @@ export function getMailboxById(id) {
   return mailboxes.find((row) => row.id === id) ?? null;
 }
 
+export { mailboxes };
+
 export function seedPaystackPlans(plans) {
   for (const plan of plans) {
     outreachPaystackPlans.set(plan.tier, {
@@ -592,7 +651,32 @@ export function resetMailboxMocks() {
   ledger.length = 0;
   sentEmails.length = 0;
   suppressions.length = 0;
+  globalInvalidEmails.clear();
+  domainEmailCache.clear();
   lastSmtpPayloads.length = 0;
+}
+
+export function getGlobalInvalidEmails() {
+  return [...globalInvalidEmails.values()];
+}
+
+export function getDomainEmailCacheEntries() {
+  return [...domainEmailCache.values()];
+}
+
+export function seedDomainEmailCache(entry) {
+  const domain = entry.domain.toLowerCase().trim();
+  domainEmailCache.set(domain, {
+    domain,
+    email: entry.email,
+    email_secondary: entry.email_secondary ?? null,
+    source: entry.source ?? "scraped",
+    confidence: entry.confidence ?? 90,
+    confidence_secondary: entry.confidence_secondary ?? null,
+    dead_emails: entry.dead_emails ?? [],
+    discovered_at: entry.discovered_at ?? new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
 }
 
 export function getLastSmtpPayloads() {
@@ -846,6 +930,26 @@ export async function registerMailboxMocks({
             row.error_message = errorMessage;
           }
         },
+        markSentEmailBounced: async (sentEmailId, errorMessage) => {
+          const row = sentEmails.find((r) => r.id === sentEmailId);
+          if (row) {
+            row.status = "bounced";
+            row.error_message = errorMessage;
+          }
+        },
+        pauseMailboxForBounceRate: async (mailboxId, reason) => {
+          const row = mailboxes.find((m) => m.id === mailboxId);
+          if (row) {
+            row.status = "paused_bounce";
+            row.last_error = reason;
+          }
+        },
+        listConnectedMailboxes: async (userId) =>
+          mailboxes.filter(
+            (m) =>
+              m.user_id === userId &&
+              ["active", "paused_bounce", "error"].includes(m.status)
+          ),
         deductOneSendCredit: async (userId) => {
           const account = outreachAccounts.get(userId);
           if (!account) throw new Error("No outreach account");
@@ -1152,6 +1256,66 @@ export async function registerMailboxMocks({
       };
     }
 
+    if (request.includes("database/global-invalid-email-repository")) {
+      return {
+        isGloballyInvalidEmail: async (email) =>
+          globalInvalidEmails.has(email.toLowerCase().trim()),
+        addGloballyInvalidEmail: async (params) => {
+          const email = params.email.toLowerCase().trim();
+          globalInvalidEmails.set(email, {
+            email,
+            smtp_code: params.smtpCode ?? null,
+            reason: params.reason,
+            bounced_at: new Date().toISOString(),
+          });
+        },
+      };
+    }
+
+    if (request.includes("database/domain-email-cache-repository")) {
+      const actual = originalLoad(request, parent, isMain);
+      return {
+        ...actual,
+        getDomainEmailCache: async (domain) => {
+          const row = domainEmailCache.get(domain.toLowerCase().trim());
+          if (!row) return null;
+          if (!actual.isDomainCacheFresh(row.discovered_at)) return null;
+          return row;
+        },
+        markDomainEmailDead: async (params) => {
+          const normalizedEmail = params.email.toLowerCase().trim();
+          const domain =
+            params.domain?.toLowerCase().trim() || normalizedEmail.split("@")[1]?.trim();
+          if (!domain) return;
+          const existing = domainEmailCache.get(domain);
+          const deadEmails = new Set(existing?.dead_emails ?? []);
+          deadEmails.add(normalizedEmail);
+          if (existing) {
+            domainEmailCache.set(domain, {
+              ...existing,
+              dead_emails: [...deadEmails],
+              updated_at: new Date().toISOString(),
+            });
+          } else {
+            domainEmailCache.set(domain, {
+              domain,
+              email: normalizedEmail,
+              email_secondary: null,
+              source: "scraped",
+              confidence: 0,
+              confidence_secondary: null,
+              dead_emails: [normalizedEmail],
+              discovered_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+          }
+        },
+        domainCacheToEnrichment: actual.domainCacheToEnrichment,
+        isDomainCacheFresh: actual.isDomainCacheFresh,
+        upsertDomainEmailCache: actual.upsertDomainEmailCache,
+      };
+    }
+
     if (request.includes("database/license-repository")) {
       return {
         getLicenseByKeyAndEmail: async (key, email) => {
@@ -1181,6 +1345,9 @@ export async function registerMailboxMocks({
     }
 
     if (request.includes("services/outreach-send-smtp")) {
+      if (process.env.MOCK_OUTREACH_SEND === "1") {
+        return originalLoad(request, parent, isMain);
+      }
       const actual = originalLoad(request, parent, isMain);
       return {
         ...actual,

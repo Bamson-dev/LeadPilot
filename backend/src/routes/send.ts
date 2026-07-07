@@ -64,6 +64,7 @@ sendRouter.post("/", requireLicense, async (req: Request, res: Response) => {
       queued: result.queued,
       skipped_suppression: result.skipped_suppression,
       skipped_no_verified_email: result.skipped_no_verified_email,
+      skipped_invalid_email: result.skipped_invalid_email,
       short_credits: result.short_credits,
       sent_email_ids: result.sent_email_ids,
     });

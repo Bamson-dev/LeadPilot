@@ -162,6 +162,20 @@ export async function listActiveMailboxes(userId: string): Promise<ConnectedMail
   return (data ?? []) as ConnectedMailbox[];
 }
 
+export async function listConnectedMailboxes(userId: string): Promise<ConnectedMailbox[]> {
+  const { data, error } = await supabase
+    .from("connected_mailboxes")
+    .select(
+      "id, user_id, email_address, smtp_host, smtp_port, account_type, status, daily_cap, daily_send_count, daily_count_reset_at, last_verified_at, last_error, created_at"
+    )
+    .eq("user_id", userId)
+    .in("status", ["active", "paused_bounce", "error"])
+    .order("created_at", { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as ConnectedMailbox[];
+}
+
 export async function disconnectMailbox(userId: string, mailboxId: string): Promise<void> {
   const { error } = await supabase
     .from("connected_mailboxes")
@@ -575,6 +589,36 @@ export async function markSentEmailFailed(sentEmailId: string, errorMessage: str
       error_message: errorMessage,
     })
     .eq("id", sentEmailId);
+
+  if (error) throw new Error(error.message);
+}
+
+export async function markSentEmailBounced(
+  sentEmailId: string,
+  errorMessage: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("sent_emails")
+    .update({
+      status: "bounced",
+      error_message: errorMessage,
+    })
+    .eq("id", sentEmailId);
+
+  if (error) throw new Error(error.message);
+}
+
+export async function pauseMailboxForBounceRate(
+  mailboxId: string,
+  reason: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("connected_mailboxes")
+    .update({
+      status: "paused_bounce",
+      last_error: reason,
+    })
+    .eq("id", mailboxId);
 
   if (error) throw new Error(error.message);
 }

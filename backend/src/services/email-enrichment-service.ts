@@ -124,17 +124,27 @@ export async function enrichBusinessLeadEmail(
   const cached = await getDomainEmailCache(domain);
   if (cached) {
     const mapped = domainCacheToEnrichment(cached);
-    logger.info("[email-diag] Domain cache hit — skipping scrape", {
+    const hasUsableEmail =
+      mapped.verifiedEmails.length > 0 || mapped.predictedEmails.length > 0;
+    if (hasUsableEmail) {
+      logger.info("[email-diag] Domain cache hit — skipping scrape", {
+        businessId: lead.id,
+        domain,
+        source: cached.source,
+        email: cached.email,
+        discoveredAt: cached.discovered_at,
+        deadEmails: cached.dead_emails?.length ?? 0,
+      });
+      return {
+        ...mapped,
+        fromCache: true,
+      };
+    }
+    logger.info("[email-diag] Domain cache hit but all addresses are dead — continuing", {
       businessId: lead.id,
       domain,
-      source: cached.source,
-      email: cached.email,
-      discoveredAt: cached.discovered_at,
+      deadEmails: cached.dead_emails?.length ?? 0,
     });
-    return {
-      ...mapped,
-      fromCache: true,
-    };
   }
 
   let verified: string[] = [];

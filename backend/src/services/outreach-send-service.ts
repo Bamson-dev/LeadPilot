@@ -16,17 +16,26 @@ import {
   isRecipientSuppressed,
   listActiveMailboxesWithSecrets,
   logCreditSpend,
+  markSentEmailBounced,
   markSentEmailFailed,
   markSentEmailSent,
+  pauseMailboxForBounceRate,
   refundSendCredit,
   resetMailboxDailyCountIfNeeded,
   type ConnectedMailboxWithSecret,
   type CreditBucket,
 } from "../database/outreach-repository";
+import { isGloballyInvalidEmail } from "../database/global-invalid-email-repository";
 import { enqueueOutreachSendJob } from "../queue/outreach-send-queue";
 import type { OutreachSendMode } from "../queue/outreach-send-queue-types";
 import { getVerifiedEmailsForBusinessId } from "../database/search-repository";
 import { logger } from "../utils/logger";
+import { OutreachSmtpSendError } from "../utils/outreach-smtp-error";
+import { recordHardBounceForRecipient } from "./outreach-bounce-service";
+import {
+  mailboxBounceThresholdReached,
+  recordMailboxHardBounce,
+} from "./outreach-bounce-rate-guard";
 
 export interface SendLeadTarget {
   recipient_email: string;
@@ -49,6 +58,7 @@ export interface QueueSendBatchResult {
   queued: number;
   skipped_suppression: number;
   skipped_no_verified_email: number;
+  skipped_invalid_email: number;
   short_credits: number;
   sent_email_ids: string[];
 }
@@ -118,6 +128,7 @@ export async function queueSendBatch(params: QueueSendBatchParams): Promise<Queu
     queued: 0,
     skipped_suppression: 0,
     skipped_no_verified_email: 0,
+    skipped_invalid_email: 0,
     short_credits: 0,
     sent_email_ids: [],
   };
@@ -133,6 +144,11 @@ export async function queueSendBatch(params: QueueSendBatchParams): Promise<Queu
 
     if (await isRecipientSuppressed(params.userId, recipient)) {
       result.skipped_suppression += 1;
+      continue;
+    }
+
+    if (await isGloballyInvalidEmail(recipient)) {
+      result.skipped_invalid_email += 1;
       continue;
     }
 
@@ -222,8 +238,42 @@ function markMailboxSendComplete(mailboxId: string, release: () => void): void {
 
 export type ProcessSendJobOutcome =
   | { action: "sent"; sentEmailId: string; mailboxId: string; creditBucket: CreditBucket }
+  | { action: "bounced"; sentEmailId: string; mailboxId: string; error: string }
   | { action: "requeue"; delayMs: number; reason: string }
   | { action: "failed"; sentEmailId: string; error: string };
+
+const MAILBOX_BOUNCE_PAUSE_MESSAGE =
+  "Sending paused: this mailbox hit a high bounce rate. Remove bad addresses from your list or reconnect after reviewing your leads.";
+
+async function refundCreditIfNeeded(params: {
+  userId: string;
+  creditBucket: CreditBucket | null;
+  sentEmailId: string;
+}): Promise<void> {
+  if (!params.creditBucket) return;
+  try {
+    await refundSendCredit({
+      userId: params.userId,
+      bucket: params.creditBucket,
+      sentEmailId: params.sentEmailId,
+    });
+  } catch (refundErr) {
+    logger.error("Outreach send refund failed", {
+      sentEmailId: params.sentEmailId,
+      error: refundErr instanceof Error ? refundErr.message : "unknown",
+    });
+  }
+}
+
+async function handleMailboxHardBounce(mailboxId: string): Promise<void> {
+  const bounceCount = recordMailboxHardBounce(mailboxId);
+  if (mailboxBounceThresholdReached(mailboxId)) {
+    await pauseMailboxForBounceRate(
+      mailboxId,
+      `${MAILBOX_BOUNCE_PAUSE_MESSAGE} (${bounceCount} hard bounces this session.)`
+    );
+  }
+}
 
 export async function processOutreachSendJob(data: {
   sentEmailId: string;
@@ -236,8 +286,21 @@ export async function processOutreachSendJob(data: {
     return { action: "failed", sentEmailId: data.sentEmailId, error: "Sent email row not found" };
   }
 
-  if (sentEmail.status === "sent" || sentEmail.status === "failed") {
+  if (sentEmail.status === "sent" || sentEmail.status === "failed" || sentEmail.status === "bounced") {
     return { action: "sent", sentEmailId: sentEmail.id, mailboxId: sentEmail.mailbox_id ?? "", creditBucket: sentEmail.credit_bucket ?? "monthly_allowance" };
+  }
+
+  if (await isGloballyInvalidEmail(sentEmail.recipient_email)) {
+    await markSentEmailBounced(
+      sentEmail.id,
+      "Recipient address is globally invalid (hard bounce recorded previously)"
+    );
+    return {
+      action: "bounced",
+      sentEmailId: sentEmail.id,
+      mailboxId: sentEmail.mailbox_id ?? "",
+      error: "Recipient address is globally invalid",
+    };
   }
 
   let mailboxes = await listActiveMailboxesWithSecrets(data.userId);
@@ -317,21 +380,29 @@ export async function processOutreachSendJob(data: {
 
     return { action: "sent", sentEmailId: sentEmail.id, mailboxId: mailbox.id, creditBucket };
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Send failed";
-    if (creditBucket) {
-      try {
-        await refundSendCredit({
-          userId: data.userId,
-          bucket: creditBucket,
-          sentEmailId: sentEmail.id,
-        });
-      } catch (refundErr) {
-        logger.error("Outreach send refund failed", {
-          sentEmailId: sentEmail.id,
-          error: refundErr instanceof Error ? refundErr.message : "unknown",
-        });
-      }
+    if (err instanceof OutreachSmtpSendError && err.kind === "hard_bounce") {
+      await refundCreditIfNeeded({
+        userId: data.userId,
+        creditBucket,
+        sentEmailId: sentEmail.id,
+      });
+      await markSentEmailBounced(sentEmail.id, err.message);
+      await recordHardBounceForRecipient({
+        recipientEmail: sentEmail.recipient_email,
+        smtpCode: err.smtpCode,
+        reason: err.message,
+      });
+      await handleMailboxHardBounce(mailbox.id);
+      markMailboxSendComplete(mailbox.id, releaseSpacing);
+      return { action: "bounced", sentEmailId: sentEmail.id, mailboxId: mailbox.id, error: err.message };
     }
+
+    const message = err instanceof Error ? err.message : "Send failed";
+    await refundCreditIfNeeded({
+      userId: data.userId,
+      creditBucket,
+      sentEmailId: sentEmail.id,
+    });
     await markSentEmailFailed(sentEmail.id, message);
     markMailboxSendComplete(mailbox.id, releaseSpacing);
     return { action: "failed", sentEmailId: sentEmail.id, error: message };
@@ -343,3 +414,5 @@ export function resetOutreachSendSpacingForTests(): void {
   mailboxLastSendAt.clear();
   mailboxChains.clear();
 }
+
+export { MAILBOX_BOUNCE_PAUSE_MESSAGE };
