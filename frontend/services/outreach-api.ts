@@ -2,8 +2,11 @@ import { getApiUrl } from "@/utils/env";
 import { getLicenseHeaders } from "@/services/api";
 import type {
   OutreachBalance,
+  OutreachCheckoutResponse,
+  OutreachCreditPackId,
   OutreachEmailTemplate,
   OutreachMailbox,
+  OutreachSubscriptionTierId,
   OutreachSendTarget,
   OutreachSendsReport,
   OutreachSentEmail,
@@ -122,4 +125,34 @@ export async function generateOutreachEmail(
   });
   if (!res.ok) throw new Error(await parseError(res));
   return (await res.json()) as GenerateOutreachEmailResult;
+}
+
+export async function initializeOutreachSubscriptionCheckout(
+  tier: OutreachSubscriptionTierId
+): Promise<OutreachCheckoutResponse> {
+  const res = await fetch(`${getApiUrl()}/checkout`, {
+    method: "POST",
+    headers: getLicenseHeaders(),
+    body: JSON.stringify({
+      type: "subscription",
+      tier,
+    }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as OutreachCheckoutResponse;
+}
+
+export async function initializeOutreachPackCheckout(
+  packId: OutreachCreditPackId
+): Promise<OutreachCheckoutResponse> {
+  const res = await fetch(`${getApiUrl()}/checkout`, {
+    method: "POST",
+    headers: getLicenseHeaders(),
+    body: JSON.stringify({
+      type: "pack",
+      pack_id: packId,
+    }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as OutreachCheckoutResponse;
 }

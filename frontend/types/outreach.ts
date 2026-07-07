@@ -25,6 +25,30 @@ export interface OutreachBalance {
   free_sends_expire_at: string | null;
 }
 
+export type OutreachSubscriptionTierId = "starter" | "growth" | "scale";
+export type OutreachCreditPackId = "small" | "medium" | "large";
+
+export interface OutreachSubscriptionTier {
+  id: OutreachSubscriptionTierId;
+  label: string;
+  amount_ngn: number;
+  monthly_allowance: number;
+  max_mailboxes: number;
+}
+
+export interface OutreachCreditPack {
+  id: OutreachCreditPackId;
+  label: string;
+  amount_ngn: number;
+  credits: number;
+}
+
+export interface OutreachCheckoutResponse {
+  authorization_url: string;
+  reference: string;
+  access_code?: string;
+}
+
 export interface OutreachEmailTemplate {
   id: string;
   name: string;

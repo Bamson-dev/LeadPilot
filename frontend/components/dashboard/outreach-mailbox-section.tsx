@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { Loader2, Mail, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -82,6 +83,12 @@ export function OutreachMailboxSection({
           <p className="mt-1 text-sm text-[#6B6B80]">
             Connect Gmail to send outreach from your own address ({activeMailboxes.length}/
             {maxMailboxes} connected).
+          </p>
+          <p className="mt-1 text-xs text-[#8888A8]">
+            Need more sends?{" "}
+            <Link href="/dashboard/plans" className="text-[#A855F7] underline">
+              Open outreach billing
+            </Link>
           </p>
         </div>
         <Button

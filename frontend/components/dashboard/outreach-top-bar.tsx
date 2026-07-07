@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { OutreachBalance, OutreachMailbox } from "@/types/outreach";
 
 interface OutreachTopBarProps {
@@ -61,6 +62,14 @@ export function OutreachTopBar({
           )}
           <p>
             Mailboxes {mailboxCount}/{maxMailboxes}
+          </p>
+          <p className="mt-1">
+            <Link
+              href="/dashboard/plans"
+              className="text-[#A855F7] hover:text-[#C084FC] underline underline-offset-2"
+            >
+              Buy outreach sends
+            </Link>
           </p>
         </div>
       </div>
