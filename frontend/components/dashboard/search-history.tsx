@@ -43,7 +43,7 @@ export function SearchHistory({
         const data = await getSearchHistory();
         setHistory(data.history ?? []);
       } catch {
-        setHistory([]);
+        // Preserve existing rows on transient errors (e.g. temporary 429).
       } finally {
         setLoading(false);
       }

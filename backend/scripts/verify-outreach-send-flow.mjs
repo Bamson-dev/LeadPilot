@@ -192,13 +192,13 @@ async function runTests() {
       max_mailboxes: 1,
       monthly_allowance_remaining: 5,
       purchased_credits_balance: 3,
-      free_sends_granted: 10,
-      free_sends_used: 10,
+      free_sends_granted: 2,
+      free_sends_used: 0,
     },
   });
 
   const headers = authHeaders(email, key);
-  const targets = Array.from({ length: 6 }, (_, i) => ({
+  const targets = Array.from({ length: 8 }, (_, i) => ({
     recipient_email: `lead${i}@example.com`,
     business_name: `Biz ${i}`,
   }));
@@ -210,7 +210,7 @@ async function runTests() {
     send_mode: "auto",
   });
 
-  if (batchRes.status !== 202 || batchRes.body?.queued !== 6) {
+  if (batchRes.status !== 202 || batchRes.body?.queued !== 8) {
     fail("bucket order batch queue", JSON.stringify(batchRes.body));
   } else {
     pass("bucket order batch queue", `queued=${batchRes.body.queued}`);
@@ -225,20 +225,23 @@ async function runTests() {
   const freeSpends = spendRows.filter((r) => r.bucket === "free_trial");
 
   if (
-    sentRows.length === 6 &&
+    sentRows.length === 8 &&
+    freeSpends.length === 2 &&
     monthlySpends.length === 5 &&
     purchasedSpends.length === 1 &&
-    freeSpends.length === 0
+    spendRows[0]?.bucket === "free_trial" &&
+    spendRows[1]?.bucket === "free_trial" &&
+    spendRows[2]?.bucket === "monthly_allowance"
   ) {
     pass(
-      "bucket spend order (6 sends)",
-      `monthly=${monthlySpends.length}, purchased=${purchasedSpends.length}, ledger=${JSON.stringify(
+      "bucket spend order (8 sends)",
+      `free=${freeSpends.length}, monthly=${monthlySpends.length}, purchased=${purchasedSpends.length}, ledger=${JSON.stringify(
         spendRows.map((r) => ({ bucket: r.bucket, amount: r.amount, ref: r.reference }))
       )}`
     );
   } else {
     fail(
-      "bucket spend order (6 sends)",
+      "bucket spend order (8 sends)",
       JSON.stringify({
         sent: sentRows.length,
         monthly: monthlySpends.length,
@@ -250,10 +253,14 @@ async function runTests() {
   }
 
   const acctAfter = getOutreachAccount(user.id);
-  if (acctAfter?.monthly_allowance_remaining === 0 && acctAfter?.purchased_credits_balance === 2) {
-    pass("bucket balances after 6 sends", "monthly=0, purchased=2");
+  if (
+    acctAfter?.free_sends_used === 2 &&
+    acctAfter?.monthly_allowance_remaining === 0 &&
+    acctAfter?.purchased_credits_balance === 2
+  ) {
+    pass("bucket balances after 8 sends", "free_used=2, monthly=0, purchased=2");
   } else {
-    fail("bucket balances after 6 sends", JSON.stringify(acctAfter));
+    fail("bucket balances after 8 sends", JSON.stringify(acctAfter));
   }
 
   resetMailboxMocks();
@@ -361,8 +368,8 @@ async function runTests() {
     account: { monthly_allowance_remaining: 5, purchased_credits_balance: 0 },
     mailbox: {
       email: `rstbox.${stamp}@gmail.com`,
-      daily_cap: 2,
-      daily_send_count: 2,
+      daily_cap: 300,
+      daily_send_count: 136,
       daily_count_reset_at: new Date(Date.now() - 60_000).toISOString(),
     },
   });
@@ -387,7 +394,10 @@ async function runTests() {
     rstSent?.status === "sent" &&
     rstMb?.daily_send_count === 1
   ) {
-    pass("daily reset then send", `count=${rstMb.daily_send_count}, status=${rstSent.status}`);
+    pass(
+      "daily reset then send",
+      `started_at=136/300, reset_count=${rstMb.daily_send_count}, status=${rstSent.status}`
+    );
   } else {
     fail("daily reset then send", JSON.stringify({ rstOutcome, rstSent, rstMb }));
   }

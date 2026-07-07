@@ -170,7 +170,7 @@ export function OutreachWorkspace({
         </div>
 
         <div role="tabpanel" hidden={activeTab !== "sends"} className={activeTab === "sends" ? undefined : "hidden"}>
-          <OutreachSendsReport refreshKey={sendsRefreshKey} />
+          <OutreachSendsReport refreshKey={sendsRefreshKey} isActive={activeTab === "sends"} />
         </div>
 
         <div

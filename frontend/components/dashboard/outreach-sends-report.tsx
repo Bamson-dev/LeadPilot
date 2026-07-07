@@ -9,6 +9,7 @@ const PAGE_SIZE = 25;
 
 interface OutreachSendsReportProps {
   refreshKey?: number;
+  isActive?: boolean;
 }
 
 function statusColor(status: string): string {
@@ -59,7 +60,10 @@ function formatOpenedAt(value: string): string {
   });
 }
 
-export function OutreachSendsReport({ refreshKey = 0 }: OutreachSendsReportProps) {
+export function OutreachSendsReport({
+  refreshKey = 0,
+  isActive = false,
+}: OutreachSendsReportProps) {
   const [report, setReport] = useState<OutreachSendsReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -86,8 +90,9 @@ export function OutreachSendsReport({ refreshKey = 0 }: OutreachSendsReportProps
   }, [offset, statusFilter]);
 
   useEffect(() => {
+    if (!isActive) return;
     void load();
-  }, [load, refreshKey]);
+  }, [isActive, load, refreshKey]);
 
   const total = report?.pagination.total ?? 0;
   const pageStart = total === 0 ? 0 : offset + 1;

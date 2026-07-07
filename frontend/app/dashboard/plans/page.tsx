@@ -86,6 +86,14 @@ export default function OutreachPlansPage() {
 
   async function startSubscriptionCheckout(tier: OutreachSubscriptionTier) {
     setError(null);
+    const hasActivePlan = outreach.balance?.subscription_status === "active";
+    const currentTier = outreach.balance?.subscription_tier;
+    if (hasActivePlan && currentTier && currentTier !== tier.id) {
+      setError(
+        `You already have an active ${currentTier} subscription. Plan switching is blocked in this release — manage your current plan first, then subscribe to ${tier.label}.`
+      );
+      return;
+    }
     const key = `subscription:${tier.id}`;
     setLoadingKey(key);
     try {
@@ -194,6 +202,10 @@ export default function OutreachPlansPage() {
             const key = `subscription:${tier.id}`;
             const isLoading = loadingKey === key;
             const isCurrent = balance?.subscription_tier === tier.id;
+            const blockedByActivePlan =
+              balance?.subscription_status === "active" &&
+              Boolean(balance?.subscription_tier) &&
+              !isCurrent;
             return (
               <article
                 key={tier.id}
@@ -217,7 +229,9 @@ export default function OutreachPlansPage() {
                 >
                   {isLoading
                     ? "Opening Paystack..."
-                    : isCurrent
+                    : blockedByActivePlan
+                      ? "Manage current plan first"
+                      : isCurrent
                       ? "Change subscription"
                       : "Subscribe"}
                 </button>

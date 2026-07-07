@@ -35,7 +35,7 @@ export function RecentSearchesPanel({
       const data = await fetchRecentSearchHistory();
       setHistory(data.history ?? []);
     } catch {
-      setHistory([]);
+      // Preserve existing rows on transient errors (e.g. temporary 429).
     } finally {
       setLoading(false);
     }

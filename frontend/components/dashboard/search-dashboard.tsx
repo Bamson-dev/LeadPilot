@@ -199,12 +199,6 @@ export function SearchDashboard() {
   }, [status]);
 
   useEffect(() => {
-    if (status === "completed" && totalFound > 0) {
-      setHistoryRefreshKey((prev) => prev + 1);
-    }
-  }, [status, totalFound]);
-
-  useEffect(() => {
     if (status !== "completed" || suggestions.length > 0) return;
     const q = searchMeta.business || businessType;
     const loc = searchMeta.location || location;
