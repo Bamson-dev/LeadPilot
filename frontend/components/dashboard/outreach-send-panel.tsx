@@ -35,6 +35,17 @@ interface OutreachSendPanelProps {
   targetBusinessType?: string;
   onClose: () => void;
   onSent: (result: QueueSendResponse) => void;
+  /** Optional override for environments like /demo that cannot call licensed /send. */
+  onSendOverride?: (input: {
+    targets: Array<{
+      recipient_email: string;
+      business_name?: string;
+      business_id?: string;
+      email_kind?: "verified" | "predicted";
+    }>;
+    subject: string;
+    body: string;
+  }) => Promise<QueueSendResponse>;
 }
 
 export function OutreachSendPanel({
@@ -46,6 +57,7 @@ export function OutreachSendPanel({
   targetBusinessType = "",
   onClose,
   onSent,
+  onSendOverride,
 }: OutreachSendPanelProps) {
   const isMobile = useIsMobile();
   const [mounted, setMounted] = useState(false);
@@ -231,27 +243,35 @@ export function OutreachSendPanel({
 
     setSending(true);
     try {
-      const response = await queueOutreachSend({
-        targets: recipients.map((r) => ({
-          recipient_email: r.recipient_email,
-          business_name: r.business_name,
-          business_id: r.business_id,
-          email_kind: r.email_kind,
-        })),
-        subject: subject.trim(),
-        body: body.trim(),
-        template_id: templateId || undefined,
-        mailbox_id: sendMode === "manual" ? mailboxId : undefined,
-        send_mode: sendMode,
-        followups: {
-          enabled: followupsEnabled && followupCount > 0,
-          steps: followupSteps.slice(0, Math.min(3, followupCount)).map((step, idx) => ({
-            ...step,
-            step_number: idx + 1,
-            gap_days: Math.max(2, step.gap_days),
-          })),
-        },
-      });
+      const targets = recipients.map((r) => ({
+        recipient_email: r.recipient_email,
+        business_name: r.business_name,
+        business_id: r.business_id,
+        email_kind: r.email_kind,
+      }));
+
+      const response = onSendOverride
+        ? await onSendOverride({
+            targets,
+            subject: subject.trim(),
+            body: body.trim(),
+          })
+        : await queueOutreachSend({
+            targets,
+            subject: subject.trim(),
+            body: body.trim(),
+            template_id: templateId || undefined,
+            mailbox_id: sendMode === "manual" ? mailboxId : undefined,
+            send_mode: sendMode,
+            followups: {
+              enabled: followupsEnabled && followupCount > 0,
+              steps: followupSteps.slice(0, Math.min(3, followupCount)).map((step, idx) => ({
+                ...step,
+                step_number: idx + 1,
+                gap_days: Math.max(2, step.gap_days),
+              })),
+            },
+          });
       setResult(response);
       onSent(response);
     } catch (err) {

@@ -13,11 +13,22 @@ import { getLeadSelectionId } from "@/lib/lead-selection";
 import { applyRatingFilter } from "@/lib/rating-filter";
 import { applyStatusFilter } from "@/lib/lead-status";
 import { getApiUrl } from "@/utils/env";
-import { markRecipientReplied } from "@/services/outreach-api";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import type { RatingFilterValue } from "@/lib/rating-filter";
 import type { Lead } from "@/types/lead";
 import type { OutreachMailbox, QueueSendResponse } from "@/types/outreach";
+
+type DemoTab = "results" | "sends";
+
+interface DemoSentRow {
+  id: string;
+  business_name: string;
+  recipient_email: string;
+  subject: string;
+  status: "sent" | "opened";
+  opened_at: string | null;
+  sent_at: string;
+}
 
 interface Contact {
   name: string;
@@ -118,6 +129,8 @@ export function DemoPageContent() {
   const [templateLead, setTemplateLead] = useState<Lead | null>(null);
   const [userEmail, setUserEmail] = useState("");
   const [creditsRemaining, setCreditsRemaining] = useState(0);
+  const [activeTab, setActiveTab] = useState<DemoTab>("results");
+  const [demoSends, setDemoSends] = useState<DemoSentRow[]>([]);
 
   const tableRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -198,6 +211,8 @@ export function DemoPageContent() {
     setRatingFilter("all");
     setSendPanelOpen(false);
     setSendNotice(null);
+    setActiveTab("results");
+    setDemoSends([]);
 
     const baseCount = 900 + Math.floor(Math.random() * 300);
     const url = `${apiUrl}/demo/search?businessType=${encodeURIComponent(bType)}&city=${encodeURIComponent(bCity)}&count=${baseCount}`;
@@ -262,13 +277,64 @@ export function DemoPageContent() {
     URL.revokeObjectURL(url);
   }
 
+  async function handleDemoSend(input: {
+    targets: Array<{
+      recipient_email: string;
+      business_name?: string;
+      business_id?: string;
+      email_kind?: "verified" | "predicted";
+    }>;
+    subject: string;
+    body: string;
+  }): Promise<QueueSendResponse> {
+    // /demo has no license key, so licensed POST /send cannot succeed here.
+    // Keep the same compose UI and success confirmation shape for accurate demo video.
+    await new Promise((resolve) => setTimeout(resolve, 600));
+
+    const now = Date.now();
+    const rows: DemoSentRow[] = input.targets.map((target, index) => {
+      const opened = index % 3 !== 2;
+      return {
+        id: `demo-send-${now}-${index}`,
+        business_name: target.business_name || "Business",
+        recipient_email: target.recipient_email,
+        subject: input.subject,
+        status: opened ? "opened" : "sent",
+        opened_at: opened ? new Date(now + 45_000 + index * 1_200).toISOString() : null,
+        sent_at: new Date(now + index * 120).toISOString(),
+      };
+    });
+
+    setDemoSends(rows);
+    setActiveTab("sends");
+
+    for (const target of input.targets) {
+      if (!target.business_id) continue;
+      setLeadStatus(target.business_id, "contacted");
+    }
+
+    return {
+      queued: rows.length,
+      skipped_suppression: 0,
+      skipped_no_verified_email: 0,
+      skipped_invalid_email: 0,
+      short_credits: 0,
+      sent_email_ids: rows.map((row) => row.id),
+    };
+  }
+
   function handleSent(result: QueueSendResponse) {
     if (result.queued > 0) {
       setSendPanelOpen(false);
       setSendNotice({ result, recipientCount: selectedLeads.length });
       setSelectedLeadIds(new Set());
+      setActiveTab("sends");
     }
   }
+
+  const openedCount = demoSends.filter((row) => row.status === "opened").length;
+  const openRate =
+    demoSends.length === 0 ? 0 : Math.round((openedCount / demoSends.length) * 100);
 
   return (
     <div
@@ -516,7 +582,42 @@ export function DemoPageContent() {
           />
         )}
 
-        {(isSearching || leads.length > 0) ? (
+        {(isSearching || leads.length > 0) && (
+          <div
+            className="mb-4 flex gap-1 overflow-x-auto border-b border-white/[0.08] pb-px"
+            role="tablist"
+            aria-label="Demo sections"
+          >
+            {[
+              { id: "results" as const, label: "Results" },
+              { id: "sends" as const, label: "Sends report" },
+            ].map((tab) => {
+              const selected = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={[
+                    "shrink-0 rounded-t-md px-3 py-2 text-sm font-medium transition-colors sm:px-4",
+                    selected
+                      ? "border-b-2 border-[#A855F7] bg-[#16161E] text-[#F4F4FF]"
+                      : "text-[#6B6B80] hover:text-[#A1A1B5]",
+                  ].join(" ")}
+                >
+                  {tab.label}
+                  {tab.id === "sends" && demoSends.length > 0
+                    ? ` (${demoSends.length})`
+                    : ""}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {(isSearching || leads.length > 0) && activeTab === "results" ? (
           <div ref={tableRef} data-outreach-results-table>
             <ResultsTable
               leads={statusFilteredTableLeads}
@@ -538,15 +639,91 @@ export function DemoPageContent() {
               onSendSelected={() => setSendPanelOpen(true)}
               hasMailbox
               onMarkReplied={(lead) => {
-                const recipient = (lead.verified_emails?.[0] || lead.email || "").trim();
-                if (!recipient) return;
-                void markRecipientReplied(recipient).then(() => {
-                  setLeadStatus(lead.id, "interested");
-                });
+                setLeadStatus(lead.id, "interested");
               }}
             />
           </div>
-        ) : (
+        ) : null}
+
+        {activeTab === "sends" && (isSearching || leads.length > 0) ? (
+          <section className="rounded-2xl border border-white/[0.08] bg-[#0F0F14] p-4 sm:p-6">
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold text-[#F4F4FF]">Sends report</h2>
+              <p className="text-sm text-[#8888A8]">
+                Delivery and open tracking for this demo send.
+              </p>
+            </div>
+
+            {demoSends.length === 0 ? (
+              <p className="rounded-xl border border-white/10 bg-[#111118] px-4 py-8 text-center text-sm text-[#6B6B80]">
+                No emails sent yet. Select leads from Results, open Compose, then click Send.
+              </p>
+            ) : (
+              <>
+                <div className="mb-4 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-xl border border-white/10 bg-[#111118] p-4">
+                    <p className="text-xs uppercase tracking-wide text-[#8888A8]">Total sent</p>
+                    <p className="mt-1 text-2xl font-bold text-[#F4F4FF]">{demoSends.length}</p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-[#111118] p-4">
+                    <p className="text-xs uppercase tracking-wide text-[#8888A8]">Total opened</p>
+                    <p className="mt-1 text-2xl font-bold text-[#10B981]">{openedCount}</p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-[#111118] p-4">
+                    <p className="text-xs uppercase tracking-wide text-[#8888A8]">Open rate</p>
+                    <p className="mt-1 text-2xl font-bold text-[#10B981]">{openRate}%</p>
+                  </div>
+                </div>
+
+                <div className="overflow-auto rounded-xl border border-white/10">
+                  <table className="w-full border-collapse text-sm">
+                    <thead>
+                      <tr className="border-b border-white/10 bg-[#111118] text-left text-xs uppercase tracking-wide text-[#8888A8]">
+                        <th className="px-3 py-2">Business</th>
+                        <th className="px-3 py-2">Email</th>
+                        <th className="px-3 py-2">Subject</th>
+                        <th className="px-3 py-2">Status</th>
+                        <th className="px-3 py-2">Opened</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {demoSends.slice(0, 50).map((row) => (
+                        <tr key={row.id} className="border-b border-white/[0.05]">
+                          <td className="px-3 py-2 text-[#F4F4FF]">{row.business_name}</td>
+                          <td className="px-3 py-2 text-[#A78BFA]">{row.recipient_email}</td>
+                          <td className="px-3 py-2 text-[#C0C0D8]">{row.subject}</td>
+                          <td
+                            className="px-3 py-2 font-semibold"
+                            style={{ color: row.status === "opened" ? "#10B981" : "#F4F4FF" }}
+                          >
+                            {row.status === "opened" ? "Opened" : "Sent"}
+                          </td>
+                          <td className="px-3 py-2 text-[#8888A8]">
+                            {row.opened_at
+                              ? new Date(row.opened_at).toLocaleString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                })
+                              : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {demoSends.length > 50 && (
+                    <p className="px-3 py-2 text-xs text-[#6B6B80]">
+                      Showing first 50 of {demoSends.length.toLocaleString()} sends
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
+          </section>
+        ) : null}
+
+        {!isSearching && leads.length === 0 ? (
           <div style={{ textAlign: "center", padding: "80px 24px", color: "#555570" }}>
             <div style={{ fontSize: 48, marginBottom: 16 }}>🌍</div>
             <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: "#F2F1FF" }}>
@@ -556,7 +733,7 @@ export function DemoPageContent() {
               Type a business type and city above, or click a quick search
             </div>
           </div>
-        )}
+        ) : null}
       </div>
 
       <OutreachSendPanel
@@ -568,6 +745,7 @@ export function DemoPageContent() {
         targetBusinessType={businessType}
         onClose={() => setSendPanelOpen(false)}
         onSent={handleSent}
+        onSendOverride={handleDemoSend}
       />
 
       <WhatsappTemplateModal
