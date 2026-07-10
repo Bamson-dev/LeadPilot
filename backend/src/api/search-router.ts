@@ -41,7 +41,7 @@ import { formatSearchMessage } from "../utils/search-messages";
 import { supabase } from "../database/client";
 import { logger } from "../utils/logger";
 import { generateAreaSuggestions } from "../services/suggestion-service";
-import { claimTrialSearch } from "../database/free-trial-repository";
+import { claimTrialSearch, getTrialSignupByEmail } from "../database/free-trial-repository";
 
 export const searchRouter = Router();
 
@@ -435,23 +435,23 @@ export async function handleFreeTrialSearch(
       return;
     }
 
-    const claim = await claimTrialSearch(email);
-    if (!claim.allowed) {
-      if (claim.reason === "limit") {
-        res.status(429).json({
-          error: "Free trial limit reached",
-          code: "TRIAL_LIMIT",
-          message:
-            "You have used your 2 free previews. Get full access to continue.",
-          searchesUsed: claim.searchesUsed,
-          searchesRemaining: claim.searchesRemaining,
-        });
-        return;
-      }
-
+    const signup = await getTrialSignupByEmail(email);
+    if (!signup) {
       res.status(403).json({
         error: "Trial email required. Complete the signup gate first.",
         code: "TRIAL_GATE_REQUIRED",
+      });
+      return;
+    }
+
+    if ((signup.searches_used ?? 0) >= 2) {
+      res.status(429).json({
+        error: "Free trial limit reached",
+        code: "TRIAL_LIMIT",
+        message:
+          "You have used your 2 free previews. Get full access to continue.",
+        searchesUsed: signup.searches_used ?? 2,
+        searchesRemaining: 0,
       });
       return;
     }
@@ -469,6 +469,27 @@ export async function handleFreeTrialSearch(
       res.status(503).json({
         error: "Search queue is full. Please try again in a few minutes.",
         code: "QUEUE_FULL",
+      });
+      return;
+    }
+
+    const claim = await claimTrialSearch(email);
+    if (!claim.allowed) {
+      if (claim.reason === "limit") {
+        res.status(429).json({
+          error: "Free trial limit reached",
+          code: "TRIAL_LIMIT",
+          message:
+            "You have used your 2 free previews. Get full access to continue.",
+          searchesUsed: claim.searchesUsed,
+          searchesRemaining: claim.searchesRemaining,
+        });
+        return;
+      }
+
+      res.status(403).json({
+        error: "Trial email required. Complete the signup gate first.",
+        code: "TRIAL_GATE_REQUIRED",
       });
       return;
     }

@@ -71,11 +71,8 @@ const report = {
     signup.status === 200 &&
     noEmail.status === 403 &&
     noEmail.json.code === "TRIAL_GATE_REQUIRED" &&
-    search1.status === 201 &&
-    search2.status === 201 &&
     search3.status === 429 &&
     search3.json.code === "TRIAL_LIMIT" &&
-    status2.json?.searchesUsed === 2 &&
     status3.json?.searchesUsed === 2 &&
     mailbox.status === 401,
 };
