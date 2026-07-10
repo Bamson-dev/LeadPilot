@@ -25,47 +25,6 @@ const trialSignups = new Map();
 
 function buildTrialSupabase() {
   return {
-    async rpc(fn, args) {
-      if (fn === "claim_trial_search") {
-        const email = String(args?.p_email ?? "")
-          .toLowerCase()
-          .trim();
-        const row = trialSignups.get(email);
-        if (!row) {
-          return {
-            data: {
-              allowed: false,
-              reason: "not_found",
-              searches_used: 0,
-              searches_remaining: 0,
-            },
-            error: null,
-          };
-        }
-        if ((row.searches_used ?? 0) >= 2) {
-          return {
-            data: {
-              allowed: false,
-              reason: "limit",
-              searches_used: row.searches_used,
-              searches_remaining: 0,
-            },
-            error: null,
-          };
-        }
-        const next = (row.searches_used ?? 0) + 1;
-        trialSignups.set(email, { ...row, searches_used: next });
-        return {
-          data: {
-            allowed: true,
-            searches_used: next,
-            searches_remaining: Math.max(0, 2 - next),
-          },
-          error: null,
-        };
-      }
-      return { data: null, error: { message: `unknown rpc ${fn}` } };
-    },
     from(table) {
       const state = { filters: {} };
       const api = {
@@ -119,15 +78,35 @@ function buildTrialSupabase() {
           };
         },
         update(patch) {
-          return {
-            eq: async (_col, val) => {
-              if (table === "free_trial_signups") {
-                const existing = trialSignups.get(val);
-                if (existing) trialSignups.set(val, { ...existing, ...patch });
-              }
-              return { error: null };
+          const updateState = { filters: {} };
+          const chain = {
+            eq(col, val) {
+              updateState.filters[col] = val;
+              return chain;
+            },
+            select() {
+              return {
+                maybeSingle: async () => {
+                  if (table !== "free_trial_signups") {
+                    return { data: null, error: null };
+                  }
+                  const email = String(updateState.filters.email ?? "");
+                  const row = trialSignups.get(email);
+                  if (!row) return { data: null, error: null };
+                  if (
+                    updateState.filters.searches_used != null &&
+                    row.searches_used !== updateState.filters.searches_used
+                  ) {
+                    return { data: null, error: null };
+                  }
+                  const next = { ...row, ...patch };
+                  trialSignups.set(email, next);
+                  return { data: next, error: null };
+                },
+              };
             },
           };
+          return chain;
         },
       };
       return api;

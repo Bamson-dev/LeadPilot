@@ -67,31 +67,54 @@ export type ClaimTrialSearchResult =
 
 export async function claimTrialSearch(email: string): Promise<ClaimTrialSearchResult> {
   const normalized = email.toLowerCase().trim();
-  const { data, error } = await supabase.rpc("claim_trial_search", {
-    p_email: normalized,
-  });
 
-  if (error) throw new Error(error.message);
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const existing = await getTrialSignupByEmail(normalized);
+    if (!existing) {
+      return {
+        allowed: false,
+        reason: "not_found",
+        searchesUsed: 0,
+        searchesRemaining: 0,
+      };
+    }
 
-  const payload = (data ?? {}) as {
-    allowed?: boolean;
-    reason?: string;
-    searches_used?: number;
-    searches_remaining?: number;
-  };
+    const current = existing.searches_used ?? 0;
+    if (current >= 2) {
+      return {
+        allowed: false,
+        reason: "limit",
+        searchesUsed: current,
+        searchesRemaining: 0,
+      };
+    }
 
-  const searchesUsed = Number(payload.searches_used ?? 0);
-  const searchesRemaining = Number(payload.searches_remaining ?? 0);
+    const { data, error } = await supabase
+      .from("free_trial_signups")
+      .update({ searches_used: current + 1 })
+      .eq("email", normalized)
+      .eq("searches_used", current)
+      .select("searches_used")
+      .maybeSingle();
 
-  if (payload.allowed) {
-    return { allowed: true, searchesUsed, searchesRemaining };
+    if (error) throw new Error(error.message);
+    if (data) {
+      const used = Number(data.searches_used ?? current + 1);
+      return {
+        allowed: true,
+        searchesUsed: used,
+        searchesRemaining: Math.max(0, 2 - used),
+      };
+    }
   }
 
+  const final = await getTrialSignupByEmail(normalized);
+  const used = final?.searches_used ?? 2;
   return {
     allowed: false,
-    reason: payload.reason === "limit" ? "limit" : "not_found",
-    searchesUsed,
-    searchesRemaining,
+    reason: "limit",
+    searchesUsed: used,
+    searchesRemaining: Math.max(0, 2 - used),
   };
 }
 
