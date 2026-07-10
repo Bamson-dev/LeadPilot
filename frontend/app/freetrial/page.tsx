@@ -54,38 +54,29 @@ function setTrialEmail(email: string): void {
   localStorage.setItem(TRIAL_EMAIL_KEY, email);
 }
 
-async function recordSearchUsed(email: string): Promise<void> {
+interface TrialSearchStatus {
+  searchesUsed: number;
+  searchesRemaining: number;
+  maxSearches: number;
+}
+
+async function fetchTrialStatus(email: string): Promise<TrialSearchStatus | null> {
   const apiUrl = getApiUrl();
-  if (!apiUrl || !email) return;
+  if (!apiUrl || !email) return null;
   try {
-    await fetch(`${apiUrl}/trial/search-used`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
+    const res = await fetch(
+      `${apiUrl}/trial/status?email=${encodeURIComponent(email.toLowerCase().trim())}`
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as TrialSearchStatus;
+    return data;
   } catch {
-    /* non-blocking */
+    return null;
   }
 }
 
-function getVisitorId(): string {
-  if (typeof window === "undefined") return "ssr";
-  let id = localStorage.getItem("lp_visitor_id");
-  if (!id) {
-    id = Math.random().toString(36).substring(2) + Date.now().toString(36);
-    localStorage.setItem("lp_visitor_id", id);
-  }
-  return id;
-}
-
-function getTrialCount(): number {
-  if (typeof window === "undefined") return 0;
-  return parseInt(localStorage.getItem("lp_trial_count") || "0", 10);
-}
-
-function incrementTrialCount(): void {
-  const current = getTrialCount();
-  localStorage.setItem("lp_trial_count", String(current + 1));
+function trialEmailQuery(email: string): string {
+  return `trialEmail=${encodeURIComponent(email.toLowerCase().trim())}`;
 }
 
 function normalizeLead(raw: BusinessLead): TrialLead {
@@ -137,12 +128,17 @@ function truncateAddress(address: string, maxLen: number): string {
   return `${address.slice(0, maxLen)}…`;
 }
 
-async function fetchSearchStats(searchId: string): Promise<TrialAggregateStats> {
+async function fetchSearchStats(
+  searchId: string,
+  trialEmail: string
+): Promise<TrialAggregateStats> {
   const apiUrl = getApiUrl();
   if (!apiUrl) return { totalFound: 0, verifiedEmailCount: 0, emailableCount: 0 };
 
   try {
-    const res = await fetch(`${apiUrl}/search/results/${searchId}?limit=1000`);
+    const res = await fetch(
+      `${apiUrl}/search/results/${searchId}?limit=1000&${trialEmailQuery(trialEmail)}`
+    );
     if (!res.ok) return { totalFound: 0, verifiedEmailCount: 0, emailableCount: 0 };
     const data = (await res.json()) as {
       totalFound?: number;
@@ -225,7 +221,8 @@ export default function FreeTrialPage() {
   const [location, setLocation] = useState("");
   const [status, setStatus] = useState<TrialStatus>("idle");
   const [leads, setLeads] = useState<TrialLead[]>([]);
-  const [trialCount, setTrialCount] = useState(0);
+  const [searchesUsed, setSearchesUsed] = useState(0);
+  const [searchesRemaining, setSearchesRemaining] = useState(2);
   const [message, setMessage] = useState("");
   const [showUpgradePanel, setShowUpgradePanel] = useState(false);
   const [showEmailHint, setShowEmailHint] = useState(false);
@@ -239,24 +236,28 @@ export default function FreeTrialPage() {
     emailableCount: 0,
   });
 
-  const searchesRemaining = Math.max(0, 2 - trialCount);
   const currentEmailableCount = useMemo(() => countEmailableInLeads(leads), [leads]);
 
   const openUpgrade = useCallback(() => setShowUpgradePanel(true), []);
+
+  const refreshTrialStatus = useCallback(async (email: string) => {
+    const status = await fetchTrialStatus(email);
+    if (!status) return;
+    setSearchesUsed(status.searchesUsed);
+    setSearchesRemaining(status.searchesRemaining);
+    if (status.searchesRemaining <= 0) {
+      setStatus("limit");
+    }
+  }, []);
 
   useEffect(() => {
     const savedEmail = getTrialEmail();
     if (savedEmail) {
       setGateEmail(savedEmail);
       setGatePassed(true);
+      void refreshTrialStatus(savedEmail);
     }
-  }, []);
-
-  useEffect(() => {
-    const count = getTrialCount();
-    setTrialCount(count);
-    if (count >= 2) setStatus("limit");
-  }, []);
+  }, [refreshTrialStatus]);
 
   useEffect(() => {
     if (status !== "searching") return;
@@ -304,6 +305,9 @@ export default function FreeTrialPage() {
       }
       setTrialEmail(email);
       setGatePassed(true);
+      setSearchesUsed(0);
+      setSearchesRemaining(2);
+      void refreshTrialStatus(email);
     } catch (err) {
       setGateError(err instanceof Error ? err.message : "Signup failed. Please try again.");
     } finally {
@@ -312,7 +316,7 @@ export default function FreeTrialPage() {
   }
 
   const connectToStream = useCallback(
-    (searchId: string, searchNumber: number) => {
+    (searchId: string, searchNumber: number, trialEmail: string) => {
       const apiUrl = getApiUrl();
       if (!apiUrl) {
         setMessage("Search service is not configured.");
@@ -320,7 +324,9 @@ export default function FreeTrialPage() {
         return;
       }
 
-      const es = new EventSource(`${apiUrl}/search/${searchId}/stream`);
+      const es = new EventSource(
+        `${apiUrl}/search/${searchId}/stream?${trialEmailQuery(trialEmail)}`
+      );
       const pendingLeads: TrialLead[] = [];
       const seenKeys = new Set<string>();
       let leadCount = 0;
@@ -341,7 +347,7 @@ export default function FreeTrialPage() {
         setStatus(searchNumber >= 2 ? "limit" : "complete");
         setMessage("");
 
-        const stats = await fetchSearchStats(searchId);
+        const stats = await fetchSearchStats(searchId, trialEmail);
         setAggregateStats((prev) => ({
           totalFound: prev.totalFound + stats.totalFound,
           verifiedEmailCount: prev.verifiedEmailCount + stats.verifiedEmailCount,
@@ -435,7 +441,15 @@ export default function FreeTrialPage() {
 
   async function runTrialSearch() {
     if (!query.trim() || !location.trim()) return;
-    if (trialCount >= 2) {
+
+    const trialEmail = getTrialEmail();
+    if (!trialEmail) {
+      setGatePassed(false);
+      setMessage("Enter your email to start your free trial.");
+      return;
+    }
+
+    if (searchesRemaining <= 0) {
       setStatus("limit");
       setShowUpgradePanel(true);
       return;
@@ -447,9 +461,10 @@ export default function FreeTrialPage() {
       return;
     }
 
-    const nextSearchNumber = trialCount + 1;
+    const nextSearchNumber = searchesUsed + 1;
     setStatus("searching");
     setLeads([]);
+    setShowEmailHint(false);
     setMessage(`Scanning for ${query.trim()} in ${location.trim()}...`);
 
     try {
@@ -459,29 +474,51 @@ export default function FreeTrialPage() {
         body: JSON.stringify({
           query: query.trim(),
           location: location.trim(),
-          visitorId: getVisitorId(),
+          email: trialEmail,
         }),
       });
 
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        code?: string;
+        searchId?: string;
+        searchesUsed?: number;
+        searchesRemaining?: number;
+      };
+
+      if (res.status === 403 && body.code === "TRIAL_GATE_REQUIRED") {
+        setGatePassed(false);
+        setMessage("Enter your email to start your free trial.");
+        return;
+      }
+
       if (res.status === 429) {
-        incrementTrialCount();
-        setTrialCount(2);
+        if (typeof body.searchesUsed === "number") {
+          setSearchesUsed(body.searchesUsed);
+        }
+        setSearchesRemaining(0);
         setStatus("limit");
         setShowUpgradePanel(true);
-        void recordSearchUsed(getTrialEmail());
         return;
       }
 
       if (!res.ok) {
-        const err = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(err.error || "Search failed");
+        throw new Error(body.error || "Search failed");
       }
 
-      const data = (await res.json()) as { searchId: string };
-      incrementTrialCount();
-      setTrialCount((prev) => prev + 1);
-      void recordSearchUsed(getTrialEmail());
-      connectToStream(data.searchId, nextSearchNumber);
+      if (typeof body.searchesUsed === "number") {
+        setSearchesUsed(body.searchesUsed);
+      }
+      if (typeof body.searchesRemaining === "number") {
+        setSearchesRemaining(body.searchesRemaining);
+      }
+
+      if (!body.searchId) {
+        throw new Error("Search failed");
+      }
+
+      connectToStream(body.searchId, nextSearchNumber, trialEmail);
+      void refreshTrialStatus(trialEmail);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Search failed. Please try again.");
       setStatus("idle");
@@ -608,7 +645,7 @@ export default function FreeTrialPage() {
               </div>
             )}
 
-            {status === "limit" && trialCount >= 2 && !showUpgradePanel && (
+            {status === "limit" && searchesUsed >= 2 && !showUpgradePanel && (
               <div className="mb-6 text-center">
                 <button
                   type="button"
@@ -818,7 +855,7 @@ export default function FreeTrialPage() {
                   </button>
                 </div>
 
-                {showEmailHint && trialCount === 1 && status === "complete" && (
+                {showEmailHint && searchesUsed === 1 && status === "complete" && (
                   <p
                     className="text-sm mb-4"
                     style={{ color: "#7878A0", lineHeight: 1.6, marginTop: 0 }}

@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from "express";
 import {
   createTrialSignup,
   getTrialSignupByEmail,
-  incrementTrialSearchesUsed,
+  getTrialSearchStatus,
   recordTrialEmailOpen,
   updateTrialSequenceProgress,
 } from "../database/free-trial-repository";
@@ -55,6 +55,30 @@ trialRouter.post("/signup", async (req: Request, res: Response) => {
   }
 });
 
+trialRouter.get("/status", async (req: Request, res: Response) => {
+  try {
+    const rawEmail = typeof req.query.email === "string" ? req.query.email : "";
+    const email = rawEmail.toLowerCase().trim();
+    if (!EMAIL_RE.test(email)) {
+      res.status(400).json({ error: "Valid email is required" });
+      return;
+    }
+
+    const status = await getTrialSearchStatus(email);
+    if (!status) {
+      res.status(404).json({ error: "Trial signup not found" });
+      return;
+    }
+
+    res.json(status);
+  } catch (err) {
+    logger.error("Trial status failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({ error: "Failed to load trial status" });
+  }
+});
+
 trialRouter.post("/search-used", async (req: Request, res: Response) => {
   try {
     const rawEmail = (req.body as { email?: string })?.email;
@@ -69,13 +93,17 @@ trialRouter.post("/search-used", async (req: Request, res: Response) => {
       return;
     }
 
-    await incrementTrialSearchesUsed(email);
-    res.json({ success: true });
+    const status = await getTrialSearchStatus(email);
+    res.json({
+      success: true,
+      searches_used: status?.searchesUsed ?? 0,
+      searches_remaining: status?.searchesRemaining ?? 0,
+    });
   } catch (err) {
     logger.error("Trial search-used failed", {
       error: err instanceof Error ? err.message : "unknown",
     });
-    res.status(500).json({ error: "Failed to update search count" });
+    res.status(500).json({ error: "Failed to load search count" });
   }
 });
 

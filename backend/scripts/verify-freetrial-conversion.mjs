@@ -25,6 +25,47 @@ const trialSignups = new Map();
 
 function buildTrialSupabase() {
   return {
+    async rpc(fn, args) {
+      if (fn === "claim_trial_search") {
+        const email = String(args?.p_email ?? "")
+          .toLowerCase()
+          .trim();
+        const row = trialSignups.get(email);
+        if (!row) {
+          return {
+            data: {
+              allowed: false,
+              reason: "not_found",
+              searches_used: 0,
+              searches_remaining: 0,
+            },
+            error: null,
+          };
+        }
+        if ((row.searches_used ?? 0) >= 2) {
+          return {
+            data: {
+              allowed: false,
+              reason: "limit",
+              searches_used: row.searches_used,
+              searches_remaining: 0,
+            },
+            error: null,
+          };
+        }
+        const next = (row.searches_used ?? 0) + 1;
+        trialSignups.set(email, { ...row, searches_used: next });
+        return {
+          data: {
+            allowed: true,
+            searches_used: next,
+            searches_remaining: Math.max(0, 2 - next),
+          },
+          error: null,
+        };
+      }
+      return { data: null, error: { message: `unknown rpc ${fn}` } };
+    },
     from(table) {
       const state = { filters: {} };
       const api = {
@@ -183,7 +224,6 @@ async function post(path, body, headers = {}) {
 }
 
 const testEmail = `freetrial-verify-${Date.now()}@example.com`;
-const visitorId = `visitor-${Date.now()}`;
 
 const signup = await post("/trial/signup", { email: testEmail });
 record(
@@ -198,20 +238,30 @@ record(
   JSON.stringify(emailSendLog.filter((e) => e.email === testEmail))
 );
 
-const search1 = await post("/freetrial", {
+const noEmail = await post("/freetrial", {
   query: "restaurants",
   location: "Lagos Nigeria",
-  visitorId,
+});
+record(
+  "search without trial email rejected",
+  noEmail.res.status === 403 && noEmail.json.code === "TRIAL_GATE_REQUIRED",
+  `status=${noEmail.res.status}, code=${noEmail.json.code}`
+);
+
+const search1 = await post("/freetrial", {
+  email: testEmail,
+  query: "restaurants",
+  location: "Lagos Nigeria",
 });
 const search2 = await post("/freetrial", {
+  email: testEmail,
   query: "dentists",
   location: "Abuja Nigeria",
-  visitorId,
 });
 const search3 = await post("/freetrial", {
+  email: testEmail,
   query: "gyms",
   location: "London UK",
-  visitorId,
 });
 
 record(
@@ -221,17 +271,22 @@ record(
 );
 record(
   "third trial search rejected on server",
-  search3.res.status === 429,
+  search3.res.status === 429 && search3.json.code === "TRIAL_LIMIT",
   `search3=${search3.res.status}, body=${JSON.stringify(search3.json)}`
 );
 
-await post("/trial/search-used", { email: testEmail });
-await post("/trial/search-used", { email: testEmail });
 const row = trialSignups.get(testEmail);
 record(
-  "searches_used counter increments",
+  "searches_used counter increments in search flow",
   row?.searches_used === 2,
   `searches_used=${row?.searches_used}`
+);
+
+const searchUsedEndpoint = await post("/trial/search-used", { email: testEmail });
+record(
+  "search-used endpoint does not increment again",
+  searchUsedEndpoint.json.searches_used === 2,
+  JSON.stringify(searchUsedEndpoint.json)
 );
 
 const mailbox = await post("/mailboxes/connect", {
@@ -281,9 +336,11 @@ record(
 );
 
 record(
-  "searches remaining counter copy",
-  /2 free searches left/.test(pageSource) && /1 free search left/.test(pageSource),
-  "both counter strings present"
+  "searches remaining counter uses server state",
+  /fetchTrialStatus/.test(pageSource) &&
+    /searchesRemaining/.test(pageSource) &&
+    !/lp_trial_count/.test(pageSource),
+  "server-backed counter wired"
 );
 
 record(

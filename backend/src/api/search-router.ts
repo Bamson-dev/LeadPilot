@@ -41,14 +41,11 @@ import { formatSearchMessage } from "../utils/search-messages";
 import { supabase } from "../database/client";
 import { logger } from "../utils/logger";
 import { generateAreaSuggestions } from "../services/suggestion-service";
+import { claimTrialSearch } from "../database/free-trial-repository";
 
 export const searchRouter = Router();
 
-const freeTrialTracker = new Map<string, number>();
-
-setInterval(() => {
-  freeTrialTracker.clear();
-}, 60 * 60 * 1000);
+const TRIAL_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function getMemoryUsagePercent(): number {
   const total = os.totalmem();
@@ -62,6 +59,9 @@ function licenseCredentialsFromQuery(req: Request): void {
   }
   if (!req.headers["x-license-email"] && req.query.licenseEmail) {
     req.headers["x-license-email"] = String(req.query.licenseEmail);
+  }
+  if (!req.headers["x-trial-email"] && req.query.trialEmail) {
+    req.headers["x-trial-email"] = String(req.query.trialEmail);
   }
 }
 
@@ -84,6 +84,15 @@ function resolveLicenseKeyFromRequest(req: Request): string | undefined {
     (req.headers["x-license-key"] as string | undefined)?.trim().toUpperCase() ??
     undefined
   );
+}
+
+function resolveTrialEmailFromRequest(req: Request): string | undefined {
+  const raw =
+    (req.headers["x-trial-email"] as string | undefined) ??
+    (req.query.trialEmail as string | undefined) ??
+    "";
+  const normalized = raw.toLowerCase().trim();
+  return TRIAL_EMAIL_RE.test(normalized) ? normalized : undefined;
 }
 
 const ORPHAN_SEARCH_CLAIM_MS = 30 * 60 * 1000;
@@ -120,7 +129,15 @@ async function requireSearchOwnership(
     return;
   }
 
-  if (access.isTrial && !access.licenseEmail) {
+  if (access.isTrial) {
+    const trialEmail = resolveTrialEmailFromRequest(req);
+    if (!trialEmail || !access.licenseEmail || trialEmail !== access.licenseEmail) {
+      res.status(401).json({
+        error: "Trial email required to access this search.",
+        code: "TRIAL_AUTH_REQUIRED",
+      });
+      return;
+    }
     next();
     return;
   }
@@ -388,9 +405,10 @@ export async function handleFreeTrialSearch(
   res: Response
 ): Promise<void> {
   try {
-    const { query, location, visitorId } = req.body as {
+    const { query, location, email: rawEmail } = req.body as {
       query?: string;
       location?: string;
+      email?: string;
       visitorId?: string;
     };
 
@@ -401,28 +419,42 @@ export async function handleFreeTrialSearch(
       return;
     }
 
-    if (!visitorId) {
+    if (!rawEmail || typeof rawEmail !== "string") {
+      res.status(403).json({
+        error: "Trial email required. Complete the signup gate first.",
+        code: "TRIAL_GATE_REQUIRED",
+      });
+      return;
+    }
+
+    const email = rawEmail.toLowerCase().trim();
+    if (!TRIAL_EMAIL_RE.test(email)) {
       res.status(400).json({
-        error: "Visitor ID required",
+        error: "Invalid email address",
       });
       return;
     }
 
-    const ip = req.ip || req.socket.remoteAddress || "unknown";
-    const limitKey = `${visitorId}:${ip}`;
-    const searchCount = freeTrialTracker.get(limitKey) || 0;
+    const claim = await claimTrialSearch(email);
+    if (!claim.allowed) {
+      if (claim.reason === "limit") {
+        res.status(429).json({
+          error: "Free trial limit reached",
+          code: "TRIAL_LIMIT",
+          message:
+            "You have used your 2 free previews. Get full access to continue.",
+          searchesUsed: claim.searchesUsed,
+          searchesRemaining: claim.searchesRemaining,
+        });
+        return;
+      }
 
-    if (searchCount >= 2) {
-      res.status(429).json({
-        error: "Free trial limit reached",
-        code: "TRIAL_LIMIT",
-        message:
-          "You have used your 2 free previews. Get full access to continue.",
+      res.status(403).json({
+        error: "Trial email required. Complete the signup gate first.",
+        code: "TRIAL_GATE_REQUIRED",
       });
       return;
     }
-
-    freeTrialTracker.set(limitKey, searchCount + 1);
 
     const memUsage = getMemoryUsagePercent();
     if (memUsage > 85) {
@@ -445,6 +477,7 @@ export async function handleFreeTrialSearch(
     const trimmedLocation = location.trim();
     const searchJob = await createSearchJob(trimmedQuery, trimmedLocation, {
       isTrial: true,
+      trialEmail: email,
     });
 
     await enqueueSearchJob({
@@ -461,6 +494,8 @@ export async function handleFreeTrialSearch(
       queuePosition,
       isTrial: true,
       maxResults: 15,
+      searchesUsed: claim.searchesUsed,
+      searchesRemaining: claim.searchesRemaining,
       message:
         queuePosition > 0
           ? `Your search is queued. You are number ${queuePosition} in line.`

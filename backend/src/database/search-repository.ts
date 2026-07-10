@@ -188,9 +188,10 @@ function normalizeSearchText(value: string): string {
 export async function createSearchJob(
   query: string,
   location: string,
-  options?: { isTrial?: boolean; licenseEmail?: string | null }
+  options?: { isTrial?: boolean; licenseEmail?: string | null; trialEmail?: string | null }
 ): Promise<SearchJob> {
   const licenseEmail = options?.licenseEmail?.toLowerCase().trim() || null;
+  const trialEmail = options?.trialEmail?.toLowerCase().trim() || null;
   const { data, error } = await supabase
     .from("search_jobs")
     .insert({
@@ -198,7 +199,7 @@ export async function createSearchJob(
       location: normalizeSearchText(location),
       status: "pending",
       is_trial: options?.isTrial ?? false,
-      license_email: options?.isTrial ? null : licenseEmail,
+      license_email: options?.isTrial ? trialEmail : licenseEmail,
     })
     .select("*")
     .single();
