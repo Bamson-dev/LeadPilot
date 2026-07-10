@@ -748,11 +748,11 @@ searchRouter.get(
 
     const heartbeat = setInterval(() => {
       if (!res.writableEnded) {
-        res.write(": heartbeat\n\n");
+        res.write(`data: ${JSON.stringify({ type: "heartbeat" })}\n\n`);
       } else {
         clearInterval(heartbeat);
       }
-    }, 5000);
+    }, 15000);
 
     try {
       const existingJob = await getSearchJob(searchId);
@@ -819,6 +819,37 @@ searchRouter.get(
                 processed: 0,
               })}\n\n`
             );
+          }
+
+          if (current.status === "completed") {
+            const limit = 250;
+            let page = 1;
+            let allLeads: Awaited<ReturnType<typeof getSearchResults>>["leads"] = [];
+            while (true) {
+              const batch = await getSearchResults(searchId, page, limit);
+              allLeads = allLeads.concat(batch.leads);
+              if (batch.leads.length < limit || allLeads.length >= batch.total) break;
+              page += 1;
+            }
+            for (const lead of allLeads) {
+              res.write(
+                `data: ${JSON.stringify({ type: "lead", data: lead, lead })}\n\n`
+              );
+            }
+            const total =
+              current.totalFound > 0 ? current.totalFound : allLeads.length;
+            res.write(
+              `data: ${JSON.stringify({
+                type: "complete",
+                total,
+                message: `Search complete. Found ${total} businesses in ${current.location}.`,
+              })}\n\n`
+            );
+            clearInterval(statusPoll);
+            clearInterval(heartbeat);
+            removeStream(searchId);
+            res.end();
+            return;
           }
 
           if (current.status === "failed") {

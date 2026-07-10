@@ -224,6 +224,48 @@ async function fetchSearchStats(
   }
 }
 
+async function fetchTrialSearchProgress(
+  searchId: string,
+  trialEmail: string
+): Promise<{
+  status: string;
+  leads: TrialLead[];
+  totalFound: number;
+  queuePosition: number;
+  verifiedEmailCount: number;
+} | null> {
+  const apiUrl = getApiUrl();
+  if (!apiUrl) return null;
+
+  try {
+    const res = await fetch(
+      `${apiUrl}/search/results/${searchId}?limit=${MAX_TRIAL_LEADS}&${trialEmailQuery(trialEmail)}`
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      status?: string;
+      leads?: BusinessLead[];
+      totalFound?: number;
+      total?: number;
+      queuePosition?: number;
+    };
+    const rows = data.leads ?? [];
+    let verifiedEmailCount = 0;
+    for (const lead of rows) {
+      if ((lead.verifiedEmails?.length ?? 0) > 0) verifiedEmailCount++;
+    }
+    return {
+      status: data.status ?? "pending",
+      leads: rows.map(normalizeLead).slice(0, MAX_TRIAL_LEADS),
+      totalFound: data.totalFound ?? data.total ?? rows.length,
+      queuePosition: data.queuePosition ?? 0,
+      verifiedEmailCount,
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function fetchVisibleLeads(
   searchId: string,
   trialEmail: string
@@ -375,6 +417,8 @@ export default function FreeTrialPage() {
 
   const paywallTriggeredRef = useRef(false);
   const enrichmentPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const searchFinishedRef = useRef(false);
 
   const tableSendCount = useMemo(() => sendButtonCount(leads), [leads]);
   const tableVerifiedCount = useMemo(() => countVerifiedInLeads(leads), [leads]);
@@ -420,6 +464,13 @@ export default function FreeTrialPage() {
     }
   }, []);
 
+  const closeEventSource = useCallback(() => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+  }, []);
+
   const resetTrialSession = useCallback(() => {
     clearTrialSession();
     setGatePassed(false);
@@ -435,21 +486,232 @@ export default function FreeTrialPage() {
     setMessage("");
     paywallTriggeredRef.current = false;
     stopEnrichmentPoll();
-  }, [stopEnrichmentPoll]);
+    closeEventSource();
+  }, [stopEnrichmentPoll, closeEventSource]);
 
-  const startEnrichmentPoll = useCallback(
-    (searchId: string, trialEmail: string) => {
+  const finishTrialSearch = useCallback(
+    async (searchId: string, searchNumber: number, trialEmail: string) => {
+      if (searchFinishedRef.current) return;
+      searchFinishedRef.current = true;
       stopEnrichmentPoll();
+      closeEventSource();
+
+      setStatus(searchNumber >= 2 ? "limit" : "complete");
+      setMessage("");
+
+      const stats = await fetchSearchStats(searchId, trialEmail);
+      setAggregateStats((prev) => {
+        const next = {
+          totalFound: prev.totalFound + stats.totalFound,
+          verifiedEmailCount: prev.verifiedEmailCount + stats.verifiedEmailCount,
+        };
+        saveTrialStats(next);
+        return next;
+      });
+
+      const freshLeads = await fetchVisibleLeads(searchId, trialEmail);
+      if (freshLeads.length > 0) {
+        setLeads(freshLeads);
+      }
+
+      if (searchNumber >= 2) {
+        setShowMidPaywall(false);
+        setShowUpgradePanel(true);
+      }
+    },
+    [stopEnrichmentPoll, closeEventSource]
+  );
+
+  const startSearchCompletionPoll = useCallback(
+    (searchId: string, searchNumber: number, trialEmail: string) => {
+      stopEnrichmentPoll();
+      searchFinishedRef.current = false;
+
       enrichmentPollRef.current = setInterval(() => {
         void (async () => {
-          const freshLeads = await fetchVisibleLeads(searchId, trialEmail);
-          if (freshLeads.length > 0) {
-            setLeads(freshLeads);
+          if (searchFinishedRef.current) return;
+
+          const progress = await fetchTrialSearchProgress(searchId, trialEmail);
+          if (!progress) return;
+
+          if (progress.leads.length > 0) {
+            setLeads(progress.leads);
+          }
+
+          if (progress.queuePosition > 0) {
+            setMessage(
+              `Your search is queued. You are number ${progress.queuePosition} in line.`
+            );
+          } else if (progress.status === "pending" || progress.status === "running") {
+            if (progress.leads.length === 0) {
+              setMessage("Scanning for businesses. This can take about 60 seconds...");
+            }
+          }
+
+          if (progress.status === "failed") {
+            searchFinishedRef.current = true;
+            stopEnrichmentPoll();
+            closeEventSource();
+            setStatus("idle");
+            setMessage(
+              "Search did not complete. Try a broader location or business type."
+            );
+            return;
+          }
+
+          if (progress.status === "completed") {
+            if (progress.totalFound === 0 && progress.leads.length === 0) {
+              searchFinishedRef.current = true;
+              stopEnrichmentPoll();
+              closeEventSource();
+              setStatus("idle");
+              setMessage(
+                "No results found. Try a broader search like restaurants in Lagos Nigeria or dentists in London UK."
+              );
+              return;
+            }
+            await finishTrialSearch(searchId, searchNumber, trialEmail);
           }
         })();
       }, 4000);
     },
-    [stopEnrichmentPoll]
+    [stopEnrichmentPoll, closeEventSource, finishTrialSearch]
+  );
+
+  const connectToStream = useCallback(
+    (searchId: string, searchNumber: number, trialEmail: string) => {
+      const apiUrl = getApiUrl();
+      if (!apiUrl) {
+        setMessage("Search service is not configured.");
+        setStatus("idle");
+        return;
+      }
+
+      startSearchCompletionPoll(searchId, searchNumber, trialEmail);
+
+      closeEventSource();
+      const es = new EventSource(
+        `${apiUrl}/search/${searchId}/stream?${trialEmailQuery(trialEmail)}`
+      );
+      eventSourceRef.current = es;
+
+      const pendingLeads: TrialLead[] = [];
+      const seenKeys = new Set<string>();
+      let leadCount = 0;
+
+      const flushPending = () => {
+        if (pendingLeads.length === 0) return;
+        const batch = [...pendingLeads];
+        pendingLeads.length = 0;
+        setLeads((prev) => [...prev, ...batch].slice(0, MAX_TRIAL_LEADS));
+      };
+
+      const flush = setInterval(flushPending, 300);
+
+      const applyLeadUpdate = (raw: BusinessLead) => {
+        const normalized = normalizeLead(raw);
+        setLeads((prev) => {
+          const idx = prev.findIndex((l) => l.id === normalized.id);
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = mergeLeadUpdate(prev[idx]!, raw);
+            return next;
+          }
+          const key = `${normalized.business_name.toLowerCase()}-${(normalized.phone ?? "").replace(/\s/g, "")}`;
+          if (seenKeys.has(key)) return prev;
+          if (prev.length >= MAX_TRIAL_LEADS) return prev;
+          return [...prev, normalized];
+        });
+      };
+
+      es.onmessage = (event) => {
+        if (searchFinishedRef.current) return;
+
+        try {
+          const data = JSON.parse(event.data) as {
+            type: string;
+            data?: BusinessLead;
+            lead?: BusinessLead;
+            total?: number;
+            message?: string;
+          };
+
+          if (data.type === "progress" && data.message) {
+            setMessage(data.message);
+          }
+
+          if (data.type === "lead") {
+            const raw = data.data ?? data.lead;
+            if (!raw) return;
+
+            const normalized = normalizeLead(raw);
+            const key = `${normalized.business_name.toLowerCase()}-${(normalized.phone ?? "").replace(/\s/g, "")}`;
+            if (seenKeys.has(key)) return;
+            seenKeys.add(key);
+
+            if (leadCount >= MAX_TRIAL_LEADS) {
+              void finishTrialSearch(searchId, searchNumber, trialEmail);
+              return;
+            }
+
+            pendingLeads.push(normalized);
+            leadCount++;
+
+            if (leadCount >= MAX_TRIAL_LEADS) {
+              setTimeout(() => void finishTrialSearch(searchId, searchNumber, trialEmail), 600);
+            }
+          }
+
+          if (data.type === "email_update") {
+            const raw = data.lead ?? data.data;
+            if (raw) applyLeadUpdate(raw);
+          }
+
+          if (data.type === "complete") {
+            clearInterval(flush);
+            es.close();
+            eventSourceRef.current = null;
+            flushPending();
+            if ((data.total ?? 0) === 0 && leadCount === 0) {
+              if (!searchFinishedRef.current) {
+                searchFinishedRef.current = true;
+                stopEnrichmentPoll();
+                setStatus("idle");
+                setMessage(
+                  "No results found. Try a broader search like restaurants in Lagos Nigeria or dentists in London UK."
+                );
+              }
+              return;
+            }
+            void finishTrialSearch(searchId, searchNumber, trialEmail);
+          }
+
+          if (data.type === "error") {
+            clearInterval(flush);
+            es.close();
+            eventSourceRef.current = null;
+            flushPending();
+            if (!searchFinishedRef.current) {
+              searchFinishedRef.current = true;
+              stopEnrichmentPoll();
+              setMessage(data.message || "Search did not complete. Please try again.");
+              setStatus("idle");
+            }
+          }
+        } catch {
+          /* ignore parse errors */
+        }
+      };
+
+      es.onerror = () => {
+        clearInterval(flush);
+        es.close();
+        eventSourceRef.current = null;
+        flushPending();
+        // Keep completion poll running; QUIC/SSE drops are common behind Cloudflare.
+      };
+    },
+    [startSearchCompletionPoll, closeEventSource, finishTrialSearch, stopEnrichmentPoll]
   );
 
   useEffect(() => {
@@ -497,11 +759,15 @@ export default function FreeTrialPage() {
       setBootstrapping(false);
     })();
 
-    return () => stopEnrichmentPoll();
-  }, [resetTrialSession, stopEnrichmentPoll]);
+    return () => {
+      stopEnrichmentPoll();
+      closeEventSource();
+    };
+  }, [resetTrialSession, stopEnrichmentPoll, closeEventSource]);
 
   useEffect(() => {
     if (status !== "searching") return;
+    if (message.includes("queued") || message.includes("in line")) return;
 
     const progressMessages = [
       `Scanning for ${query} in ${location}...`,
@@ -518,7 +784,7 @@ export default function FreeTrialPage() {
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [status, query, location]);
+  }, [status, query, location, message]);
 
   useEffect(() => {
     if (
@@ -588,163 +854,6 @@ export default function FreeTrialPage() {
       setGateLoading(false);
     }
   }
-
-  const connectToStream = useCallback(
-    (searchId: string, searchNumber: number, trialEmail: string) => {
-      const apiUrl = getApiUrl();
-      if (!apiUrl) {
-        setMessage("Search service is not configured.");
-        setStatus("idle");
-        return;
-      }
-
-      startEnrichmentPoll(searchId, trialEmail);
-
-      const es = new EventSource(
-        `${apiUrl}/search/${searchId}/stream?${trialEmailQuery(trialEmail)}`
-      );
-      const pendingLeads: TrialLead[] = [];
-      const seenKeys = new Set<string>();
-      let leadCount = 0;
-
-      const flushPending = () => {
-        if (pendingLeads.length === 0) return;
-        const batch = [...pendingLeads];
-        pendingLeads.length = 0;
-        setLeads((prev) => [...prev, ...batch].slice(0, MAX_TRIAL_LEADS));
-      };
-
-      const flush = setInterval(flushPending, 300);
-
-      const applyLeadUpdate = (raw: BusinessLead) => {
-        const normalized = normalizeLead(raw);
-        setLeads((prev) => {
-          const idx = prev.findIndex((l) => l.id === normalized.id);
-          if (idx >= 0) {
-            const next = [...prev];
-            next[idx] = mergeLeadUpdate(prev[idx]!, raw);
-            return next;
-          }
-          const key = `${normalized.business_name.toLowerCase()}-${(normalized.phone ?? "").replace(/\s/g, "")}`;
-          if (seenKeys.has(key)) return prev;
-          if (prev.length >= MAX_TRIAL_LEADS) return prev;
-          return [...prev, normalized];
-        });
-      };
-
-      const finishSearch = async () => {
-        clearInterval(flush);
-        es.close();
-        flushPending();
-        setStatus(searchNumber >= 2 ? "limit" : "complete");
-        setMessage("");
-
-        const stats = await fetchSearchStats(searchId, trialEmail);
-        setAggregateStats((prev) => {
-          const next = {
-            totalFound: prev.totalFound + stats.totalFound,
-            verifiedEmailCount: prev.verifiedEmailCount + stats.verifiedEmailCount,
-          };
-          saveTrialStats(next);
-          return next;
-        });
-
-        const freshLeads = await fetchVisibleLeads(searchId, trialEmail);
-        if (freshLeads.length > 0) {
-          setLeads(freshLeads);
-        }
-
-        if (searchNumber >= 2) {
-          setShowMidPaywall(false);
-          setShowUpgradePanel(true);
-          stopEnrichmentPoll();
-        }
-      };
-
-      const handleZeroResults = () => {
-        clearInterval(flush);
-        es.close();
-        flushPending();
-        stopEnrichmentPoll();
-        setStatus("idle");
-        setMessage(
-          "No results found. Try a broader search like restaurants in Lagos Nigeria or dentists in London UK."
-        );
-      };
-
-      es.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data) as {
-            type: string;
-            data?: BusinessLead;
-            lead?: BusinessLead;
-            businessId?: string;
-            total?: number;
-            message?: string;
-          };
-
-          if (data.type === "lead") {
-            const raw = data.data ?? data.lead;
-            if (!raw) return;
-
-            const normalized = normalizeLead(raw);
-            const key = `${normalized.business_name.toLowerCase()}-${(normalized.phone ?? "").replace(/\s/g, "")}`;
-            if (seenKeys.has(key)) return;
-            seenKeys.add(key);
-
-            if (leadCount >= MAX_TRIAL_LEADS) {
-              void finishSearch();
-              return;
-            }
-
-            pendingLeads.push(normalized);
-            leadCount++;
-
-            if (leadCount >= MAX_TRIAL_LEADS) {
-              setTimeout(() => void finishSearch(), 600);
-            }
-          }
-
-          if (data.type === "email_update") {
-            const raw = data.lead ?? data.data;
-            if (raw) applyLeadUpdate(raw);
-          }
-
-          if (data.type === "complete") {
-            if ((data.total ?? 0) === 0 && leadCount === 0) {
-              handleZeroResults();
-              return;
-            }
-            void finishSearch();
-          }
-
-          if (data.type === "error") {
-            clearInterval(flush);
-            es.close();
-            stopEnrichmentPoll();
-            setMessage(data.message || "Search did not complete. Please try again.");
-            setStatus("idle");
-          }
-        } catch {
-          /* ignore parse errors */
-        }
-      };
-
-      es.onerror = () => {
-        clearInterval(flush);
-        es.close();
-        flushPending();
-        if (leadCount === 0) {
-          stopEnrichmentPoll();
-          setStatus("idle");
-          setMessage("Connection lost. Please try again.");
-        } else {
-          void finishSearch();
-        }
-      };
-    },
-    [startEnrichmentPoll, stopEnrichmentPoll]
-  );
 
   async function runTrialSearch() {
     if (!query.trim() || !location.trim()) return;
