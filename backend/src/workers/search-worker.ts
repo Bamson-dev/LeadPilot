@@ -27,6 +27,18 @@ const WORKER_CONCURRENCY = 2;
 
 let worker: Worker<SearchQueueJobData> | null = null;
 
+async function getSearchJobWithRetry(searchId: string) {
+  const delays = [0, 500, 1500, 3000];
+  for (const delayMs of delays) {
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+    const record = await getSearchJob(searchId);
+    if (record) return record;
+  }
+  return null;
+}
+
 async function resolveJobEmail(
   searchId: string,
   licenseEmail?: string | null
@@ -46,19 +58,9 @@ async function processSearchJob(job: Job<SearchQueueJobData>): Promise<void> {
     }
   };
 
-  const jobRecord = await getSearchJob(searchId);
+  const jobRecord = await getSearchJobWithRetry(searchId);
   if (!jobRecord) {
-    logger.warn(
-      "[search-worker] Dropping stale queue job — search_jobs row missing (likely pre-DB-recreate)",
-      {
-        searchId,
-        bullJobId: job.id,
-        query,
-        location,
-      }
-    );
-    await job.remove().catch(() => undefined);
-    return;
+    throw new Error(`search_jobs row missing for ${searchId}`);
   }
 
   const trial = isTrial ?? jobRecord.isTrial ?? false;

@@ -498,6 +498,40 @@ export async function markSearchFailed(id: string, errorMessage: string): Promis
   await updateSearchJob(id, { status: "failed", error: errorMessage });
 }
 
+/** Pending rows older than minAgeMinutes with no worker progress (still at initial updated_at). */
+export async function listOrphanedPendingSearchJobs(
+  minAgeMinutes: number
+): Promise<
+  Array<{
+    searchId: string;
+    query: string;
+    location: string;
+    isTrial: boolean;
+    licenseEmail?: string;
+  }>
+> {
+  const cutoff = new Date(Date.now() - minAgeMinutes * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from("search_jobs")
+    .select("id, query, location, is_trial, license_email, created_at, updated_at")
+    .eq("status", "pending")
+    .lt("created_at", cutoff)
+    .order("created_at", { ascending: true })
+    .limit(25);
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? [])
+    .filter((row) => row.created_at === row.updated_at)
+    .map((row) => ({
+      searchId: row.id,
+      query: row.query,
+      location: row.location,
+      isTrial: Boolean(row.is_trial),
+      licenseEmail: row.license_email?.trim() || undefined,
+    }));
+}
+
 /** Copy cached leads into a new search job (new IDs). */
 export async function copyLeadsToSearch(
   searchId: string,

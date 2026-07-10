@@ -1,4 +1,5 @@
 import { Queue } from "bullmq";
+import { listOrphanedPendingSearchJobs } from "../database/search-repository";
 import { logger } from "../utils/logger";
 import {
   getRedisConnectionOptions,
@@ -21,8 +22,96 @@ import {
 
 let bullQueue: Queue<SearchQueueJobData> | null = null;
 let initialized = false;
+let reconcileTimer: ReturnType<typeof setInterval> | null = null;
+
+const ORPHAN_PENDING_MIN_AGE_MINUTES = 2;
+const ORPHAN_RECONCILE_INTERVAL_MS = 60_000;
 
 export { SEARCH_QUEUE_NAME, type SearchQueueJobData, type SearchQueueStatus };
+
+async function addBullSearchJob(data: SearchQueueJobData): Promise<void> {
+  if (!bullQueue) {
+    throw new Error("BullMQ search queue is not initialized");
+  }
+
+  const existing = await bullQueue.getJob(data.searchId);
+  if (existing) {
+    const state = await existing.getState();
+    if (
+      state === "active" ||
+      state === "waiting" ||
+      state === "delayed" ||
+      state === "prioritized"
+    ) {
+      return;
+    }
+    if (state === "completed" || state === "failed") {
+      await existing.remove().catch(() => undefined);
+    }
+  }
+
+  const job = await bullQueue.add("run-search", data, {
+    jobId: data.searchId,
+  });
+  const state = await job.getState();
+  logger.info("[search-queue] BullMQ job enqueued", {
+    searchId: data.searchId,
+    state,
+    isTrial: data.isTrial ?? false,
+  });
+}
+
+export async function reconcileOrphanedPendingSearchJobs(): Promise<{
+  checked: number;
+  requeued: number;
+}> {
+  if (!bullQueue || !isRedisQueueEnabled()) {
+    return { checked: 0, requeued: 0 };
+  }
+
+  const orphans = await listOrphanedPendingSearchJobs(ORPHAN_PENDING_MIN_AGE_MINUTES);
+  let requeued = 0;
+
+  for (const orphan of orphans) {
+    const existing = await bullQueue.getJob(orphan.searchId);
+    const state = existing ? await existing.getState() : "missing";
+
+    if (
+      state === "active" ||
+      state === "waiting" ||
+      state === "delayed" ||
+      state === "prioritized"
+    ) {
+      continue;
+    }
+
+    if (existing && (state === "completed" || state === "failed")) {
+      await existing.remove().catch(() => undefined);
+    }
+
+    await addBullSearchJob(orphan);
+    requeued += 1;
+    logger.warn("[search-queue] Re-queued orphaned pending search job", {
+      searchId: orphan.searchId,
+      query: orphan.query,
+      location: orphan.location,
+      priorBullState: state,
+    });
+  }
+
+  return { checked: orphans.length, requeued };
+}
+
+function scheduleOrphanReconciliation(): void {
+  if (reconcileTimer) return;
+  reconcileTimer = setInterval(() => {
+    void reconcileOrphanedPendingSearchJobs().then((result) => {
+      if (result.requeued > 0) {
+        logger.info("[search-queue] Orphan reconcile interval", result);
+      }
+    });
+  }, ORPHAN_RECONCILE_INTERVAL_MS);
+}
 
 export async function initSearchQueue(): Promise<void> {
   if (initialized) return;
@@ -65,6 +154,12 @@ export async function initSearchQueue(): Promise<void> {
   }
 
   startSearchWorker();
+  scheduleOrphanReconciliation();
+  void reconcileOrphanedPendingSearchJobs().then((result) => {
+    if (result.checked > 0 || result.requeued > 0) {
+      logger.info("[search-queue] Orphan reconcile on startup", result);
+    }
+  });
   logger.info("BullMQ search queue initialized", {
     name: SEARCH_QUEUE_NAME,
     lockDurationMs: BULLMQ_LOCK_DURATION_MS,
@@ -76,6 +171,10 @@ export function isBullSearchQueueActive(): boolean {
 }
 
 export async function shutdownSearchQueue(): Promise<void> {
+  if (reconcileTimer) {
+    clearInterval(reconcileTimer);
+    reconcileTimer = null;
+  }
   await stopSearchWorker();
   if (bullQueue) {
     await bullQueue.close();
@@ -93,9 +192,7 @@ export async function enqueueSearchJob(data: SearchQueueJobData): Promise<void> 
 
   if (bullQueue && isRedisQueueEnabled()) {
     try {
-      await bullQueue.add("run-search", data, {
-        jobId: data.searchId,
-      });
+      await addBullSearchJob(data);
       return;
     } catch (err) {
       logger.error("Failed to enqueue BullMQ search job — using inline fallback", {
