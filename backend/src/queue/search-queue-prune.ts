@@ -34,18 +34,32 @@ export async function pruneStaleSearchQueueJobs(
       }
 
       const record = await getSearchJob(searchId).catch(() => null);
-      if (record) continue;
+      if (!record) {
+        await job.remove().catch(() => undefined);
+        removed += 1;
+        logger.warn("[search-queue] Pruned BullMQ job with missing search_jobs row", {
+          queue: SEARCH_QUEUE_NAME,
+          searchId,
+          bullJobId: job.id,
+          state,
+        });
+        continue;
+      }
 
-      await job.remove().catch(() => undefined);
-      removed += 1;
-      logger.warn("[search-queue] Pruned stale BullMQ job (missing search_jobs row)", {
-        queue: SEARCH_QUEUE_NAME,
-        searchId,
-        bullJobId: job.id,
-        state,
-        query: job.data?.query,
-        location: job.data?.location,
-      });
+      if (
+        (state === "waiting" || state === "delayed" || state === "prioritized") &&
+        (record.status === "completed" || record.status === "failed")
+      ) {
+        await job.remove().catch(() => undefined);
+        removed += 1;
+        logger.warn("[search-queue] Pruned BullMQ job already terminal in DB", {
+          queue: SEARCH_QUEUE_NAME,
+          searchId,
+          bullJobId: job.id,
+          state,
+          dbStatus: record.status,
+        });
+      }
     }
   }
 

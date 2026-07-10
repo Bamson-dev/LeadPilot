@@ -53,6 +53,7 @@ async function addBullSearchJob(data: SearchQueueJobData): Promise<void> {
 
   const job = await bullQueue.add("run-search", data, {
     jobId: data.searchId,
+    priority: data.isTrial ? 1 : 5,
   });
   const state = await job.getState();
   logger.info("[search-queue] BullMQ job enqueued", {
@@ -150,11 +151,24 @@ function schedulePendingJobWatch(data: SearchQueueJobData): void {
 function scheduleOrphanReconciliation(): void {
   if (reconcileTimer) return;
   reconcileTimer = setInterval(() => {
-    void reconcileOrphanedPendingSearchJobs().then((result) => {
+    void (async () => {
+      if (bullQueue) {
+        try {
+          const pruned = await pruneStaleSearchQueueJobs(bullQueue);
+          if (pruned.removed > 0) {
+            logger.info("[search-queue] Interval stale job prune", pruned);
+          }
+        } catch (err) {
+          logger.error("[search-queue] Interval stale job prune failed", {
+            error: err instanceof Error ? err.message : "unknown",
+          });
+        }
+      }
+      const result = await reconcileOrphanedPendingSearchJobs();
       if (result.requeued > 0) {
         logger.info("[search-queue] Orphan reconcile interval", result);
       }
-    });
+    })();
   }, ORPHAN_RECONCILE_INTERVAL_MS);
 }
 

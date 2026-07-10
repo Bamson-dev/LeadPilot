@@ -464,15 +464,6 @@ export async function handleFreeTrialSearch(
       return;
     }
 
-    const queueStatus = await refreshSearchQueueStatus();
-    if (queueStatus.queued >= 10) {
-      res.status(503).json({
-        error: "Search queue is full. Please try again in a few minutes.",
-        code: "QUEUE_FULL",
-      });
-      return;
-    }
-
     const claim = await claimTrialSearch(email);
     if (!claim.allowed) {
       if (claim.reason === "limit") {
