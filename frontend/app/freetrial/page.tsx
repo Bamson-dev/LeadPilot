@@ -1,15 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import type { BusinessLead } from "@leadthur/shared";
 import { getApiUrl } from "@/utils/env";
 import { SALE_PRICE_NGN } from "@/constants/pricing";
 
 const MAX_TRIAL_LEADS = 15;
+const MARKETING_TOTAL = "1,000+";
 const PAYSTACK_URL = "https://paystack.shop/pay/Leadthur";
 const SITE_URL = "https://www.leadthur.com";
 const TRIAL_EMAIL_KEY = "lp_trial_email";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MID_PAYWALL_TRIGGER = 5;
 
 type TrialStatus = "idle" | "searching" | "complete" | "limit";
 
@@ -29,7 +38,6 @@ interface TrialLead {
 interface TrialAggregateStats {
   totalFound: number;
   verifiedEmailCount: number;
-  emailableCount: number;
 }
 
 const FONT_STACK =
@@ -44,6 +52,16 @@ const LOCKED_FIELD_STYLE: CSSProperties = {
   padding: "2px 8px",
   borderRadius: 4,
 };
+
+const VALUE_STACK = [
+  { label: "Built in email sender", free: true },
+  { label: "AI outreach writer", free: true },
+  { label: "Open tracking", free: true },
+  { label: "Automatic follow ups", free: true },
+  { label: "Search history", free: true },
+  { label: "Exports", free: true },
+  { label: "195 countries", free: true },
+] as const;
 
 function getTrialEmail(): string {
   if (typeof window === "undefined") return "";
@@ -68,8 +86,7 @@ async function fetchTrialStatus(email: string): Promise<TrialSearchStatus | null
       `${apiUrl}/trial/status?email=${encodeURIComponent(email.toLowerCase().trim())}`
     );
     if (!res.ok) return null;
-    const data = (await res.json()) as TrialSearchStatus;
-    return data;
+    return (await res.json()) as TrialSearchStatus;
   } catch {
     return null;
   }
@@ -80,9 +97,7 @@ function trialEmailQuery(email: string): string {
 }
 
 function normalizeLead(raw: BusinessLead): TrialLead {
-  const verifiedEmails = raw.verifiedEmails?.length
-    ? [...raw.verifiedEmails]
-    : [];
+  const verifiedEmails = raw.verifiedEmails?.length ? [...raw.verifiedEmails] : [];
   const emails =
     raw.emails?.length > 0
       ? [...raw.emails]
@@ -103,6 +118,20 @@ function normalizeLead(raw: BusinessLead): TrialLead {
   };
 }
 
+function mergeLeadUpdate(prev: TrialLead, raw: BusinessLead): TrialLead {
+  const next = normalizeLead(raw);
+  return {
+    ...prev,
+    ...next,
+    business_name: prev.business_name || next.business_name,
+    address: prev.address || next.address,
+  };
+}
+
+function countVerifiedInLeads(leads: TrialLead[]): number {
+  return leads.filter((lead) => lead.verifiedEmails.length > 0).length;
+}
+
 function countEmailableInLeads(leads: TrialLead[]): number {
   return leads.filter(
     (lead) =>
@@ -112,15 +141,16 @@ function countEmailableInLeads(leads: TrialLead[]): number {
   ).length;
 }
 
-function generatePlaceholderEmail(businessName: string): string {
-  const domain = businessName
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, "")
-    .trim()
-    .split(" ")
-    .slice(0, 2)
-    .join("");
-  return `info@${domain || "business"}.com`;
+function sendButtonCount(leads: TrialLead[]): number {
+  const verified = countVerifiedInLeads(leads);
+  if (verified > 0) return verified;
+  const emailable = countEmailableInLeads(leads);
+  if (emailable > 0) return emailable;
+  return leads.length;
+}
+
+function lockedDisplayValue(value: string, fallback: string): string {
+  return value.trim() || fallback;
 }
 
 function truncateAddress(address: string, maxLen: number): string {
@@ -133,34 +163,48 @@ async function fetchSearchStats(
   trialEmail: string
 ): Promise<TrialAggregateStats> {
   const apiUrl = getApiUrl();
-  if (!apiUrl) return { totalFound: 0, verifiedEmailCount: 0, emailableCount: 0 };
+  if (!apiUrl) return { totalFound: 0, verifiedEmailCount: 0 };
 
   try {
     const res = await fetch(
       `${apiUrl}/search/results/${searchId}?limit=1000&${trialEmailQuery(trialEmail)}`
     );
-    if (!res.ok) return { totalFound: 0, verifiedEmailCount: 0, emailableCount: 0 };
+    if (!res.ok) return { totalFound: 0, verifiedEmailCount: 0 };
     const data = (await res.json()) as {
       totalFound?: number;
       total?: number;
       leads?: BusinessLead[];
     };
-    const leads = data.leads ?? [];
+    const rows = data.leads ?? [];
     let verifiedEmailCount = 0;
-    let emailableCount = 0;
-    for (const lead of leads) {
-      const verified = lead.verifiedEmails?.length ?? 0;
-      const listed = lead.emails?.length ?? 0;
-      if (verified > 0) verifiedEmailCount++;
-      if (verified > 0 || listed > 0 || lead.email?.trim()) emailableCount++;
+    for (const lead of rows) {
+      if ((lead.verifiedEmails?.length ?? 0) > 0) verifiedEmailCount++;
     }
     return {
-      totalFound: data.totalFound ?? data.total ?? leads.length,
+      totalFound: data.totalFound ?? data.total ?? rows.length,
       verifiedEmailCount,
-      emailableCount,
     };
   } catch {
-    return { totalFound: 0, verifiedEmailCount: 0, emailableCount: 0 };
+    return { totalFound: 0, verifiedEmailCount: 0 };
+  }
+}
+
+async function fetchVisibleLeads(
+  searchId: string,
+  trialEmail: string
+): Promise<TrialLead[]> {
+  const apiUrl = getApiUrl();
+  if (!apiUrl) return [];
+
+  try {
+    const res = await fetch(
+      `${apiUrl}/search/results/${searchId}?limit=${MAX_TRIAL_LEADS}&${trialEmailQuery(trialEmail)}`
+    );
+    if (!res.ok) return [];
+    const data = (await res.json()) as { leads?: BusinessLead[] };
+    return (data.leads ?? []).map(normalizeLead).slice(0, MAX_TRIAL_LEADS);
+  } catch {
+    return [];
   }
 }
 
@@ -187,7 +231,16 @@ function LockedContactValue({ value }: { value: string }) {
   return (
     <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
       <span style={LOCKED_FIELD_STYLE}>{value}</span>
-      <span style={{ fontSize: 10, color: "#A78BFA", fontWeight: 600, display: "inline-flex", gap: 4 }}>
+      <span
+        style={{
+          fontSize: 10,
+          color: "#A78BFA",
+          fontWeight: 600,
+          display: "inline-flex",
+          gap: 4,
+          flexShrink: 0,
+        }}
+      >
         <LockIcon size={12} />
         Locked
       </span>
@@ -216,6 +269,52 @@ function StarRating() {
   );
 }
 
+function LeadRowMobile({ lead }: { lead: TrialLead }) {
+  const phoneDisplay = lockedDisplayValue(lead.phone ?? "", "Not listed");
+  const emailDisplay = lockedDisplayValue(
+    lead.verifiedEmails[0] ?? lead.emails[0] ?? lead.email ?? "",
+    "contact@business.com"
+  );
+  const ratingDisplay =
+    lead.rating != null
+      ? `★ ${lead.rating}${lead.reviews_count != null ? ` (${lead.reviews_count.toLocaleString()} reviews)` : ""}`
+      : "n/a";
+
+  return (
+    <div
+      style={{
+        background: "#111118",
+        border: "1px solid rgba(255,255,255,0.07)",
+        borderRadius: 12,
+        padding: 16,
+        animation: "fadeIn 0.3s ease",
+      }}
+    >
+      <div style={{ fontWeight: 700, fontSize: 15, color: "#F0EFFF", marginBottom: 8 }}>
+        {lead.business_name}
+      </div>
+      {lead.address && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "flex-start" }}>
+          <span style={{ color: "#555575", fontSize: 12, flexShrink: 0 }}>Address</span>
+          <span style={{ color: "#C0C0D8", fontSize: 12, lineHeight: 1.4 }}>{lead.address}</span>
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "center", flexWrap: "wrap" }}>
+        <span style={{ color: "#555575", fontSize: 12, flexShrink: 0 }}>Phone</span>
+        <LockedContactValue value={phoneDisplay} />
+      </div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
+        <span style={{ color: "#555575", fontSize: 12, flexShrink: 0 }}>Email</span>
+        <LockedContactValue value={emailDisplay} />
+      </div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <span style={{ color: "#555575", fontSize: 12, flexShrink: 0 }}>Rating</span>
+        <LockedContactValue value={ratingDisplay} />
+      </div>
+    </div>
+  );
+}
+
 export default function FreeTrialPage() {
   const [query, setQuery] = useState("");
   const [location, setLocation] = useState("");
@@ -225,7 +324,10 @@ export default function FreeTrialPage() {
   const [searchesRemaining, setSearchesRemaining] = useState(2);
   const [message, setMessage] = useState("");
   const [showUpgradePanel, setShowUpgradePanel] = useState(false);
-  const [showEmailHint, setShowEmailHint] = useState(false);
+  const [showMidPaywall, setShowMidPaywall] = useState(false);
+  const [midPaywallDismissed, setMidPaywallDismissed] = useState(false);
+  const [activeSearchQuery, setActiveSearchQuery] = useState("");
+  const [activeSearchLocation, setActiveSearchLocation] = useState("");
   const [gatePassed, setGatePassed] = useState(false);
   const [gateEmail, setGateEmail] = useState("");
   const [gateLoading, setGateLoading] = useState(false);
@@ -233,22 +335,53 @@ export default function FreeTrialPage() {
   const [aggregateStats, setAggregateStats] = useState<TrialAggregateStats>({
     totalFound: 0,
     verifiedEmailCount: 0,
-    emailableCount: 0,
   });
 
-  const currentEmailableCount = useMemo(() => countEmailableInLeads(leads), [leads]);
+  const paywallTriggeredRef = useRef(false);
+  const enrichmentPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const tableSendCount = useMemo(() => sendButtonCount(leads), [leads]);
+  const tableVerifiedCount = useMemo(() => countVerifiedInLeads(leads), [leads]);
+  const exportCount = leads.length;
 
   const openUpgrade = useCallback(() => setShowUpgradePanel(true), []);
 
+  const dismissMidPaywall = useCallback(() => {
+    setShowMidPaywall(false);
+    setMidPaywallDismissed(true);
+  }, []);
+
   const refreshTrialStatus = useCallback(async (email: string) => {
-    const status = await fetchTrialStatus(email);
-    if (!status) return;
-    setSearchesUsed(status.searchesUsed);
-    setSearchesRemaining(status.searchesRemaining);
-    if (status.searchesRemaining <= 0) {
+    const trialStatus = await fetchTrialStatus(email);
+    if (!trialStatus) return;
+    setSearchesUsed(trialStatus.searchesUsed);
+    setSearchesRemaining(trialStatus.searchesRemaining);
+    if (trialStatus.searchesRemaining <= 0) {
       setStatus("limit");
     }
   }, []);
+
+  const stopEnrichmentPoll = useCallback(() => {
+    if (enrichmentPollRef.current) {
+      clearInterval(enrichmentPollRef.current);
+      enrichmentPollRef.current = null;
+    }
+  }, []);
+
+  const startEnrichmentPoll = useCallback(
+    (searchId: string, trialEmail: string) => {
+      stopEnrichmentPoll();
+      enrichmentPollRef.current = setInterval(() => {
+        void (async () => {
+          const freshLeads = await fetchVisibleLeads(searchId, trialEmail);
+          if (freshLeads.length > 0) {
+            setLeads(freshLeads);
+          }
+        })();
+      }, 4000);
+    },
+    [stopEnrichmentPoll]
+  );
 
   useEffect(() => {
     const savedEmail = getTrialEmail();
@@ -257,7 +390,8 @@ export default function FreeTrialPage() {
       setGatePassed(true);
       void refreshTrialStatus(savedEmail);
     }
-  }, [refreshTrialStatus]);
+    return () => stopEnrichmentPoll();
+  }, [refreshTrialStatus, stopEnrichmentPoll]);
 
   useEffect(() => {
     if (status !== "searching") return;
@@ -266,6 +400,7 @@ export default function FreeTrialPage() {
       `Scanning for ${query} in ${location}...`,
       "Extracting business details...",
       "Collecting phone numbers and addresses...",
+      "Finding verified email addresses...",
       "Almost done. Finalizing results...",
     ];
 
@@ -277,6 +412,18 @@ export default function FreeTrialPage() {
 
     return () => clearInterval(interval);
   }, [status, query, location]);
+
+  useEffect(() => {
+    if (
+      leads.length >= MID_PAYWALL_TRIGGER &&
+      !paywallTriggeredRef.current &&
+      !midPaywallDismissed &&
+      !showUpgradePanel
+    ) {
+      paywallTriggeredRef.current = true;
+      setShowMidPaywall(true);
+    }
+  }, [leads.length, midPaywallDismissed, showUpgradePanel]);
 
   async function handleGateSubmit() {
     const email = gateEmail.toLowerCase().trim();
@@ -324,6 +471,8 @@ export default function FreeTrialPage() {
         return;
       }
 
+      startEnrichmentPoll(searchId, trialEmail);
+
       const es = new EventSource(
         `${apiUrl}/search/${searchId}/stream?${trialEmailQuery(trialEmail)}`
       );
@@ -340,6 +489,22 @@ export default function FreeTrialPage() {
 
       const flush = setInterval(flushPending, 300);
 
+      const applyLeadUpdate = (raw: BusinessLead) => {
+        const normalized = normalizeLead(raw);
+        setLeads((prev) => {
+          const idx = prev.findIndex((l) => l.id === normalized.id);
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = mergeLeadUpdate(prev[idx]!, raw);
+            return next;
+          }
+          const key = `${normalized.business_name.toLowerCase()}-${(normalized.phone ?? "").replace(/\s/g, "")}`;
+          if (seenKeys.has(key)) return prev;
+          if (prev.length >= MAX_TRIAL_LEADS) return prev;
+          return [...prev, normalized];
+        });
+      };
+
       const finishSearch = async () => {
         clearInterval(flush);
         es.close();
@@ -351,14 +516,17 @@ export default function FreeTrialPage() {
         setAggregateStats((prev) => ({
           totalFound: prev.totalFound + stats.totalFound,
           verifiedEmailCount: prev.verifiedEmailCount + stats.verifiedEmailCount,
-          emailableCount: prev.emailableCount + stats.emailableCount,
         }));
 
-        if (searchNumber === 1) {
-          setShowEmailHint(true);
+        const freshLeads = await fetchVisibleLeads(searchId, trialEmail);
+        if (freshLeads.length > 0) {
+          setLeads(freshLeads);
         }
+
         if (searchNumber >= 2) {
+          setShowMidPaywall(false);
           setShowUpgradePanel(true);
+          stopEnrichmentPoll();
         }
       };
 
@@ -366,6 +534,7 @@ export default function FreeTrialPage() {
         clearInterval(flush);
         es.close();
         flushPending();
+        stopEnrichmentPoll();
         setStatus("idle");
         setMessage(
           "No results found. Try a broader search like restaurants in Lagos Nigeria or dentists in London UK."
@@ -378,8 +547,8 @@ export default function FreeTrialPage() {
             type: string;
             data?: BusinessLead;
             lead?: BusinessLead;
+            businessId?: string;
             total?: number;
-            processed?: number;
             message?: string;
           };
 
@@ -405,6 +574,11 @@ export default function FreeTrialPage() {
             }
           }
 
+          if (data.type === "email_update") {
+            const raw = data.lead ?? data.data;
+            if (raw) applyLeadUpdate(raw);
+          }
+
           if (data.type === "complete") {
             if ((data.total ?? 0) === 0 && leadCount === 0) {
               handleZeroResults();
@@ -416,6 +590,7 @@ export default function FreeTrialPage() {
           if (data.type === "error") {
             clearInterval(flush);
             es.close();
+            stopEnrichmentPoll();
             setMessage(data.message || "Search did not complete. Please try again.");
             setStatus("idle");
           }
@@ -429,6 +604,7 @@ export default function FreeTrialPage() {
         es.close();
         flushPending();
         if (leadCount === 0) {
+          stopEnrichmentPoll();
           setStatus("idle");
           setMessage("Connection lost. Please try again.");
         } else {
@@ -436,7 +612,7 @@ export default function FreeTrialPage() {
         }
       };
     },
-    []
+    [startEnrichmentPoll, stopEnrichmentPoll]
   );
 
   async function runTrialSearch() {
@@ -462,18 +638,25 @@ export default function FreeTrialPage() {
     }
 
     const nextSearchNumber = searchesUsed + 1;
+    const trimmedQuery = query.trim();
+    const trimmedLocation = location.trim();
+
     setStatus("searching");
     setLeads([]);
-    setShowEmailHint(false);
-    setMessage(`Scanning for ${query.trim()} in ${location.trim()}...`);
+    setShowMidPaywall(false);
+    setMidPaywallDismissed(false);
+    paywallTriggeredRef.current = false;
+    setActiveSearchQuery(trimmedQuery);
+    setActiveSearchLocation(trimmedLocation);
+    setMessage(`Scanning for ${trimmedQuery} in ${trimmedLocation}...`);
 
     try {
       const res = await fetch(`${apiUrl}/freetrial`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          query: query.trim(),
-          location: location.trim(),
+          query: trimmedQuery,
+          location: trimmedLocation,
           email: trialEmail,
         }),
       });
@@ -525,11 +708,15 @@ export default function FreeTrialPage() {
     }
   }
 
+  const upgradeVerifiedCount = Math.max(aggregateStats.verifiedEmailCount, tableVerifiedCount);
+
   const tapTarget: CSSProperties = {
     minHeight: 48,
     minWidth: 48,
     padding: "12px 16px",
   };
+
+  const bottomPad = showUpgradePanel ? 360 : showMidPaywall ? 280 : 40;
 
   return (
     <div
@@ -537,7 +724,7 @@ export default function FreeTrialPage() {
       style={{
         background: "#06060A",
         fontFamily: FONT_STACK,
-        paddingBottom: showUpgradePanel ? 320 : 40,
+        paddingBottom: bottomPad,
       }}
     >
       <style>{`
@@ -639,33 +826,7 @@ export default function FreeTrialPage() {
                   color: "#E9D5FF",
                 }}
               >
-                {searchesRemaining === 2
-                  ? "2 free searches left"
-                  : "1 free search left"}
-              </div>
-            )}
-
-            {status === "limit" && searchesUsed >= 2 && !showUpgradePanel && (
-              <div className="mb-6 text-center">
-                <button
-                  type="button"
-                  onClick={openUpgrade}
-                  style={{
-                    ...tapTarget,
-                    width: "100%",
-                    maxWidth: 420,
-                    margin: "0 auto",
-                    display: "block",
-                    background: "#7C3AED",
-                    color: "#fff",
-                    fontWeight: 800,
-                    border: "none",
-                    borderRadius: 12,
-                    cursor: "pointer",
-                  }}
-                >
-                  Get lifetime access
-                </button>
+                {searchesRemaining === 2 ? "2 free searches left" : "1 free search left"}
               </div>
             )}
 
@@ -720,8 +881,7 @@ export default function FreeTrialPage() {
                     alignItems: "center",
                     justifyContent: "center",
                     gap: 10,
-                    boxShadow:
-                      status === "searching" ? "none" : "0 0 40px rgba(124,58,237,0.4)",
+                    boxShadow: status === "searching" ? "none" : "0 0 40px rgba(124,58,237,0.4)",
                   }}
                 >
                   {status === "searching" ? (
@@ -828,7 +988,7 @@ export default function FreeTrialPage() {
                     }}
                   >
                     <LockIcon />
-                    Send email to {currentEmailableCount} businesses, locked
+                    Send email to {tableSendCount} businesses, locked
                   </button>
                   <button
                     type="button"
@@ -851,69 +1011,13 @@ export default function FreeTrialPage() {
                     }}
                   >
                     <LockIcon />
-                    Export CSV, locked
+                    Export {exportCount} rows, locked
                   </button>
                 </div>
 
-                {showEmailHint && searchesUsed === 1 && status === "complete" && (
-                  <p
-                    className="text-sm mb-4"
-                    style={{ color: "#7878A0", lineHeight: 1.6, marginTop: 0 }}
-                  >
-                    Emailing all of these takes one click with lifetime access.
-                  </p>
-                )}
-
                 <div className="flex flex-col gap-2 md:hidden">
                   {leads.map((lead) => (
-                    <div
-                      key={lead.id}
-                      style={{
-                        background: "#111118",
-                        border: "1px solid rgba(255,255,255,0.07)",
-                        borderRadius: 12,
-                        padding: 16,
-                        animation: "fadeIn 0.3s ease",
-                      }}
-                    >
-                      <div style={{ fontWeight: 700, fontSize: 15, color: "#F0EFFF", marginBottom: 8 }}>
-                        {lead.business_name}
-                      </div>
-                      {lead.address && (
-                        <div style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "flex-start" }}>
-                          <span style={{ color: "#555575", fontSize: 12, flexShrink: 0 }}>Address</span>
-                          <span style={{ color: "#C0C0D8", fontSize: 12, lineHeight: 1.4 }}>{lead.address}</span>
-                        </div>
-                      )}
-                      <div style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "center", flexWrap: "wrap" }}>
-                        <span style={{ color: "#555575", fontSize: 12, flexShrink: 0 }}>Phone</span>
-                        {lead.phone ? (
-                          <a
-                            href={`tel:${lead.phone}`}
-                            style={{ color: "#F0EFFF", fontSize: 13, fontWeight: 600, textDecoration: "none", minHeight: 48, display: "inline-flex", alignItems: "center" }}
-                          >
-                            {lead.phone}
-                          </a>
-                        ) : (
-                          <span style={{ color: "#555575", fontSize: 12 }}>Not listed</span>
-                        )}
-                      </div>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
-                        <span style={{ color: "#555575", fontSize: 12, flexShrink: 0 }}>Email</span>
-                        <LockedContactValue value={generatePlaceholderEmail(lead.business_name)} />
-                      </div>
-                      {lead.rating != null && (
-                        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                          <span style={{ color: "#FBBF24", fontSize: 13 }}>★</span>
-                          <span style={{ color: "#FBBF24", fontSize: 12, fontWeight: 700 }}>{lead.rating}</span>
-                          {lead.reviews_count != null && (
-                            <span style={{ color: "#555575", fontSize: 11 }}>
-                              ({lead.reviews_count.toLocaleString()} reviews)
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                    <LeadRowMobile key={lead.id} lead={lead} />
                   ))}
                 </div>
 
@@ -946,41 +1050,45 @@ export default function FreeTrialPage() {
                     <span>Email</span>
                     <span>Rating</span>
                   </div>
-                  {leads.map((lead, i) => (
-                    <div
-                      key={lead.id}
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1.8fr 2fr 1.4fr 2fr 1fr",
-                        padding: "14px 16px",
-                        borderBottom: "1px solid rgba(255,255,255,0.04)",
-                        fontSize: 13,
-                        alignItems: "center",
-                        animation: "fadeIn 0.3s ease",
-                        animationDelay: `${i * 40}ms`,
-                      }}
-                    >
-                      <span style={{ fontWeight: 700, color: "#F0EFFF" }}>{lead.business_name}</span>
-                      <span style={{ color: "#7878A0" }} title={lead.address || undefined}>
-                        {lead.address ? truncateAddress(lead.address, 35) : "n/a"}
-                      </span>
-                      <span>
-                        {lead.phone ? (
-                          <a href={`tel:${lead.phone}`} style={{ color: "#F0EFFF", textDecoration: "none" }}>
-                            {lead.phone}
-                          </a>
-                        ) : (
-                          <span style={{ color: "#555575" }}>Not listed</span>
-                        )}
-                      </span>
-                      <span>
-                        <LockedContactValue value={generatePlaceholderEmail(lead.business_name)} />
-                      </span>
-                      <span style={{ color: "#FBBF24", fontWeight: 700 }}>
-                        {lead.rating != null ? `★ ${lead.rating}` : "n/a"}
-                      </span>
-                    </div>
-                  ))}
+                  {leads.map((lead, i) => {
+                    const phoneDisplay = lockedDisplayValue(lead.phone ?? "", "Not listed");
+                    const emailDisplay = lockedDisplayValue(
+                      lead.verifiedEmails[0] ?? lead.emails[0] ?? lead.email ?? "",
+                      "contact@business.com"
+                    );
+                    const ratingDisplay =
+                      lead.rating != null ? `★ ${lead.rating}` : "n/a";
+
+                    return (
+                      <div
+                        key={lead.id}
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "1.8fr 2fr 1.4fr 2fr 1fr",
+                          padding: "14px 16px",
+                          borderBottom: "1px solid rgba(255,255,255,0.04)",
+                          fontSize: 13,
+                          alignItems: "center",
+                          animation: "fadeIn 0.3s ease",
+                          animationDelay: `${i * 40}ms`,
+                        }}
+                      >
+                        <span style={{ fontWeight: 700, color: "#F0EFFF" }}>{lead.business_name}</span>
+                        <span style={{ color: "#7878A0" }} title={lead.address || undefined}>
+                          {lead.address ? truncateAddress(lead.address, 35) : "n/a"}
+                        </span>
+                        <span>
+                          <LockedContactValue value={phoneDisplay} />
+                        </span>
+                        <span>
+                          <LockedContactValue value={emailDisplay} />
+                        </span>
+                        <span>
+                          <LockedContactValue value={ratingDisplay} />
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </section>
             )}
@@ -992,10 +1100,77 @@ export default function FreeTrialPage() {
         className="text-center text-xs py-8 px-4 border-t"
         style={{ borderColor: "rgba(255,255,255,0.06)", color: "#555575" }}
       >
-        <a href={SITE_URL} className="hover:text-[#7878A0]" style={{ minHeight: 48, display: "inline-flex", alignItems: "center" }}>
+        <a
+          href={SITE_URL}
+          className="hover:text-[#7878A0]"
+          style={{ minHeight: 48, display: "inline-flex", alignItems: "center" }}
+        >
           LeadThur · Business Discovery Intelligence
         </a>
       </footer>
+
+      {showMidPaywall && leads.length > 0 && !showUpgradePanel && (
+        <div
+          className="fixed bottom-0 left-0 right-0 z-40"
+          style={{
+            background: "linear-gradient(to top, rgba(6,6,10,0.92) 55%, transparent)",
+            padding: "20px 16px 16px",
+            pointerEvents: "none",
+          }}
+        >
+          <div
+            className="mx-auto max-w-md rounded-2xl p-5"
+            style={{
+              background: "rgba(17,17,24,0.96)",
+              border: "1px solid rgba(124,58,237,0.35)",
+              boxShadow: "0 0 60px rgba(124,58,237,0.2)",
+              pointerEvents: "auto",
+            }}
+          >
+            <p style={{ fontSize: 15, fontWeight: 700, color: "#F0EFFF", lineHeight: 1.55, margin: "0 0 12px" }}>
+              You are seeing {leads.length} of {MARKETING_TOTAL} businesses found for{" "}
+              {activeSearchQuery} in {activeSearchLocation}. Full access unlocks every result for your
+              search, with complete emails, phone numbers, and one click outreach to all of them.
+            </p>
+            <div className="flex flex-col gap-2">
+              <a
+                href={PAYSTACK_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-extrabold rounded-xl text-center"
+                style={{
+                  ...tapTarget,
+                  display: "block",
+                  background: "#7C3AED",
+                  color: "white",
+                  textDecoration: "none",
+                  fontSize: 15,
+                  boxShadow: "0 0 32px rgba(124,58,237,0.4)",
+                }}
+              >
+                Get lifetime access for ₦{SALE_PRICE_NGN.toLocaleString()}
+              </a>
+              <button
+                type="button"
+                onClick={dismissMidPaywall}
+                style={{
+                  ...tapTarget,
+                  background: "transparent",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  color: "#9CA3AF",
+                  borderRadius: 12,
+                  fontWeight: 600,
+                  fontSize: 14,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                Keep browsing my free results
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showUpgradePanel && gatePassed && (
         <div
@@ -1013,15 +1188,15 @@ export default function FreeTrialPage() {
               border: "1px solid rgba(124,58,237,0.45)",
               boxShadow: "0 0 80px rgba(124,58,237,0.25)",
               pointerEvents: "auto",
-              maxHeight: "min(72vh, 520px)",
+              maxHeight: "min(78vh, 560px)",
               overflowY: "auto",
             }}
           >
             <p style={{ fontSize: 17, fontWeight: 800, color: "#F0EFFF", lineHeight: 1.5, margin: "0 0 16px" }}>
               You found {aggregateStats.totalFound.toLocaleString()} potential clients.{" "}
-              {aggregateStats.verifiedEmailCount.toLocaleString()} of them have a verified email
-              address sitting in front of you. Emailing all of them takes one click, and that click
-              is behind lifetime access.
+              {upgradeVerifiedCount.toLocaleString()} of them have a verified email address sitting in
+              front of you. Emailing all of them takes one click, and that click is behind lifetime
+              access.
             </p>
 
             <ul
@@ -1034,21 +1209,34 @@ export default function FreeTrialPage() {
                 gap: 8,
               }}
             >
-              {[
-                `₦${SALE_PRICE_NGN.toLocaleString()} once for lifetime access`,
-                "Search any service in any city and build your pipeline",
-                "Export your potential client lists to CSV",
-                "One click outreach to businesses with verified emails",
-              ].map((item) => (
-                <li key={item} style={{ fontSize: 14, color: "#C0C0D8", lineHeight: 1.45, paddingLeft: 18, position: "relative" }}>
-                  <span style={{ position: "absolute", left: 0, color: "#34D399" }}>+</span>
-                  {item}
+              {VALUE_STACK.map((item) => (
+                <li
+                  key={item.label}
+                  style={{
+                    fontSize: 14,
+                    color: "#C0C0D8",
+                    lineHeight: 1.45,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 12,
+                  }}
+                >
+                  <span>{item.label}</span>
+                  {item.free && (
+                    <span style={{ color: "#34D399", fontWeight: 700, flexShrink: 0 }}>FREE</span>
+                  )}
                 </li>
               ))}
             </ul>
 
+            <p style={{ fontSize: 16, fontWeight: 800, color: "#F0EFFF", margin: "0 0 8px" }}>
+              <span style={{ textDecoration: "line-through", color: "#7878A0", fontWeight: 600, marginRight: 8 }}>
+                ₦100,000 per year
+              </span>
+              ₦{SALE_PRICE_NGN.toLocaleString()} once
+            </p>
             <p style={{ fontSize: 13, color: "#7878A0", margin: "0 0 8px", lineHeight: 1.5 }}>
-              Six of twenty lifetime slots remain before the price becomes ₦100,000 per year.
+              Six of twenty lifetime slots remain before the price rises.
             </p>
             <p style={{ fontSize: 13, color: "#7878A0", margin: "0 0 16px", lineHeight: 1.5 }}>
               30 day money back guarantee. If LeadThur does not help you find potential clients, email

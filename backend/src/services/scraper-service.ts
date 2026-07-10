@@ -10,7 +10,6 @@ import {
   getAllSearchLeads,
   countSearchLeads,
   insertBusinessLead,
-  markSearchComplete,
   tryClaimResultsEmailSend,
   updateSearchJob,
 } from "../database/search-repository";
@@ -514,32 +513,19 @@ async function runBackgroundWork(
     const phase1CompletedAt = Date.now();
     await updateSearchJob(searchId, { scrapingInProgress: false });
 
-    if (!isTrial) {
-      const leadCount = await countSearchLeads(searchId);
-      const phase2 = await runPhase2EmailScraping(
-        searchId,
-        query,
-        location,
-        leadCount,
-        jobStartedAt,
-        phase1CompletedAt,
-        emit,
-        { licenseEmail: options?.licenseEmail }
-      );
-      emailTimedOut = phase2.emailTimedOut;
-      skipEmailScraping = phase2.skipEmailScraping;
-    } else {
-      const trialLeads = await getAllSearchLeads(searchId);
-      for (const lead of trialLeads) {
-        if (lead.website && !lead.emailScraped) {
-          const { markBusinessLeadEmailScraped } = await import(
-            "../database/search-repository"
-          );
-          await markBusinessLeadEmailScraped(lead.id, []).catch(() => undefined);
-        }
-      }
-      await updateSearchJob(searchId, { emailScrapingComplete: true });
-    }
+    const leadCount = await countSearchLeads(searchId);
+    const phase2 = await runPhase2EmailScraping(
+      searchId,
+      query,
+      location,
+      leadCount,
+      jobStartedAt,
+      phase1CompletedAt,
+      emit,
+      { licenseEmail: options?.licenseEmail }
+    );
+    emailTimedOut = phase2.emailTimedOut;
+    skipEmailScraping = phase2.skipEmailScraping;
 
     const leads = await getAllSearchLeads(searchId);
     const totalFound = await countSearchLeads(searchId);
@@ -606,27 +592,25 @@ async function runBackgroundWork(
       options?.licenseEmail
     );
     if (leadsCollected > 0) {
-      if (!isTrial) {
-        try {
-          const phase2 = await runPhase2EmailScraping(
-            searchId,
-            query,
-            location,
-            leadsCollected,
-            options?.jobStartedAt ?? Date.now(),
-            Date.now(),
-            emit,
-            { licenseEmail }
-          );
-          skipEmailScraping = phase2.skipEmailScraping;
-          emailTimedOut = phase2.emailTimedOut;
-        } catch (phase2Err) {
-          logger.error("[search-job] Phase 2 failed after background error", {
-            searchId,
-            error: phase2Err instanceof Error ? phase2Err.message : "unknown",
-          });
-          await markAllLeadsEmailScrapeSkipped(searchId);
-        }
+      try {
+        const phase2 = await runPhase2EmailScraping(
+          searchId,
+          query,
+          location,
+          leadsCollected,
+          options?.jobStartedAt ?? Date.now(),
+          Date.now(),
+          emit,
+          { licenseEmail }
+        );
+        skipEmailScraping = phase2.skipEmailScraping;
+        emailTimedOut = phase2.emailTimedOut;
+      } catch (phase2Err) {
+        logger.error("[search-job] Phase 2 failed after background error", {
+          searchId,
+          error: phase2Err instanceof Error ? phase2Err.message : "unknown",
+        });
+        await markAllLeadsEmailScrapeSkipped(searchId);
       }
       await finalizeSearchAndNotify(
         searchId,
@@ -725,7 +709,7 @@ export async function runScraperJob(
     logSearchStep(searchId, step);
     await updateSearchJob(searchId, {
       status: "running",
-      scrapingInProgress: !isTrial,
+      scrapingInProgress: true,
     });
 
     const startMessage = PHASE1_LOADING_MESSAGE;
@@ -807,16 +791,6 @@ export async function runScraperJob(
     const phase1Total = uniqueCount > 0 ? uniqueCount : scrapeResult.count;
     const stats = computeSearchStats(deduplicateLeads(collectedLeads));
 
-    if (isTrial) {
-      await markSearchComplete(searchId, phase1Total);
-      emit({
-        type: "complete",
-        total: phase1Total,
-        message: `Search complete. Found ${phase1Total} businesses in ${location}.`,
-      });
-      return;
-    }
-
     step = "phase1_persist";
     logSearchStep(searchId, step, { phase1Total });
 
@@ -834,7 +808,7 @@ export async function runScraperJob(
       message: `Found ${phase1Total} businesses. Finding email addresses in the background...`,
     });
 
-    if (options?.licenseKey) {
+    if (!isTrial && options?.licenseKey) {
       await saveUserSearch({
         licenseKey: options.licenseKey,
         searchId,
