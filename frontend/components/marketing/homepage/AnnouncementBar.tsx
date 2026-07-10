@@ -6,7 +6,7 @@ export function AnnouncementBar() {
       className="marketing-announcement-bar"
       style={{
         width: "100%",
-        padding: "10px 16px",
+        padding: "12px 16px",
         textAlign: "center",
         fontFamily: FONT,
         fontSize: 13,
@@ -15,8 +15,7 @@ export function AnnouncementBar() {
         backgroundColor: "#1a1030",
       }}
     >
-      🔥 Lifetime deal closing soon. Price increases permanently once the remaining slots are
-      gone.
+      Only 6 of 20 lifetime slots left at $25. After that it becomes $100 a year.
     </div>
   );
 }

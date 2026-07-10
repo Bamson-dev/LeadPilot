@@ -14,7 +14,16 @@ export const C = {
   muted: "#7878A0",
 } as const;
 
-export const FONT = "var(--font-inter), Inter, sans-serif";
+export const FONT =
+  '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
 
 export const CHECKOUT = "/checkout";
-export const FREETRIAL = "/freetrial";
+export const FREETRIAL = "https://www.leadthur.com/freetrial";
+
+export const TAP_TARGET = {
+  minHeight: 48,
+  minWidth: 48,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+} as const;

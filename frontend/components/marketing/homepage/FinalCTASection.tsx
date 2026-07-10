@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CHECKOUT, C, FONT, FREETRIAL } from "./theme";
+import { CHECKOUT, C, FONT, TAP_TARGET } from "./theme";
 
 export function FinalCTASection() {
   return (
@@ -27,29 +27,33 @@ export function FinalCTASection() {
           pointerEvents: "none",
         }}
       />
-      <div style={{ position: "relative", maxWidth: 520, margin: "0 auto" }}>
+      <div style={{ position: "relative", maxWidth: 680, margin: "0 auto" }}>
         <h2
           style={{
             fontSize: "clamp(32px, 5vw, 48px)",
             fontWeight: 900,
             color: C.text,
-            margin: "0 0 16px",
+            margin: "0 0 20px",
             letterSpacing: -1,
           }}
         >
-          Your next client is one search away.
+          They are eating. You are watching.
         </h2>
-        <p style={{ fontSize: 16, color: C.muted, lineHeight: 1.6, margin: "0 0 32px" }}>
-          Stop spending time looking. Start spending time closing.
+        <p style={{ fontSize: 16, color: C.muted, lineHeight: 1.7, margin: "0 0 32px" }}>
+          Tonight a business owner in London is paying somebody worse than you to build their
+          website, because that person knocked and you never did. So is one in Toronto, one in
+          Dubai, and one four streets from where you are sitting. Their phone numbers and their
+          email addresses are sitting in a list you can pull in the next sixty seconds.
         </p>
         <Link
           href={CHECKOUT}
           className="marketing-cta-glow"
           style={{
-            display: "block",
-            maxWidth: 420,
-            margin: "0 auto 14px",
-            padding: "18px 28px",
+            ...TAP_TARGET,
+            width: "100%",
+            maxWidth: 440,
+            margin: "0 auto 16px",
+            padding: "16px 28px",
             borderRadius: 14,
             background: C.purple,
             color: "#fff",
@@ -58,24 +62,10 @@ export function FinalCTASection() {
             textDecoration: "none",
           }}
         >
-          Get Lifetime Access Now →
+          Claim My Lifetime Access
         </Link>
-        <Link
-          href={FREETRIAL}
-          style={{
-            display: "block",
-            maxWidth: 420,
-            margin: "0 auto 12px",
-            fontSize: 15,
-            fontWeight: 600,
-            color: C.purpleLight,
-            textDecoration: "none",
-          }}
-        >
-          Try it free first. No card needed →
-        </Link>
-        <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>
-          Lifetime access. No monthly fees. No renewal. Ever.
+        <p style={{ fontSize: 14, color: C.muted, margin: 0, lineHeight: 1.5 }}>
+          $25 once. 30 day refund promise. 6 slots left before it goes to $100 a year.
         </p>
       </div>
     </section>

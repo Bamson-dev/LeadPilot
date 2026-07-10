@@ -1,36 +1,40 @@
 "use client";
 
 import { useState } from "react";
-import { C, FONT } from "./theme";
+import { C, FONT, TAP_TARGET } from "./theme";
 
 const FAQ_ITEMS = [
   {
-    q: "Does this work in my country?",
-    a: "LeadThur works in 195 countries. London, New York, Dubai, Lagos, Nairobi, Toronto, Accra, Sydney, Johannesburg and everywhere in between. If businesses exist there, LeadThur finds them.",
+    q: "Can I test it before I pay.",
+    a: "Yes and you should. Two full searches free, no card needed. Run it on your own service in whichever city you want to sell into, and look at the real phone numbers and real email addresses that come back. Decide after you have proved it works for your situation rather than somebody else's.",
   },
   {
-    q: "Can I try before paying?",
-    a: "Yes. Go to the free trial page. No account. No card. Run two real searches and see exactly what comes back before you commit to anything.",
+    q: "Do my clients have to live near me.",
+    a: "No, and this is where most people leave money on the table. LeadThur covers 195 countries, so you can pull businesses in London, Toronto, Dubai or Nairobi in the same sixty seconds it takes to search your own street. Those businesses pay in pounds and dollars and they care about the work rather than where you sit while you do it.",
   },
   {
-    q: "Is there really no monthly fee?",
-    a: "None. You pay once and that is it. No renewal. No subscription. No charge next month or next year. The only reason we mention a yearly option is because this lifetime deal closes when the slots run out.",
+    q: "Where do the emails send from.",
+    a: "From your own inbox. You connect your email once, then LeadThur sends on your behalf. The business sees your name and your address, and their reply comes straight back to you with nobody standing between you and your client.",
   },
   {
-    q: "What happens after I pay?",
-    a: "Card payments get instant automatic access. Bank transfer, send proof to WhatsApp 09067285890 and access is activated within minutes. Either way you are running searches the same day you pay.",
+    q: "What do I even say to these businesses.",
+    a: "Describe what you sell and the AI writes the email for you, opening with something specific about that business and ending with a clear ask. You can change any word before it goes, and there are done for you templates by service if you would rather start from one of those.",
   },
   {
-    q: "How many businesses can I find?",
-    a: "Each search returns up to 1,000 businesses. LeadThur then suggests nearby areas so you can keep searching. Most users build lists of 2,000 to 5,000 contacts in a single session.",
+    q: "Where does the data come from.",
+    a: "Public business listings and the businesses own websites. Everything LeadThur returns is information the business already publishes so that customers can reach them.",
   },
   {
-    q: "Can I use this for cold email or WhatsApp outreach?",
-    a: "Yes. Every result includes a direct phone number and email. Export the list and use it however you pitch, WhatsApp, cold email, direct calling, or all three.",
+    q: "What happens after the 20 slots are gone.",
+    a: "The price becomes $100 per year. Everybody who claimed a slot before then keeps lifetime access at $25 and never pays again, including every feature we build later.",
   },
   {
-    q: "Is this hard to use?",
-    a: "If you can type into Google, you can use LeadThur. Two fields. One button. Results in 60 seconds. Nothing to install or configure.",
+    q: "Is this hard to use.",
+    a: "You type a business type, you type a city, you press search. If you can use Google you can use LeadThur. Most people run their first search in under two minutes and send their first pitch the same day.",
+  },
+  {
+    q: "What if it does not work for me.",
+    a: "Then you get your money back within 30 days and you keep everything you downloaded. We would rather refund you than have you sitting on something you never use.",
   },
 ];
 
@@ -47,19 +51,6 @@ export function FAQSection() {
       }}
     >
       <div style={{ maxWidth: 720, margin: "0 auto" }}>
-        <h2
-          style={{
-            fontSize: "clamp(26px, 4vw, 36px)",
-            fontWeight: 900,
-            color: C.text,
-            textAlign: "center",
-            margin: "0 0 40px",
-            letterSpacing: -0.5,
-          }}
-        >
-          A few questions people ask before signing up.
-        </h2>
-
         <div>
           {FAQ_ITEMS.map((item, index) => {
             const isOpen = openIndex === index;
@@ -69,10 +60,9 @@ export function FAQSection() {
                   type="button"
                   onClick={() => setOpenIndex(isOpen ? null : index)}
                   style={{
+                    ...TAP_TARGET,
                     width: "100%",
-                    display: "flex",
                     justifyContent: "space-between",
-                    alignItems: "center",
                     gap: 16,
                     padding: "20px 0",
                     background: "none",

@@ -3,10 +3,27 @@
 import { useEffect, useMemo, useState } from "react";
 import { useFlutterwave, closePaymentModal } from "flutterwave-react-v3";
 import { detectCountry } from "@/lib/geolocation";
-import { COMPARE_AT_PRICE_USD, SALE_PRICE_USD } from "@/constants/pricing";
+import { SALE_PRICE_USD } from "@/constants/pricing";
 import { getApiUrl } from "@/utils/env";
 
 const FLW_PUBLIC_KEY = process.env.NEXT_PUBLIC_FLUTTERWAVE_PUBLIC_KEY ?? "";
+const FONT =
+  '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+
+const TIER_ONE = [
+  { item: "1,000+ potential clients per search forever", price: "$60" },
+  { item: "Direct phone numbers and verified emails", price: "$45" },
+  { item: "The email sender built into the dashboard", price: "$50" },
+  { item: "Unlimited CSV export of every search", price: "$25" },
+];
+
+const TIER_TWO = [
+  "AI outreach writer that drafts every pitch.",
+  "Done for you pitch templates by service.",
+  "Open tracking and automatic follow ups.",
+  "Search history and 195 countries.",
+  "Every feature we add later at no extra charge.",
+];
 
 function generateFlwTxRef(): string {
   return `LT-FLW-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
@@ -21,7 +38,6 @@ export default function CheckoutPage() {
   const [flwTxRef, setFlwTxRef] = useState(generateFlwTxRef);
 
   const isNigeriaGateway = country === "NG";
-  const isNigeria = isNigeriaGateway;
 
   useEffect(() => {
     detectCountry().then((code) => {
@@ -154,7 +170,7 @@ export default function CheckoutPage() {
         alignItems: "center",
         justifyContent: "center",
         padding: 20,
-        fontFamily: "Inter, sans-serif",
+        fontFamily: FONT,
       }}
     >
       <div
@@ -163,7 +179,7 @@ export default function CheckoutPage() {
           border: `1px solid ${isNigeriaGateway ? "rgba(16,185,129,0.25)" : "rgba(124,58,237,0.25)"}`,
           borderRadius: 20,
           padding: 0,
-          maxWidth: 440,
+          maxWidth: 480,
           width: "100%",
           boxShadow: `0 0 80px ${isNigeriaGateway ? "rgba(16,185,129,0.08)" : "rgba(124,58,237,0.08)"}`,
           overflow: "hidden",
@@ -199,7 +215,6 @@ export default function CheckoutPage() {
               Lead<span style={{ color: "#A78BFA" }}>Thur</span>
             </span>
           </div>
-
         </div>
 
         <div style={{ padding: "28px 24px" }}>
@@ -212,45 +227,61 @@ export default function CheckoutPage() {
               marginBottom: 6,
             }}
           >
-            Get Lifetime Access
+            Pay once. Find clients forever.
           </h1>
-
-          <p
-            style={{
-              fontSize: 13,
-              color: "#8888A8",
-              marginBottom: 20,
-              lineHeight: 1.6,
-            }}
-          >
-            One payment of{" "}
-            <strong style={{ color: "#F2F1FF" }}>{detecting ? "…" : `$${SALE_PRICE_USD}`}</strong>. No monthly
-            fee. No renewal. Ever.
-          </p>
 
           <div
             style={{
               background: "rgba(124,58,237,0.05)",
               border: "1px solid rgba(124,58,237,0.12)",
               borderRadius: 12,
-              padding: "12px 16px",
+              padding: "14px 16px",
+              marginBottom: 16,
+            }}
+          >
+            <p style={{ margin: "0 0 12px", fontSize: 13, fontWeight: 800, color: "#F2F1FF" }}>
+              What you are getting
+            </p>
+            {TIER_ONE.map((row, i, arr) => (
+              <div
+                key={row.item}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  padding: "7px 0",
+                  fontSize: 13,
+                  color: "#C0C0D8",
+                  borderBottom:
+                    i < arr.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
+                  flexWrap: "wrap",
+                }}
+              >
+                <span>{row.item}</span>
+                <span style={{ textDecoration: "line-through", color: "#7878A0" }}>{row.price}</span>
+              </div>
+            ))}
+          </div>
+
+          <div
+            style={{
+              background: "rgba(16,185,129,0.05)",
+              border: "1px solid rgba(16,185,129,0.15)",
+              borderRadius: 12,
+              padding: "14px 16px",
               marginBottom: 20,
             }}
           >
-            {[
-              "1,000+ business contacts per search",
-              "Direct phone numbers and WhatsApp numbers included",
-              "Real contact emails pulled fresh from their website every search",
-              "Unlimited CSV export — download and own your leads forever",
-              "195 countries covered — any city, any niche, worldwide",
-              "Lifetime updates included — every new feature ships to you free",
-            ].map((f, i, arr) => (
+            <p style={{ margin: "0 0 12px", fontSize: 13, fontWeight: 800, color: "#10B981" }}>
+              Included when you claim a slot today
+            </p>
+            {TIER_TWO.map((item, i, arr) => (
               <div
-                key={f}
+                key={item}
                 style={{
                   display: "flex",
-                  alignItems: "center",
-                  gap: 10,
+                  justifyContent: "space-between",
+                  gap: 12,
                   padding: "7px 0",
                   fontSize: 13,
                   color: "#C0C0D8",
@@ -258,29 +289,33 @@ export default function CheckoutPage() {
                     i < arr.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
                 }}
               >
-                <span style={{ color: "#10B981", fontWeight: 800, fontSize: 12 }}>✓</span>
-                {f}
+                <span>{item}</span>
+                <span style={{ color: "#10B981", fontWeight: 800, flexShrink: 0 }}>FREE</span>
               </div>
             ))}
           </div>
 
-          <div
-            style={{
-              display: "flex",
-              alignItems: "baseline",
-              gap: 10,
-              marginBottom: 20,
-            }}
-          >
-            <span
+          <div style={{ textAlign: "center", marginBottom: 20 }}>
+            <p
               style={{
+                margin: "0 0 6px",
                 fontSize: 14,
-                color: "#555570",
+                color: "#7878A0",
                 textDecoration: "line-through",
               }}
             >
-              {`$${COMPARE_AT_PRICE_USD}`}
-            </span>
+              $300
+            </p>
+            <p
+              style={{
+                margin: "0 0 10px",
+                fontSize: 14,
+                color: "#7878A0",
+                textDecoration: "line-through",
+              }}
+            >
+              $100 per year
+            </p>
             <span
               style={{
                 fontSize: 36,
@@ -291,19 +326,9 @@ export default function CheckoutPage() {
             >
               {detecting ? "…" : `$${SALE_PRICE_USD}`}
             </span>
-            <span
-              style={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: "#10B981",
-                background: "rgba(16,185,129,0.08)",
-                padding: "3px 10px",
-                borderRadius: 100,
-                border: "1px solid rgba(16,185,129,0.2)",
-              }}
-            >
-              Lifetime
-            </span>
+            <p style={{ margin: "8px 0 0", fontSize: 13, color: "#7878A0", fontWeight: 600 }}>
+              Once. Never again.
+            </p>
           </div>
 
           <label
@@ -328,13 +353,14 @@ export default function CheckoutPage() {
             onKeyDown={(e) => e.key === "Enter" && handlePay()}
             style={{
               width: "100%",
+              minHeight: 48,
               padding: "13px 16px",
               background: "#0A0A10",
               border: "1px solid rgba(255,255,255,0.1)",
               borderRadius: 10,
               fontSize: 14,
               color: "#F2F1FF",
-              fontFamily: "Inter, sans-serif",
+              fontFamily: FONT,
               outline: "none",
               marginBottom: error ? 8 : 16,
               boxSizing: "border-box",
@@ -351,11 +377,12 @@ export default function CheckoutPage() {
             disabled={loading || detecting}
             style={{
               width: "100%",
+              minHeight: 48,
               background: detecting
                 ? "#1A1A24"
                 : isNigeriaGateway
                   ? "#10B981"
-                  : "#FF8200",
+                  : "#7C3AED",
               color: "white",
               border: "none",
               borderRadius: 12,
@@ -363,12 +390,12 @@ export default function CheckoutPage() {
               fontSize: 15,
               fontWeight: 800,
               cursor: loading || detecting ? "not-allowed" : "pointer",
-              fontFamily: "Inter, sans-serif",
+              fontFamily: FONT,
               boxShadow: detecting
                 ? "none"
                 : isNigeriaGateway
                   ? "0 0 40px rgba(16,185,129,0.3)"
-                  : "0 0 40px rgba(255,130,0,0.25)",
+                  : "0 0 40px rgba(124,58,237,0.35)",
               marginBottom: 14,
               opacity: loading ? 0.7 : 1,
             }}
@@ -377,7 +404,7 @@ export default function CheckoutPage() {
               ? "Loading..."
               : loading
                 ? "Opening payment..."
-                : `🔒 Pay $${SALE_PRICE_USD} — Get Access Now`}
+                : `Claim My Lifetime Access - $${SALE_PRICE_USD}`}
           </button>
 
           <p
@@ -389,8 +416,8 @@ export default function CheckoutPage() {
             }}
           >
             {isNigeriaGateway
-              ? "🔒 Secured by Paystack · Instant access after payment"
-              : "🔒 Secured by Flutterwave · Instant access after payment"}
+              ? "Secured by Paystack · Instant access after payment"
+              : "Secured by Flutterwave · Instant access after payment"}
           </p>
         </div>
       </div>

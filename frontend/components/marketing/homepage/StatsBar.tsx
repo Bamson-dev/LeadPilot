@@ -1,12 +1,5 @@
 import { C, FONT } from "./theme";
 
-const STATS = [
-  { n: "1,000+", l: "Businesses per search" },
-  { n: "60s", l: "Average search time" },
-  { n: "195+", l: "Countries covered" },
-  { n: "$0", l: "Monthly fee ever" },
-];
-
 export function StatsBar() {
   return (
     <section
@@ -15,40 +8,21 @@ export function StatsBar() {
         borderTop: `1px solid ${C.border}`,
         borderBottom: `1px solid ${C.border}`,
         fontFamily: FONT,
+        padding: "24px 16px",
       }}
     >
-      <div
+      <p
         style={{
-          maxWidth: 1100,
-          margin: "0 auto",
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+          margin: 0,
+          textAlign: "center",
+          fontSize: "clamp(14px, 3.5vw, 16px)",
+          fontWeight: 700,
+          color: C.purpleLight,
+          lineHeight: 1.6,
         }}
       >
-        {STATS.map((s, i) => (
-          <div
-            key={s.l}
-            style={{
-              padding: "32px 24px",
-              textAlign: "center",
-              borderRight: i < STATS.length - 1 ? `1px solid ${C.border}` : "none",
-            }}
-          >
-            <div
-              style={{
-                fontSize: 32,
-                fontWeight: 800,
-                color: C.purpleLight,
-                letterSpacing: -1,
-                marginBottom: 6,
-              }}
-            >
-              {s.n}
-            </div>
-            <div style={{ fontSize: 13, color: C.muted }}>{s.l}</div>
-          </div>
-        ))}
-      </div>
+        5,111 found this week. 60 seconds to first result. 195+ countries. 0% commission taken.
+      </p>
     </section>
   );
 }

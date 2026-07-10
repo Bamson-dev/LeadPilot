@@ -564,7 +564,11 @@ export default function FreeTrialPage() {
       }
 
       const trialStatus = await fetchTrialStatus(email);
-      if (trialStatus && trialStatus.searchesRemaining <= 0) {
+      if (
+        trialStatus &&
+        trialStatus !== "not_found" &&
+        trialStatus.searchesRemaining <= 0
+      ) {
         clearTrialSession();
         setGatePassed(false);
         setGateError(

@@ -9,7 +9,7 @@ const NAV_LINKS = [
   { label: "How It Works", id: "how-it-works" },
   { label: "Features", id: "features" },
   { label: "Reviews", id: "reviews" },
-  { label: "Pricing", id: "pricing" },
+  { label: "Offer", id: "offer" },
   { label: "FAQ", id: "faq" },
 ] as const;
 
@@ -153,7 +153,7 @@ export function Nav() {
         #how-it-works,
         #features,
         #reviews,
-        #pricing,
+        #offer,
         #faq {
           scroll-margin-top: 64px;
         }
@@ -308,7 +308,7 @@ export function Nav() {
           #how-it-works,
           #features,
           #reviews,
-          #pricing,
+          #offer,
           #faq {
             scroll-margin-top: 56px;
           }

@@ -36,8 +36,8 @@ export function Footer() {
         >
           <span>
             Questions?{" "}
-            <a href="https://wa.me/2349067285890" style={{ color: C.green }}>
-              WhatsApp 09067285890
+            <a href="mailto:support@leadthur.com" style={{ color: C.green }}>
+              support@leadthur.com
             </a>
           </span>
           <span>© 2026 LeadThur. All rights reserved.</span>

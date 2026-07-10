@@ -1,26 +1,30 @@
 import { C, FONT } from "./theme";
 
 const OLD_WAY = [
-  "Hours on Google searching one business at a time",
-  "Paying someone to build a contact list that takes days",
-  "Data that is wrong or out of date by the time you get it",
-  "Running out of leads by midweek",
-  "Waiting for referrals that may never come",
+  "Hours on Google hunting for one contact form.",
+  "DMs that get opened and quietly ignored.",
+  "Losing twenty percent of every job to Upwork.",
+  "Stuck pitching whoever happens to live near you.",
+  "Paying monthly for a lead list you never own.",
+  "Waiting for referrals that arrive whenever they feel like it.",
+  "Paying a second tool just to send the emails.",
 ];
 
 const NEW_WAY = [
-  "1,000+ contacts in 60 seconds any city any country",
-  "Direct phone numbers and emails included",
-  "Fresh live data every time you search",
-  "Unlimited searches any niche any city",
-  "Export and start pitching the same day",
+  "One search returns 1,000+ potential clients in 60 seconds.",
+  "Direct phone numbers and verified emails, never a contact form.",
+  "You keep every dollar, we take no commission ever.",
+  "Pitch any city on earth and get paid in their currency.",
+  "Pay once and the tool is yours forever.",
+  "Email them the same afternoon you find them.",
+  "The email sender is already inside.",
 ];
 
 export function DifferenceSection() {
   return (
     <section
       style={{
-        backgroundColor: C.bgSecondary,
+        backgroundColor: C.bg,
         padding: "72px 24px",
         fontFamily: FONT,
       }}
@@ -39,13 +43,7 @@ export function DifferenceSection() {
           There is the hard way. And then there is this.
         </h2>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-            gap: 20,
-          }}
-        >
+        <div className="difference-columns">
           <div
             style={{
               padding: "28px",
@@ -55,7 +53,7 @@ export function DifferenceSection() {
             }}
           >
             <h3 style={{ fontSize: 18, fontWeight: 800, color: C.red, margin: "0 0 20px" }}>
-              The old way
+              How you get clients now
             </h3>
             <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
               {OLD_WAY.map((item) => (
@@ -70,7 +68,7 @@ export function DifferenceSection() {
                     lineHeight: 1.5,
                   }}
                 >
-                  <span style={{ color: C.red, fontWeight: 700 }}>✕</span>
+                  <span style={{ color: C.red, fontWeight: 700 }}>x</span>
                   {item}
                 </li>
               ))}
@@ -86,7 +84,7 @@ export function DifferenceSection() {
             }}
           >
             <h3 style={{ fontSize: 18, fontWeight: 800, color: C.green, margin: "0 0 20px" }}>
-              The LeadThur way
+              How you get clients with LeadThur
             </h3>
             <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
               {NEW_WAY.map((item) => (
@@ -101,7 +99,7 @@ export function DifferenceSection() {
                     lineHeight: 1.5,
                   }}
                 >
-                  <span style={{ color: C.green, fontWeight: 700 }}>✓</span>
+                  <span style={{ color: C.green, fontWeight: 700 }}>+</span>
                   {item}
                 </li>
               ))}
@@ -109,6 +107,18 @@ export function DifferenceSection() {
           </div>
         </div>
       </div>
+      <style>{`
+        .difference-columns {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 20px;
+        }
+        @media (min-width: 768px) {
+          .difference-columns {
+            grid-template-columns: repeat(2, 1fr);
+          }
+        }
+      `}</style>
     </section>
   );
 }
