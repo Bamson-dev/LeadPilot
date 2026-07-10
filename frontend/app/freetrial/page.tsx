@@ -17,6 +17,7 @@ const MARKETING_TOTAL = "1,000+";
 const PAYSTACK_URL = "https://paystack.shop/pay/Leadthur";
 const SITE_URL = "https://www.leadthur.com";
 const TRIAL_EMAIL_KEY = "lp_trial_email";
+const TRIAL_STATS_KEY = "lp_trial_stats";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MID_PAYWALL_TRIGGER = 5;
 
@@ -72,19 +73,48 @@ function setTrialEmail(email: string): void {
   localStorage.setItem(TRIAL_EMAIL_KEY, email);
 }
 
+function clearTrialEmail(): void {
+  localStorage.removeItem(TRIAL_EMAIL_KEY);
+}
+
+function loadTrialStats(): TrialAggregateStats | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(TRIAL_STATS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as TrialAggregateStats;
+    if (
+      typeof parsed.totalFound === "number" &&
+      typeof parsed.verifiedEmailCount === "number"
+    ) {
+      return parsed;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function saveTrialStats(stats: TrialAggregateStats): void {
+  sessionStorage.setItem(TRIAL_STATS_KEY, JSON.stringify(stats));
+}
+
 interface TrialSearchStatus {
   searchesUsed: number;
   searchesRemaining: number;
   maxSearches: number;
 }
 
-async function fetchTrialStatus(email: string): Promise<TrialSearchStatus | null> {
+async function fetchTrialStatus(
+  email: string
+): Promise<TrialSearchStatus | "not_found" | null> {
   const apiUrl = getApiUrl();
   if (!apiUrl || !email) return null;
   try {
     const res = await fetch(
       `${apiUrl}/trial/status?email=${encodeURIComponent(email.toLowerCase().trim())}`
     );
+    if (res.status === 404) return "not_found";
     if (!res.ok) return null;
     return (await res.json()) as TrialSearchStatus;
   } catch {
@@ -336,6 +366,7 @@ export default function FreeTrialPage() {
     totalFound: 0,
     verifiedEmailCount: 0,
   });
+  const [bootstrapping, setBootstrapping] = useState(true);
 
   const paywallTriggeredRef = useRef(false);
   const enrichmentPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -353,6 +384,14 @@ export default function FreeTrialPage() {
 
   const refreshTrialStatus = useCallback(async (email: string) => {
     const trialStatus = await fetchTrialStatus(email);
+    if (trialStatus === "not_found") {
+      clearTrialEmail();
+      setGatePassed(false);
+      setGateEmail("");
+      setStatus("idle");
+      setShowUpgradePanel(false);
+      return;
+    }
     if (!trialStatus) return;
     setSearchesUsed(trialStatus.searchesUsed);
     setSearchesRemaining(trialStatus.searchesRemaining);
@@ -385,12 +424,20 @@ export default function FreeTrialPage() {
   );
 
   useEffect(() => {
-    const savedEmail = getTrialEmail();
-    if (savedEmail) {
-      setGateEmail(savedEmail);
-      setGatePassed(true);
-      void refreshTrialStatus(savedEmail);
+    const savedStats = loadTrialStats();
+    if (savedStats) {
+      setAggregateStats(savedStats);
     }
+
+    const savedEmail = getTrialEmail();
+    if (!savedEmail) {
+      setBootstrapping(false);
+      return;
+    }
+
+    setGateEmail(savedEmail);
+    setGatePassed(true);
+    void refreshTrialStatus(savedEmail).finally(() => setBootstrapping(false));
     return () => stopEnrichmentPoll();
   }, [refreshTrialStatus, stopEnrichmentPoll]);
 
@@ -447,9 +494,14 @@ export default function FreeTrialPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        const err = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(err.error || "Signup failed");
+        if (res.status === 429) {
+          throw new Error(
+            body.error || "Too many requests from your network. Please wait a minute and try again."
+          );
+        }
+        throw new Error(body.error || "Signup failed");
       }
       setTrialEmail(email);
       setGatePassed(true);
@@ -514,10 +566,14 @@ export default function FreeTrialPage() {
         setMessage("");
 
         const stats = await fetchSearchStats(searchId, trialEmail);
-        setAggregateStats((prev) => ({
-          totalFound: prev.totalFound + stats.totalFound,
-          verifiedEmailCount: prev.verifiedEmailCount + stats.verifiedEmailCount,
-        }));
+        setAggregateStats((prev) => {
+          const next = {
+            totalFound: prev.totalFound + stats.totalFound,
+            verifiedEmailCount: prev.verifiedEmailCount + stats.verifiedEmailCount,
+          };
+          saveTrialStats(next);
+          return next;
+        });
 
         const freshLeads = await fetchVisibleLeads(searchId, trialEmail);
         if (freshLeads.length > 0) {
@@ -771,7 +827,30 @@ export default function FreeTrialPage() {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 md:px-8 py-8 md:py-12">
-        {!gatePassed ? (
+        {bootstrapping && gatePassed ? (
+          <div
+            className="text-center rounded-2xl py-12 px-6"
+            style={{
+              background: "#111118",
+              border: "1px solid rgba(124,58,237,0.25)",
+              color: "#7878A0",
+            }}
+          >
+            <span
+              style={{
+                width: 20,
+                height: 20,
+                border: "2px solid rgba(124,58,237,0.3)",
+                borderTop: "2px solid #A78BFA",
+                borderRadius: "50%",
+                display: "inline-block",
+                animation: "spin 0.8s linear infinite",
+                marginBottom: 12,
+              }}
+            />
+            <p style={{ margin: 0, fontSize: 14 }}>Loading your free trial...</p>
+          </div>
+        ) : !gatePassed ? (
           <section
             className="mx-auto max-w-md rounded-2xl p-6 md:p-8 text-center"
             style={{
