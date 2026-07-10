@@ -24,8 +24,9 @@ let bullQueue: Queue<SearchQueueJobData> | null = null;
 let initialized = false;
 let reconcileTimer: ReturnType<typeof setInterval> | null = null;
 
-const ORPHAN_PENDING_MIN_AGE_MINUTES = 2;
+const ORPHAN_PENDING_MIN_AGE_MINUTES = 1;
 const ORPHAN_RECONCILE_INTERVAL_MS = 60_000;
+const PENDING_JOB_WATCH_DELAYS_MS = [30_000, 90_000, 180_000] as const;
 
 export { SEARCH_QUEUE_NAME, type SearchQueueJobData, type SearchQueueStatus };
 
@@ -100,6 +101,50 @@ export async function reconcileOrphanedPendingSearchJobs(): Promise<{
   }
 
   return { checked: orphans.length, requeued };
+}
+
+function schedulePendingJobWatch(data: SearchQueueJobData): void {
+  if (!bullQueue || !isRedisQueueEnabled()) return;
+
+  for (const delayMs of PENDING_JOB_WATCH_DELAYS_MS) {
+    setTimeout(() => {
+      void (async () => {
+        try {
+          const { getSearchJob } = await import("../database/search-repository");
+          const record = await getSearchJob(data.searchId);
+          if (!record || record.status !== "pending") return;
+
+          const bullJob = await bullQueue!.getJob(data.searchId);
+          const state = bullJob ? await bullJob.getState() : "missing";
+          if (
+            state === "active" ||
+            state === "waiting" ||
+            state === "delayed" ||
+            state === "prioritized"
+          ) {
+            return;
+          }
+
+          if (bullJob && (state === "completed" || state === "failed")) {
+            await bullJob.remove().catch(() => undefined);
+          }
+
+          await addBullSearchJob(data);
+          logger.warn("[search-queue] Pending job watch re-enqueued search", {
+            searchId: data.searchId,
+            delayMs,
+            priorBullState: state,
+          });
+        } catch (err) {
+          logger.error("[search-queue] Pending job watch failed", {
+            searchId: data.searchId,
+            delayMs,
+            error: err instanceof Error ? err.message : "unknown",
+          });
+        }
+      })();
+    }, delayMs);
+  }
 }
 
 function scheduleOrphanReconciliation(): void {
@@ -193,6 +238,7 @@ export async function enqueueSearchJob(data: SearchQueueJobData): Promise<void> 
   if (bullQueue && isRedisQueueEnabled()) {
     try {
       await addBullSearchJob(data);
+      schedulePendingJobWatch(data);
       return;
     } catch (err) {
       logger.error("Failed to enqueue BullMQ search job — using inline fallback", {
