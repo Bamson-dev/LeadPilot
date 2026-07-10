@@ -1,18 +1,18 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Try LeadThur Free — No Signup Needed",
+  title: "Try LeadThur Free — 2 Searches, No Card",
   description:
-    "Run free searches on LeadThur right now. Find real businesses with phone numbers, addresses, and Google ratings in any city worldwide. No credit card. No account needed. Results in 60 seconds.",
+    "Type your service and any city. Get real businesses with phone numbers and email addresses in about 60 seconds. Two free searches, no card required.",
   keywords:
-    "free lead generation, find business contacts free, business search tool no signup, free trial lead generation, find clients free",
+    "free lead generation, find business contacts free, business search tool, free trial lead generation, find clients free",
   alternates: {
     canonical: "https://www.leadthur.com/freetrial",
   },
   openGraph: {
-    title: "Try LeadThur Free — No Signup Needed",
+    title: "Try LeadThur Free — 2 Searches, No Card",
     description:
-      "Find real businesses with phone numbers and emails in any city. No credit card. No account. Results in 60 seconds.",
+      "Get real businesses with phone numbers and email addresses in about 60 seconds. Two free searches, no card required.",
     url: "https://www.leadthur.com/freetrial",
     siteName: "LeadThur",
     images: [
@@ -28,9 +28,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Try LeadThur Free — No Signup Needed",
+    title: "Try LeadThur Free — 2 Searches, No Card",
     description:
-      "Find real businesses with phone numbers and emails in any city. No signup needed. Results in 60 seconds.",
+      "Get real businesses with phone numbers and email addresses in about 60 seconds. Two free searches, no card required.",
     creator: "@BamsonOfficial",
     images: ["https://www.leadthur.com/og-image.png"],
   },
