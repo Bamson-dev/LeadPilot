@@ -30,6 +30,10 @@ Required minimum:
 - `PORT=3000`
 - `NODE_ENV=production`
 
+Optional for staging QA (does **not** bypass per-email trial search limits):
+
+- `RATE_LIMIT_IP_ALLOWLIST=162.120.188.117` — comma-separated IPs that skip the per-IP request rate limit on `/freetrial` and other rate-limited routes
+
 ## After Deploying
 
 SSH into the Contabo VPS and run:

@@ -358,6 +358,7 @@ export default function FreeTrialPage() {
     setSearchesRemaining(trialStatus.searchesRemaining);
     if (trialStatus.searchesRemaining <= 0) {
       setStatus("limit");
+      setShowUpgradePanel(true);
     }
   }, []);
 
@@ -675,13 +676,21 @@ export default function FreeTrialPage() {
         return;
       }
 
-      if (res.status === 429) {
+      if (res.status === 429 && body.code === "TRIAL_LIMIT") {
         if (typeof body.searchesUsed === "number") {
           setSearchesUsed(body.searchesUsed);
         }
         setSearchesRemaining(0);
         setStatus("limit");
         setShowUpgradePanel(true);
+        return;
+      }
+
+      if (res.status === 429) {
+        setMessage(
+          body.error || "Too many requests from your network. Please wait a minute and try again."
+        );
+        setStatus("idle");
         return;
       }
 
@@ -828,6 +837,49 @@ export default function FreeTrialPage() {
               >
                 {searchesRemaining === 2 ? "2 free searches left" : "1 free search left"}
               </div>
+            )}
+
+            {status === "limit" && (
+              <section
+                className="mb-8 rounded-2xl p-6 text-center"
+                style={{
+                  background: "#111118",
+                  border: "1px solid rgba(124,58,237,0.25)",
+                }}
+              >
+                <p
+                  style={{
+                    margin: "0 0 16px",
+                    fontSize: 16,
+                    fontWeight: 700,
+                    color: "#F0EFFF",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  You have used both free searches. Lifetime access lets you keep building your
+                  pipeline with full emails, phone numbers, and one click outreach.
+                </p>
+                <button
+                  type="button"
+                  onClick={openUpgrade}
+                  style={{
+                    ...tapTarget,
+                    width: "100%",
+                    maxWidth: 420,
+                    margin: "0 auto",
+                    display: "block",
+                    background: "#7C3AED",
+                    color: "#fff",
+                    fontWeight: 800,
+                    border: "none",
+                    borderRadius: 12,
+                    cursor: "pointer",
+                    boxShadow: "0 0 40px rgba(124,58,237,0.4)",
+                  }}
+                >
+                  Get lifetime access for ₦{SALE_PRICE_NGN.toLocaleString()}
+                </button>
+              </section>
             )}
 
             {status !== "limit" && (

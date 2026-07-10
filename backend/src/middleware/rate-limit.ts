@@ -13,17 +13,38 @@ const SENDS_MAX_REQUESTS = Number(process.env.RATE_LIMIT_SENDS_MAX) || 60;
 const CHECKOUT_BALANCE_MAX_REQUESTS =
   Number(process.env.RATE_LIMIT_CHECKOUT_BALANCE_MAX) || 120;
 
-function clientIp(req: Request): string {
+export function clientIp(req: Request): string {
   const forwarded = req.headers["x-forwarded-for"];
   if (typeof forwarded === "string") {
-    return forwarded.split(",")[0]?.trim() ?? req.ip;
+    return forwarded.split(",")[0]?.trim() ?? req.ip ?? "unknown";
   }
   return req.ip ?? "unknown";
 }
 
+function parseIpAllowlist(): Set<string> {
+  const raw = process.env.RATE_LIMIT_IP_ALLOWLIST?.trim();
+  if (!raw) return new Set();
+  return new Set(
+    raw
+      .split(",")
+      .map((ip) => ip.trim())
+      .filter(Boolean)
+  );
+}
+
+export function isRateLimitAllowlisted(ip: string): boolean {
+  return parseIpAllowlist().has(ip);
+}
+
 export function rateLimit(req: Request, res: Response, next: NextFunction): void {
+  const ip = clientIp(req);
+  if (isRateLimitAllowlisted(ip)) {
+    next();
+    return;
+  }
+
   const scope = requestScope(req);
-  const key = `${scope}:${clientIp(req)}`;
+  const key = `${scope}:${ip}`;
   const now = Date.now();
   let bucket = buckets.get(key);
 
@@ -37,6 +58,7 @@ export function rateLimit(req: Request, res: Response, next: NextFunction): void
   if (bucket.count > maxRequestsForScope(scope)) {
     res.status(429).json({
       error: "Too many requests. Please wait a minute and try again.",
+      code: "RATE_LIMITED",
     });
     return;
   }
