@@ -9,12 +9,12 @@ process.env.RATE_LIMIT_IP_ALLOWLIST = "162.120.188.117,203.0.113.50";
 
 const { rateLimit, clientIp } = await import("../dist/middleware/rate-limit.js");
 
-function mockReq(ip, path = "/freetrial") {
+function mockReq(ip, path = "/freetrial", headers = {}) {
   return {
     ip,
     originalUrl: path,
     path,
-    headers: { "x-forwarded-for": ip },
+    headers: { "x-forwarded-for": ip, ...headers },
   };
 }
 
@@ -57,6 +57,9 @@ const report = {
   allowlistedAlwaysPasses: allowlistedBurst.every((r) => r.nextCalled && r.status === 200),
   blockedResponse: hit("198.51.100.99", "/freetrial"),
   clientIpForwarded: clientIp(mockReq("162.120.188.117")),
+  clientIpCloudflare: clientIp(
+    mockReq("203.0.113.1", "/freetrial", { "cf-connecting-ip": "162.120.188.117" })
+  ),
 };
 
 console.log(JSON.stringify(report, null, 2));
@@ -64,5 +67,6 @@ const pass =
   report.nonAllowlistedEventuallyBlocked &&
   report.allowlistedAlwaysPasses &&
   report.blockedResponse.status === 429 &&
-  report.blockedResponse.body?.code === "RATE_LIMITED";
+  report.blockedResponse.body?.code === "RATE_LIMITED" &&
+  report.clientIpCloudflare === "162.120.188.117";
 process.exit(pass ? 0 : 1);

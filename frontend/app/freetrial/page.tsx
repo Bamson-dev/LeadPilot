@@ -77,6 +77,11 @@ function clearTrialEmail(): void {
   localStorage.removeItem(TRIAL_EMAIL_KEY);
 }
 
+function clearTrialSession(): void {
+  clearTrialEmail();
+  sessionStorage.removeItem(TRIAL_STATS_KEY);
+}
+
 function loadTrialStats(): TrialAggregateStats | null {
   if (typeof window === "undefined") return null;
   try {
@@ -385,11 +390,12 @@ export default function FreeTrialPage() {
   const refreshTrialStatus = useCallback(async (email: string) => {
     const trialStatus = await fetchTrialStatus(email);
     if (trialStatus === "not_found") {
-      clearTrialEmail();
+      clearTrialSession();
       setGatePassed(false);
       setGateEmail("");
       setStatus("idle");
       setShowUpgradePanel(false);
+      setAggregateStats({ totalFound: 0, verifiedEmailCount: 0 });
       return;
     }
     if (!trialStatus) return;
@@ -397,7 +403,13 @@ export default function FreeTrialPage() {
     setSearchesRemaining(trialStatus.searchesRemaining);
     if (trialStatus.searchesRemaining <= 0) {
       setStatus("limit");
-      setShowUpgradePanel(true);
+      const stats = loadTrialStats();
+      if (stats && stats.totalFound > 0) {
+        setAggregateStats(stats);
+        setShowUpgradePanel(true);
+      } else {
+        setShowUpgradePanel(false);
+      }
     }
   }, []);
 
@@ -407,6 +419,23 @@ export default function FreeTrialPage() {
       enrichmentPollRef.current = null;
     }
   }, []);
+
+  const resetTrialSession = useCallback(() => {
+    clearTrialSession();
+    setGatePassed(false);
+    setGateEmail("");
+    setStatus("idle");
+    setLeads([]);
+    setSearchesUsed(0);
+    setSearchesRemaining(2);
+    setShowUpgradePanel(false);
+    setShowMidPaywall(false);
+    setMidPaywallDismissed(false);
+    setAggregateStats({ totalFound: 0, verifiedEmailCount: 0 });
+    setMessage("");
+    paywallTriggeredRef.current = false;
+    stopEnrichmentPoll();
+  }, [stopEnrichmentPoll]);
 
   const startEnrichmentPoll = useCallback(
     (searchId: string, trialEmail: string) => {
@@ -424,11 +453,6 @@ export default function FreeTrialPage() {
   );
 
   useEffect(() => {
-    const savedStats = loadTrialStats();
-    if (savedStats) {
-      setAggregateStats(savedStats);
-    }
-
     const savedEmail = getTrialEmail();
     if (!savedEmail) {
       setBootstrapping(false);
@@ -436,10 +460,45 @@ export default function FreeTrialPage() {
     }
 
     setGateEmail(savedEmail);
-    setGatePassed(true);
-    void refreshTrialStatus(savedEmail).finally(() => setBootstrapping(false));
+
+    void (async () => {
+      const trialStatus = await fetchTrialStatus(savedEmail);
+      if (trialStatus === "not_found") {
+        resetTrialSession();
+        setBootstrapping(false);
+        return;
+      }
+      if (!trialStatus) {
+        setGatePassed(false);
+        setBootstrapping(false);
+        return;
+      }
+
+      setSearchesUsed(trialStatus.searchesUsed);
+      setSearchesRemaining(trialStatus.searchesRemaining);
+
+      if (trialStatus.searchesRemaining <= 0) {
+        const stats = loadTrialStats();
+        resetTrialSession();
+        setMessage(
+          stats && stats.totalFound > 0
+            ? "That email has already used both free searches."
+            : "That email has already used both free searches. Enter a different email below to run a fresh trial."
+        );
+        setBootstrapping(false);
+        return;
+      }
+
+      const savedStats = loadTrialStats();
+      if (savedStats) {
+        setAggregateStats(savedStats);
+      }
+      setGatePassed(true);
+      setBootstrapping(false);
+    })();
+
     return () => stopEnrichmentPoll();
-  }, [refreshTrialStatus, stopEnrichmentPoll]);
+  }, [resetTrialSession, stopEnrichmentPoll]);
 
   useEffect(() => {
     if (status !== "searching") return;
@@ -503,6 +562,17 @@ export default function FreeTrialPage() {
         }
         throw new Error(body.error || "Signup failed");
       }
+
+      const trialStatus = await fetchTrialStatus(email);
+      if (trialStatus && trialStatus.searchesRemaining <= 0) {
+        clearTrialSession();
+        setGatePassed(false);
+        setGateError(
+          "This email has already used both free searches. Enter a different email or upgrade for full access."
+        );
+        return;
+      }
+
       setTrialEmail(email);
       setGatePassed(true);
       setSearchesUsed(0);
@@ -882,6 +952,11 @@ export default function FreeTrialPage() {
               onKeyDown={(e) => e.key === "Enter" && void handleGateSubmit()}
             />
             {gateError && <p className="text-sm text-red-400 mb-2">{gateError}</p>}
+            {message && !gateError && (
+              <p className="text-sm mb-2" style={{ color: "#A78BFA" }}>
+                {message}
+              </p>
+            )}
             <button
               type="button"
               onClick={() => void handleGateSubmit()}
@@ -945,7 +1020,7 @@ export default function FreeTrialPage() {
                     ...tapTarget,
                     width: "100%",
                     maxWidth: 420,
-                    margin: "0 auto",
+                    margin: "0 auto 12px",
                     display: "block",
                     background: "#7C3AED",
                     color: "#fff",
@@ -957,6 +1032,27 @@ export default function FreeTrialPage() {
                   }}
                 >
                   Get lifetime access for ₦{SALE_PRICE_NGN.toLocaleString()}
+                </button>
+                <button
+                  type="button"
+                  onClick={resetTrialSession}
+                  style={{
+                    ...tapTarget,
+                    width: "100%",
+                    maxWidth: 420,
+                    margin: "0 auto",
+                    display: "block",
+                    background: "transparent",
+                    color: "#9CA3AF",
+                    fontWeight: 600,
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    borderRadius: 12,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    fontSize: 14,
+                  }}
+                >
+                  Start fresh with a different email
                 </button>
               </section>
             )}

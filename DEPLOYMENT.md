@@ -65,6 +65,14 @@ bash backend/scripts/verify-deployment.sh http://localhost:3000
 
 `app.set('trust proxy', 1)` is enabled so rate limits and logs see the real client IP behind Cloudflare.
 
+To verify which IP the backend resolves for your browser (after deploy), open DevTools on any page and run:
+
+```javascript
+fetch("https://staging-backend.leadthur.com/health/client-ip").then((r) => r.json()).then(console.log)
+```
+
+Check `resolvedIp` and `allowlisted`. If `allowlisted` is false, add `resolvedIp` to `RATE_LIMIT_IP_ALLOWLIST` in Coolify (not the IP from a script with a spoofed `X-Forwarded-For` header).
+
 ## Vercel (frontend)
 
 | Setting | Value |

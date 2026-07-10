@@ -1,11 +1,12 @@
 import os from "os";
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { getBrowserPool } from "../scraper/browser/browser-pool";
 import {
   getDeepseekKeyFingerprint,
   isDeepseekConfigured,
 } from "../utils/deepseek-config";
 import { refreshSearchQueueStatus } from "../queue/search-queue";
+import { getClientIpDiagnostics } from "../middleware/rate-limit";
 
 const router = Router();
 
@@ -37,6 +38,10 @@ router.get("/", async (_req, res) => {
     timestamp: new Date().toISOString(),
     version: process.env.npm_package_version || "1.0.0",
   });
+});
+
+router.get("/client-ip", (req: Request, res) => {
+  res.status(200).json(getClientIpDiagnostics(req));
 });
 
 router.get("/ready", async (_req, res) => {

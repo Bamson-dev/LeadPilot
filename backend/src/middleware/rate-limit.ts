@@ -13,12 +13,70 @@ const SENDS_MAX_REQUESTS = Number(process.env.RATE_LIMIT_SENDS_MAX) || 60;
 const CHECKOUT_BALANCE_MAX_REQUESTS =
   Number(process.env.RATE_LIMIT_CHECKOUT_BALANCE_MAX) || 120;
 
-export function clientIp(req: Request): string {
-  const forwarded = req.headers["x-forwarded-for"];
-  if (typeof forwarded === "string") {
-    return forwarded.split(",")[0]?.trim() ?? req.ip ?? "unknown";
+function headerIp(value: string | string[] | undefined): string | null {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed || null;
   }
+  if (Array.isArray(value)) {
+    const trimmed = value[0]?.trim();
+    return trimmed || null;
+  }
+  return null;
+}
+
+/** Resolve the client IP behind Cloudflare / reverse proxies. */
+export function clientIp(req: Request): string {
+  const cfConnectingIp = headerIp(req.headers["cf-connecting-ip"]);
+  if (cfConnectingIp) return cfConnectingIp;
+
+  const trueClientIp = headerIp(req.headers["true-client-ip"]);
+  if (trueClientIp) return trueClientIp;
+
+  const realIp = headerIp(req.headers["x-real-ip"]);
+  if (realIp) return realIp;
+
+  const forwarded = headerIp(req.headers["x-forwarded-for"]);
+  if (forwarded) {
+    const parts = forwarded.split(",").map((part) => part.trim()).filter(Boolean);
+    if (parts.length > 0) {
+      return parts[0];
+    }
+  }
+
   return req.ip ?? "unknown";
+}
+
+export interface ClientIpDiagnostics {
+  resolvedIp: string;
+  allowlisted: boolean;
+  allowlistConfigured: boolean;
+  headers: {
+    "cf-connecting-ip": string | null;
+    "true-client-ip": string | null;
+    "x-real-ip": string | null;
+    "x-forwarded-for": string | null;
+  };
+  expressReqIp: string | null;
+  socketRemoteAddress: string | null;
+}
+
+export function getClientIpDiagnostics(req: Request): ClientIpDiagnostics {
+  const resolvedIp = clientIp(req);
+  const allowlist = parseIpAllowlist();
+  return {
+    resolvedIp,
+    allowlisted: allowlist.has(resolvedIp),
+    allowlistConfigured: allowlist.size > 0,
+    headers: {
+      "cf-connecting-ip": headerIp(req.headers["cf-connecting-ip"]),
+      "true-client-ip": headerIp(req.headers["true-client-ip"]),
+      "x-real-ip": headerIp(req.headers["x-real-ip"]),
+      "x-forwarded-for": headerIp(req.headers["x-forwarded-for"]),
+    },
+    expressReqIp: req.ip ?? null,
+    socketRemoteAddress: req.socket?.remoteAddress ?? null,
+  };
 }
 
 function parseIpAllowlist(): Set<string> {
