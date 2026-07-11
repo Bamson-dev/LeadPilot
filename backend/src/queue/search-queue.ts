@@ -67,14 +67,29 @@ export async function reconcileOrphanedPendingSearchJobs(): Promise<{
   checked: number;
   requeued: number;
 }> {
-  if (!bullQueue || !isRedisQueueEnabled()) {
-    return { checked: 0, requeued: 0 };
-  }
-
   const orphans = await listOrphanedPendingSearchJobs(ORPHAN_PENDING_MIN_AGE_MINUTES);
   let requeued = 0;
 
   for (const orphan of orphans) {
+    if (orphan.isTrial) {
+      const existing = bullQueue ? await bullQueue.getJob(orphan.searchId) : null;
+      if (existing) {
+        await existing.remove().catch(() => undefined);
+      }
+      await inlineSearchQueue.add(orphan);
+      requeued += 1;
+      logger.warn("[search-queue] Re-queued orphaned trial job on inline queue", {
+        searchId: orphan.searchId,
+        query: orphan.query,
+        location: orphan.location,
+      });
+      continue;
+    }
+
+    if (!bullQueue || !isRedisQueueEnabled()) {
+      continue;
+    }
+
     const existing = await bullQueue.getJob(orphan.searchId);
     const state = existing ? await existing.getState() : "missing";
 
@@ -105,6 +120,8 @@ export async function reconcileOrphanedPendingSearchJobs(): Promise<{
 }
 
 function schedulePendingJobWatch(data: SearchQueueJobData): void {
+  if (data.isTrial) return;
+
   if (!bullQueue || !isRedisQueueEnabled()) return;
 
   for (const delayMs of PENDING_JOB_WATCH_DELAYS_MS) {
@@ -243,6 +260,16 @@ export async function shutdownSearchQueue(): Promise<void> {
 }
 
 export async function enqueueSearchJob(data: SearchQueueJobData): Promise<void> {
+  if (data.isTrial) {
+    logSearchLifecycle("job_enqueued", data.searchId, {
+      query: data.query,
+      location: data.location,
+      queue: "inline-trial",
+    });
+    await inlineSearchQueue.add(data);
+    return;
+  }
+
   logSearchLifecycle("job_enqueued", data.searchId, {
     query: data.query,
     location: data.location,
@@ -266,6 +293,9 @@ export async function enqueueSearchJob(data: SearchQueueJobData): Promise<void> 
 }
 
 export async function getSearchQueuePosition(searchId: string): Promise<number> {
+  const inlinePos = inlineSearchQueue.getQueuePositionForSearch(searchId);
+  if (inlinePos) return inlinePos;
+
   if (bullQueue && isRedisQueueEnabled()) {
     try {
       const job = await bullQueue.getJob(searchId);
@@ -315,10 +345,16 @@ export async function refreshSearchQueueStatus(): Promise<SearchQueueStatus> {
         "delayed",
         "prioritized"
       );
+      const inline = inlineSearchQueue.getStatus();
       return {
-        running: counts.active ?? 0,
-        queued: (counts.waiting ?? 0) + (counts.delayed ?? 0) + (counts.prioritized ?? 0),
+        running: (counts.active ?? 0) + inline.running,
+        queued:
+          (counts.waiting ?? 0) +
+          (counts.delayed ?? 0) +
+          (counts.prioritized ?? 0) +
+          inline.queued,
         maxConcurrent: 2,
+        inline,
         mode: "bullmq",
       };
     } catch {

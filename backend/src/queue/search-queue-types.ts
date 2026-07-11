@@ -14,6 +14,12 @@ export interface SearchQueueStatus {
   queued: number;
   maxConcurrent: number;
   mode: "bullmq" | "inline";
+  inline?: {
+    running: number;
+    queued: number;
+    maxConcurrent: number;
+    mode: "inline";
+  };
 }
 
 export interface AdminQueueMetrics {

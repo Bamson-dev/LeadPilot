@@ -527,191 +527,64 @@ export default function FreeTrialPage() {
       stopEnrichmentPoll();
       searchFinishedRef.current = false;
 
-      enrichmentPollRef.current = setInterval(() => {
-        void (async () => {
-          if (searchFinishedRef.current) return;
+      const pollOnce = async () => {
+        if (searchFinishedRef.current) return;
 
-          const progress = await fetchTrialSearchProgress(searchId, trialEmail);
-          if (!progress) return;
+        const progress = await fetchTrialSearchProgress(searchId, trialEmail);
+        if (!progress) return;
 
-          if (progress.leads.length > 0) {
-            setLeads(progress.leads);
+        if (progress.leads.length > 0) {
+          setLeads(progress.leads);
+        }
+
+        if (progress.queuePosition > 0) {
+          setMessage(
+            `Your search is queued. You are number ${progress.queuePosition} in line.`
+          );
+        } else if (progress.status === "pending" || progress.status === "running") {
+          if (progress.leads.length === 0) {
+            setMessage("Scanning for businesses. This can take about 60 seconds...");
           }
+        }
 
-          if (progress.queuePosition > 0) {
-            setMessage(
-              `Your search is queued. You are number ${progress.queuePosition} in line.`
-            );
-          } else if (progress.status === "pending" || progress.status === "running") {
-            if (progress.leads.length === 0) {
-              setMessage("Scanning for businesses. This can take about 60 seconds...");
-            }
-          }
+        if (progress.status === "failed") {
+          searchFinishedRef.current = true;
+          stopEnrichmentPoll();
+          setStatus("idle");
+          setMessage(
+            "Search did not complete. Try a broader location or business type."
+          );
+          return;
+        }
 
-          if (progress.status === "failed") {
+        if (progress.status === "completed") {
+          if (progress.totalFound === 0 && progress.leads.length === 0) {
             searchFinishedRef.current = true;
             stopEnrichmentPoll();
-            closeEventSource();
             setStatus("idle");
             setMessage(
-              "Search did not complete. Try a broader location or business type."
+              "No results found. Try a broader search like restaurants in Lagos Nigeria or dentists in London UK."
             );
             return;
           }
+          await finishTrialSearch(searchId, searchNumber, trialEmail);
+        }
+      };
 
-          if (progress.status === "completed") {
-            if (progress.totalFound === 0 && progress.leads.length === 0) {
-              searchFinishedRef.current = true;
-              stopEnrichmentPoll();
-              closeEventSource();
-              setStatus("idle");
-              setMessage(
-                "No results found. Try a broader search like restaurants in Lagos Nigeria or dentists in London UK."
-              );
-              return;
-            }
-            await finishTrialSearch(searchId, searchNumber, trialEmail);
-          }
-        })();
-      }, 4000);
+      void pollOnce();
+      enrichmentPollRef.current = setInterval(() => {
+        void pollOnce();
+      }, 3000);
     },
-    [stopEnrichmentPoll, closeEventSource, finishTrialSearch]
+    [stopEnrichmentPoll, finishTrialSearch]
   );
 
   const connectToStream = useCallback(
     (searchId: string, searchNumber: number, trialEmail: string) => {
-      const apiUrl = getApiUrl();
-      if (!apiUrl) {
-        setMessage("Search service is not configured.");
-        setStatus("idle");
-        return;
-      }
-
+      // Trial uses polling only — SSE over QUIC/HTTP3 behind Cloudflare is unreliable.
       startSearchCompletionPoll(searchId, searchNumber, trialEmail);
-
-      closeEventSource();
-      const es = new EventSource(
-        `${apiUrl}/search/${searchId}/stream?${trialEmailQuery(trialEmail)}`
-      );
-      eventSourceRef.current = es;
-
-      const pendingLeads: TrialLead[] = [];
-      const seenKeys = new Set<string>();
-      let leadCount = 0;
-
-      const flushPending = () => {
-        if (pendingLeads.length === 0) return;
-        const batch = [...pendingLeads];
-        pendingLeads.length = 0;
-        setLeads((prev) => [...prev, ...batch].slice(0, MAX_TRIAL_LEADS));
-      };
-
-      const flush = setInterval(flushPending, 300);
-
-      const applyLeadUpdate = (raw: BusinessLead) => {
-        const normalized = normalizeLead(raw);
-        setLeads((prev) => {
-          const idx = prev.findIndex((l) => l.id === normalized.id);
-          if (idx >= 0) {
-            const next = [...prev];
-            next[idx] = mergeLeadUpdate(prev[idx]!, raw);
-            return next;
-          }
-          const key = `${normalized.business_name.toLowerCase()}-${(normalized.phone ?? "").replace(/\s/g, "")}`;
-          if (seenKeys.has(key)) return prev;
-          if (prev.length >= MAX_TRIAL_LEADS) return prev;
-          return [...prev, normalized];
-        });
-      };
-
-      es.onmessage = (event) => {
-        if (searchFinishedRef.current) return;
-
-        try {
-          const data = JSON.parse(event.data) as {
-            type: string;
-            data?: BusinessLead;
-            lead?: BusinessLead;
-            total?: number;
-            message?: string;
-          };
-
-          if (data.type === "progress" && data.message) {
-            setMessage(data.message);
-          }
-
-          if (data.type === "lead") {
-            const raw = data.data ?? data.lead;
-            if (!raw) return;
-
-            const normalized = normalizeLead(raw);
-            const key = `${normalized.business_name.toLowerCase()}-${(normalized.phone ?? "").replace(/\s/g, "")}`;
-            if (seenKeys.has(key)) return;
-            seenKeys.add(key);
-
-            if (leadCount >= MAX_TRIAL_LEADS) {
-              void finishTrialSearch(searchId, searchNumber, trialEmail);
-              return;
-            }
-
-            pendingLeads.push(normalized);
-            leadCount++;
-
-            if (leadCount >= MAX_TRIAL_LEADS) {
-              setTimeout(() => void finishTrialSearch(searchId, searchNumber, trialEmail), 600);
-            }
-          }
-
-          if (data.type === "email_update") {
-            const raw = data.lead ?? data.data;
-            if (raw) applyLeadUpdate(raw);
-          }
-
-          if (data.type === "complete") {
-            clearInterval(flush);
-            es.close();
-            eventSourceRef.current = null;
-            flushPending();
-            if ((data.total ?? 0) === 0 && leadCount === 0) {
-              if (!searchFinishedRef.current) {
-                searchFinishedRef.current = true;
-                stopEnrichmentPoll();
-                setStatus("idle");
-                setMessage(
-                  "No results found. Try a broader search like restaurants in Lagos Nigeria or dentists in London UK."
-                );
-              }
-              return;
-            }
-            void finishTrialSearch(searchId, searchNumber, trialEmail);
-          }
-
-          if (data.type === "error") {
-            clearInterval(flush);
-            es.close();
-            eventSourceRef.current = null;
-            flushPending();
-            if (!searchFinishedRef.current) {
-              searchFinishedRef.current = true;
-              stopEnrichmentPoll();
-              setMessage(data.message || "Search did not complete. Please try again.");
-              setStatus("idle");
-            }
-          }
-        } catch {
-          /* ignore parse errors */
-        }
-      };
-
-      es.onerror = () => {
-        clearInterval(flush);
-        es.close();
-        eventSourceRef.current = null;
-        flushPending();
-        // Keep completion poll running; QUIC/SSE drops are common behind Cloudflare.
-      };
     },
-    [startSearchCompletionPoll, closeEventSource, finishTrialSearch, stopEnrichmentPoll]
+    [startSearchCompletionPoll]
   );
 
   useEffect(() => {
