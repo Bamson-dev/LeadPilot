@@ -76,7 +76,7 @@ export async function reconcileOrphanedPendingSearchJobs(): Promise<{
       if (existing) {
         await existing.remove().catch(() => undefined);
       }
-      await inlineSearchQueue.add(orphan);
+      inlineSearchQueue.schedule(orphan);
       requeued += 1;
       logger.warn("[search-queue] Re-queued orphaned trial job on inline queue", {
         searchId: orphan.searchId,
@@ -259,6 +259,29 @@ export async function shutdownSearchQueue(): Promise<void> {
   initialized = false;
 }
 
+export function recoverStuckTrialSearch(job: {
+  id: string;
+  query: string;
+  location: string;
+  status: string;
+  isTrial?: boolean;
+}): void {
+  if (!job.isTrial || job.status !== "pending") return;
+  if (inlineSearchQueue.isTracked(job.id)) return;
+
+  logger.warn("[search-queue] Recovering stuck trial search on inline queue", {
+    searchId: job.id,
+    query: job.query,
+    location: job.location,
+  });
+  inlineSearchQueue.schedule({
+    searchId: job.id,
+    query: job.query,
+    location: job.location,
+    isTrial: true,
+  });
+}
+
 export async function enqueueSearchJob(data: SearchQueueJobData): Promise<void> {
   if (data.isTrial) {
     logSearchLifecycle("job_enqueued", data.searchId, {
@@ -266,7 +289,7 @@ export async function enqueueSearchJob(data: SearchQueueJobData): Promise<void> 
       location: data.location,
       queue: "inline-trial",
     });
-    await inlineSearchQueue.add(data);
+    inlineSearchQueue.schedule(data);
     return;
   }
 
@@ -289,7 +312,7 @@ export async function enqueueSearchJob(data: SearchQueueJobData): Promise<void> 
     }
   }
 
-  await inlineSearchQueue.add(data);
+  inlineSearchQueue.schedule(data);
 }
 
 export async function getSearchQueuePosition(searchId: string): Promise<number> {

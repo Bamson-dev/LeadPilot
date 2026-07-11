@@ -30,6 +30,7 @@ import {
 import {
   enqueueSearch,
   enqueueSearchJob,
+  recoverStuckTrialSearch,
   refreshSearchQueueStatus,
   resolveQueuePosition,
 } from "../queue/search-queue";
@@ -237,6 +238,16 @@ async function buildSearchResultsPayload(
     );
 
   const queuePosition = await resolveQueuePosition(searchId);
+
+  if (job?.isTrial && job.status === "pending" && queuePosition === 0) {
+    recoverStuckTrialSearch({
+      id: job.id,
+      query: job.query,
+      location: job.location,
+      status: job.status,
+      isTrial: job.isTrial,
+    });
+  }
 
   return {
     searchId,

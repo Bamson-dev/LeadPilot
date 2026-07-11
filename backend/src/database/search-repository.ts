@@ -522,7 +522,7 @@ export async function listOrphanedPendingSearchJobs(
   if (error) throw new Error(error.message);
 
   return (data ?? [])
-    .filter((row) => row.created_at === row.updated_at)
+    .filter((row) => Boolean(row.is_trial) || row.created_at === row.updated_at)
     .map((row) => ({
       searchId: row.id,
       query: row.query,

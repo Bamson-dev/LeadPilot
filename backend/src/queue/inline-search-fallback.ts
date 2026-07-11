@@ -19,6 +19,12 @@ class InlineSearchQueue {
     reject: (err: Error) => void;
   }> = [];
   private running = 0;
+  private runningSearchIds = new Set<string>();
+
+  isTracked(searchId: string): boolean {
+    if (this.runningSearchIds.has(searchId)) return true;
+    return this.queue.some((job) => job.data.searchId === searchId);
+  }
 
   async add(data: SearchQueueJobData): Promise<void> {
     logSearchLifecycle("job_enqueued", data.searchId, {
@@ -32,11 +38,32 @@ class InlineSearchQueue {
     });
   }
 
+  /** Queue a job without blocking the caller until scraping finishes. */
+  schedule(data: SearchQueueJobData): void {
+    logSearchLifecycle("job_enqueued", data.searchId, {
+      queue: "inline",
+      query: data.query,
+      location: data.location,
+    });
+    this.queue.push({
+      data,
+      resolve: () => undefined,
+      reject: (err) => {
+        logger.error("[inline-queue] Scheduled search job failed", {
+          searchId: data.searchId,
+          error: err.message,
+        });
+      },
+    });
+    void this.process();
+  }
+
   private async process(): Promise<void> {
     if (this.running >= INLINE_MAX_CONCURRENT || this.queue.length === 0) return;
 
     const job = this.queue.shift()!;
     this.running++;
+    this.runningSearchIds.add(job.data.searchId);
 
     const emit = (event: StreamEvent) => {
       emitToStream(job.data.searchId, event);
@@ -96,6 +123,7 @@ class InlineSearchQueue {
         job.reject(recoverErr instanceof Error ? recoverErr : new Error(message));
       }
     } finally {
+      this.runningSearchIds.delete(job.data.searchId);
       this.running--;
       void this.process();
     }
