@@ -188,6 +188,24 @@ function lockedDisplayValue(value: string, fallback: string): string {
   return value.trim() || fallback;
 }
 
+function hasTrialPhone(phone: string | null | undefined): boolean {
+  return Boolean(phone?.trim());
+}
+
+function TrialPhoneValue({ phone }: { phone: string | null }) {
+  if (hasTrialPhone(phone)) {
+    return (
+      <span style={{ fontSize: 13, color: "#C0C0D8", fontWeight: 600 }}>{phone!.trim()}</span>
+    );
+  }
+
+  return (
+    <span style={LOCKED_FIELD_STYLE} aria-label="Phone not listed">
+      Not listed
+    </span>
+  );
+}
+
 function truncateAddress(address: string, maxLen: number): string {
   if (address.length <= maxLen) return address;
   return `${address.slice(0, maxLen)}…`;
@@ -347,7 +365,6 @@ function StarRating() {
 }
 
 function LeadRowMobile({ lead }: { lead: TrialLead }) {
-  const phoneDisplay = lockedDisplayValue(lead.phone ?? "", "Not listed");
   const emailDisplay = lockedDisplayValue(
     lead.verifiedEmails[0] ?? lead.emails[0] ?? lead.email ?? "",
     "contact@business.com"
@@ -378,7 +395,7 @@ function LeadRowMobile({ lead }: { lead: TrialLead }) {
       )}
       <div style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "center", flexWrap: "wrap" }}>
         <span style={{ color: "#555575", fontSize: 12, flexShrink: 0 }}>Phone</span>
-        <LockedContactValue value={phoneDisplay} />
+        <TrialPhoneValue phone={lead.phone} />
       </div>
       <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
         <span style={{ color: "#555575", fontSize: 12, flexShrink: 0 }}>Email</span>
@@ -421,7 +438,6 @@ export default function FreeTrialPage() {
   const searchFinishedRef = useRef(false);
 
   const tableSendCount = useMemo(() => sendButtonCount(leads), [leads]);
-  const tableVerifiedCount = useMemo(() => countVerifiedInLeads(leads), [leads]);
   const exportCount = leads.length;
 
   const openUpgrade = useCallback(() => setShowUpgradePanel(true), []);
@@ -514,10 +530,8 @@ export default function FreeTrialPage() {
         setLeads(freshLeads);
       }
 
-      if (searchNumber >= 2) {
-        setShowMidPaywall(false);
-        setShowUpgradePanel(true);
-      }
+      setShowMidPaywall(false);
+      setShowUpgradePanel(true);
     },
     [stopEnrichmentPoll, closeEventSource]
   );
@@ -828,8 +842,6 @@ export default function FreeTrialPage() {
       setStatus("idle");
     }
   }
-
-  const upgradeVerifiedCount = Math.max(aggregateStats.verifiedEmailCount, tableVerifiedCount);
 
   const tapTarget: CSSProperties = {
     minHeight: 48,
@@ -1264,7 +1276,6 @@ export default function FreeTrialPage() {
                     <span>Rating</span>
                   </div>
                   {leads.map((lead, i) => {
-                    const phoneDisplay = lockedDisplayValue(lead.phone ?? "", "Not listed");
                     const emailDisplay = lockedDisplayValue(
                       lead.verifiedEmails[0] ?? lead.emails[0] ?? lead.email ?? "",
                       "contact@business.com"
@@ -1291,7 +1302,7 @@ export default function FreeTrialPage() {
                           {lead.address ? truncateAddress(lead.address, 35) : "n/a"}
                         </span>
                         <span>
-                          <LockedContactValue value={phoneDisplay} />
+                          <TrialPhoneValue phone={lead.phone} />
                         </span>
                         <span>
                           <LockedContactValue value={emailDisplay} />
@@ -1341,7 +1352,7 @@ export default function FreeTrialPage() {
             }}
           >
             <p style={{ fontSize: 15, fontWeight: 700, color: "#F0EFFF", lineHeight: 1.55, margin: "0 0 12px" }}>
-              You are seeing {leads.length} of {MARKETING_TOTAL} businesses found for{" "}
+              You are seeing {MAX_TRIAL_LEADS} of {MARKETING_TOTAL} businesses found for{" "}
               {activeSearchQuery} in {activeSearchLocation}. Full access unlocks every result for your
               search, with complete emails, phone numbers, and one click outreach to all of them.
             </p>
@@ -1406,10 +1417,10 @@ export default function FreeTrialPage() {
             }}
           >
             <p style={{ fontSize: 17, fontWeight: 800, color: "#F0EFFF", lineHeight: 1.5, margin: "0 0 16px" }}>
-              You found {aggregateStats.totalFound.toLocaleString()} potential clients.{" "}
-              {upgradeVerifiedCount.toLocaleString()} of them have a verified email address sitting in
-              front of you. Emailing all of them takes one click, and that click is behind lifetime
-              access.
+              You are seeing {MAX_TRIAL_LEADS} of {MARKETING_TOTAL} businesses found for{" "}
+              {activeSearchQuery || query} in {activeSearchLocation || location}. Full access unlocks
+              every result for your search, with complete emails, phone numbers, and one click outreach
+              to all of them.
             </p>
 
             <ul
