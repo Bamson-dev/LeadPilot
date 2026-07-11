@@ -42,7 +42,13 @@ import { formatSearchMessage } from "../utils/search-messages";
 import { supabase } from "../database/client";
 import { logger } from "../utils/logger";
 import { generateAreaSuggestions } from "../services/suggestion-service";
-import { claimTrialSearch, getTrialSignupByEmail } from "../database/free-trial-repository";
+import { claimTrialSearch, getTrialSignupByEmail, releaseTrialSearch } from "../database/free-trial-repository";
+import {
+  claimTrialIpSearch,
+  getTrialIpSearchStatus,
+  releaseTrialIpSearch,
+} from "../database/free-trial-ip-repository";
+import { clientIp, isRateLimitAllowlisted } from "../middleware/rate-limit";
 
 export const searchRouter = Router();
 
@@ -415,6 +421,10 @@ export async function handleFreeTrialSearch(
   req: Request,
   res: Response
 ): Promise<void> {
+  let claimedEmail: string | null = null;
+  let claimedIp: string | null = null;
+  let ipCapBypassed = true;
+
   try {
     const { query, location, email: rawEmail } = req.body as {
       query?: string;
@@ -475,6 +485,24 @@ export async function handleFreeTrialSearch(
       return;
     }
 
+    const requestIp = clientIp(req);
+    ipCapBypassed = isRateLimitAllowlisted(requestIp);
+
+    if (!ipCapBypassed) {
+      const ipStatus = await getTrialIpSearchStatus(requestIp);
+      if (ipStatus.searchesUsed >= 2) {
+        res.status(429).json({
+          error: "Free trial limit reached for this network",
+          code: "TRIAL_IP_LIMIT",
+          message:
+            "This network has already used the 2 free trial searches. Get full access to continue.",
+          ipSearchesUsed: ipStatus.searchesUsed,
+          ipSearchesRemaining: 0,
+        });
+        return;
+      }
+    }
+
     const claim = await claimTrialSearch(email);
     if (!claim.allowed) {
       if (claim.reason === "limit") {
@@ -494,6 +522,29 @@ export async function handleFreeTrialSearch(
         code: "TRIAL_GATE_REQUIRED",
       });
       return;
+    }
+    claimedEmail = email;
+
+    if (!ipCapBypassed) {
+      try {
+        const ipClaim = await claimTrialIpSearch(requestIp);
+        if (!ipClaim.allowed) {
+          await releaseTrialSearch(email);
+          res.status(429).json({
+            error: "Free trial limit reached for this network",
+            code: "TRIAL_IP_LIMIT",
+            message:
+              "This network has already used the 2 free trial searches. Get full access to continue.",
+            ipSearchesUsed: ipClaim.searchesUsed,
+            ipSearchesRemaining: ipClaim.searchesRemaining,
+          });
+          return;
+        }
+        claimedIp = requestIp;
+      } catch (ipErr) {
+        await releaseTrialSearch(email);
+        throw ipErr;
+      }
     }
 
     const trimmedQuery = query.trim();
@@ -525,6 +576,12 @@ export async function handleFreeTrialSearch(
           : `Searching for ${trimmedQuery} in ${trimmedLocation}`,
     });
   } catch (err) {
+    if (claimedEmail) {
+      await releaseTrialSearch(claimedEmail).catch(() => undefined);
+    }
+    if (claimedIp) {
+      await releaseTrialIpSearch(claimedIp).catch(() => undefined);
+    }
     logger.error("Free trial search failed", {
       error: err instanceof Error ? err.message : "unknown",
     });

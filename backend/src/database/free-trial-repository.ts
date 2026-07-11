@@ -52,6 +52,29 @@ export async function incrementTrialSearchesUsed(email: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+export async function releaseTrialSearch(email: string): Promise<void> {
+  const normalized = email.toLowerCase().trim();
+
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const existing = await getTrialSignupByEmail(normalized);
+    if (!existing) return;
+
+    const current = existing.searches_used ?? 0;
+    if (current <= 0) return;
+
+    const { data, error } = await supabase
+      .from("free_trial_signups")
+      .update({ searches_used: current - 1 })
+      .eq("email", normalized)
+      .eq("searches_used", current)
+      .select("searches_used")
+      .maybeSingle();
+
+    if (error) throw new Error(error.message);
+    if (data) return;
+  }
+}
+
 export type ClaimTrialSearchResult =
   | {
       allowed: true;

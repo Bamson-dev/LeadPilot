@@ -10,16 +10,31 @@ import {
 } from "react";
 import type { BusinessLead } from "@leadthur/shared";
 import { getApiUrl } from "@/utils/env";
-import { SALE_PRICE_NGN } from "@/constants/pricing";
+import { SALE_PRICE_USD } from "@/constants/pricing";
 
 const MAX_TRIAL_LEADS = 15;
-const MARKETING_TOTAL = "1,000+";
-const PAYSTACK_URL = "https://paystack.shop/pay/Leadthur";
+const CHECKOUT_URL = "/checkout";
 const SITE_URL = "https://www.leadthur.com";
 const TRIAL_EMAIL_KEY = "lp_trial_email";
 const TRIAL_STATS_KEY = "lp_trial_stats";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const MID_PAYWALL_TRIGGER = 5;
+
+const PAYWALL_HEADING = "Pay once. Find clients forever.";
+
+const PAYWALL_TIER_ONE = [
+  { label: "1,000+ potential clients per search forever", compareAt: "$60" },
+  { label: "Direct phone numbers and verified emails", compareAt: "$45" },
+  { label: "The email sender built into the dashboard", compareAt: "$50" },
+  { label: "Unlimited CSV export of every search", compareAt: "$25" },
+] as const;
+
+const PAYWALL_TIER_TWO = [
+  "AI outreach writer that drafts every pitch",
+  "Done for you pitch templates by service",
+  "Open tracking and automatic follow ups",
+  "Search history and 195 countries",
+  "Every feature we add later at no extra charge",
+] as const;
 
 type TrialStatus = "idle" | "searching" | "complete" | "limit";
 
@@ -54,15 +69,58 @@ const LOCKED_FIELD_STYLE: CSSProperties = {
   borderRadius: 4,
 };
 
-const VALUE_STACK = [
-  { label: "Built in email sender", free: true },
-  { label: "AI outreach writer", free: true },
-  { label: "Open tracking", free: true },
-  { label: "Automatic follow ups", free: true },
-  { label: "Search history", free: true },
-  { label: "Exports", free: true },
-  { label: "195 countries", free: true },
-] as const;
+function PaywallValueRow({
+  label,
+  compareAt,
+  free,
+}: {
+  label: string;
+  compareAt?: string;
+  free?: boolean;
+}) {
+  return (
+    <li
+      style={{
+        fontSize: 14,
+        color: "#C0C0D8",
+        lineHeight: 1.45,
+        display: "flex",
+        justifyContent: "space-between",
+        gap: 12,
+        alignItems: "flex-start",
+      }}
+    >
+      <span>{label}</span>
+      {compareAt ? (
+        <span
+          style={{
+            textDecoration: "line-through",
+            color: "#7878A0",
+            fontWeight: 600,
+            flexShrink: 0,
+          }}
+        >
+          {compareAt}
+        </span>
+      ) : free ? (
+        <span style={{ color: "#34D399", fontWeight: 700, flexShrink: 0 }}>FREE</span>
+      ) : null}
+    </li>
+  );
+}
+
+function isSearchReadyForPaywall(progress: {
+  status: string;
+  leads: TrialLead[];
+  totalFound: number;
+  emailScrapingComplete: boolean;
+}): boolean {
+  if (progress.status !== "completed" || !progress.emailScrapingComplete) {
+    return false;
+  }
+  const targetRows = Math.min(MAX_TRIAL_LEADS, progress.totalFound || progress.leads.length);
+  return progress.leads.length >= targetRows && progress.leads.length > 0;
+}
 
 function getTrialEmail(): string {
   if (typeof window === "undefined") return "";
@@ -251,6 +309,7 @@ async function fetchTrialSearchProgress(
   totalFound: number;
   queuePosition: number;
   verifiedEmailCount: number;
+  emailScrapingComplete: boolean;
 } | null> {
   const apiUrl = getApiUrl();
   if (!apiUrl) return null;
@@ -266,6 +325,7 @@ async function fetchTrialSearchProgress(
       totalFound?: number;
       total?: number;
       queuePosition?: number;
+      emailScrapingComplete?: boolean;
     };
     const rows = data.leads ?? [];
     let verifiedEmailCount = 0;
@@ -278,6 +338,7 @@ async function fetchTrialSearchProgress(
       totalFound: data.totalFound ?? data.total ?? rows.length,
       queuePosition: data.queuePosition ?? 0,
       verifiedEmailCount,
+      emailScrapingComplete: Boolean(data.emailScrapingComplete),
     };
   } catch {
     return null;
@@ -418,8 +479,8 @@ export default function FreeTrialPage() {
   const [searchesRemaining, setSearchesRemaining] = useState(2);
   const [message, setMessage] = useState("");
   const [showUpgradePanel, setShowUpgradePanel] = useState(false);
-  const [showMidPaywall, setShowMidPaywall] = useState(false);
-  const [midPaywallDismissed, setMidPaywallDismissed] = useState(false);
+  const [searchResultsReady, setSearchResultsReady] = useState(false);
+  const [scrolledToResultsEnd, setScrolledToResultsEnd] = useState(false);
   const [activeSearchQuery, setActiveSearchQuery] = useState("");
   const [activeSearchLocation, setActiveSearchLocation] = useState("");
   const [gatePassed, setGatePassed] = useState(false);
@@ -436,16 +497,12 @@ export default function FreeTrialPage() {
   const enrichmentPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const searchFinishedRef = useRef(false);
+  const resultsEndRef = useRef<HTMLDivElement | null>(null);
 
   const tableSendCount = useMemo(() => sendButtonCount(leads), [leads]);
   const exportCount = leads.length;
 
   const openUpgrade = useCallback(() => setShowUpgradePanel(true), []);
-
-  const dismissMidPaywall = useCallback(() => {
-    setShowMidPaywall(false);
-    setMidPaywallDismissed(true);
-  }, []);
 
   const refreshTrialStatus = useCallback(async (email: string) => {
     const trialStatus = await fetchTrialStatus(email);
@@ -496,8 +553,8 @@ export default function FreeTrialPage() {
     setSearchesUsed(0);
     setSearchesRemaining(2);
     setShowUpgradePanel(false);
-    setShowMidPaywall(false);
-    setMidPaywallDismissed(false);
+    setSearchResultsReady(false);
+    setScrolledToResultsEnd(false);
     setAggregateStats({ totalFound: 0, verifiedEmailCount: 0 });
     setMessage("");
     paywallTriggeredRef.current = false;
@@ -529,9 +586,6 @@ export default function FreeTrialPage() {
       if (freshLeads.length > 0) {
         setLeads(freshLeads);
       }
-
-      setShowMidPaywall(false);
-      setShowUpgradePanel(true);
     },
     [stopEnrichmentPoll, closeEventSource]
   );
@@ -549,6 +603,10 @@ export default function FreeTrialPage() {
 
         if (progress.leads.length > 0) {
           setLeads(progress.leads);
+        }
+
+        if (isSearchReadyForPaywall(progress)) {
+          setSearchResultsReady(true);
         }
 
         if (progress.queuePosition > 0) {
@@ -674,16 +732,29 @@ export default function FreeTrialPage() {
   }, [status, query, location, message]);
 
   useEffect(() => {
-    if (
-      leads.length >= MID_PAYWALL_TRIGGER &&
-      !paywallTriggeredRef.current &&
-      !midPaywallDismissed &&
-      !showUpgradePanel
-    ) {
-      paywallTriggeredRef.current = true;
-      setShowMidPaywall(true);
+    if (!searchResultsReady || !scrolledToResultsEnd || paywallTriggeredRef.current) {
+      return;
     }
-  }, [leads.length, midPaywallDismissed, showUpgradePanel]);
+    paywallTriggeredRef.current = true;
+    setShowUpgradePanel(true);
+  }, [searchResultsReady, scrolledToResultsEnd]);
+
+  useEffect(() => {
+    const sentinel = resultsEndRef.current;
+    if (!sentinel || !searchResultsReady) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setScrolledToResultsEnd(true);
+        }
+      },
+      { root: null, threshold: 0.6 }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [searchResultsReady, leads.length]);
 
   async function handleGateSubmit() {
     const email = gateEmail.toLowerCase().trim();
@@ -770,9 +841,10 @@ export default function FreeTrialPage() {
 
     setStatus("searching");
     setLeads([]);
-    setShowMidPaywall(false);
-    setMidPaywallDismissed(false);
+    setSearchResultsReady(false);
+    setScrolledToResultsEnd(false);
     paywallTriggeredRef.current = false;
+    setShowUpgradePanel(false);
     setActiveSearchQuery(trimmedQuery);
     setActiveSearchLocation(trimmedLocation);
     setMessage(`Scanning for ${trimmedQuery} in ${trimmedLocation}...`);
@@ -802,7 +874,7 @@ export default function FreeTrialPage() {
         return;
       }
 
-      if (res.status === 429 && body.code === "TRIAL_LIMIT") {
+      if (res.status === 429 && (body.code === "TRIAL_LIMIT" || body.code === "TRIAL_IP_LIMIT")) {
         if (typeof body.searchesUsed === "number") {
           setSearchesUsed(body.searchesUsed);
         }
@@ -849,7 +921,7 @@ export default function FreeTrialPage() {
     padding: "12px 16px",
   };
 
-  const bottomPad = showUpgradePanel ? 360 : showMidPaywall ? 280 : 40;
+  const bottomPad = showUpgradePanel ? 420 : 40;
 
   return (
     <div
@@ -877,9 +949,7 @@ export default function FreeTrialPage() {
           LeadThur
         </a>
         <a
-          href={PAYSTACK_URL}
-          target="_blank"
-          rel="noopener noreferrer"
+          href={CHECKOUT_URL}
           style={{
             color: "#A78BFA",
             fontSize: 14,
@@ -1029,7 +1099,7 @@ export default function FreeTrialPage() {
                     boxShadow: "0 0 40px rgba(124,58,237,0.4)",
                   }}
                 >
-                  Get lifetime access for ₦{SALE_PRICE_NGN.toLocaleString()}
+                  Get lifetime access for ${SALE_PRICE_USD}
                 </button>
                 <button
                   type="button"
@@ -1314,6 +1384,7 @@ export default function FreeTrialPage() {
                     );
                   })}
                 </div>
+                <div ref={resultsEndRef} style={{ height: 1, width: "100%" }} aria-hidden />
               </section>
             )}
           </>
@@ -1332,69 +1403,6 @@ export default function FreeTrialPage() {
           LeadThur · Business Discovery Intelligence
         </a>
       </footer>
-
-      {showMidPaywall && leads.length > 0 && !showUpgradePanel && (
-        <div
-          className="fixed bottom-0 left-0 right-0 z-40"
-          style={{
-            background: "linear-gradient(to top, rgba(6,6,10,0.92) 55%, transparent)",
-            padding: "20px 16px 16px",
-            pointerEvents: "none",
-          }}
-        >
-          <div
-            className="mx-auto max-w-md rounded-2xl p-5"
-            style={{
-              background: "rgba(17,17,24,0.96)",
-              border: "1px solid rgba(124,58,237,0.35)",
-              boxShadow: "0 0 60px rgba(124,58,237,0.2)",
-              pointerEvents: "auto",
-            }}
-          >
-            <p style={{ fontSize: 15, fontWeight: 700, color: "#F0EFFF", lineHeight: 1.55, margin: "0 0 12px" }}>
-              You are seeing {MAX_TRIAL_LEADS} of {MARKETING_TOTAL} businesses found for{" "}
-              {activeSearchQuery} in {activeSearchLocation}. Full access unlocks every result for your
-              search, with complete emails, phone numbers, and one click outreach to all of them.
-            </p>
-            <div className="flex flex-col gap-2">
-              <a
-                href={PAYSTACK_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-extrabold rounded-xl text-center"
-                style={{
-                  ...tapTarget,
-                  display: "block",
-                  background: "#7C3AED",
-                  color: "white",
-                  textDecoration: "none",
-                  fontSize: 15,
-                  boxShadow: "0 0 32px rgba(124,58,237,0.4)",
-                }}
-              >
-                Get lifetime access for ₦{SALE_PRICE_NGN.toLocaleString()}
-              </a>
-              <button
-                type="button"
-                onClick={dismissMidPaywall}
-                style={{
-                  ...tapTarget,
-                  background: "transparent",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  color: "#9CA3AF",
-                  borderRadius: 12,
-                  fontWeight: 600,
-                  fontSize: 14,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
-              >
-                Keep browsing my free results
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {showUpgradePanel && gatePassed && (
         <div
@@ -1416,13 +1424,22 @@ export default function FreeTrialPage() {
               overflowY: "auto",
             }}
           >
-            <p style={{ fontSize: 17, fontWeight: 800, color: "#F0EFFF", lineHeight: 1.5, margin: "0 0 16px" }}>
-              You are seeing {MAX_TRIAL_LEADS} of {MARKETING_TOTAL} businesses found for{" "}
-              {activeSearchQuery || query} in {activeSearchLocation || location}. Full access unlocks
-              every result for your search, with complete emails, phone numbers, and one click outreach
-              to all of them.
+            <p style={{ fontSize: 20, fontWeight: 800, color: "#F0EFFF", lineHeight: 1.35, margin: "0 0 16px" }}>
+              {PAYWALL_HEADING}
             </p>
 
+            <p
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: "#A78BFA",
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                margin: "0 0 8px",
+              }}
+            >
+              What you are getting
+            </p>
             <ul
               style={{
                 listStyle: "none",
@@ -1433,44 +1450,55 @@ export default function FreeTrialPage() {
                 gap: 8,
               }}
             >
-              {VALUE_STACK.map((item) => (
-                <li
-                  key={item.label}
-                  style={{
-                    fontSize: 14,
-                    color: "#C0C0D8",
-                    lineHeight: 1.45,
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 12,
-                  }}
-                >
-                  <span>{item.label}</span>
-                  {item.free && (
-                    <span style={{ color: "#34D399", fontWeight: 700, flexShrink: 0 }}>FREE</span>
-                  )}
-                </li>
+              {PAYWALL_TIER_ONE.map((item) => (
+                <PaywallValueRow key={item.label} label={item.label} compareAt={item.compareAt} />
               ))}
             </ul>
 
-            <p style={{ fontSize: 16, fontWeight: 800, color: "#F0EFFF", margin: "0 0 8px" }}>
-              <span style={{ textDecoration: "line-through", color: "#7878A0", fontWeight: 600, marginRight: 8 }}>
-                ₦100,000 per year
-              </span>
-              ₦{SALE_PRICE_NGN.toLocaleString()} once
+            <p
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: "#34D399",
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                margin: "0 0 8px",
+              }}
+            >
+              Included when you claim a slot today
             </p>
-            <p style={{ fontSize: 13, color: "#7878A0", margin: "0 0 8px", lineHeight: 1.5 }}>
-              Six of twenty lifetime slots remain before the price rises.
-            </p>
-            <p style={{ fontSize: 13, color: "#7878A0", margin: "0 0 16px", lineHeight: 1.5 }}>
-              30 day money back guarantee. If LeadThur does not help you find potential clients, email
-              support and we refund you.
-            </p>
+            <ul
+              style={{
+                listStyle: "none",
+                margin: "0 0 16px",
+                padding: 0,
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+              }}
+            >
+              {PAYWALL_TIER_TWO.map((item) => (
+                <PaywallValueRow key={item} label={item} free />
+              ))}
+            </ul>
+
+            <div style={{ margin: "0 0 16px", textAlign: "center" }}>
+              <p style={{ margin: "0 0 6px", fontSize: 14, color: "#7878A0" }}>
+                <span style={{ textDecoration: "line-through", marginRight: 8 }}>Total value $300</span>
+              </p>
+              <p style={{ margin: "0 0 10px", fontSize: 14, color: "#7878A0" }}>
+                <span style={{ textDecoration: "line-through" }}>$100 per year</span>
+              </p>
+              <p style={{ margin: 0, fontSize: 34, fontWeight: 900, color: "#F0EFFF", lineHeight: 1.1 }}>
+                ${SALE_PRICE_USD}
+              </p>
+              <p style={{ margin: "6px 0 0", fontSize: 14, fontWeight: 700, color: "#C0C0D8" }}>
+                Once. Never again.
+              </p>
+            </div>
 
             <a
-              href={PAYSTACK_URL}
-              target="_blank"
-              rel="noopener noreferrer"
+              href={CHECKOUT_URL}
               className="block font-extrabold rounded-xl text-center"
               style={{
                 ...tapTarget,
@@ -1481,7 +1509,7 @@ export default function FreeTrialPage() {
                 fontSize: 16,
               }}
             >
-              Get lifetime access for ₦{SALE_PRICE_NGN.toLocaleString()}
+              Get lifetime access for ${SALE_PRICE_USD}
             </a>
           </div>
         </div>
