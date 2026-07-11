@@ -212,6 +212,19 @@ async function finalizeSearchAndNotify(
         })
       );
     }
+
+    const { getSearchJob } = await import("../database/search-repository");
+    const { schedulePostSearchEmail } = await import("../database/free-trial-repository");
+    const job = await getSearchJob(searchId);
+    if (job?.isTrial && licenseEmail) {
+      void schedulePostSearchEmail(licenseEmail, query, location).catch((err) =>
+        logger.error("Failed to schedule post-search trial email", {
+          searchId,
+          email: licenseEmail,
+          error: err instanceof Error ? err.message : "unknown",
+        })
+      );
+    }
   }
 }
 

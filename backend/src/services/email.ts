@@ -520,16 +520,39 @@ export async function sendTopUpConfirmationEmail({
   });
 }
 
-export async function sendTrialEmail(email: string, step: number): Promise<void> {
-  const { getTrialEmailBody, TRIAL_EMAIL_SUBJECTS } = await import("./trial-email-content");
-  const subject = TRIAL_EMAIL_SUBJECTS[step];
-  const body = getTrialEmailBody(step);
+export async function sendTrialEmail(
+  email: string,
+  step: number,
+  sequenceVersion = 2
+): Promise<void> {
+  const {
+    getTrialEmailBody,
+    getTrialEmailSubject,
+  } = await import("./trial-email-content");
+  const subject = getTrialEmailSubject(sequenceVersion, step);
+  const body = getTrialEmailBody(sequenceVersion, step);
   if (!subject || !body) {
-    throw new Error(`Invalid trial email step: ${step}`);
+    throw new Error(`Invalid trial email step: ${step} (version ${sequenceVersion})`);
   }
 
   const html = wrapTrial(body, email, step);
   await deliver({ to: email, subject, html });
+}
+
+export async function sendTrialPostSearchEmail(
+  email: string,
+  query: string,
+  location: string
+): Promise<void> {
+  const { getTrialPostSearchEmailBody, TRIAL_POST_SEARCH_EMAIL_SUBJECT, TRIAL_POST_SEARCH_TRACKING_STEP } =
+    await import("./trial-email-content");
+  const body = getTrialPostSearchEmailBody(query, location);
+  const html = wrapTrial(body, email, TRIAL_POST_SEARCH_TRACKING_STEP);
+  await deliver({
+    to: email,
+    subject: TRIAL_POST_SEARCH_EMAIL_SUBJECT,
+    html,
+  });
 }
 
 function formatBroadcastBody(body: string): string {
@@ -555,12 +578,16 @@ export async function sendTrialBroadcastEmail(
 }
 
 /** Staging/admin helper for previewing redesigned emails. */
-export async function sendTrialEmailPreview(email: string, step: number): Promise<boolean> {
-  const { getTrialEmailBody, TRIAL_EMAIL_SUBJECTS } = await import("./trial-email-content");
-  const subject = TRIAL_EMAIL_SUBJECTS[step];
-  const body = getTrialEmailBody(step);
+export async function sendTrialEmailPreview(
+  email: string,
+  step: number,
+  sequenceVersion = 2
+): Promise<boolean> {
+  const { getTrialEmailBody, getTrialEmailSubject } = await import("./trial-email-content");
+  const subject = getTrialEmailSubject(sequenceVersion, step);
+  const body = getTrialEmailBody(sequenceVersion, step);
   if (!subject || !body) {
-    throw new Error(`Invalid trial email step: ${step}`);
+    throw new Error(`Invalid trial email step: ${step} (version ${sequenceVersion})`);
   }
   return sendEmail({ to: email, subject, html: wrapTrial(body, email, step) });
 }

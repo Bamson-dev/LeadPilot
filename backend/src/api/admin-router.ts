@@ -1780,7 +1780,7 @@ adminRouter.get("/email-performance", requireAdminAuth, async (_req: Request, re
     const sendsByStep = new Map<number, number>();
     const opensByStep = new Map<number, { opens: number; lastOpenedAt: string | null }>();
 
-    for (let step = 1; step <= 15; step++) {
+    for (let step = 1; step <= 20; step++) {
       const sends = sequenceSteps.reduce(
         (count, row) => count + (row.sequence_step >= step ? 1 : 0),
         0
@@ -1790,7 +1790,7 @@ adminRouter.get("/email-performance", requireAdminAuth, async (_req: Request, re
     }
 
     for (const row of opensRows) {
-      if (!Number.isInteger(row.step) || row.step < 1 || row.step > 15) continue;
+      if (!Number.isInteger(row.step) || row.step < 1 || row.step > 100) continue;
       const current = opensByStep.get(row.step) ?? { opens: 0, lastOpenedAt: null };
       const nextLastOpened =
         current.lastOpenedAt && row.last_opened_at
@@ -1804,7 +1804,7 @@ adminRouter.get("/email-performance", requireAdminAuth, async (_req: Request, re
       });
     }
 
-    const rows = Array.from({ length: 15 }, (_, idx) => {
+    const rows = Array.from({ length: 20 }, (_, idx) => {
       const step = idx + 1;
       const sends = sendsByStep.get(step) ?? 0;
       const opens = opensByStep.get(step)?.opens ?? 0;

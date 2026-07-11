@@ -9,7 +9,12 @@ export interface FreeTrialSignup {
   converted_at: string | null;
   sequence_step: number;
   sequence_paused: boolean;
+  sequence_version: number;
   last_email_sent_at: string | null;
+  post_search_email_scheduled_at: string | null;
+  post_search_email_sent_at: string | null;
+  post_search_query: string | null;
+  post_search_location: string | null;
   created_at: string;
 }
 
@@ -31,7 +36,10 @@ export async function createTrialSignup(email: string): Promise<FreeTrialSignup>
   const normalized = email.toLowerCase().trim();
   const { data, error } = await supabase
     .from("free_trial_signups")
-    .insert({ email: normalized })
+    .insert({
+      email: normalized,
+      sequence_version: 2,
+    })
     .select("*")
     .single();
 
@@ -218,11 +226,63 @@ export async function listTrialSignupsDueForSequence(): Promise<FreeTrialSignup[
     .from("free_trial_signups")
     .select("*")
     .eq("converted", false)
-    .eq("sequence_paused", false)
-    .lt("sequence_step", 15);
+    .eq("sequence_paused", false);
 
   if (error) throw new Error(error.message);
   return (data ?? []) as FreeTrialSignup[];
+}
+
+const POST_SEARCH_DELAY_MS = 3 * 60 * 60 * 1000;
+
+export async function schedulePostSearchEmail(
+  email: string,
+  query: string,
+  location: string
+): Promise<void> {
+  const normalized = email.toLowerCase().trim();
+  const existing = await getTrialSignupByEmail(normalized);
+  if (!existing || existing.converted || existing.sequence_paused) return;
+  if (existing.post_search_email_sent_at) return;
+
+  const scheduledAt = new Date(Date.now() + POST_SEARCH_DELAY_MS).toISOString();
+  const { error } = await supabase
+    .from("free_trial_signups")
+    .update({
+      post_search_query: query.trim(),
+      post_search_location: location.trim(),
+      post_search_email_scheduled_at: scheduledAt,
+    })
+    .eq("email", normalized);
+
+  if (error) throw new Error(error.message);
+}
+
+export async function listTrialSignupsDueForPostSearchEmail(): Promise<FreeTrialSignup[]> {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("free_trial_signups")
+    .select("*")
+    .eq("converted", false)
+    .eq("sequence_paused", false)
+    .is("post_search_email_sent_at", null)
+    .not("post_search_email_scheduled_at", "is", null)
+    .lte("post_search_email_scheduled_at", now);
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as FreeTrialSignup[];
+}
+
+export async function markPostSearchEmailSent(email: string): Promise<void> {
+  const normalized = email.toLowerCase().trim();
+  const { error } = await supabase
+    .from("free_trial_signups")
+    .update({
+      post_search_email_sent_at: new Date().toISOString(),
+      post_search_email_scheduled_at: null,
+    })
+    .eq("email", normalized);
+
+  if (error) throw new Error(error.message);
 }
 
 export async function recordTrialEmailOpen(email: string, step: number): Promise<void> {

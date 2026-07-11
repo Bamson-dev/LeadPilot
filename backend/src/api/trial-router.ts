@@ -40,7 +40,7 @@ trialRouter.post("/signup", async (req: Request, res: Response) => {
     await createTrialSignup(email);
 
     try {
-      await sendTrialEmail(email, 1);
+      await sendTrialEmail(email, 1, 2);
       await updateTrialSequenceProgress(email, 1);
     } catch (error) {
       logger.error("Trial welcome email failed", { email, error });
@@ -112,7 +112,7 @@ trialRouter.get("/email-opened", async (req: Request, res: Response) => {
   const step = Number(req.query.step);
 
   try {
-    if (EMAIL_RE.test(email) && Number.isInteger(step) && step >= 1 && step <= 15) {
+    if (EMAIL_RE.test(email) && Number.isInteger(step) && step >= 1 && step <= 100) {
       await recordTrialEmailOpen(email, step);
     }
   } catch (err) {
