@@ -1424,6 +1424,10 @@ export default function FreeTrialPage() {
               overflowY: "auto",
             }}
           >
+            <p style={{ fontSize: 15, fontWeight: 600, color: "#C0C0D8", lineHeight: 1.55, margin: "0 0 12px" }}>
+              You are seeing {MAX_TRIAL_LEADS} of 1,000+ businesses found for {activeSearchQuery} in{" "}
+              {activeSearchLocation}.
+            </p>
             <p style={{ fontSize: 20, fontWeight: 800, color: "#F0EFFF", lineHeight: 1.35, margin: "0 0 16px" }}>
               {PAYWALL_HEADING}
             </p>
