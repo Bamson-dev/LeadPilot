@@ -32,6 +32,7 @@ import { logger } from "./utils/logger";
 import { getDeepseekKeyFingerprint, isDeepseekConfigured } from "./utils/deepseek-config";
 import { startTrialSequenceScheduler } from "./services/trial-sequence";
 import { initSearchQueue, shutdownSearchQueue } from "./queue/search-queue";
+import { runStartupMigrations } from "./database/run-startup-migrations";
 import { initOutreachSendQueue, shutdownOutreachSendQueue } from "./queue/outreach-send-queue";
 import { ensureOutreachPaystackPlans } from "./services/outreach-paystack-plans";
 import { startOutreachGraceScheduler } from "./services/outreach-grace-scheduler";
@@ -205,6 +206,11 @@ async function start(): Promise<void> {
     }
     registerRoutes();
     const env = getEnv();
+    await runStartupMigrations().catch((err) => {
+      logger.error("Startup migrations failed — free trial IP cap may be unavailable", {
+        error: err instanceof Error ? err.message : "unknown",
+      });
+    });
     logger.info("Backend routes ready", {
       nodeEnv: env.NODE_ENV,
       scraperConcurrency: env.SCRAPER_CONCURRENCY,

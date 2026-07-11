@@ -1,4 +1,4 @@
-name: Deploy Backend to VPS
+name: Deploy Backend
 
 on:
   push:
@@ -7,22 +7,50 @@ on:
       - "backend/**"
       - "shared/**"
       - "docker-compose.yml"
+      - "supabase/migrations/**"
       - ".github/workflows/deploy.yml"
       - "scripts/deploy-vps.sh"
   workflow_dispatch:
 
 concurrency:
-  group: deploy-vps-production
+  group: deploy-backend-production
   cancel-in-progress: true
 
 jobs:
   deploy:
-    name: Deploy to Contabo VPS
+    name: Deploy backend.leadthur.com
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
-      - name: Deploy over SSH
+      - name: Validate deploy configuration
+        id: deploy_config
+        run: |
+          set -euo pipefail
+          if [ -n "${{ secrets.COOLIFY_DEPLOY_WEBHOOK_URL }}" ]; then
+            echo "method=coolify" >> "$GITHUB_OUTPUT"
+            echo "Using Coolify deploy webhook"
+            exit 0
+          fi
+          if [ -n "${{ secrets.VPS_HOST }}" ] && [ -n "${{ secrets.VPS_SSH_KEY }}" ] && [ -n "${{ secrets.VPS_USER }}" ]; then
+            echo "method=ssh" >> "$GITHUB_OUTPUT"
+            echo "Using legacy VPS SSH deploy"
+            exit 0
+          fi
+          echo "::error::No deploy credentials configured."
+          echo "::error::Set COOLIFY_DEPLOY_WEBHOOK_URL (recommended — Coolify → backend service → Webhooks)."
+          echo "::error::Or set VPS_HOST, VPS_USER, and VPS_SSH_KEY for the legacy /opt/leadthur docker-compose path."
+          exit 1
+
+      - name: Trigger Coolify redeploy
+        if: steps.deploy_config.outputs.method == 'coolify'
+        run: |
+          set -euo pipefail
+          curl -fsS -X GET "${{ secrets.COOLIFY_DEPLOY_WEBHOOK_URL }}"
+          echo "Coolify deploy webhook triggered"
+
+      - name: Deploy over SSH (legacy VPS path)
+        if: steps.deploy_config.outputs.method == 'ssh'
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -39,23 +67,22 @@ jobs:
             git reset --hard origin/main
             bash scripts/deploy-vps.sh
 
-      - name: Verify health
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT || 22 }}
-          script: |
-            set -euo pipefail
-            for i in 1 2 3 4 5 6 7 8 9 10; do
-              if curl -fsS http://127.0.0.1:3000/health | grep -qE '"status":"ok"|OK'; then
-                echo "Health check passed"
-                exit 0
-              fi
-              echo "Waiting for backend... ($i/10)"
-              sleep 6
-            done
-            echo "Health check failed"
-            docker compose --env-file .env.production logs --tail=80 backend
-            exit 1
+      - name: Verify production health and commit
+        run: |
+          set -euo pipefail
+          EXPECTED="${{ github.sha }}"
+          echo "Expecting deployed gitCommitSha to start with: ${EXPECTED:0:7}"
+          for i in $(seq 1 30); do
+            BODY=$(curl -fsS "https://backend.leadthur.com/health" || true)
+            SHA=$(echo "$BODY" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("gitCommitSha",""))' 2>/dev/null || true)
+            IPCAP=$(echo "$BODY" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("freeTrialIpCapReady",False))' 2>/dev/null || true)
+            if [ -n "$SHA" ] && [ "$SHA" != "unknown" ] && [[ "$SHA" == "$EXPECTED"* ]]; then
+              echo "Health OK — gitCommitSha=$SHA freeTrialIpCapReady=$IPCAP"
+              exit 0
+            fi
+            echo "Waiting for deploy ($i/30) gitCommitSha=${SHA:-missing}"
+            sleep 20
+          done
+          echo "::error::Deploy verification failed. backend.leadthur.com/health never reported gitCommitSha=${EXPECTED}"
+          curl -sS "https://backend.leadthur.com/health" || true
+          exit 1

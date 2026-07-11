@@ -26,6 +26,7 @@ Required minimum:
 
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_KEY` (service_role only)
+- `SUPABASE_DB_PASSWORD` (database password — enables automatic `free_trial_ip_usage` migration on startup)
 - `FRONTEND_URL` (e.g. `https://www.leadthur.com`)
 - `PORT=3000`
 - `NODE_ENV=production`
@@ -33,6 +34,17 @@ Required minimum:
 Optional for staging QA (does **not** bypass per-email trial search limits):
 
 - `RATE_LIMIT_IP_ALLOWLIST=162.120.188.117` — comma-separated IPs that skip the per-IP request rate limit on `/freetrial` and other rate-limited routes
+
+**Production Supabase project:** `oytbynwogudfqqaxxrjq` (`https://oytbynwogudfqqaxxrjq.supabase.co`).  
+If `freeTrialIpCapReady` is `false` on `/health` after deploy, either set `SUPABASE_DB_PASSWORD` in Coolify and redeploy, or run `supabase/migrations/035_free_trial_ip_usage.sql` once in the Supabase SQL editor.
+
+## GitHub Actions auto-deploy (Coolify)
+
+Add repo secret **`COOLIFY_DEPLOY_WEBHOOK_URL`** — from Coolify → backend service → **Webhooks** → Deploy webhook URL.
+
+Every push to `main` that touches `backend/` triggers [`.github/workflows/deploy.yml`](./.github/workflows/deploy.yml), hits the Coolify webhook, then verifies `GET /health` reports matching `gitCommitSha`.
+
+Legacy VPS SSH deploy (`VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`) remains as fallback for `/opt/leadthur` docker-compose, but production Coolify should use the webhook.
 
 ## After Deploying
 

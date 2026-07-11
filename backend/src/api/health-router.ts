@@ -7,8 +7,15 @@ import {
 } from "../utils/deepseek-config";
 import { refreshSearchQueueStatus } from "../queue/search-queue";
 import { getClientIpDiagnostics } from "../middleware/rate-limit";
+import { getGitCommitSha } from "../utils/build-info";
+import { supabase } from "../database/client";
 
 const router = Router();
+
+async function isFreeTrialIpCapReady(): Promise<boolean> {
+  const { error } = await supabase.from("free_trial_ip_usage").select("ip_address").limit(1);
+  return !error;
+}
 
 router.get("/", async (_req, res) => {
   let browser: "ready" | "initializing" = "initializing";
@@ -37,6 +44,8 @@ router.get("/", async (_req, res) => {
     },
     timestamp: new Date().toISOString(),
     version: process.env.npm_package_version || "1.0.0",
+    gitCommitSha: getGitCommitSha(),
+    freeTrialIpCapReady: await isFreeTrialIpCapReady(),
   });
 });
 
