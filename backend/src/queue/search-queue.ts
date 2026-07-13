@@ -133,6 +133,8 @@ function schedulePendingJobWatch(data: SearchQueueJobData): void {
         try {
           const { getSearchJob } = await import("../database/search-repository");
           const record = await getSearchJob(data.searchId);
+          // Only heal true orphans still stuck in pending — never re-enqueue
+          // running/completed/failed jobs (avoids duplicate workers + dual emails).
           if (!record || record.status !== "pending") return;
 
           const bullJob = await bullQueue!.getJob(data.searchId);
@@ -143,6 +145,11 @@ function schedulePendingJobWatch(data: SearchQueueJobData): void {
             state === "delayed" ||
             state === "prioritized"
           ) {
+            return;
+          }
+
+          // Job may already be dequeued but status update not visible yet.
+          if (state === "missing" && Date.now() - new Date(record.createdAt).getTime() < 45_000) {
             return;
           }
 

@@ -1,10 +1,11 @@
 import type { StreamEvent } from "@leadthur/shared";
-import { getSearchJob, markSearchFailed } from "../database/search-repository";
+import { getSearchJob, countSearchLeads } from "../database/search-repository";
 import { logger } from "../utils/logger";
 import {
   recoverSearchJobEmailScraping,
   runScraperJob,
 } from "../services/scraper-service";
+import { notifySearchTerminalFailure } from "../services/search-failure-notify";
 import { clearStreamBuffer, emitToStream } from "../services/stream-registry";
 import { logSearchLifecycle } from "../utils/search-job-lifecycle";
 import { SEARCH_JOB_TIMEOUT_MS } from "../scraper/utils/constants";
@@ -144,19 +145,55 @@ class InlineSearchQueue {
         error: message,
       });
 
-      try {
-        await recoverSearchJobEmailScraping(
-          job.data.searchId,
-          job.data.query,
-          job.data.location,
-          emit,
-          { licenseEmail: job.data.licenseEmail, jobStartedAt, licenseKey: job.data.licenseKey }
+      const searchId = job.data.searchId;
+      const existing = await getSearchJob(searchId).catch(() => null);
+      const leadsCollected = await countSearchLeads(searchId).catch(() => 0);
+
+      if (existing?.emailScrapingComplete || existing?.status === "completed") {
+        job.resolve();
+      } else if (existing?.status === "running" || existing?.scrapingInProgress) {
+        logger.warn(
+          "[inline-queue] Failure while scrape still active — leaving job running",
+          { searchId, status: existing?.status, leadsCollected }
         );
         job.resolve();
-      } catch (recoverErr) {
-        emitToStream(job.data.searchId, { type: "error", message });
-        markSearchFailed(job.data.searchId, message).catch(() => undefined);
-        job.reject(recoverErr instanceof Error ? recoverErr : new Error(message));
+      } else if (leadsCollected > 0 && !existing?.emailScrapingComplete) {
+        try {
+          await recoverSearchJobEmailScraping(
+            searchId,
+            job.data.query,
+            job.data.location,
+            emit,
+            {
+              licenseEmail: job.data.licenseEmail,
+              jobStartedAt,
+              licenseKey: job.data.licenseKey,
+            }
+          );
+          job.resolve();
+        } catch (recoverErr) {
+          emitToStream(searchId, { type: "error", message });
+          void notifySearchTerminalFailure({
+            searchId,
+            query: job.data.query,
+            location: job.data.location,
+            licenseEmail: job.data.licenseEmail,
+            errorMessage: message,
+            kind: "queue",
+          });
+          job.reject(recoverErr instanceof Error ? recoverErr : new Error(message));
+        }
+      } else {
+        emitToStream(searchId, { type: "error", message });
+        void notifySearchTerminalFailure({
+          searchId,
+          query: job.data.query,
+          location: job.data.location,
+          licenseEmail: job.data.licenseEmail,
+          errorMessage: message,
+          kind: "queue",
+        });
+        job.reject(err instanceof Error ? err : new Error(message));
       }
     } finally {
       this.runningSearchIds.delete(job.data.searchId);

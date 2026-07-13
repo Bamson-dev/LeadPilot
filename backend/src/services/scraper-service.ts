@@ -17,7 +17,6 @@ import { upsertUserSearchFinalCount, saveUserSearch } from "../database/user-sea
 import { recordSearchHistorySafe } from "../database/search-history-repository";
 import { getLicenseEmailBySearchId } from "../database/license-repository";
 import {
-  sendSearchFailedEmail,
   sendSearchResultsReadyEmail,
   sendSearchRunningEmail,
 } from "../services/email";
@@ -941,20 +940,15 @@ export async function runScraperJob(
     }
 
     const message = formatScraperError(err);
+    // Do not email from the scraper catch: BullMQ retries and stall races previously
+    // sent a failure email here while a later attempt (or the same worker) still
+    // completed and emailed success. Terminal failure mail is owned by the worker /
+    // inline queue via notifySearchTerminalFailure.
     await updateSearchJob(searchId, {
       status: "failed",
       error: message,
       scrapingInProgress: false,
     });
-
-    const licenseEmail = await resolveLicenseEmail();
-    if (licenseEmail) {
-      void sendSearchFailedEmail(licenseEmail, query, location).catch((emailErr) =>
-        logger.error("Failed to send failed email", {
-          error: emailErr instanceof Error ? emailErr.message : "unknown",
-        })
-      );
-    }
 
     emit({
       type: "error",

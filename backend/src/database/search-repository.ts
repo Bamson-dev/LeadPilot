@@ -6,6 +6,7 @@ import {
 } from "../utils/lead-mapper";
 import { parseEmailList } from "../scraper/parsers/email-filter";
 import { supabase } from "./client";
+import { logger } from "../utils/logger";
 
 interface DbSearchJob {
   id: string;
@@ -21,6 +22,7 @@ interface DbSearchJob {
   nearby_cities?: NearbyCitySuggestion[] | null;
   stats_summary?: SearchStatsSummary | null;
   results_email_sent?: boolean | null;
+  failure_email_sent?: boolean | null;
   error: string | null;
   created_at: string;
   updated_at: string;
@@ -455,6 +457,30 @@ export async function tryClaimResultsEmailSend(searchId: string): Promise<boolea
   return Boolean(data);
 }
 
+/** Atomically claim the terminal failure email so stall races cannot double-notify. */
+export async function tryClaimFailureEmailSend(searchId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("search_jobs")
+    .update({ failure_email_sent: true })
+    .eq("id", searchId)
+    .eq("failure_email_sent", false)
+    .eq("results_email_sent", false)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    // Column may not exist yet on a lagging environment — fall back to allowing one send.
+    if (/failure_email_sent/i.test(error.message)) {
+      logger.warn("[search-repo] failure_email_sent column missing — skipping claim", {
+        error: error.message,
+      });
+      return true;
+    }
+    throw new Error(error.message);
+  }
+  return Boolean(data);
+}
+
 export async function insertBusinessLeads(leads: BusinessLead[]): Promise<void> {
   if (leads.length === 0) return;
   const batchSize = 50;
@@ -527,10 +553,31 @@ export async function failStaleRunningSearchJobs(
     })
     .eq("status", "running")
     .lt("updated_at", cutoff)
-    .select("id");
+    .select("id, query, location, license_email, is_trial");
 
   if (error) throw new Error(error.message);
-  return data?.length ?? 0;
+  const rows = data ?? [];
+
+  if (rows.length > 0) {
+    const { notifySearchTerminalFailure } = await import(
+      "../services/search-failure-notify"
+    );
+    for (const row of rows) {
+      if (row.is_trial) continue;
+      void notifySearchTerminalFailure({
+        searchId: row.id,
+        query: row.query,
+        location: row.location,
+        licenseEmail: row.license_email,
+        errorMessage,
+        kind: "queue",
+        markFailed: false,
+        settleMs: 0,
+      }).catch(() => undefined);
+    }
+  }
+
+  return rows.length;
 }
 
 /** Pending rows older than minAgeMinutes with no worker progress (still at initial updated_at). */
