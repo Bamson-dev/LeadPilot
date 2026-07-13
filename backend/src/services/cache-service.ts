@@ -3,6 +3,10 @@ import type { BusinessLead } from "@leadthur/shared";
 import { supabase } from "../database/client";
 import { predictionsFromDb, predictionStorageFields } from "../utils/lead-mapper";
 import { parseEmailList } from "../scraper/parsers/email-filter";
+import {
+  MAX_LEADS_PER_SEARCH,
+  MIN_CACHE_LEADS_TO_REUSE,
+} from "../scraper/utils/constants";
 import { logger } from "../utils/logger";
 
 function mapRowToBusinessLead(row: Record<string, unknown>): BusinessLead {
@@ -48,14 +52,14 @@ function mapRowToBusinessLead(row: Record<string, unknown>): BusinessLead {
 export async function getCachedSearch(
   query: string,
   location: string
-): Promise<{ searchId: string; leads: BusinessLead[] } | null> {
+): Promise<{ searchId: string; leads: BusinessLead[]; priorTotalFound: number } | null> {
   const normalizedQuery = query.toLowerCase().trim();
   const normalizedLocation = location.toLowerCase().trim();
   const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
 
   const { data: cachedJob, error: jobError } = await supabase
     .from("search_jobs")
-    .select("id, created_at")
+    .select("id, created_at, total_found")
     .ilike("query", normalizedQuery)
     .ilike("location", normalizedLocation)
     .eq("status", "completed")
@@ -66,16 +70,53 @@ export async function getCachedSearch(
 
   if (jobError || !cachedJob) return null;
 
+  const priorTotalFound = Number(cachedJob.total_found ?? 0);
+  const fetchLimit = Math.min(
+    MAX_LEADS_PER_SEARCH,
+    Math.max(priorTotalFound > 0 ? priorTotalFound : MAX_LEADS_PER_SEARCH, MIN_CACHE_LEADS_TO_REUSE)
+  );
+
   const { data: rows, error: leadsError } = await supabase
     .from("business_leads")
     .select("*")
     .eq("search_id", cachedJob.id)
-    .limit(250);
+    .limit(fetchLimit);
 
   if (leadsError || !rows || rows.length === 0) return null;
 
+  if (rows.length < MIN_CACHE_LEADS_TO_REUSE) {
+    logger.info("[search-diag] Cache skip — below reuse minimum", {
+      priorSearchId: cachedJob.id,
+      fetched: rows.length,
+      minReuse: MIN_CACHE_LEADS_TO_REUSE,
+    });
+    return null;
+  }
+
+  // Prior search claimed more leads than we fetched — avoid silently under-delivering.
+  if (
+    priorTotalFound >= MIN_CACHE_LEADS_TO_REUSE &&
+    rows.length < Math.floor(priorTotalFound * 0.9)
+  ) {
+    logger.warn("[search-diag] Cache under-delivery — skipping reuse for fresh scrape", {
+      priorSearchId: cachedJob.id,
+      priorTotalFound,
+      fetched: rows.length,
+      fetchLimit,
+    });
+    return null;
+  }
+
+  logger.info("[search-diag] Cache hit", {
+    priorSearchId: cachedJob.id,
+    priorTotalFound,
+    fetched: rows.length,
+    fetchLimit,
+  });
+
   return {
     searchId: cachedJob.id as string,
+    priorTotalFound,
     leads: rows.map((row) =>
       mapRowToBusinessLead(row as Record<string, unknown>)
     ),

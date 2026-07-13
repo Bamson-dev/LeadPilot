@@ -686,6 +686,14 @@ searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => 
         });
       }
 
+      logger.info("[search-diag] Serving cached search", {
+        searchId: newJob.id,
+        priorSearchId: cached.searchId,
+        totalFound: cached.leads.length,
+        priorTotalFound: cached.priorTotalFound,
+        cacheHit: true,
+      });
+
       res.status(201).json({
         searchId: newJob.id,
         status: "completed",

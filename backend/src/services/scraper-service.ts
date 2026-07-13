@@ -34,6 +34,7 @@ import {
   PHASE2_EMAIL_SCRAPE_MAX_MS,
   PHASE2_TRIGGER_WATCHDOG_MS,
   BACKGROUND_MAPS_BUDGET_MS,
+  NEARBY_CITY_SUGGESTION_THRESHOLD,
 } from "../scraper/utils/constants";
 import type { RawLeadInput } from "../types/scraper";
 import { isMemoryPressureHigh, getMemoryUsagePercent } from "../utils/memory";
@@ -567,14 +568,14 @@ async function runBackgroundWork(
     const stats = computeSearchStats(leads);
 
     let nearbyCities = undefined;
-    if (!isTrial && totalFound < 300) {
+    if (!isTrial && totalFound < NEARBY_CITY_SUGGESTION_THRESHOLD) {
       const geo = await geocodeCity(location);
       if (geo) {
         nearbyCities = findNearbyCities(
           location,
           geo.lat,
           geo.lng,
-          5,
+          8,
           100
         );
         if (nearbyCities.length > 0) {
@@ -833,6 +834,20 @@ export async function runScraperJob(
     const uniqueCount = deduplicateLeads(collectedLeads).length;
     const phase1Total = uniqueCount > 0 ? uniqueCount : scrapeResult.count;
     const stats = computeSearchStats(deduplicateLeads(collectedLeads));
+    const phase1ElapsedMs = Date.now() - jobStartedAt;
+
+    logger.info("[search-diag] Phase 1 complete", {
+      searchId,
+      query,
+      location,
+      isTrial,
+      totalFound: phase1Total,
+      phase1ElapsedMs,
+      phase1BudgetMs: isTrial ? null : PHASE1_DEADLINE_MS,
+      deadlineCutShort: Boolean(scrapeResult.phase1TimedOut),
+      remainingUrls: scrapeResult.remainingUrls?.length ?? 0,
+      cacheHit: false,
+    });
 
     step = "phase1_persist";
     logSearchStep(searchId, step, { phase1Total });

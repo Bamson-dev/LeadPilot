@@ -26,7 +26,11 @@ export const SIDEBAR_STABLE_ROUNDS = 5;
 export const SIDEBAR_SCROLL_TIMEOUT_MS = 60_000;
 export const DETAIL_PANEL_WAIT_MS = 1200;
 export const PLACE_PAGE_TIMEOUT_MS = 18000;
-export const SEARCH_JOB_TIMEOUT_MS = parseInt(process.env.SEARCH_JOB_TIMEOUT_MS || "600000", 10);
+/** Full job wall (Phase 1 + background Maps + Phase 2). Keep above those budgets. */
+export const SEARCH_JOB_TIMEOUT_MS = parseInt(
+  process.env.SEARCH_JOB_TIMEOUT_MS || String(15 * 60 * 1000),
+  10
+);
 export const EMAIL_FETCH_TIMEOUT_MS = 15000;
 export const EMAIL_PLAYWRIGHT_TIMEOUT_MS = 25_000;
 export const EMAIL_PLAYWRIGHT_RETRY_COUNT = 1;
@@ -38,23 +42,40 @@ export const EMAIL_SCRAPE_BATCH_SIZE = 8;
 export const EMAIL_SCRAPE_BATCH_SIZE_LARGE = 3;
 export const MEDIUM_CITY_RESULT_THRESHOLD = 150;
 export const LARGE_CITY_RESULT_THRESHOLD = 300;
+/** Show nearby-city chips when paid results are below this count. */
+export const NEARBY_CITY_SUGGESTION_THRESHOLD = parseInt(
+  process.env.NEARBY_CITY_SUGGESTION_THRESHOLD || "400",
+  10
+);
+/** Area / neighbourhood suggestion chips when results are below this count. */
+export const AREA_SUGGESTION_THRESHOLD = parseInt(
+  process.env.AREA_SUGGESTION_THRESHOLD || "350",
+  10
+);
 export const MEMORY_SKIP_SCRAPE_PERCENT = 80;
 /** Phase 2 email budget — starts after Phase 1; must not wait on unbounded Maps backfill. */
 export const PHASE2_EMAIL_SCRAPE_MAX_MS = 5 * 60 * 1000;
 export const EMAIL_SCRAPE_MAX_MS = PHASE2_EMAIL_SCRAPE_MAX_MS;
 export const PHASE2_TRIGGER_WATCHDOG_MS = 10_000;
-export const PHASE1_DEADLINE_MS = 90_000;
+/** Paid Phase 1 Maps collection budget (env-overridable; default 3 minutes). */
+export const PHASE1_DEADLINE_MS = parseInt(
+  process.env.PHASE1_DEADLINE_MS || String(180_000),
+  10
+);
 /**
  * Cap for continueMapsExtraction after Phase 1 times out.
  * Without this, remaining place-URL extraction can run past the worker
  * timeout and Phase 2 email scraping never starts (emails stay blank).
  */
 export const BACKGROUND_MAPS_BUDGET_MS = parseInt(
-  process.env.BACKGROUND_MAPS_BUDGET_MS || String(2.5 * 60 * 1000),
+  process.env.BACKGROUND_MAPS_BUDGET_MS || String(4.5 * 60 * 1000),
   10
 );
 /** BullMQ lock must cover longest Phase 1 background extraction + Phase 2 email scrape. */
-export const BULLMQ_LOCK_DURATION_MS = 15 * 60 * 1000;
+export const BULLMQ_LOCK_DURATION_MS = parseInt(
+  process.env.BULLMQ_LOCK_DURATION_MS || String(20 * 60 * 1000),
+  10
+);
 export const BULLMQ_STALLED_INTERVAL_MS = 2 * 60 * 1000;
 export const BULLMQ_MAX_STALLED_COUNT = 5;
 export const PHASE1_HEARTBEAT_MS = 30_000;
