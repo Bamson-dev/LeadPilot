@@ -1,5 +1,8 @@
 import { Queue } from "bullmq";
-import { listOrphanedPendingSearchJobs } from "../database/search-repository";
+import {
+  failStaleRunningSearchJobs,
+  listOrphanedPendingSearchJobs,
+} from "../database/search-repository";
 import { logger } from "../utils/logger";
 import {
   getRedisConnectionOptions,
@@ -185,6 +188,16 @@ function scheduleOrphanReconciliation(): void {
       if (result.requeued > 0) {
         logger.info("[search-queue] Orphan reconcile interval", result);
       }
+      try {
+        const failed = await failStaleRunningSearchJobs(20);
+        if (failed > 0) {
+          logger.warn("[search-queue] Failed stale running jobs", { failed });
+        }
+      } catch (err) {
+        logger.error("[search-queue] Stale running cleanup failed", {
+          error: err instanceof Error ? err.message : "unknown",
+        });
+      }
     })();
   }, ORPHAN_RECONCILE_INTERVAL_MS);
 }
@@ -236,6 +249,17 @@ export async function initSearchQueue(): Promise<void> {
       logger.info("[search-queue] Orphan reconcile on startup", result);
     }
   });
+  void failStaleRunningSearchJobs(20)
+    .then((failed) => {
+      if (failed > 0) {
+        logger.warn("[search-queue] Failed stale running jobs on startup", { failed });
+      }
+    })
+    .catch((err) => {
+      logger.error("[search-queue] Stale running cleanup failed on startup", {
+        error: err instanceof Error ? err.message : "unknown",
+      });
+    });
   logger.info("BullMQ search queue initialized", {
     name: SEARCH_QUEUE_NAME,
     lockDurationMs: BULLMQ_LOCK_DURATION_MS,

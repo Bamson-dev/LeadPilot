@@ -498,6 +498,32 @@ export async function markSearchFailed(id: string, errorMessage: string): Promis
   await updateSearchJob(id, { status: "failed", error: errorMessage });
 }
 
+/**
+ * Fail search jobs stuck in `running` longer than maxAgeMinutes.
+ * Used to recover from hung Playwright / Maps scrapes that never release
+ * BullMQ concurrency or browser-pool slots.
+ */
+export async function failStaleRunningSearchJobs(
+  maxAgeMinutes: number,
+  errorMessage = "Search timed out while running. Please try again."
+): Promise<number> {
+  const cutoff = new Date(Date.now() - maxAgeMinutes * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from("search_jobs")
+    .update({
+      status: "failed",
+      error: errorMessage,
+      scraping_in_progress: false,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("status", "running")
+    .lt("updated_at", cutoff)
+    .select("id");
+
+  if (error) throw new Error(error.message);
+  return data?.length ?? 0;
+}
+
 /** Pending rows older than minAgeMinutes with no worker progress (still at initial updated_at). */
 export async function listOrphanedPendingSearchJobs(
   minAgeMinutes: number

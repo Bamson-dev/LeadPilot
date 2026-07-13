@@ -19,11 +19,49 @@ import {
   BULLMQ_LOCK_DURATION_MS,
   BULLMQ_MAX_STALLED_COUNT,
   BULLMQ_STALLED_INTERVAL_MS,
+  SEARCH_JOB_TIMEOUT_MS,
 } from "../scraper/utils/constants";
 import { SEARCH_QUEUE_NAME, type SearchQueueJobData } from "../queue/search-queue-types";
 import { getRedisConnectionOptions } from "../queue/redis-connection";
+import { getBrowserPool } from "../scraper/browser/browser-pool";
 
 const WORKER_CONCURRENCY = 2;
+
+async function runScraperJobWithHardTimeout(
+  ...args: Parameters<typeof runScraperJob>
+): Promise<void> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  try {
+    await Promise.race([
+      runScraperJob(...args),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(
+            new Error(
+              `Search exceeded the ${Math.round(SEARCH_JOB_TIMEOUT_MS / 60_000)} minute limit. Please try again.`
+            )
+          );
+        }, SEARCH_JOB_TIMEOUT_MS);
+      }),
+    ]);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes("exceeded the") && message.includes("minute limit")) {
+      // Hung Playwright sessions keep holding pool slots after the race rejects.
+      // Reset the pool so the rest of the queue can proceed.
+      try {
+        await getBrowserPool().resetAfterDeadlock();
+      } catch (resetErr) {
+        logger.error("[search-worker] Browser pool reset after timeout failed", {
+          error: resetErr instanceof Error ? resetErr.message : "unknown",
+        });
+      }
+    }
+    throw err;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
 
 let worker: Worker<SearchQueueJobData> | null = null;
 
@@ -91,7 +129,7 @@ async function processSearchJob(job: Job<SearchQueueJobData>): Promise<void> {
   });
 
   try {
-    await runScraperJob(searchId, query, location, emit, {
+    await runScraperJobWithHardTimeout(searchId, query, location, emit, {
       licenseKey,
       licenseEmail,
       isTrial: trial,

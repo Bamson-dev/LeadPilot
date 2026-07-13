@@ -142,14 +142,62 @@ export class BrowserPool {
   }
 
   async healthCheck(): Promise<void> {
+    const checkedOut = new Set(
+      this.browsers.filter((b) => !this.available.includes(b) && this.slotReleases.has(b))
+    );
+
     for (let i = 0; i < this.browsers.length; i++) {
       if (!this.browsers[i].isConnected()) {
         logger.warn("Restarting crashed browser", { index: i });
-        await this.browsers[i].close().catch(() => undefined);
+        const dead = this.browsers[i];
+        const releaseSlot = this.slotReleases.get(dead);
+        if (releaseSlot) {
+          releaseSlot();
+          this.slotReleases.delete(dead);
+        }
+        this.available = this.available.filter((b) => b !== dead);
+        await dead.close().catch(() => undefined);
         this.browsers[i] = await this.launchBrowser();
+        if (!checkedOut.has(dead)) {
+          this.available.push(this.browsers[i]);
+        }
       }
     }
-    this.available = this.browsers.filter((b) => b.isConnected());
+
+    // Never reclaim browsers that are currently checked out — that caused
+    // double-checkout, hung Chromium sessions, and leaked Playwright slots.
+    const availableSet = new Set(this.available.filter((b) => b.isConnected()));
+    for (const browser of this.browsers) {
+      if (
+        browser.isConnected() &&
+        !this.slotReleases.has(browser) &&
+        !availableSet.has(browser)
+      ) {
+        this.available.push(browser);
+        availableSet.add(browser);
+      }
+    }
+  }
+
+  async resetAfterDeadlock(): Promise<void> {
+    logger.warn("Resetting browser pool after scraper deadlock/timeout", {
+      browsers: this.browsers.length,
+      available: this.available.length,
+      checkedOut: this.slotReleases.size,
+    });
+    for (const release of this.slotReleases.values()) {
+      try {
+        release();
+      } catch {
+        /* ignore */
+      }
+    }
+    this.slotReleases.clear();
+    await Promise.all(this.browsers.map((b) => b.close().catch(() => undefined)));
+    this.browsers = [];
+    this.available = [];
+    this.initPromise = null;
+    await this.init();
   }
 
   async shutdown(): Promise<void> {

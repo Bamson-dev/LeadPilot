@@ -7,10 +7,46 @@ import {
 } from "../services/scraper-service";
 import { clearStreamBuffer, emitToStream } from "../services/stream-registry";
 import { logSearchLifecycle } from "../utils/search-job-lifecycle";
+import { SEARCH_JOB_TIMEOUT_MS } from "../scraper/utils/constants";
+import { getBrowserPool } from "../scraper/browser/browser-pool";
 
 const INLINE_MAX_CONCURRENT = 2;
 
 import type { SearchQueueJobData } from "./search-queue-types";
+
+async function runInlineScraperWithHardTimeout(
+  ...args: Parameters<typeof runScraperJob>
+): Promise<void> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  try {
+    await Promise.race([
+      runScraperJob(...args),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(
+            new Error(
+              `Search exceeded the ${Math.round(SEARCH_JOB_TIMEOUT_MS / 60_000)} minute limit. Please try again.`
+            )
+          );
+        }, SEARCH_JOB_TIMEOUT_MS);
+      }),
+    ]);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes("exceeded the") && message.includes("minute limit")) {
+      try {
+        await getBrowserPool().resetAfterDeadlock();
+      } catch (resetErr) {
+        logger.error("[inline-queue] Browser pool reset after timeout failed", {
+          error: resetErr instanceof Error ? resetErr.message : "unknown",
+        });
+      }
+    }
+    throw err;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
 
 class InlineSearchQueue {
   private queue: Array<{
@@ -89,7 +125,7 @@ class InlineSearchQueue {
         location: job.data.location,
       });
 
-      await runScraperJob(job.data.searchId, job.data.query, job.data.location, emit, {
+      await runInlineScraperWithHardTimeout(job.data.searchId, job.data.query, job.data.location, emit, {
         licenseKey: job.data.licenseKey,
         licenseEmail: job.data.licenseEmail,
         isTrial,
