@@ -192,13 +192,17 @@ export function SearchDashboard() {
     }
   };
 
+  const stoppedEarly =
+    typeof phaseMessage === "string" &&
+    phaseMessage.toLowerCase().includes("stopped early");
+
   useEffect(() => {
-    if (fullyComplete) {
+    if (fullyComplete && !stoppedEarly) {
       setShowSuccess(true);
       const t = setTimeout(() => setShowSuccess(false), 3000);
       return () => clearTimeout(t);
     }
-  }, [fullyComplete]);
+  }, [fullyComplete, stoppedEarly]);
 
   useEffect(() => {
     if (!fullyComplete || suggestions.length > 0) return;
@@ -466,7 +470,7 @@ export function SearchDashboard() {
           </div>
         )}
 
-        {showSuccess && fullyComplete && (
+        {showSuccess && fullyComplete && !stoppedEarly && (
           <div
             className="success-banner-fade mt-4"
             style={{
@@ -492,7 +496,19 @@ export function SearchDashboard() {
           </div>
         )}
 
-        {fullyComplete && !error && !savedBanner && !showSuccess && (
+        {fullyComplete && stoppedEarly && !error && (
+          <div
+            role="status"
+            className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3"
+          >
+            <p className="text-sm text-amber-200">
+              {phaseMessage ||
+                `Search stopped early with ${displayCount.toLocaleString()} leads. Email lookup didn't finish — try searching again for a complete run.`}
+            </p>
+          </div>
+        )}
+
+        {fullyComplete && !error && !savedBanner && !showSuccess && !stoppedEarly && (
           <p className="mt-4 text-sm text-[#A1A1B5]">
             {displayCount === 0
               ? "No potential clients found in this area. Try a nearby city."
