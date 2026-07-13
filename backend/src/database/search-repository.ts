@@ -533,51 +533,151 @@ export async function markSearchFailed(id: string, errorMessage: string): Promis
   await updateSearchJob(id, { status: "failed", error: errorMessage });
 }
 
+export type StaleRunningCleanupResult = {
+  failed: number;
+  recovered: number;
+};
+
 /**
- * Fail search jobs stuck in `running` longer than maxAgeMinutes.
+ * Handle search jobs stuck in `running` longer than maxAgeMinutes.
  * Used to recover from hung Playwright / Maps scrapes that never release
  * BullMQ concurrency or browser-pool slots.
+ *
+ * When leads already exist, prefer Phase 2 email recovery over a hard fail —
+ * otherwise the UI shows a partial list with blank emails and a fake "done" state.
  */
 export async function failStaleRunningSearchJobs(
   maxAgeMinutes: number,
   errorMessage = "Search timed out while running. Please try again."
-): Promise<number> {
+): Promise<StaleRunningCleanupResult> {
   const cutoff = new Date(Date.now() - maxAgeMinutes * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from("search_jobs")
-    .update({
-      status: "failed",
-      error: errorMessage,
-      scraping_in_progress: false,
-      updated_at: new Date().toISOString(),
-    })
+    .select(
+      "id, query, location, license_email, is_trial, total_found, email_scraping_complete"
+    )
     .eq("status", "running")
     .lt("updated_at", cutoff)
-    .select("id, query, location, license_email, is_trial");
+    .limit(25);
 
   if (error) throw new Error(error.message);
-  const rows = data ?? [];
 
-  if (rows.length > 0) {
+  const rows = data ?? [];
+  let failed = 0;
+  let recovered = 0;
+
+  for (const row of rows) {
+    const leadCount =
+      Number(row.total_found) > 0
+        ? Number(row.total_found)
+        : await countSearchLeads(row.id).catch(() => 0);
+
+    if (leadCount > 0 && !row.email_scraping_complete) {
+      // Claim the job so the next cleanup interval does not double-start recovery.
+      await updateSearchJob(row.id, {
+        status: "running",
+        scrapingInProgress: true,
+        error: null,
+      });
+      recovered += 1;
+
+      logger.warn("[search] Stale running job — recovering Phase 2 emails", {
+        searchId: row.id,
+        leadCount,
+        query: row.query,
+        location: row.location,
+      });
+
+      void (async () => {
+        try {
+          const { recoverSearchJobEmailScraping } = await import(
+            "../services/scraper-service"
+          );
+          const { emitToStream, clearStreamBuffer } = await import(
+            "../services/stream-registry"
+          );
+          const emit = (event: import("@leadthur/shared").StreamEvent) => {
+            emitToStream(row.id, event);
+            if (event.type === "complete" || event.type === "error") {
+              clearStreamBuffer(row.id);
+            }
+          };
+          await recoverSearchJobEmailScraping(
+            row.id,
+            row.query,
+            row.location,
+            emit,
+            { licenseEmail: row.license_email }
+          );
+        } catch (recoverErr) {
+          logger.error("[search] Stale Phase 2 recovery failed", {
+            searchId: row.id,
+            error:
+              recoverErr instanceof Error ? recoverErr.message : "unknown",
+          });
+          await updateSearchJob(row.id, {
+            status: "failed",
+            error: errorMessage,
+            scrapingInProgress: false,
+          }).catch(() => undefined);
+          if (!row.is_trial) {
+            const { notifySearchTerminalFailure } = await import(
+              "../services/search-failure-notify"
+            );
+            void notifySearchTerminalFailure({
+              searchId: row.id,
+              query: row.query,
+              location: row.location,
+              licenseEmail: row.license_email,
+              errorMessage,
+              kind: "queue",
+              markFailed: false,
+              settleMs: 0,
+            }).catch(() => undefined);
+          }
+        }
+      })();
+      continue;
+    }
+
+    const { error: failErr } = await supabase
+      .from("search_jobs")
+      .update({
+        status: "failed",
+        error: errorMessage,
+        scraping_in_progress: false,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", row.id)
+      .eq("status", "running");
+
+    if (failErr) {
+      logger.error("[search] Failed to mark stale job failed", {
+        searchId: row.id,
+        error: failErr.message,
+      });
+      continue;
+    }
+
+    failed += 1;
+    if (row.is_trial) continue;
+
     const { notifySearchTerminalFailure } = await import(
       "../services/search-failure-notify"
     );
-    for (const row of rows) {
-      if (row.is_trial) continue;
-      void notifySearchTerminalFailure({
-        searchId: row.id,
-        query: row.query,
-        location: row.location,
-        licenseEmail: row.license_email,
-        errorMessage,
-        kind: "queue",
-        markFailed: false,
-        settleMs: 0,
-      }).catch(() => undefined);
-    }
+    void notifySearchTerminalFailure({
+      searchId: row.id,
+      query: row.query,
+      location: row.location,
+      licenseEmail: row.license_email,
+      errorMessage,
+      kind: "queue",
+      markFailed: false,
+      settleMs: 0,
+    }).catch(() => undefined);
   }
 
-  return rows.length;
+  return { failed, recovered };
 }
 
 /** Pending rows older than minAgeMinutes with no worker progress (still at initial updated_at). */

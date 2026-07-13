@@ -721,12 +721,12 @@ export function useSearch(options?: UseSearchOptions) {
                 if (prev.searchId !== searchId) return prev;
                 const pending = pendingLeadsRef.current.splice(0);
                 const merged = mergePendingIntoLeads(prev.leads, pending, searchId);
-                const count = merged.length;
+                const count = Math.max(merged.length, job.totalFound ?? 0);
                 if (count > 0) {
                   queueMicrotask(() =>
                     finishSearch(
                       count,
-                      `We found ${count.toLocaleString()} potential clients for you.`
+                      `Search stopped early with ${count.toLocaleString()} leads. Email lookup didn't finish — try searching again for a complete run.`
                     )
                   );
                   return {
@@ -935,7 +935,7 @@ export function useSearch(options?: UseSearchOptions) {
                   queueMicrotask(() =>
                     finishSearch(
                       merged.length,
-                      `We found ${merged.length.toLocaleString()} potential clients for you.`
+                      `Search stopped early with ${merged.length.toLocaleString()} leads. Email lookup didn't finish — try searching again for a complete run.`
                     )
                   );
                   return {

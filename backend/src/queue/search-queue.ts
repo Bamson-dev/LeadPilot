@@ -196,9 +196,9 @@ function scheduleOrphanReconciliation(): void {
         logger.info("[search-queue] Orphan reconcile interval", result);
       }
       try {
-        const failed = await failStaleRunningSearchJobs(20);
-        if (failed > 0) {
-          logger.warn("[search-queue] Failed stale running jobs", { failed });
+        const stale = await failStaleRunningSearchJobs(20);
+        if (stale.failed > 0 || stale.recovered > 0) {
+          logger.warn("[search-queue] Stale running cleanup", stale);
         }
       } catch (err) {
         logger.error("[search-queue] Stale running cleanup failed", {
@@ -257,9 +257,9 @@ export async function initSearchQueue(): Promise<void> {
     }
   });
   void failStaleRunningSearchJobs(20)
-    .then((failed) => {
-      if (failed > 0) {
-        logger.warn("[search-queue] Failed stale running jobs on startup", { failed });
+    .then((stale) => {
+      if (stale.failed > 0 || stale.recovered > 0) {
+        logger.warn("[search-queue] Stale running cleanup on startup", stale);
       }
     })
     .catch((err) => {
