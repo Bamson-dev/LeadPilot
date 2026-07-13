@@ -493,9 +493,9 @@ export function SearchDashboard() {
 
         {status === "completed" && !error && !savedBanner && !showSuccess && (
           <p className="mt-4 text-sm text-[#A1A1B5]">
-            {tableLeads.length === 0
+            {totalFound === 0 && tableLeads.length === 0
               ? "No potential clients found in this area. Try a nearby city."
-              : `We found ${tableLeads.length.toLocaleString()} potential clients for you.`}
+              : `We found ${Math.max(totalFound, tableLeads.length).toLocaleString()} potential clients for you.`}
           </p>
         )}
 
