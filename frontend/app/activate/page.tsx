@@ -55,9 +55,10 @@ export default function ActivatePage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#09090B] px-4">
       <form onSubmit={handleSubmit} className="glass w-full max-w-md rounded-2xl p-8">
-        <h1 className="text-2xl font-bold text-[#F4F4FF]">Activate LeadThur</h1>
+        <h1 className="text-2xl font-bold text-[#F4F4FF]">Log in to LeadThur</h1>
         <p className="mt-2 text-sm text-[#6B6B80]">
-          Enter the email and license key from your activation email.
+          Enter the email and license key from your purchase or activation email to open your
+          dashboard.
         </p>
 
         <label className="mt-6 block text-xs font-medium text-[#6B6B80]">Email</label>
@@ -90,7 +91,7 @@ export default function ActivatePage() {
           disabled={loading}
           className="mt-6 w-full rounded-lg bg-[#7C3AED] py-2.5 font-semibold text-white hover:bg-[#6D28D9] disabled:opacity-60"
         >
-          {loading ? "Activating…" : "Activate account"}
+          {loading ? "Signing in…" : "Log in"}
         </button>
       </form>
     </main>

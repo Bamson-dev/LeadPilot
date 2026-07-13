@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useState } from "react";
 import { LeadThurLogo } from "./LeadThurLogo";
-import { CHECKOUT, C, FONT, FREETRIAL } from "./theme";
+import { CHECKOUT, C, FONT, FREETRIAL, LOGIN } from "./theme";
 
 const NAV_LINKS = [
   { label: "How It Works", id: "how-it-works" },
@@ -92,6 +92,9 @@ export function Nav() {
               gap: 10,
             }}
           >
+            <Link href={LOGIN} className="homepage-nav-login">
+              Log in
+            </Link>
             <Link href={FREETRIAL} className="homepage-nav-try-free">
               Try Free
             </Link>
@@ -127,6 +130,13 @@ export function Nav() {
             </button>
           ))}
           <div className="homepage-nav-mobile-buttons">
+            <Link
+              href={LOGIN}
+              className="homepage-nav-login homepage-nav-login--mobile"
+              onClick={closeMenu}
+            >
+              Log in
+            </Link>
             <Link
               href={FREETRIAL}
               className="homepage-nav-try-free homepage-nav-try-free--mobile"
@@ -173,6 +183,25 @@ export function Nav() {
 
         .homepage-nav-link:hover {
           color: #F0EEFF;
+        }
+
+        .homepage-nav-login {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 8px 12px;
+          border-radius: 8px;
+          color: #F0EEFF;
+          font-size: 13px;
+          font-weight: 600;
+          text-decoration: none;
+          white-space: nowrap;
+          transition: color 0.2s ease, background-color 0.2s ease;
+        }
+
+        .homepage-nav-login:hover {
+          color: #fff;
+          background: rgba(255, 255, 255, 0.06);
         }
 
         .homepage-nav-try-free {
@@ -276,10 +305,16 @@ export function Nav() {
           padding: 16px 24px 20px;
         }
 
+        .homepage-nav-login--mobile,
         .homepage-nav-try-free--mobile,
         .homepage-nav-lifetime--mobile {
           width: 100%;
           text-align: center;
+        }
+
+        .homepage-nav-login--mobile {
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          padding: 12px 16px;
         }
 
         @media (max-width: 767px) {
@@ -292,6 +327,7 @@ export function Nav() {
             display: none !important;
           }
 
+          .homepage-nav-actions .homepage-nav-login,
           .homepage-nav-actions .homepage-nav-try-free,
           .homepage-nav-actions .homepage-nav-lifetime {
             display: none !important;
