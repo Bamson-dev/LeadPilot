@@ -500,10 +500,18 @@ export function SearchDashboard() {
           </p>
         )}
 
-        {!fullyComplete && isSearching && displayCount > 0 && !error && (
-          <p className="mt-4 text-sm text-[#A1A1B5]">
-            Finding potential clients… {displayCount.toLocaleString()} found so far
-          </p>
+        {!fullyComplete && isSearching && !error && (
+          <div className="mt-4 rounded-lg border border-violet-500/25 bg-violet-500/10 px-4 py-3">
+            <p className="text-sm text-[#E4E4F0]">
+              {displayCount > 0
+                ? `Finding potential clients… ${displayCount.toLocaleString()} found so far.`
+                : "Finding potential clients…"}
+            </p>
+            <p className="mt-1.5 text-sm text-[#A1A1B5]">
+              You can leave this page anytime. We&apos;ll email you when your results are ready,
+              and you can return to your dashboard to check progress.
+            </p>
+          </div>
         )}
 
         {error && (

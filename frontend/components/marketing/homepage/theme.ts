@@ -19,6 +19,7 @@ export const FONT =
 
 export const CHECKOUT = "/checkout";
 export const FREETRIAL = "https://www.leadthur.com/freetrial";
+export const LOGIN = "/activate";
 
 export const TAP_TARGET = {
   minHeight: 48,

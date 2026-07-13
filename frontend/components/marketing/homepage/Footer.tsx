@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { LeadThurLogo } from "./LeadThurLogo";
-import { C, FONT } from "./theme";
+import { C, FONT, LOGIN } from "./theme";
 
 export function Footer() {
   return (
@@ -34,6 +34,9 @@ export function Footer() {
             color: C.muted,
           }}
         >
+          <Link href={LOGIN} style={{ color: C.muted, textDecoration: "none" }}>
+            Log in
+          </Link>
           <span>
             Questions?{" "}
             <a href="mailto:support@leadthur.com" style={{ color: C.green }}>

@@ -429,15 +429,15 @@ export async function sendSearchRunningEmail(
   location: string
 ): Promise<void> {
   const body = `
-    ${emailHeading("Your search is still running")}
-    ${emailParagraph(`Your search for ${query} in ${location} is taking longer than usual.`)}
-    ${emailParagraph("You do not need to keep the page open. Your results will be saved to your dashboard when the search finishes.")}
-    ${emailButton("Go to dashboard", `${getFrontendUrl()}/dashboard`)}
+    ${emailHeading("Your search is still in progress")}
+    ${emailParagraph(`We're still gathering potential clients for ${escapeHtml(query)} in ${escapeHtml(location)}.`)}
+    ${emailParagraph("You don't need to keep this page open. Feel free to step away — we'll email you again when your results are ready, and you can always return to your dashboard to check progress.")}
+    ${emailButton("Open my dashboard", `${getFrontendUrl()}/dashboard`)}
   `;
 
   await deliver({
     to: email,
-    subject: "Your LeadThur Search Is Still Running — We Will Notify You When Done",
+    subject: "Your LeadThur Search Is Still Running — Feel Free to Check Back Later",
     html: wrapTransactional(body, email),
   });
 }

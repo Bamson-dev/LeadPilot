@@ -702,7 +702,9 @@ export async function runScraperJob(
 
   const runningEmailTimer = setTimeout(() => {
     void (async () => {
-      if (isTrial || searchComplete || leadsFoundSoFar >= 5 || runningEmailSent) {
+      // Paid searches can run several minutes after the Phase 1 budget bump.
+      // Always nudge once if still in progress — don't skip just because leads already appeared.
+      if (isTrial || searchComplete || runningEmailSent) {
         return;
       }
       runningEmailSent = true;
@@ -715,7 +717,7 @@ export async function runScraperJob(
         );
       }
     })();
-  }, 2 * 60 * 1000);
+  }, 90_000);
 
   if (!pool.isReady()) {
     emit({
