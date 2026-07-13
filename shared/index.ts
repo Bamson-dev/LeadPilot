@@ -6,3 +6,4 @@ export * from "./utils/formatters";
 export * from "./utils/validators";
 export * from "./utils/blocked-website-domains";
 export * from "./utils/outreach-recipient";
+export * from "./utils/search-completion";

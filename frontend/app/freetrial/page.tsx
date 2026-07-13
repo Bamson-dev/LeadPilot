@@ -9,6 +9,7 @@ import {
   type CSSProperties,
 } from "react";
 import type { BusinessLead } from "@leadthur/shared";
+import { isSearchFullyComplete } from "@/utils/search-completion";
 import { getApiUrl } from "@/utils/env";
 import { SALE_PRICE_USD } from "@/constants/pricing";
 
@@ -114,8 +115,17 @@ function isSearchReadyForPaywall(progress: {
   leads: TrialLead[];
   totalFound: number;
   emailScrapingComplete: boolean;
+  scrapingInProgress?: boolean;
+  fullyComplete?: boolean;
 }): boolean {
-  if (progress.status !== "completed" || !progress.emailScrapingComplete) {
+  if (
+    !isSearchFullyComplete({
+      fullyComplete: progress.fullyComplete,
+      status: progress.status,
+      scrapingInProgress: progress.scrapingInProgress,
+      emailScrapingComplete: progress.emailScrapingComplete,
+    })
+  ) {
     return false;
   }
   const targetRows = Math.min(MAX_TRIAL_LEADS, progress.totalFound || progress.leads.length);
@@ -310,6 +320,8 @@ async function fetchTrialSearchProgress(
   queuePosition: number;
   verifiedEmailCount: number;
   emailScrapingComplete: boolean;
+  scrapingInProgress: boolean;
+  fullyComplete: boolean;
 } | null> {
   const apiUrl = getApiUrl();
   if (!apiUrl) return null;
@@ -326,19 +338,31 @@ async function fetchTrialSearchProgress(
       total?: number;
       queuePosition?: number;
       emailScrapingComplete?: boolean;
+      scrapingInProgress?: boolean;
+      fullyComplete?: boolean;
     };
     const rows = data.leads ?? [];
     let verifiedEmailCount = 0;
     for (const lead of rows) {
       if ((lead.verifiedEmails?.length ?? 0) > 0) verifiedEmailCount++;
     }
+    const status = data.status ?? "pending";
+    const scrapingInProgress = Boolean(data.scrapingInProgress);
+    const emailScrapingComplete = Boolean(data.emailScrapingComplete);
     return {
-      status: data.status ?? "pending",
+      status,
       leads: rows.map(normalizeLead).slice(0, MAX_TRIAL_LEADS),
       totalFound: data.totalFound ?? data.total ?? rows.length,
       queuePosition: data.queuePosition ?? 0,
       verifiedEmailCount,
-      emailScrapingComplete: Boolean(data.emailScrapingComplete),
+      emailScrapingComplete,
+      scrapingInProgress,
+      fullyComplete: isSearchFullyComplete({
+        fullyComplete: data.fullyComplete,
+        status,
+        scrapingInProgress,
+        emailScrapingComplete,
+      }),
     };
   } catch {
     return null;
@@ -629,7 +653,7 @@ export default function FreeTrialPage() {
           return;
         }
 
-        if (progress.status === "completed") {
+        if (isSearchFullyComplete(progress)) {
           if (progress.totalFound === 0 && progress.leads.length === 0) {
             searchFinishedRef.current = true;
             stopEnrichmentPoll();

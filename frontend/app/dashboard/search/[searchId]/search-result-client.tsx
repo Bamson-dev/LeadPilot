@@ -13,67 +13,15 @@ import {
 } from "@/components/dashboard/outreach-workspace";
 import { WhatsappTemplateModal } from "@/components/dashboard/whatsapp-template-modal";
 import { useOutreach } from "@/hooks/useOutreach";
-import { pollSearchResults, getLicenseUsage, getSearch } from "@/services/api";
-import { businessLeadToLead } from "@/types/lead";
+import { useSearchJob } from "@/hooks/useSearchJob";
+import { getLicenseUsage } from "@/services/api";
 import type { Lead } from "@/types/lead";
-import type { BusinessLead } from "@leadthur/shared";
-import { normalizeApiBusinessLeads } from "@/utils/normalize-api-lead";
 import { useLeadStatuses } from "@/hooks/useLeadStatuses";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { hasStoredLicense } from "@/lib/license";
 import { getLeadSelectionId } from "@/lib/lead-selection";
 import { exportToCSV } from "@/features/export/csv-export";
 import { markRecipientReplied } from "@/services/outreach-api";
-
-const POLL_MS = 5000;
-
-function placeIdFromLead(lead: BusinessLead): string {
-  const url = lead.googleMapsUrl ?? "";
-  const match = url.match(/\/maps\/place\/([^/?]+)/);
-  if (match) {
-    try {
-      return decodeURIComponent(match[1]);
-    } catch {
-      return match[1];
-    }
-  }
-  return lead.id;
-}
-
-function mergePollLeads(
-  existing: BusinessLead[],
-  incoming: BusinessLead[]
-): BusinessLead[] {
-  const byPlace = new Map<string, BusinessLead>();
-  for (const lead of existing) {
-    byPlace.set(placeIdFromLead(lead), lead);
-  }
-  for (const lead of incoming) {
-    const key = placeIdFromLead(lead);
-    const prev = byPlace.get(key);
-    byPlace.set(
-      key,
-      prev
-        ? {
-            ...prev,
-            ...lead,
-            id: prev.id || lead.id,
-            email: lead.email ?? prev.email,
-            emails: lead.emails?.length ? lead.emails : prev.emails,
-            verifiedEmails: lead.verifiedEmails?.length
-              ? lead.verifiedEmails
-              : prev.verifiedEmails,
-            predictedEmails: lead.predictedEmails?.length
-              ? lead.predictedEmails
-              : prev.predictedEmails,
-            emailSource: lead.emailSource ?? prev.emailSource,
-            emailScraped: lead.emailScraped || prev.emailScraped,
-          }
-        : lead
-    );
-  }
-  return [...byPlace.values()];
-}
 
 function dashboardSearchUrl(
   businessType: string,
@@ -93,20 +41,32 @@ export default function SearchResultPage() {
   const searchId = String(params.searchId ?? "");
   const isMobile = useIsMobile();
   const outreach = useOutreach();
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [notFound, setNotFound] = useState(false);
-  const [emailScrapingComplete, setEmailScrapingComplete] = useState(true);
-  const [nearbyCities, setNearbyCities] = useState<
-    Awaited<ReturnType<typeof pollSearchResults>>["nearbyCities"]
-  >([]);
-  const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(() => new Set());
+  const {
+    leads,
+    loading,
+    notFound,
+    fullyComplete,
+    emailScrapingComplete,
+    totalFound,
+    query: jobQuery,
+    location: jobLocation,
+    nearbyCities,
+  } = useSearchJob(searchId);
+
+  const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(
+    () => new Set()
+  );
   const [sendPanelOpen, setSendPanelOpen] = useState(false);
   const [templateLead, setTemplateLead] = useState<Lead | null>(null);
   const [userEmail, setUserEmail] = useState("");
   const [creditsRemaining, setCreditsRemaining] = useState(0);
   const [businessType, setBusinessType] = useState("");
   const [location, setLocation] = useState("");
+
+  useEffect(() => {
+    if (jobQuery) setBusinessType(jobQuery);
+    if (jobLocation) setLocation(jobLocation);
+  }, [jobQuery, jobLocation]);
 
   const { leadStatuses, setLeadStatus, statusFilter, setStatusFilter } =
     useLeadStatuses(leads);
@@ -125,43 +85,42 @@ export default function SearchResultPage() {
     });
   }, []);
 
-  const scrollToMailboxes = useCallback(() => {
-    requestMailboxesTab();
-  }, []);
-
-  const handleSearch = useCallback(() => {
-    const bt = businessType.trim();
-    const loc = location.trim();
-    if (!bt || !loc) return;
-    router.push(dashboardSearchUrl(bt, loc));
-  }, [businessType, location, router]);
-
-  const handleSearchAgain = useCallback(
-    (bt: string, loc: string) => {
-      router.push(dashboardSearchUrl(bt, loc, { accumulate: true }));
-    },
-    [router]
-  );
-
   const handleDownload = useCallback(() => {
-    const bt = businessType.trim() || "search";
-    const loc = location.trim() || searchId;
+    const bt = (businessType || "leads").replace(/\s+/g, "-").toLowerCase();
+    const loc = (location || "export").replace(/\s+/g, "-").toLowerCase();
     exportToCSV(leads, `leadthur-${bt}-${loc}-${Date.now()}.csv`);
-  }, [businessType, location, leads, searchId]);
+  }, [leads, businessType, location]);
 
   const handleClearResults = useCallback(() => {
     router.push("/dashboard");
   }, [router]);
 
+  const handleSearch = useCallback(() => {
+    if (!businessType.trim() || !location.trim()) return;
+    router.push(dashboardSearchUrl(businessType, location));
+  }, [businessType, location, router]);
+
+  const handleSearchAgain = useCallback(
+    (bt: string, loc: string) => {
+      router.push(dashboardSearchUrl(bt, loc));
+    },
+    [router]
+  );
+
   const handleNearbyCity = useCallback(
     (city: string) => {
-      setLocation(city);
       router.push(
-        dashboardSearchUrl(businessType.trim() || "businesses", city, { accumulate: true })
+        dashboardSearchUrl(businessType.trim() || "businesses", city, {
+          accumulate: true,
+        })
       );
     },
     [businessType, router]
   );
+
+  const scrollToMailboxes = useCallback(() => {
+    requestMailboxesTab();
+  }, []);
 
   useEffect(() => {
     setUserEmail(localStorage.getItem("leadthur_email") || "");
@@ -173,77 +132,8 @@ export default function SearchResultPage() {
   useEffect(() => {
     if (!hasStoredLicense()) {
       router.replace("/activate");
-      return;
     }
-    if (!searchId) {
-      setNotFound(true);
-      setLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    let interval: ReturnType<typeof setInterval> | null = null;
-    let mergedBusinessLeads: BusinessLead[] = [];
-
-    const load = async () => {
-      try {
-        const [payload, job] = await Promise.all([
-          pollSearchResults(searchId),
-          getSearch(searchId).catch(() => null),
-        ]);
-        if (cancelled) return;
-
-        if (job?.query) {
-          setBusinessType(job.query);
-        }
-        if (job?.location) {
-          setLocation(job.location);
-        }
-
-        if (payload.leads.length > 0) {
-          mergedBusinessLeads = mergePollLeads(
-            mergedBusinessLeads,
-            normalizeApiBusinessLeads(payload.leads)
-          );
-          setLeads(mergedBusinessLeads.map(businessLeadToLead));
-        }
-
-        setEmailScrapingComplete(payload.emailScrapingComplete);
-        setNearbyCities(payload.nearbyCities ?? []);
-        setNotFound(false);
-        setLoading(false);
-
-        const leadsStillCatchingUp =
-          payload.totalFound > 0 &&
-          mergedBusinessLeads.length < payload.totalFound;
-        const keepPolling =
-          payload.scrapingInProgress ||
-          !payload.emailScrapingComplete ||
-          leadsStillCatchingUp;
-
-        if (keepPolling && !interval) {
-          interval = setInterval(() => {
-            void load();
-          }, POLL_MS);
-        } else if (!keepPolling && interval) {
-          clearInterval(interval);
-          interval = null;
-        }
-      } catch {
-        if (!cancelled) {
-          setNotFound(true);
-          setLoading(false);
-        }
-      }
-    };
-
-    void load();
-
-    return () => {
-      cancelled = true;
-      if (interval) clearInterval(interval);
-    };
-  }, [searchId, router]);
+  }, [router]);
 
   if (notFound) {
     return (
@@ -256,10 +146,26 @@ export default function SearchResultPage() {
     );
   }
 
+  const displayCount = Math.max(totalFound, leads.length);
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-xl font-bold text-white">Your search results</h1>
+        {fullyComplete ? (
+          <p className="mt-2 text-sm text-[#A1A1B5]">
+            {displayCount === 0
+              ? "No potential clients found in this area. Try a nearby city."
+              : `We found ${displayCount.toLocaleString()} potential clients for you.`}
+          </p>
+        ) : (
+          <p className="mt-2 text-sm text-[#A1A1B5]">
+            Finding potential clients
+            {displayCount > 0
+              ? `… ${displayCount.toLocaleString()} found so far`
+              : "…"}
+          </p>
+        )}
       </div>
 
       <OutreachWorkspace
@@ -269,7 +175,7 @@ export default function SearchResultPage() {
         onBusinessTypeChange={setBusinessType}
         onLocationChange={setLocation}
         onSearch={handleSearch}
-        searchDisabled={loading}
+        searchDisabled={loading || !fullyComplete}
         selectedLeads={selectedLeads}
         sendPanelOpen={sendPanelOpen}
         onCloseSendPanel={() => setSendPanelOpen(false)}
@@ -294,7 +200,11 @@ export default function SearchResultPage() {
             hasMailbox={outreach.hasMailbox}
             onNoMailboxClick={scrollToMailboxes}
             onMarkReplied={(lead) => {
-              const recipient = (lead.verified_emails?.[0] || lead.email || "").trim();
+              const recipient = (
+                lead.verified_emails?.[0] ||
+                lead.email ||
+                ""
+              ).trim();
               if (!recipient) return;
               void markRecipientReplied(recipient).then(() => {
                 setLeadStatus(lead.id, "interested");
@@ -305,7 +215,7 @@ export default function SearchResultPage() {
         resultsFooter={
           <div className="space-y-4">
             <NearbyCityChips
-              show={emailScrapingComplete && !loading}
+              show={fullyComplete && !loading}
               cities={nearbyCities}
               onSelectCity={handleNearbyCity}
             />

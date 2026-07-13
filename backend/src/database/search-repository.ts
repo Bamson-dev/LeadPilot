@@ -1,4 +1,5 @@
 import type { BusinessLead, NearbyCitySuggestion, SearchJob, SearchStatsSummary } from "@leadthur/shared";
+import { computeFullyComplete } from "@leadthur/shared";
 import {
   predictionsFromDb,
   predictionStorageFields,
@@ -103,19 +104,27 @@ function leadToDbInsert(lead: BusinessLead): Record<string, unknown> {
 }
 
 function mapSearchJob(row: DbSearchJob): SearchJob {
+  const status = row.status as SearchJob["status"];
+  const scrapingInProgress = Boolean(row.scraping_in_progress);
+  const emailScrapingComplete = Boolean(row.email_scraping_complete);
   return {
     id: row.id,
     query: row.query,
     location: row.location,
-    status: row.status as SearchJob["status"],
+    status,
     totalFound: row.total_found,
     processed: row.processed,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     error: row.error,
     isTrial: Boolean(row.is_trial),
-    scrapingInProgress: Boolean(row.scraping_in_progress),
-    emailScrapingComplete: Boolean(row.email_scraping_complete),
+    scrapingInProgress,
+    emailScrapingComplete,
+    fullyComplete: computeFullyComplete({
+      status,
+      scrapingInProgress,
+      emailScrapingComplete,
+    }),
     nearbyCities: (row.nearby_cities as NearbyCitySuggestion[] | null) ?? undefined,
     statsSummary: (row.stats_summary as SearchStatsSummary | null) ?? undefined,
   };

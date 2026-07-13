@@ -455,6 +455,10 @@ export async function recoverSearchJobEmailScraping(
   emit({
     type: "complete",
     total: leadCount,
+    status: "completed",
+    scrapingInProgress: false,
+    emailScrapingComplete: true,
+    fullyComplete: true,
     message: `Search complete. Found ${leadCount} businesses in ${location}.`,
   });
 
@@ -604,6 +608,10 @@ async function runBackgroundWork(
     emit({
       type: "complete",
       total: totalFound,
+      status: "completed",
+      scrapingInProgress: false,
+      emailScrapingComplete: true,
+      fullyComplete: true,
       message: `Search complete. Found ${totalFound} businesses in ${location}.`,
     });
 
@@ -655,6 +663,10 @@ async function runBackgroundWork(
       emit({
         type: "complete",
         total: leadsCollected,
+        status: "completed",
+        scrapingInProgress: false,
+        emailScrapingComplete: true,
+        fullyComplete: true,
         message: `Search complete. Found ${leadsCollected} businesses in ${location}.`,
       });
       return;
@@ -837,6 +849,10 @@ export async function runScraperJob(
     emit({
       type: "complete",
       total: phase1Total,
+      status: "completed",
+      scrapingInProgress: true,
+      emailScrapingComplete: false,
+      fullyComplete: false,
       message: `Found ${phase1Total} businesses. Finding email addresses in the background...`,
     });
 
@@ -914,6 +930,10 @@ export async function runScraperJob(
         emit({
           type: "complete",
           total: committed,
+          status: "completed",
+          scrapingInProgress: false,
+          emailScrapingComplete: true,
+          fullyComplete: true,
           message: `We found ${committed.toLocaleString()} potential clients for you.`,
         });
       }
