@@ -83,6 +83,9 @@ export async function crawlEmailsFromWebsite(
       discoveredContact,
       `${baseUrl}/contact`,
       `${baseUrl}/contact-us`,
+      `${baseUrl}/get-in-touch`,
+      `${baseUrl}/enquiry`,
+      `${baseUrl}/enquiries`,
       `${baseUrl}/about`,
       `${baseUrl}/about-us`,
     ].filter((url): url is string => Boolean(url));
@@ -126,11 +129,37 @@ export async function createEmailBrowserContext(
   });
 }
 
+interface RenderedPageFetch {
+  html: string | null;
+  status: number | null;
+  /** True when CDN/origin errors make further page crawls on this host a waste. */
+  unscrapable: boolean;
+}
+
+function isUnscrapableHttpStatus(status: number | null): boolean {
+  if (status == null) return false;
+  if (status === 403 || status === 429) return true;
+  if (status === 520 || status === 521 || status === 522 || status === 523 || status === 524) {
+    return true;
+  }
+  return status >= 500;
+}
+
+function looksLikeChallengeOrErrorPage(html: string): boolean {
+  const lower = html.toLowerCase();
+  if (lower.includes("cf-error") || lower.includes("cloudflare ray id")) return true;
+  if (lower.includes("attention required") && lower.includes("cloudflare")) return true;
+  if (html.length < 8_000 && /error code\s*[:\s]*(522|523|524|520|521)/i.test(html)) {
+    return true;
+  }
+  return false;
+}
+
 async function fetchRenderedHtmlWithPlaywright(
   context: BrowserContext,
   pageUrl: string,
   timeoutMs = EMAIL_PLAYWRIGHT_TIMEOUT_MS
-): Promise<string | null> {
+): Promise<RenderedPageFetch> {
   let lastError: string | null = null;
 
   for (let attempt = 0; attempt <= EMAIL_PLAYWRIGHT_RETRY_COUNT; attempt++) {
@@ -153,11 +182,20 @@ async function fetchRenderedHtmlWithPlaywright(
         waitUntil: "domcontentloaded",
       });
 
+      const status = response?.status() ?? null;
       logger.info("[email-diag] Playwright page goto complete", {
         pageUrl: pageUrl.substring(0, 80),
-        httpStatus: response?.status() ?? null,
+        httpStatus: status,
         attempt: attempt + 1,
       });
+
+      if (isUnscrapableHttpStatus(status)) {
+        logger.warn("[email-diag] Playwright page unscrapable HTTP status — skipping idle wait", {
+          pageUrl: pageUrl.substring(0, 80),
+          httpStatus: status,
+        });
+        return { html: null, status, unscrapable: true };
+      }
 
       await Promise.race([
         page
@@ -167,6 +205,15 @@ async function fetchRenderedHtmlWithPlaywright(
       ]);
 
       const html = await page.content();
+      if (looksLikeChallengeOrErrorPage(html)) {
+        logger.warn("[email-diag] Playwright page looks like CDN/error challenge", {
+          pageUrl: pageUrl.substring(0, 80),
+          htmlLength: html.length,
+          httpStatus: status,
+        });
+        return { html: null, status, unscrapable: true };
+      }
+
       logger.info("[email-diag] Playwright rendered HTML retrieved", {
         pageUrl: pageUrl.substring(0, 80),
         htmlLength: html.length,
@@ -174,7 +221,7 @@ async function fetchRenderedHtmlWithPlaywright(
         atSymbolCount: (html.match(/@/g) ?? []).length,
         attempt: attempt + 1,
       });
-      return html;
+      return { html, status, unscrapable: false };
     } catch (err) {
       lastError = err instanceof Error ? err.message : "unknown";
       logger.warn("[email-diag] Playwright tab load failed", {
@@ -187,7 +234,7 @@ async function fetchRenderedHtmlWithPlaywright(
     }
   }
 
-  return null;
+  return { html: null, status: null, unscrapable: false };
 }
 
 export interface CombinedEmailDiscovery {
@@ -260,20 +307,28 @@ function resolveAboutPageUrls(baseUrl: string): string[] {
 }
 
 function resolveContactPageCandidates(
-  homepageHtml: string,
+  homepageHtml: string | null,
   baseUrl: string
 ): string[] {
-  const discovered = findContactLinkFromHtml(homepageHtml, baseUrl);
+  const discovered = homepageHtml
+    ? findContactLinkFromHtml(homepageHtml, baseUrl) ??
+      findContactPageUrlFromHtml(homepageHtml, baseUrl)
+    : null;
   const candidates = [
     discovered,
     `${baseUrl}/contact`,
     `${baseUrl}/contact-us`,
+    `${baseUrl}/get-in-touch`,
+    `${baseUrl}/enquiry`,
+    `${baseUrl}/enquiries`,
+    `${baseUrl}/reach-us`,
   ].filter((url): url is string => Boolean(url));
 
   const seen = new Set<string>();
   return candidates.filter((url) => {
-    if (seen.has(url)) return false;
-    seen.add(url);
+    const key = url.toLowerCase().replace(/\/$/, "");
+    if (seen.has(key)) return false;
+    seen.add(key);
     return true;
   });
 }
@@ -299,7 +354,9 @@ async function scrapePagesForEmailsWithPlaywright(
     if (!baseUrl.startsWith("http")) baseUrl = `https://${baseUrl}`;
     baseUrl = baseUrl.replace(/\/$/, "");
 
-    const crawlRenderedPage = async (pageUrl: string): Promise<string | null> => {
+    const crawlRenderedPage = async (
+      pageUrl: string
+    ): Promise<RenderedPageFetch | null> => {
       if (pagesFetched >= EMAIL_SCRAPE_MAX_PAGES) return null;
       pagesFetched++;
       return fetchRenderedHtmlWithPlaywright(context, pageUrl);
@@ -310,35 +367,49 @@ async function scrapePagesForEmailsWithPlaywright(
       baseUrl: baseUrl.substring(0, 80),
     });
 
-    const homepageHtml = await crawlRenderedPage(baseUrl);
-    if (!homepageHtml) {
-      logger.warn("[email-diag] Playwright homepage returned empty HTML", {
-        websiteUrl: siteLabel,
-      });
+    const homepageFetch = await crawlRenderedPage(baseUrl);
+    if (homepageFetch?.unscrapable) {
+      // Same-origin CDN/origin failures usually hit /contact too — fall through to MX.
+      logger.warn(
+        "[email-diag] Homepage unscrapable — skipping contact/about crawl, defer to MX prediction",
+        {
+          websiteUrl: siteLabel,
+          httpStatus: homepageFetch.status,
+        }
+      );
       return { emails: [], html: "", htmlLength: 0, mailtoFound: false };
     }
 
-    htmlChunks.push(homepageHtml);
-    const fromHome = extractEmailsFromHtmlStrict(homepageHtml);
-    logger.info("[email-diag] Playwright homepage email scan", {
-      websiteUrl: siteLabel,
-      htmlLength: homepageHtml.length,
-      mailtoFound: homepageHtml.toLowerCase().includes("mailto:"),
-      emailsFound: fromHome.length,
-      emails: fromHome.slice(0, 3),
-    });
+    const homepageHtml = homepageFetch?.html ?? null;
+    let fromHome: string[] = [];
 
-    if (fromHome.length > 0) {
-      return {
-        emails: fromHome,
-        html: homepageHtml,
+    if (!homepageHtml) {
+      logger.warn(
+        "[email-diag] Playwright homepage returned empty HTML — continuing with contact/about paths",
+        { websiteUrl: siteLabel }
+      );
+    } else {
+      htmlChunks.push(homepageHtml);
+      fromHome = extractEmailsFromHtmlStrict(homepageHtml);
+      logger.info("[email-diag] Playwright homepage email scan", {
+        websiteUrl: siteLabel,
         htmlLength: homepageHtml.length,
         mailtoFound: homepageHtml.toLowerCase().includes("mailto:"),
-      };
+        emailsFound: fromHome.length,
+        emails: fromHome.slice(0, 3),
+      });
+
+      if (fromHome.length > 0) {
+        return {
+          emails: fromHome,
+          html: homepageHtml,
+          htmlLength: homepageHtml.length,
+          mailtoFound: homepageHtml.toLowerCase().includes("mailto:"),
+        };
+      }
     }
 
     let contactEmails: string[] = [];
-    let contactPageLoaded = false;
     const contactCandidates = resolveContactPageCandidates(homepageHtml, baseUrl);
 
     for (const contactUrl of contactCandidates) {
@@ -347,31 +418,40 @@ async function scrapePagesForEmailsWithPlaywright(
         websiteUrl: siteLabel,
         contactUrl: contactUrl.substring(0, 80),
       });
-      const contactHtml = await crawlRenderedPage(contactUrl);
-      if (!contactHtml) continue;
-      contactPageLoaded = true;
-      htmlChunks.push(contactHtml);
-      contactEmails = extractEmailsFromHtmlStrict(contactHtml);
+      const contactFetch = await crawlRenderedPage(contactUrl);
+      if (!contactFetch) break;
+      if (contactFetch.unscrapable) {
+        logger.warn("[email-diag] Contact page unscrapable — trying next candidate", {
+          websiteUrl: siteLabel,
+          contactUrl: contactUrl.substring(0, 80),
+          httpStatus: contactFetch.status,
+        });
+        continue;
+      }
+      if (!contactFetch.html) continue;
+      htmlChunks.push(contactFetch.html);
+      contactEmails = extractEmailsFromHtmlStrict(contactFetch.html);
       logger.info("[email-diag] Playwright contact page email scan", {
         websiteUrl: siteLabel,
-        htmlLength: contactHtml.length,
+        htmlLength: contactFetch.html.length,
         emailsFound: contactEmails.length,
         emails: contactEmails.slice(0, 3),
       });
       if (contactEmails.length > 0) break;
     }
 
-    if (contactEmails.length === 0 && !contactPageLoaded) {
+    if (contactEmails.length === 0) {
       for (const aboutUrl of resolveAboutPageUrls(baseUrl)) {
         if (pagesFetched >= EMAIL_SCRAPE_MAX_PAGES) break;
         logger.info("[email-diag] Playwright scraping about page", {
           websiteUrl: siteLabel,
           aboutUrl: aboutUrl.substring(0, 80),
         });
-        const aboutHtml = await crawlRenderedPage(aboutUrl);
-        if (!aboutHtml) continue;
-        htmlChunks.push(aboutHtml);
-        const aboutEmails = extractEmailsFromHtmlStrict(aboutHtml);
+        const aboutFetch = await crawlRenderedPage(aboutUrl);
+        if (!aboutFetch) break;
+        if (aboutFetch.unscrapable || !aboutFetch.html) continue;
+        htmlChunks.push(aboutFetch.html);
+        const aboutEmails = extractEmailsFromHtmlStrict(aboutFetch.html);
         logger.info("[email-diag] Playwright about page email scan", {
           websiteUrl: siteLabel,
           emailsFound: aboutEmails.length,
@@ -558,7 +638,7 @@ function resolveInternalUrl(baseUrl: string, contactPath: string): string {
 
 function findContactPageUrlFromHtml(html: string, baseUrl: string): string | null {
   const contactLinkRegex =
-    /href=["']([^"']*contact[^"']*|[^"']*get-in-touch[^"']*|[^"']*reach-us[^"']*|[^"']*enquir[^"']*)[^"']*["']/gi;
+    /href=["']([^"']*(?:contact|get-in-touch|reach-us|enquir|enquiry|book-now)[^"']*)["']/gi;
   const match = contactLinkRegex.exec(html);
   if (!match) return null;
   return resolveInternalUrl(baseUrl, match[1]);
