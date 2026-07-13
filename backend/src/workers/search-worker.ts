@@ -12,7 +12,7 @@ import {
   runScraperJob,
 } from "../services/scraper-service";
 import { clearStreamBuffer, emitToStream } from "../services/stream-registry";
-import { sendSearchQueueFailureEmail } from "../services/email";
+import { notifySearchTerminalFailure } from "../services/search-failure-notify";
 import { logger } from "../utils/logger";
 import { logSearchLifecycle } from "../utils/search-job-lifecycle";
 import {
@@ -234,6 +234,24 @@ export function startSearchWorker(): Worker<SearchQueueJobData> | null {
       }
     };
 
+    if (existing?.emailScrapingComplete || existing?.status === "completed") {
+      return;
+    }
+
+    if (existing?.status === "running" || existing?.scrapingInProgress) {
+      logger.warn(
+        "[search-worker] Final BullMQ failure while scrape still active — not marking failed or emailing",
+        {
+          searchId,
+          status: existing.status,
+          scrapingInProgress: existing.scrapingInProgress,
+          leadsCollected,
+          error: err.message,
+        }
+      );
+      return;
+    }
+
     if (leadsCollected > 0 && !existing?.emailScrapingComplete) {
       await recoverSearchJobEmailScraping(searchId, query, location, emit, {
         licenseEmail,
@@ -247,28 +265,23 @@ export function startSearchWorker(): Worker<SearchQueueJobData> | null {
       return;
     }
 
-    if (existing?.emailScrapingComplete) {
-      return;
-    }
-
     const message = err.message || "Search did not complete. Please try again.";
-    await updateSearchJob(searchId, {
-      status: "failed",
-      error: message,
-      scrapingInProgress: false,
-    });
     emitToStream(searchId, { type: "error", message });
     clearStreamBuffer(searchId);
 
-    const email = await resolveJobEmail(searchId, licenseEmail);
-    if (email) {
-      void sendSearchQueueFailureEmail(email, query, location).catch((emailErr) =>
-        logger.error("Failed to send queue failure email", {
-          searchId,
-          error: emailErr instanceof Error ? emailErr.message : "unknown",
-        })
-      );
-    }
+    void notifySearchTerminalFailure({
+      searchId,
+      query,
+      location,
+      licenseEmail,
+      errorMessage: message,
+      kind: "queue",
+    }).catch((emailErr) =>
+      logger.error("Failed to send queue failure email", {
+        searchId,
+        error: emailErr instanceof Error ? emailErr.message : "unknown",
+      })
+    );
   });
 
   worker.on("error", (err) => {
