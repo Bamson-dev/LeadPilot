@@ -213,8 +213,13 @@ export default function SearchResultPage() {
         setNotFound(false);
         setLoading(false);
 
+        const leadsStillCatchingUp =
+          payload.totalFound > 0 &&
+          mergedBusinessLeads.length < payload.totalFound;
         const keepPolling =
-          payload.scrapingInProgress || !payload.emailScrapingComplete;
+          payload.scrapingInProgress ||
+          !payload.emailScrapingComplete ||
+          leadsStillCatchingUp;
 
         if (keepPolling && !interval) {
           interval = setInterval(() => {

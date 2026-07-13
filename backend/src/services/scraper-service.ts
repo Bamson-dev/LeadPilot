@@ -29,7 +29,13 @@ import { generateAreaSuggestions } from "./suggestion-service";
 import { runBatchEmailScraping } from "./email-batch-scraper";
 import { computeSearchStats } from "./search-stats";
 import { findNearbyCities } from "./nearby-cities";
-import { PHASE1_DEADLINE_MS, MEMORY_SKIP_SCRAPE_PERCENT, PHASE2_EMAIL_SCRAPE_MAX_MS, PHASE2_TRIGGER_WATCHDOG_MS } from "../scraper/utils/constants";
+import {
+  PHASE1_DEADLINE_MS,
+  MEMORY_SKIP_SCRAPE_PERCENT,
+  PHASE2_EMAIL_SCRAPE_MAX_MS,
+  PHASE2_TRIGGER_WATCHDOG_MS,
+  BACKGROUND_MAPS_BUDGET_MS,
+} from "../scraper/utils/constants";
 import type { RawLeadInput } from "../types/scraper";
 import { isMemoryPressureHigh, getMemoryUsagePercent } from "../utils/memory";
 import {
@@ -477,14 +483,19 @@ async function runBackgroundWork(
   let skipEmailScraping = false;
 
   try {
+    // Remaining Maps URLs are capped so Phase 2 always starts. Unbounded
+    // continueMapsExtraction previously could run past the worker timeout,
+    // leaving status=completed with email_scraping_complete=false and blank emails.
     if (remainingUrls.length > 0 && pool.isReady()) {
       logSearchLifecycle("phase1_heartbeat", searchId, {
         phase: "background_extraction_start",
         remainingUrls: remainingUrls.length,
+        backgroundMapsBudgetMs: BACKGROUND_MAPS_BUDGET_MS,
         elapsedMs: Date.now() - jobStartedAt,
       });
       logSearchStep(searchId, "background_extraction", {
         remainingUrls: remainingUrls.length,
+        backgroundMapsBudgetMs: BACKGROUND_MAPS_BUDGET_MS,
       });
       const browser = await pool.acquire(60_000);
       const seenKeys = new Set<string>();
@@ -493,6 +504,7 @@ async function runBackgroundWork(
         seenKeys.add(leadDedupeKey(lead));
       }
 
+      const mapsDeadlineMs = Date.now() + BACKGROUND_MAPS_BUDGET_MS;
       try {
         await continueMapsExtraction(browser, {
           query,
@@ -500,6 +512,7 @@ async function runBackgroundWork(
           isTrial,
           placeUrls: remainingUrls,
           startCount: existing.length,
+          deadlineMs: mapsDeadlineMs,
           onProgress: (count, max) => {
             emit({
               type: "progress",
@@ -527,6 +540,12 @@ async function runBackgroundWork(
     await updateSearchJob(searchId, { scrapingInProgress: false });
 
     const leadCount = await countSearchLeads(searchId);
+    logger.info("[search-job] Background Maps done — starting Phase 2 email scraping", {
+      searchId,
+      leadCount,
+      remainingUrlsAtStart: remainingUrls.length,
+      elapsedMs: Date.now() - jobStartedAt,
+    });
     const phase2 = await runPhase2EmailScraping(
       searchId,
       query,

@@ -39,11 +39,20 @@ export const EMAIL_SCRAPE_BATCH_SIZE_LARGE = 3;
 export const MEDIUM_CITY_RESULT_THRESHOLD = 150;
 export const LARGE_CITY_RESULT_THRESHOLD = 300;
 export const MEMORY_SKIP_SCRAPE_PERCENT = 80;
-/** Phase 2 email budget — starts only after Phase 1 extraction finishes. */
+/** Phase 2 email budget — starts after Phase 1; must not wait on unbounded Maps backfill. */
 export const PHASE2_EMAIL_SCRAPE_MAX_MS = 5 * 60 * 1000;
 export const EMAIL_SCRAPE_MAX_MS = PHASE2_EMAIL_SCRAPE_MAX_MS;
 export const PHASE2_TRIGGER_WATCHDOG_MS = 10_000;
 export const PHASE1_DEADLINE_MS = 90_000;
+/**
+ * Cap for continueMapsExtraction after Phase 1 times out.
+ * Without this, remaining place-URL extraction can run past the worker
+ * timeout and Phase 2 email scraping never starts (emails stay blank).
+ */
+export const BACKGROUND_MAPS_BUDGET_MS = parseInt(
+  process.env.BACKGROUND_MAPS_BUDGET_MS || String(2.5 * 60 * 1000),
+  10
+);
 /** BullMQ lock must cover longest Phase 1 background extraction + Phase 2 email scrape. */
 export const BULLMQ_LOCK_DURATION_MS = 15 * 60 * 1000;
 export const BULLMQ_STALLED_INTERVAL_MS = 2 * 60 * 1000;

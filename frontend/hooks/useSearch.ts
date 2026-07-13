@@ -411,7 +411,7 @@ export function useSearch(options?: UseSearchOptions) {
   );
 
   const fetchFinalResults = useCallback(
-    async (searchId: string) => {
+    async (searchId: string, attempt = 0) => {
       if (searchId !== searchIdRef.current) return;
       const pending = pendingLeadsRef.current.splice(0);
 
@@ -419,10 +419,12 @@ export function useSearch(options?: UseSearchOptions) {
         const limit = 1000;
         let page = 1;
         let fetched: BusinessLead[] = [];
+        let reportedTotal = 0;
 
         while (true) {
           const payload = await pollSearchResults(searchId, page, limit);
           if (searchId !== searchIdRef.current) return;
+          reportedTotal = Math.max(reportedTotal, payload.totalFound ?? 0);
           fetched = fetched.concat(normalizeApiBusinessLeads(payload.leads));
           if (payload.leads.length < limit || fetched.length >= payload.totalFound) {
             break;
@@ -440,7 +442,8 @@ export function useSearch(options?: UseSearchOptions) {
               )
             : fetched;
 
-        const totalFound = merged.length;
+        // Prefer the live DB count from the API over in-memory length.
+        const totalFound = Math.max(merged.length, reportedTotal);
 
         if (merged.length > 0) {
           replaceLeads(merged, searchId);
@@ -453,7 +456,7 @@ export function useSearch(options?: UseSearchOptions) {
             return prev;
           }
           const leads = merged.length > 0 ? merged : prev.leads;
-          const count = leads.length;
+          const count = Math.max(leads.length, totalFound, prev.totalFound);
           onCompleteRef.current?.(
             leads,
             queryRef.current,
@@ -473,10 +476,23 @@ export function useSearch(options?: UseSearchOptions) {
                 : `We found ${count.toLocaleString()} potential clients for you.`,
           };
         });
+
+        // If the API reported more rows than we received, retry once.
+        if (merged.length < reportedTotal && attempt < 2) {
+          window.setTimeout(() => {
+            void fetchFinalResults(searchId, attempt + 1);
+          }, 2000);
+        }
       } catch {
         if (searchId !== searchIdRef.current) return;
         if (pending.length > 0) {
           mergeLeads(pending.map((lead) => normalizeApiBusinessLead(lead)));
+        }
+        // Do not leave a partial SSE subset as the final list — retry.
+        if (attempt < 3) {
+          window.setTimeout(() => {
+            void fetchFinalResults(searchId, attempt + 1);
+          }, 2000 * (attempt + 1));
         }
       }
     },
@@ -516,14 +532,10 @@ export function useSearch(options?: UseSearchOptions) {
       setState((prev) => {
         if (prev.searchId && prev.searchId !== activeId) return prev;
         const merged = mergePendingIntoLeads(prev.leads, pending, activeId);
-        const totalFound = merged.length;
+        // Never discard the authoritative server total in favour of the SSE
+        // subset still held in memory — that caused "141 found" with 6 table rows.
+        const totalFound = Math.max(total, merged.length, prev.totalFound);
         queueMicrotask(() => {
-          onCompleteRef.current?.(
-            merged,
-            queryRef.current,
-            locationRef.current,
-            totalFound
-          );
           void loadSoftRegionSuggestions(
             queryRef.current,
             locationRef.current,
@@ -532,6 +544,7 @@ export function useSearch(options?: UseSearchOptions) {
         });
         return {
           ...prev,
+          // Keep existing leads until fetchFinalResults replaces with the full DB set.
           leads: merged,
           status: "completed",
           totalFound,
@@ -688,7 +701,7 @@ export function useSearch(options?: UseSearchOptions) {
             ) {
               setState((prev) => {
                 if (prev.searchId !== searchId) return prev;
-                const count = prev.leads.length;
+                const count = Math.max(prev.leads.length, prev.totalFound, job.totalFound ?? 0);
                 queueMicrotask(() =>
                   finishSearch(
                     count,

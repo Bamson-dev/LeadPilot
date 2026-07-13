@@ -1383,7 +1383,12 @@ export async function scrapeGoogleMaps(
 /** Continue extracting leads from URLs collected after a phase-1 timeout. */
 export async function continueMapsExtraction(
   browser: Browser,
-  options: MapsScrapeOptions & { placeUrls: string[]; startCount?: number }
+  options: MapsScrapeOptions & {
+    placeUrls: string[];
+    startCount?: number;
+    /** Stop extraction when Date.now() reaches this (Phase 2 must still run). */
+    deadlineMs?: number;
+  }
 ): Promise<number> {
   const {
     query,
@@ -1393,6 +1398,7 @@ export async function continueMapsExtraction(
     isTrial,
     placeUrls,
     startCount = 0,
+    deadlineMs,
   } = options;
 
   if (placeUrls.length === 0) return startCount;
@@ -1419,6 +1425,19 @@ export async function continueMapsExtraction(
     onProgress?.(count, max);
 
     for (let i = 0; i < placeUrls.length; i += BATCH_SIZE) {
+      if (deadlineMs != null && Date.now() >= deadlineMs) {
+        logger.warn(
+          "[maps] Background extraction stopped — budget exhausted, handing off to Phase 2",
+          {
+            startCount,
+            extracted: count - startCount,
+            urlsRemaining: placeUrls.length - i,
+            urlsTotal: placeUrls.length,
+          }
+        );
+        break;
+      }
+
       const batch = placeUrls.slice(i, i + BATCH_SIZE);
       const results = await Promise.allSettled(
         batch.map((url, batchIndex) =>
