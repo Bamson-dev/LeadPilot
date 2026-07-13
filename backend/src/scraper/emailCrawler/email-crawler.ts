@@ -10,6 +10,12 @@ import { logger } from "../../utils/logger";
 import { resolveEffectiveBusinessWebsite } from "../utils/effective-website";
 import type { Browser, BrowserContext } from "playwright";
 import { isBlockedEmailScrapeDomain } from "@leadthur/shared";
+import {
+  isUnscrapableHttpStatus,
+  looksLikeChallengeOrErrorPage,
+  resolveDefaultAboutPaths,
+  resolveDefaultContactPaths,
+} from "./email-scrape-heuristics";
 
 export interface EmailCrawlResult {
   emails: string[];
@@ -134,25 +140,6 @@ interface RenderedPageFetch {
   status: number | null;
   /** True when CDN/origin errors make further page crawls on this host a waste. */
   unscrapable: boolean;
-}
-
-function isUnscrapableHttpStatus(status: number | null): boolean {
-  if (status == null) return false;
-  if (status === 403 || status === 429) return true;
-  if (status === 520 || status === 521 || status === 522 || status === 523 || status === 524) {
-    return true;
-  }
-  return status >= 500;
-}
-
-function looksLikeChallengeOrErrorPage(html: string): boolean {
-  const lower = html.toLowerCase();
-  if (lower.includes("cf-error") || lower.includes("cloudflare ray id")) return true;
-  if (lower.includes("attention required") && lower.includes("cloudflare")) return true;
-  if (html.length < 8_000 && /error code\s*[:\s]*(522|523|524|520|521)/i.test(html)) {
-    return true;
-  }
-  return false;
 }
 
 async function fetchRenderedHtmlWithPlaywright(
@@ -303,7 +290,7 @@ function dedupeEmails(emails: string[]): string[] {
 }
 
 function resolveAboutPageUrls(baseUrl: string): string[] {
-  return [`${baseUrl}/about`, `${baseUrl}/about-us`];
+  return resolveDefaultAboutPaths(baseUrl);
 }
 
 function resolveContactPageCandidates(
@@ -316,12 +303,7 @@ function resolveContactPageCandidates(
     : null;
   const candidates = [
     discovered,
-    `${baseUrl}/contact`,
-    `${baseUrl}/contact-us`,
-    `${baseUrl}/get-in-touch`,
-    `${baseUrl}/enquiry`,
-    `${baseUrl}/enquiries`,
-    `${baseUrl}/reach-us`,
+    ...resolveDefaultContactPaths(baseUrl),
   ].filter((url): url is string => Boolean(url));
 
   const seen = new Set<string>();
