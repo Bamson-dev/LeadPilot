@@ -1,6 +1,7 @@
 import os from "os";
 import { Router, type NextFunction, type Request, type Response } from "express";
 import type { SearchResponse, SearchResultsResponse } from "@leadthur/shared";
+import { computeFullyComplete } from "@leadthur/shared";
 import {
   createSearchJob,
   getSearchJob,
@@ -255,14 +256,23 @@ async function buildSearchResultsPayload(
     });
   }
 
+  const scrapingInProgress = Boolean(job?.scrapingInProgress);
+  const emailScrapingComplete = resolveEmailScrapingComplete(job);
+  const status = job?.status ?? "unknown";
+
   return {
     searchId,
-    status: job?.status ?? "unknown",
+    status,
     leads,
     total,
     totalFound: total,
-    scrapingInProgress: Boolean(job?.scrapingInProgress),
-    emailScrapingComplete: resolveEmailScrapingComplete(job),
+    scrapingInProgress,
+    emailScrapingComplete,
+    fullyComplete: computeFullyComplete({
+      status,
+      scrapingInProgress,
+      emailScrapingComplete,
+    }),
     queuePosition,
     summary,
     nearbyCities: job?.nearbyCities ?? [],
@@ -570,6 +580,9 @@ export async function handleFreeTrialSearch(
       maxResults: 15,
       searchesUsed: claim.searchesUsed,
       searchesRemaining: claim.searchesRemaining,
+      scrapingInProgress: queuePosition === 0,
+      emailScrapingComplete: false,
+      fullyComplete: false,
       message:
         queuePosition > 0
           ? `Your search is queued. You are number ${queuePosition} in line.`
@@ -679,6 +692,8 @@ searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => 
         cached: true,
         totalFound: cached.leads.length,
         scrapingInProgress: false,
+        emailScrapingComplete: true,
+        fullyComplete: true,
         searchesRemaining: req.searchesRemaining ?? null,
         message: `Found ${cached.leads.length} businesses instantly`,
       } satisfies SearchResponse);
@@ -704,6 +719,8 @@ searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => 
       status: queuePosition > 0 ? "queued" : "running",
       queuePosition,
       scrapingInProgress: queuePosition === 0,
+      emailScrapingComplete: false,
+      fullyComplete: false,
       searchesRemaining: req.searchesRemaining ?? null,
       message:
         queuePosition > 0
@@ -824,7 +841,8 @@ searchRouter.get(
 
     try {
       const existingJob = await getSearchJob(searchId);
-      if (existingJob && existingJob.status === "completed") {
+      // Wait for fullyComplete — status alone flips at Phase 1 end.
+      if (existingJob?.fullyComplete) {
         const limit = 250;
         let page = 1;
         let allLeads: Awaited<ReturnType<typeof getSearchResults>>["leads"] = [];
@@ -847,6 +865,10 @@ searchRouter.get(
           `data: ${JSON.stringify({
             type: "complete",
             total,
+            status: existingJob.status,
+            scrapingInProgress: existingJob.scrapingInProgress,
+            emailScrapingComplete: existingJob.emailScrapingComplete,
+            fullyComplete: true,
             message: `Search complete. Found ${total} businesses in ${existingJob.location}.`,
           })}\n\n`
         );
@@ -889,7 +911,7 @@ searchRouter.get(
             );
           }
 
-          if (current.status === "completed") {
+          if (current.fullyComplete) {
             const limit = 250;
             let page = 1;
             let allLeads: Awaited<ReturnType<typeof getSearchResults>>["leads"] = [];
@@ -910,6 +932,10 @@ searchRouter.get(
               `data: ${JSON.stringify({
                 type: "complete",
                 total,
+                status: current.status,
+                scrapingInProgress: current.scrapingInProgress,
+                emailScrapingComplete: current.emailScrapingComplete,
+                fullyComplete: true,
                 message: `Search complete. Found ${total} businesses in ${current.location}.`,
               })}\n\n`
             );

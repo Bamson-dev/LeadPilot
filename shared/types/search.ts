@@ -10,6 +10,11 @@ export interface SearchJob {
   isTrial?: boolean;
   scrapingInProgress?: boolean;
   emailScrapingComplete?: boolean;
+  /**
+   * True only when status is completed, Maps backfill is done, and Phase 2
+   * email scraping has finished. Additive — does not replace the raw flags.
+   */
+  fullyComplete?: boolean;
   nearbyCities?: NearbyCitySuggestion[];
   statsSummary?: SearchStatsSummary | null;
   createdAt: string;
@@ -25,6 +30,7 @@ export interface SearchResultsResponse {
   totalFound: number;
   scrapingInProgress: boolean;
   emailScrapingComplete: boolean;
+  fullyComplete: boolean;
   queuePosition: number;
   summary: SearchStatsSummary;
   nearbyCities: NearbyCitySuggestion[];
@@ -49,6 +55,7 @@ export interface SearchResponse {
   totalFound?: number;
   scrapingInProgress?: boolean;
   emailScrapingComplete?: boolean;
+  fullyComplete?: boolean;
   queuePosition?: number;
   searchesRemaining?: number | null;
   message?: string;
@@ -88,4 +95,9 @@ export interface StreamEvent {
   emails?: string[];
   emailSource?: "website" | "predicted";
   suggestions?: AreaSuggestion[] | string[];
+  /** Present on complete events — false after Phase 1, true when fully done. */
+  fullyComplete?: boolean;
+  scrapingInProgress?: boolean;
+  emailScrapingComplete?: boolean;
+  status?: string;
 }

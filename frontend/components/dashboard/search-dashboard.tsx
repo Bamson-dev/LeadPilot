@@ -125,6 +125,7 @@ export function SearchDashboard() {
     clearResults,
     scrapingInProgress,
     emailScrapingComplete,
+    fullyComplete,
     nearbyCities,
     regionCitySuggestions,
     regionSelectionMessage,
@@ -192,21 +193,21 @@ export function SearchDashboard() {
   };
 
   useEffect(() => {
-    if (status === "completed") {
+    if (fullyComplete) {
       setShowSuccess(true);
       const t = setTimeout(() => setShowSuccess(false), 3000);
       return () => clearTimeout(t);
     }
-  }, [status]);
+  }, [fullyComplete]);
 
   useEffect(() => {
-    if (status !== "completed" || suggestions.length > 0) return;
+    if (!fullyComplete || suggestions.length > 0) return;
     const q = searchMeta.business || businessType;
     const loc = searchMeta.location || location;
     if (!q.trim() || !loc.trim()) return;
     void fetchSuggestions(q, loc, totalFound, searchedExpansionLocations);
   }, [
-    status,
+    fullyComplete,
     suggestions.length,
     searchMeta.business,
     searchMeta.location,
@@ -346,7 +347,7 @@ export function SearchDashboard() {
     setSavedBanner(null);
   };
 
-  const displayCount = tableLeads.length;
+  const displayCount = Math.max(totalFound, tableLeads.length);
 
   const isQueuedWaiting =
     queuePosition > 0 && tableLeads.length === 0 && !scrapingInProgress;
@@ -358,7 +359,7 @@ export function SearchDashboard() {
     !savedBanner;
 
   const exportCount = tableLeads.length;
-  const exportPulse = status === "completed" && exportCount > 0;
+  const exportPulse = fullyComplete && exportCount > 0;
 
   const searchesRemaining =
     userStats?.freeSearchesRemaining ??
@@ -465,7 +466,7 @@ export function SearchDashboard() {
           </div>
         )}
 
-        {showSuccess && (
+        {showSuccess && fullyComplete && (
           <div
             className="success-banner-fade mt-4"
             style={{
@@ -484,18 +485,24 @@ export function SearchDashboard() {
                 Search complete
               </div>
               <div style={{ color: "#6B6B80", fontSize: 12 }}>
-                We found {totalFound.toLocaleString()} potential clients for you. Your leads are
+                We found {displayCount.toLocaleString()} potential clients for you. Your leads are
                 ready to export.
               </div>
             </div>
           </div>
         )}
 
-        {status === "completed" && !error && !savedBanner && !showSuccess && (
+        {fullyComplete && !error && !savedBanner && !showSuccess && (
           <p className="mt-4 text-sm text-[#A1A1B5]">
-            {totalFound === 0 && tableLeads.length === 0
+            {displayCount === 0
               ? "No potential clients found in this area. Try a nearby city."
-              : `We found ${Math.max(totalFound, tableLeads.length).toLocaleString()} potential clients for you.`}
+              : `We found ${displayCount.toLocaleString()} potential clients for you.`}
+          </p>
+        )}
+
+        {!fullyComplete && isSearching && displayCount > 0 && !error && (
+          <p className="mt-4 text-sm text-[#A1A1B5]">
+            Finding potential clients… {displayCount.toLocaleString()} found so far
           </p>
         )}
 
@@ -556,9 +563,7 @@ export function SearchDashboard() {
                 )}
               </div>
               {isSearching && !isQueuedWaiting && <Progress value={progress} className="h-2" />}
-              {status === "completed" &&
-                emailScrapingComplete &&
-                regionCitySuggestions.length > 0 && (
+              {fullyComplete && regionCitySuggestions.length > 0 && (
                   <RegionCityChips
                     suggestions={regionCitySuggestions}
                     message={regionSelectionMessage ?? undefined}
@@ -575,7 +580,7 @@ export function SearchDashboard() {
           (isSearching || tableLeads.length > 0 || savedBanner) ? (
             <div className="space-y-4">
               <NearbyCityChips
-                show={status === "completed" && emailScrapingComplete && !isSearching}
+                show={fullyComplete && !isSearching}
                 cities={nearbyCities}
                 onSelectCity={(city) => {
                   setLocation(city);
@@ -637,7 +642,7 @@ export function SearchDashboard() {
         onSearchAgain={handleSearchAgain}
       />
 
-      {loadingSuggestions && status === "completed" && (
+      {loadingSuggestions && fullyComplete && (
         <div
           style={{
             background: "#0F0F14",
@@ -653,7 +658,7 @@ export function SearchDashboard() {
         </div>
       )}
 
-      {suggestions.length > 0 && status === "completed" && (
+      {suggestions.length > 0 && fullyComplete && (
         <div
           style={{
             background: "#0F0F14",

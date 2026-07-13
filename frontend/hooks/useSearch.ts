@@ -12,6 +12,7 @@ import {
 import { businessLeadToLead } from "@/types/lead";
 import type { Lead } from "@/types/lead";
 import { normalizeApiBusinessLead, normalizeApiBusinessLeads } from "@/utils/normalize-api-lead";
+import { isSearchFullyComplete } from "@/utils/search-completion";
 
 export type { BusinessLead };
 
@@ -26,6 +27,7 @@ interface SearchState {
   error: string | null;
   scrapingInProgress: boolean;
   emailScrapingComplete: boolean;
+  fullyComplete: boolean;
   summary: SearchStatsSummary | null;
   nearbyCities: NearbyCitySuggestion[];
   regionCitySuggestions: CitySelectionSuggestion[];
@@ -177,6 +179,7 @@ export function useSearch(options?: UseSearchOptions) {
     error: null,
     scrapingInProgress: false,
     emailScrapingComplete: true,
+    fullyComplete: false,
     summary: null,
     nearbyCities: [],
     regionCitySuggestions: [],
@@ -470,6 +473,9 @@ export function useSearch(options?: UseSearchOptions) {
             status: "completed",
             queuePosition: 0,
             error: null,
+            scrapingInProgress: false,
+            emailScrapingComplete: true,
+            fullyComplete: true,
             message:
               count === 0
                 ? "No potential clients found in this area. Try a nearby city."
@@ -552,6 +558,7 @@ export function useSearch(options?: UseSearchOptions) {
           error: null,
           scrapingInProgress: false,
           emailScrapingComplete: true,
+          fullyComplete: true,
           message:
             message ??
             (totalFound === 0
@@ -588,13 +595,14 @@ export function useSearch(options?: UseSearchOptions) {
               const count = Math.max(merged.length, payload.totalFound);
               const mapsRunning = payload.scrapingInProgress;
               const emailDone = payload.emailScrapingComplete;
+              const done = isSearchFullyComplete(payload);
               return {
                 ...prev,
                 leads: merged,
                 totalFound: count,
                 message: progressMessage(
                   count,
-                  !emailDone || mapsRunning ? "running" : "completed",
+                  done ? "completed" : "running",
                   prev.queuePosition
                 ),
                 queuePosition: payload.queuePosition,
@@ -602,14 +610,13 @@ export function useSearch(options?: UseSearchOptions) {
                 nearbyCities: payload.nearbyCities ?? prev.nearbyCities,
                 scrapingInProgress: payload.scrapingInProgress,
                 emailScrapingComplete: emailDone,
-                status:
-                  !emailDone || mapsRunning ? "running" : prev.status,
+                fullyComplete: done,
+                status: done ? "completed" : "running",
               };
             });
 
             if (
-              !payload.scrapingInProgress &&
-              payload.emailScrapingComplete &&
+              isSearchFullyComplete(payload) &&
               (payload.status === "completed" || payload.totalFound > 0)
             ) {
               const count = Math.max(payload.totalFound, payload.leads.length);
@@ -648,6 +655,7 @@ export function useSearch(options?: UseSearchOptions) {
           error: null,
           scrapingInProgress: true,
           emailScrapingComplete: false,
+          fullyComplete: false,
           message:
             message ??
             progressMessage(totalFound, "running", 0),
@@ -694,11 +702,7 @@ export function useSearch(options?: UseSearchOptions) {
             const job = await getSearch(searchId);
             if (searchId !== searchIdRef.current) return;
 
-            if (
-              job.status === "completed" &&
-              !job.scrapingInProgress &&
-              job.emailScrapingComplete
-            ) {
+            if (isSearchFullyComplete(job)) {
               setState((prev) => {
                 if (prev.searchId !== searchId) return prev;
                 const count = Math.max(prev.leads.length, prev.totalFound, job.totalFound ?? 0);
@@ -792,6 +796,10 @@ export function useSearch(options?: UseSearchOptions) {
             emails?: string[];
             emailSource?: "website" | "predicted";
             suggestions?: Array<AreaSuggestion | string>;
+            fullyComplete?: boolean;
+            scrapingInProgress?: boolean;
+            emailScrapingComplete?: boolean;
+            status?: string;
           };
 
           switch (data.type) {
@@ -884,16 +892,26 @@ export function useSearch(options?: UseSearchOptions) {
 
             case "complete": {
               const total = data.total ?? 0;
-              const isPhase1 =
-                data.message?.toLowerCase().includes("background") ||
-                data.message?.toLowerCase().includes("email");
-              if (isPhase1) {
-                phase1Complete(total, data.message);
-              } else {
+              if (data.fullyComplete === true) {
                 finishSearch(
                   total,
                   data.message ?? progressMessage(total, "completed", 0)
                 );
+              } else if (data.fullyComplete === false) {
+                phase1Complete(total, data.message);
+              } else {
+                // Legacy SSE without fullyComplete — keep prior message heuristic.
+                const isPhase1 =
+                  data.message?.toLowerCase().includes("background") ||
+                  data.message?.toLowerCase().includes("email");
+                if (isPhase1) {
+                  phase1Complete(total, data.message);
+                } else {
+                  finishSearch(
+                    total,
+                    data.message ?? progressMessage(total, "completed", 0)
+                  );
+                }
               }
               break;
             }
@@ -1101,6 +1119,7 @@ export function useSearch(options?: UseSearchOptions) {
         error: null,
         scrapingInProgress: false,
         emailScrapingComplete: false,
+        fullyComplete: false,
         summary: null,
         nearbyCities: [],
         regionCitySuggestions: [],
@@ -1148,6 +1167,7 @@ export function useSearch(options?: UseSearchOptions) {
               error: null,
               scrapingInProgress: false,
               emailScrapingComplete: true,
+              fullyComplete: true,
               summary: null,
               nearbyCities: [],
       regionCitySuggestions: [],
@@ -1164,6 +1184,7 @@ export function useSearch(options?: UseSearchOptions) {
           queuePosition,
           status: "running",
           emailScrapingComplete: false,
+          fullyComplete: false,
           message: progressMessage(0, queuePosition > 0 ? "queued" : "running", queuePosition),
         }));
 
@@ -1300,6 +1321,7 @@ export function useSearch(options?: UseSearchOptions) {
       error: null,
       scrapingInProgress: false,
       emailScrapingComplete: true,
+      fullyComplete: false,
       summary: null,
       nearbyCities: [],
       regionCitySuggestions: [],
@@ -1325,6 +1347,7 @@ export function useSearch(options?: UseSearchOptions) {
       error: null,
       scrapingInProgress: false,
       emailScrapingComplete: true,
+      fullyComplete: false,
       summary: null,
       nearbyCities: [],
       regionCitySuggestions: [],
@@ -1346,6 +1369,7 @@ export function useSearch(options?: UseSearchOptions) {
       error: null,
       scrapingInProgress: false,
       emailScrapingComplete: true,
+      fullyComplete: true,
       summary: null,
       nearbyCities: [],
       regionCitySuggestions: [],
@@ -1363,17 +1387,22 @@ export function useSearch(options?: UseSearchOptions) {
     })
   );
 
-  const isSearching = state.status === "starting" || state.status === "running";
+  const isFullyComplete = isSearchFullyComplete(state);
+  const isSearching =
+    state.status === "starting" ||
+    state.status === "running" ||
+    (state.status === "completed" && !isFullyComplete);
 
   return {
     ...state,
     leads: tableLeads,
     rawLeads: state.leads,
+    fullyComplete: isFullyComplete,
     isSearching,
     phaseMessage: state.message,
     progress: getSearchProgressPercent(
       state.leads.length,
-      state.status === "completed"
+      isFullyComplete
     ),
     searchMeta: { business: queryRef.current, location: locationRef.current },
     runSearch: search,
