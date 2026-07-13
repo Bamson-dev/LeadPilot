@@ -108,6 +108,43 @@ async function scrapeOneLeadEmail(
   };
 }
 
+function emailScrapePriority(lead: BusinessLead): number {
+  const raw = (lead.website || "").trim().toLowerCase();
+  if (!raw) return 100;
+
+  let host = raw;
+  try {
+    host = new URL(raw.startsWith("http") ? raw : `https://${raw}`).hostname.toLowerCase();
+  } catch {
+    host = raw.replace(/^https?:\/\//, "").split("/")[0] ?? raw;
+  }
+
+  // Slow / low-yield hosts last so more real sites finish inside the Phase 2 budget.
+  if (
+    /(?:^|\.)(?:linktr\.ee|bit\.ly|facebook\.com|instagram\.com|wa\.me|whatsapp\.com|youtu\.be|youtube\.com|tiktok\.com)$/i.test(
+      host
+    )
+  ) {
+    return 90;
+  }
+  if (
+    /(?:^|\.)(?:wixsite\.com|squarespace\.com|wordpress\.com|webflow\.io|godaddysites\.com|myshopify\.com|carrd\.co)$/i.test(
+      host
+    )
+  ) {
+    return 60;
+  }
+  if (/\.(edu|gov|ac\.[a-z]{2})$/i.test(host)) return 40;
+
+  const labels = host.split(".").filter(Boolean);
+  if (labels.length <= 3) return 10;
+  return 25;
+}
+
+function sortLeadsForEmailScrape(leads: BusinessLead[]): BusinessLead[] {
+  return [...leads].sort((a, b) => emailScrapePriority(a) - emailScrapePriority(b));
+}
+
 function resolveTabConcurrency(totalResultCount?: number): number {
   const count = totalResultCount ?? 0;
   if (count >= MEDIUM_CITY_RESULT_THRESHOLD) {
@@ -206,8 +243,9 @@ export async function runBatchEmailScraping(
 
       if (pending.length === 0) break;
 
+      const ordered = sortLeadsForEmailScrape(pending);
       const context = browserContext;
-      await runWithTabConcurrency(pending, tabConcurrency, async (lead) => {
+      await runWithTabConcurrency(ordered, tabConcurrency, async (lead) => {
         if (Date.now() >= deadline) return;
 
         websitesAttempted++;

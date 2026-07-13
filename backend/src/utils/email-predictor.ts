@@ -42,6 +42,7 @@ const BASE_PREFIX_PRIORITY = [
   "info",
   "contact",
   "hello",
+  "enquiries",
   "support",
   "sales",
   "bookings",
@@ -67,6 +68,10 @@ const CATEGORY_RULES: CategoryRule[] = [
     prefixes: ["bookings", "hello", "contact", "info"],
   },
   {
+    match: /gym|fitness|yoga|pilates|crossfit|wellness/i,
+    prefixes: ["info", "contact", "hello", "bookings", "membership"],
+  },
+  {
     match: /law|legal|attorney|solicitor/i,
     prefixes: ["office", "contact", "info"],
   },
@@ -77,6 +82,10 @@ const CATEGORY_RULES: CategoryRule[] = [
   {
     match: /medical|clinic|dental|hospital|health|doctor|pharmacy|spa/i,
     prefixes: ["appointments", "info", "contact", "hello"],
+  },
+  {
+    match: /florist|flower|bakery|cafe|coffee/i,
+    prefixes: ["orders", "hello", "info", "contact"],
   },
 ];
 
@@ -154,6 +163,9 @@ export function scorePredictionConfidence(
 
   let confidence = 82;
   if (HIGH_PREFIXES.has(p)) confidence = p === "info" ? 95 : p === "contact" ? 93 : 92;
+  else if (p === "enquiries" || p === "enquiry") confidence = 87;
+  else if (p === "membership") confidence = cat.match(/gym|fitness/) ? 88 : 80;
+  else if (p === "orders") confidence = cat.match(/florist|bakery|food/) ? 88 : 80;
   else if (p === "support") confidence = 88;
   else if (p === "sales") confidence = 85;
   else if (p === "bookings") confidence = cat.match(/restaurant|salon|hotel|spa/) ? 91 : 86;
