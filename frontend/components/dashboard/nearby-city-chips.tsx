@@ -18,7 +18,8 @@ export function NearbyCityChips({
   return (
     <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-4 space-y-3">
       <p className="text-sm text-amber-100/90 leading-relaxed">
-        Search a specific area of the city for more results.
+        Want more results? Search a specific area of the city — each search adds
+        new potential clients without clearing your current list.
       </p>
       <div className="flex flex-wrap gap-2.5">
         {cities.map((item) => (

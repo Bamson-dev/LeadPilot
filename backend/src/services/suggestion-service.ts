@@ -8,6 +8,7 @@ import {
   discoverNeighbourhoodAreas,
   parseCityCountry,
 } from "../scraper/googleMaps/neighbourhood-expansion";
+import { AREA_SUGGESTION_THRESHOLD } from "../scraper/utils/constants";
 
 const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions";
 const MAX_SUGGESTIONS = 6;
@@ -201,7 +202,7 @@ export async function generateAreaSuggestions(
   options?: { excludeLocations?: string[] }
 ): Promise<AreaSuggestionResult> {
   try {
-    if (totalFound >= 200) {
+    if (totalFound >= AREA_SUGGESTION_THRESHOLD) {
       return {
         suggestions: [],
         message: "Great coverage. You already have a large result set for this area.",
