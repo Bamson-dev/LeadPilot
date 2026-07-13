@@ -12,6 +12,9 @@ const MAX_REQUESTS = Number(process.env.RATE_LIMIT_MAX) || 30;
 const SENDS_MAX_REQUESTS = Number(process.env.RATE_LIMIT_SENDS_MAX) || 60;
 const CHECKOUT_BALANCE_MAX_REQUESTS =
   Number(process.env.RATE_LIMIT_CHECKOUT_BALANCE_MAX) || 120;
+/** Dashboard polls status/results every few seconds for minutes during Phase 2. */
+const SEARCH_POLL_MAX_REQUESTS =
+  Number(process.env.RATE_LIMIT_SEARCH_POLL_MAX) || 180;
 
 function headerIp(value: string | string[] | undefined): string | null {
   if (typeof value === "string") {
@@ -124,17 +127,37 @@ export function rateLimit(req: Request, res: Response, next: NextFunction): void
   next();
 }
 
-function requestScope(req: Request): "default" | "sends" | "checkout-balance" {
+function requestScope(
+  req: Request
+): "default" | "sends" | "checkout-balance" | "search-poll" {
   const url = req.originalUrl || req.path;
   if (url.startsWith("/sends")) return "sends";
   if (url.startsWith("/checkout") || url.startsWith("/balance")) {
     return "checkout-balance";
   }
+  if (isSearchPollRequest(req)) return "search-poll";
   return "default";
 }
 
-function maxRequestsForScope(scope: "default" | "sends" | "checkout-balance"): number {
+function isSearchPollRequest(req: Request): boolean {
+  if (req.method !== "GET") return false;
+  const path = (req.originalUrl || req.path || "").split("?")[0];
+  if (!path.startsWith("/search/")) return false;
+  if (path.startsWith("/search/results/")) return true;
+  if (/\/search\/[^/]+\/results$/.test(path)) return true;
+  if (/\/search\/[^/]+\/stream$/.test(path)) return true;
+  // Job status: GET /search/:uuid
+  if (/^\/search\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(path)) {
+    return true;
+  }
+  return false;
+}
+
+function maxRequestsForScope(
+  scope: "default" | "sends" | "checkout-balance" | "search-poll"
+): number {
   if (scope === "sends") return SENDS_MAX_REQUESTS;
   if (scope === "checkout-balance") return CHECKOUT_BALANCE_MAX_REQUESTS;
+  if (scope === "search-poll") return SEARCH_POLL_MAX_REQUESTS;
   return MAX_REQUESTS;
 }

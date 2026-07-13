@@ -32,8 +32,8 @@ interface SearchState {
   regionSelectionMessage: string | null;
 }
 
-const POLL_INTERVAL_MS = 3000;
-const SCRAPING_POLL_INTERVAL_MS = 3000;
+const POLL_INTERVAL_MS = 5000;
+const SCRAPING_POLL_INTERVAL_MS = 5000;
 const SEARCH_TIMEOUT_MS = 10 * 60 * 1000;
 const SEARCH_FAILED_MESSAGE =
   "Search did not complete. Please try a broader location or business type.";
@@ -676,9 +676,10 @@ export function useSearch(options?: UseSearchOptions) {
         if (completedRef.current || searchId !== searchIdRef.current) return;
         void (async () => {
           try {
+            // Status only — results are polled separately by startResultsPoll.
+            // Calling syncFromApi here doubled /search traffic and tripped RATE_LIMIT_MAX.
             const job = await getSearch(searchId);
             if (searchId !== searchIdRef.current) return;
-            await syncFromApi(searchId);
 
             if (
               job.status === "completed" &&
@@ -729,12 +730,12 @@ export function useSearch(options?: UseSearchOptions) {
               });
             }
           } catch {
-            /* polling is best-effort */
+            /* polling is best-effort — including 429; results poller keeps trying */
           }
         })();
       }, POLL_INTERVAL_MS);
     },
-    [stopPolling, syncFromApi, finishSearch, closeStream]
+    [stopPolling, finishSearch, closeStream]
   );
 
   useEffect(() => {

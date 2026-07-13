@@ -25,7 +25,7 @@ import { getLeadSelectionId } from "@/lib/lead-selection";
 import { exportToCSV } from "@/features/export/csv-export";
 import { markRecipientReplied } from "@/services/outreach-api";
 
-const POLL_MS = 3000;
+const POLL_MS = 5000;
 
 function placeIdFromLead(lead: BusinessLead): string {
   const url = lead.googleMapsUrl ?? "";
