@@ -14,6 +14,7 @@ import { startSearchWorker, stopSearchWorker } from "../workers/search-worker";
 import { logSearchLifecycle } from "../utils/search-job-lifecycle";
 import {
   BULLMQ_LOCK_DURATION_MS,
+  SEARCH_WORKER_CONCURRENCY,
 } from "../scraper/utils/constants";
 import { pruneStaleSearchQueueJobs } from "./search-queue-prune";
 import {
@@ -216,7 +217,7 @@ export async function initSearchQueue(): Promise<void> {
   const redisOk = await probeRedisConnection();
   if (!redisOk) {
     logger.warn(
-      "Using inline search queue fallback (concurrency 2). Set REDIS_URL to enable BullMQ."
+      `Using inline search queue fallback (concurrency ${SEARCH_WORKER_CONCURRENCY}). Set REDIS_URL to enable BullMQ.`
     );
     return;
   }
@@ -270,6 +271,7 @@ export async function initSearchQueue(): Promise<void> {
   logger.info("BullMQ search queue initialized", {
     name: SEARCH_QUEUE_NAME,
     lockDurationMs: BULLMQ_LOCK_DURATION_MS,
+    workerConcurrency: SEARCH_WORKER_CONCURRENCY,
   });
 }
 
@@ -377,7 +379,7 @@ export function getSearchQueueStatus(): SearchQueueStatus {
     return {
       running: 0,
       queued: 0,
-      maxConcurrent: 2,
+      maxConcurrent: SEARCH_WORKER_CONCURRENCY,
       mode: "bullmq",
     };
   }
@@ -407,7 +409,7 @@ export async function refreshSearchQueueStatus(): Promise<SearchQueueStatus> {
           (counts.delayed ?? 0) +
           (counts.prioritized ?? 0) +
           inline.queued,
-        maxConcurrent: 2,
+        maxConcurrent: SEARCH_WORKER_CONCURRENCY,
         inline,
         mode: "bullmq",
       };

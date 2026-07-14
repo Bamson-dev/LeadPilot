@@ -7,6 +7,17 @@ export const MIN_CACHE_LEADS_TO_REUSE = parseInt(
   10
 );
 export const SCRAPE_CONCURRENCY = 5;
+
+/** Parallel paid search jobs (BullMQ worker + inline fallback). Matches SCRAPER_CONCURRENCY unless WORKER_CONCURRENCY is set. */
+export const SEARCH_WORKER_CONCURRENCY = (() => {
+  const raw =
+    process.env.WORKER_CONCURRENCY ||
+    process.env.SCRAPER_CONCURRENCY ||
+    String(SCRAPE_CONCURRENCY);
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 1) return SCRAPE_CONCURRENCY;
+  return Math.min(n, 10);
+})();
 export const MAPS_URL_BATCH_SIZE = 5;
 export const MAPS_BATCH_DELAY_MIN_MS = 2000;
 export const MAPS_BATCH_DELAY_MAX_MS = 4000;

@@ -20,12 +20,11 @@ import {
   BULLMQ_MAX_STALLED_COUNT,
   BULLMQ_STALLED_INTERVAL_MS,
   SEARCH_JOB_TIMEOUT_MS,
+  SEARCH_WORKER_CONCURRENCY,
 } from "../scraper/utils/constants";
 import { SEARCH_QUEUE_NAME, type SearchQueueJobData } from "../queue/search-queue-types";
 import { getRedisConnectionOptions } from "../queue/redis-connection";
 import { getBrowserPool } from "../scraper/browser/browser-pool";
-
-const WORKER_CONCURRENCY = 2;
 
 async function runScraperJobWithHardTimeout(
   ...args: Parameters<typeof runScraperJob>
@@ -182,7 +181,7 @@ export function startSearchWorker(): Worker<SearchQueueJobData> | null {
 
   worker = new Worker<SearchQueueJobData>(SEARCH_QUEUE_NAME, processSearchJob, {
     connection,
-    concurrency: WORKER_CONCURRENCY,
+    concurrency: SEARCH_WORKER_CONCURRENCY,
     lockDuration: BULLMQ_LOCK_DURATION_MS,
     stalledInterval: BULLMQ_STALLED_INTERVAL_MS,
     maxStalledCount: BULLMQ_MAX_STALLED_COUNT,
@@ -293,7 +292,7 @@ export function startSearchWorker(): Worker<SearchQueueJobData> | null {
 
   logger.info("BullMQ search worker started", {
     queue: SEARCH_QUEUE_NAME,
-    concurrency: WORKER_CONCURRENCY,
+    concurrency: SEARCH_WORKER_CONCURRENCY,
     lockDurationMs: BULLMQ_LOCK_DURATION_MS,
     stalledIntervalMs: BULLMQ_STALLED_INTERVAL_MS,
     maxStalledCount: BULLMQ_MAX_STALLED_COUNT,
