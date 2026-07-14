@@ -8,10 +8,8 @@ import {
 import { notifySearchTerminalFailure } from "../services/search-failure-notify";
 import { clearStreamBuffer, emitToStream } from "../services/stream-registry";
 import { logSearchLifecycle } from "../utils/search-job-lifecycle";
-import { SEARCH_JOB_TIMEOUT_MS } from "../scraper/utils/constants";
+import { SEARCH_JOB_TIMEOUT_MS, SEARCH_WORKER_CONCURRENCY } from "../scraper/utils/constants";
 import { getBrowserPool } from "../scraper/browser/browser-pool";
-
-const INLINE_MAX_CONCURRENT = 2;
 
 import type { SearchQueueJobData } from "./search-queue-types";
 
@@ -96,7 +94,7 @@ class InlineSearchQueue {
   }
 
   private async process(): Promise<void> {
-    if (this.running >= INLINE_MAX_CONCURRENT || this.queue.length === 0) return;
+    if (this.running >= SEARCH_WORKER_CONCURRENCY || this.queue.length === 0) return;
 
     const job = this.queue.shift()!;
     this.running++;
@@ -206,7 +204,7 @@ class InlineSearchQueue {
     return {
       running: this.running,
       queued: this.queue.length,
-      maxConcurrent: INLINE_MAX_CONCURRENT,
+      maxConcurrent: SEARCH_WORKER_CONCURRENCY,
       mode: "inline" as const,
     };
   }
