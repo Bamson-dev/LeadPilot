@@ -1,7 +1,7 @@
 import os from "os";
 import { Router, type NextFunction, type Request, type Response } from "express";
 import type { SearchResponse, SearchResultsResponse } from "@leadthur/shared";
-import { computeFullyComplete } from "@leadthur/shared";
+import { computeFullyComplete, validateTrialSearchInput } from "@leadthur/shared";
 import {
   createSearchJob,
   getSearchJob,
@@ -487,6 +487,18 @@ export async function handleFreeTrialSearch(
       return;
     }
 
+    const trimmedQuery = query.trim();
+    const trimmedLocation = location.trim();
+    const trialValidation = validateTrialSearchInput(trimmedQuery, trimmedLocation);
+    if (!trialValidation.ok) {
+      res.status(400).json({
+        error: trialValidation.message,
+        code: "TRIAL_SEARCH_INVALID",
+        hint: trialValidation.suggestion,
+      });
+      return;
+    }
+
     const memUsage = getMemoryUsagePercent();
     if (memUsage > 85) {
       res.status(503).json({
@@ -557,8 +569,6 @@ export async function handleFreeTrialSearch(
       }
     }
 
-    const trimmedQuery = query.trim();
-    const trimmedLocation = location.trim();
     const searchJob = await createSearchJob(trimmedQuery, trimmedLocation, {
       isTrial: true,
       trialEmail: email,
