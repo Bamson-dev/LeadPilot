@@ -396,9 +396,13 @@ export async function sendSearchResultsReadyEmail(
   _query: string,
   location: string,
   stats: SearchResultsEmailStats,
-  options?: { timedOut?: boolean; skipEmailScraping?: boolean }
+  options?: { timedOut?: boolean; skipEmailScraping?: boolean; isTrial?: boolean }
 ): Promise<void> {
-  const resultsUrl = `${getFrontendUrl()}/dashboard/search/${searchId}`;
+  // Trial users don't have dashboard access — send them back to the free trial page.
+  // Paid results keep the existing dashboard deep link unchanged.
+  const resultsUrl = options?.isTrial
+    ? `${getFrontendUrl()}/freetrial`
+    : `${getFrontendUrl()}/dashboard/search/${searchId}`;
   const city = formatPlaceForSubject(displayCityFromLocation(location));
   const countLabel = stats.total.toLocaleString("en-US");
 
