@@ -194,6 +194,10 @@ async function finalizeSearchAndNotify(
       results_count: totalFound,
     });
 
+    const { getSearchJob } = await import("../database/search-repository");
+    const job = await getSearchJob(searchId);
+    const isTrial = Boolean(job?.isTrial);
+
     const claimed = await tryClaimResultsEmailSend(searchId);
     if (claimed) {
       void sendSearchResultsReadyEmail(
@@ -210,6 +214,7 @@ async function finalizeSearchAndNotify(
         {
           timedOut: emailTimedOut,
           skipEmailScraping: notifyOptions?.skipEmailScraping,
+          isTrial,
         }
       ).catch((err) =>
         logger.error("Failed to send results ready email", {
@@ -219,10 +224,8 @@ async function finalizeSearchAndNotify(
       );
     }
 
-    const { getSearchJob } = await import("../database/search-repository");
-    const { schedulePostSearchEmail } = await import("../database/free-trial-repository");
-    const job = await getSearchJob(searchId);
-    if (job?.isTrial && licenseEmail) {
+    if (isTrial && licenseEmail) {
+      const { schedulePostSearchEmail } = await import("../database/free-trial-repository");
       void schedulePostSearchEmail(licenseEmail, query, location).catch((err) =>
         logger.error("Failed to schedule post-search trial email", {
           searchId,
