@@ -9,6 +9,11 @@ import {
   type CSSProperties,
 } from "react";
 import type { BusinessLead } from "@leadthur/shared";
+import {
+  TRIAL_SEARCH_EXAMPLES,
+  validateTrialSearchInput,
+  type TrialSearchSuggestion,
+} from "@leadthur/shared";
 import { isSearchFullyComplete } from "@/utils/search-completion";
 import { getApiUrl } from "@/utils/env";
 import { SALE_PRICE_USD } from "@/constants/pricing";
@@ -449,6 +454,126 @@ function StarRating() {
   );
 }
 
+function TrialSearchGuidance() {
+  return (
+    <div
+      className="mb-4 rounded-xl px-4 py-3"
+      style={{
+        background: "rgba(124,58,237,0.08)",
+        border: "1px solid rgba(124,58,237,0.2)",
+      }}
+    >
+      <p style={{ margin: 0, fontSize: 13, color: "#E9D5FF", fontWeight: 600 }}>
+        Search one business type in one city
+      </p>
+      <p style={{ margin: "6px 0 0", fontSize: 12, color: "#9CA3AF", lineHeight: 1.5 }}>
+        Good: <span style={{ color: "#C4B5FD" }}>restaurants</span> in{" "}
+        <span style={{ color: "#C4B5FD" }}>London UK</span>
+      </p>
+      <p style={{ margin: "4px 0 0", fontSize: 12, color: "#6B7280", lineHeight: 1.5 }}>
+        Avoid lists of countries, job titles, or comma-separated business types.
+      </p>
+    </div>
+  );
+}
+
+function TrialExamplePills({
+  onSelect,
+}: {
+  onSelect: (example: TrialSearchSuggestion) => void;
+}) {
+  return (
+    <div style={{ marginTop: 16 }}>
+      <p
+        style={{
+          fontSize: 11,
+          color: "#555575",
+          marginBottom: 10,
+          textAlign: "center",
+        }}
+      >
+        Try one of these
+      </p>
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 8,
+          justifyContent: "center",
+        }}
+      >
+        {TRIAL_SEARCH_EXAMPLES.map((ex) => (
+          <button
+            key={`${ex.query}-${ex.location}`}
+            type="button"
+            onClick={() => onSelect(ex)}
+            style={{
+              minHeight: 48,
+              minWidth: 48,
+              padding: "12px 16px",
+              background: "transparent",
+              border: "1px solid rgba(124,58,237,0.25)",
+              color: "#A78BFA",
+              borderRadius: 100,
+              fontSize: 12,
+              cursor: "pointer",
+              fontWeight: 500,
+              fontFamily: "inherit",
+            }}
+          >
+            {ex.query} in {ex.location}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TrialSearchHint({
+  message,
+  suggestion,
+  onApply,
+}: {
+  message: string;
+  suggestion?: TrialSearchSuggestion;
+  onApply: (suggestion: TrialSearchSuggestion) => void;
+}) {
+  return (
+    <div
+      role="alert"
+      className="mt-4 rounded-xl px-4 py-3"
+      style={{
+        background: "rgba(245,158,11,0.1)",
+        border: "1px solid rgba(245,158,11,0.3)",
+      }}
+    >
+      <p style={{ margin: 0, fontSize: 13, color: "#FCD34D", lineHeight: 1.5 }}>
+        {message}
+      </p>
+      {suggestion ? (
+        <button
+          type="button"
+          onClick={() => onApply(suggestion)}
+          style={{
+            marginTop: 10,
+            background: "transparent",
+            border: "1px solid rgba(245,158,11,0.4)",
+            color: "#FDE68A",
+            borderRadius: 8,
+            padding: "8px 12px",
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          Try {suggestion.query} in {suggestion.location} instead
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function LeadRowMobile({ lead }: { lead: TrialLead }) {
   const emailDisplay = lockedDisplayValue(
     lead.verifiedEmails[0] ?? lead.emails[0] ?? lead.email ?? "",
@@ -516,6 +641,10 @@ export default function FreeTrialPage() {
     verifiedEmailCount: 0,
   });
   const [bootstrapping, setBootstrapping] = useState(true);
+  const [searchHint, setSearchHint] = useState<{
+    message: string;
+    suggestion?: TrialSearchSuggestion;
+  } | null>(null);
 
   const paywallTriggeredRef = useRef(false);
   const enrichmentPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -582,6 +711,7 @@ export default function FreeTrialPage() {
     setAggregateStats({ totalFound: 0, verifiedEmailCount: 0 });
     setMessage("");
     paywallTriggeredRef.current = false;
+    setSearchHint(null);
     stopEnrichmentPoll();
     closeEventSource();
   }, [stopEnrichmentPoll, closeEventSource]);
@@ -647,9 +777,12 @@ export default function FreeTrialPage() {
           searchFinishedRef.current = true;
           stopEnrichmentPoll();
           setStatus("idle");
-          setMessage(
-            "Search did not complete. Try a broader location or business type."
-          );
+          setMessage("");
+          setSearchHint({
+            message:
+              "No businesses found for that search. Use one business type in one city so you can test the tool properly.",
+            suggestion: TRIAL_SEARCH_EXAMPLES[0],
+          });
           return;
         }
 
@@ -658,9 +791,12 @@ export default function FreeTrialPage() {
             searchFinishedRef.current = true;
             stopEnrichmentPoll();
             setStatus("idle");
-            setMessage(
-              "No results found. Try a broader search like restaurants in Lagos Nigeria or dentists in London UK."
-            );
+            setMessage("");
+            setSearchHint({
+              message:
+                "No results found. Try one business type in one city — e.g. restaurants in London UK.",
+              suggestion: TRIAL_SEARCH_EXAMPLES[0],
+            });
             return;
           }
           await finishTrialSearch(searchId, searchNumber, trialEmail);
@@ -863,6 +999,18 @@ export default function FreeTrialPage() {
     const trimmedQuery = query.trim();
     const trimmedLocation = location.trim();
 
+    const validation = validateTrialSearchInput(trimmedQuery, trimmedLocation);
+    if (!validation.ok) {
+      setSearchHint({
+        message: validation.message,
+        suggestion: validation.suggestion,
+      });
+      setMessage("");
+      setStatus("idle");
+      return;
+    }
+
+    setSearchHint(null);
     setStatus("searching");
     setLeads([]);
     setSearchResultsReady(false);
@@ -890,7 +1038,18 @@ export default function FreeTrialPage() {
         searchId?: string;
         searchesUsed?: number;
         searchesRemaining?: number;
+        hint?: TrialSearchSuggestion;
       };
+
+      if (res.status === 400 && body.code === "TRIAL_SEARCH_INVALID") {
+        setSearchHint({
+          message: body.error || "That search format will not work on Google Maps.",
+          suggestion: body.hint ?? TRIAL_SEARCH_EXAMPLES[0],
+        });
+        setMessage("");
+        setStatus("idle");
+        return;
+      }
 
       if (res.status === 403 && body.code === "TRIAL_GATE_REQUIRED") {
         setGatePassed(false);
@@ -937,6 +1096,13 @@ export default function FreeTrialPage() {
       setMessage(err instanceof Error ? err.message : "Search failed. Please try again.");
       setStatus("idle");
     }
+  }
+
+  function applyTrialSuggestion(suggestion: TrialSearchSuggestion) {
+    setQuery(suggestion.query);
+    setLocation(suggestion.location);
+    setSearchHint(null);
+    setMessage("");
   }
 
   const tapTarget: CSSProperties = {
@@ -1025,8 +1191,8 @@ export default function FreeTrialPage() {
               className="text-base md:text-lg mb-6 leading-relaxed"
               style={{ color: "#C0C0D8", marginTop: 0 }}
             >
-              Type your service and any city. Get real businesses with real phone numbers and real
-              email addresses in about 60 seconds. Twice, free.
+              Type one business type and one city. Get real businesses with phone numbers
+              and email addresses in about 60 seconds. Twice, free.
             </p>
             <input
               type="email"
@@ -1151,12 +1317,20 @@ export default function FreeTrialPage() {
 
             {status !== "limit" && (
               <>
+                <TrialSearchGuidance />
+
                 <div className="flex flex-col gap-2 mb-2">
+                  <label style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 600 }}>
+                    Business type
+                  </label>
                   <input
                     type="text"
                     placeholder="e.g. restaurants, dentists, gyms"
                     value={query}
-                    onChange={(e) => setQuery(e.target.value)}
+                    onChange={(e) => {
+                      setQuery(e.target.value);
+                      if (searchHint) setSearchHint(null);
+                    }}
                     disabled={status === "searching"}
                     className="w-full rounded-lg text-sm outline-none"
                     style={{
@@ -1167,11 +1341,19 @@ export default function FreeTrialPage() {
                     }}
                     onKeyDown={(e) => e.key === "Enter" && void runTrialSearch()}
                   />
+                  <label
+                    style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 600, marginTop: 4 }}
+                  >
+                    City or area
+                  </label>
                   <input
                     type="text"
-                    placeholder="e.g. Lagos Nigeria, London UK"
+                    placeholder="e.g. London UK, Dubai UAE"
                     value={location}
-                    onChange={(e) => setLocation(e.target.value)}
+                    onChange={(e) => {
+                      setLocation(e.target.value);
+                      if (searchHint) setSearchHint(null);
+                    }}
                     disabled={status === "searching"}
                     className="w-full rounded-lg text-sm outline-none"
                     style={{
@@ -1223,59 +1405,20 @@ export default function FreeTrialPage() {
                   )}
                 </button>
 
-                {status === "idle" && leads.length === 0 && (
-                  <div style={{ marginTop: 16 }}>
-                    <p
-                      style={{
-                        fontSize: 11,
-                        color: "#555575",
-                        marginBottom: 10,
-                        textAlign: "center",
-                      }}
-                    >
-                      Try one of these
-                    </p>
-                    <div
-                      style={{
-                        display: "flex",
-                        flexWrap: "wrap",
-                        gap: 8,
-                        justifyContent: "center",
-                      }}
-                    >
-                      {[
-                        { q: "restaurants", l: "Lagos Nigeria" },
-                        { q: "dentists", l: "Abuja Nigeria" },
-                        { q: "salons", l: "London UK" },
-                      ].map((ex) => (
-                        <button
-                          key={`${ex.q}-${ex.l}`}
-                          type="button"
-                          onClick={() => {
-                            setQuery(ex.q);
-                            setLocation(ex.l);
-                          }}
-                          style={{
-                            ...tapTarget,
-                            background: "transparent",
-                            border: "1px solid rgba(124,58,237,0.25)",
-                            color: "#A78BFA",
-                            borderRadius: 100,
-                            fontSize: 12,
-                            cursor: "pointer",
-                            fontWeight: 500,
-                            fontFamily: "inherit",
-                          }}
-                        >
-                          {ex.q} in {ex.l}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                {searchHint ? (
+                  <TrialSearchHint
+                    message={searchHint.message}
+                    suggestion={searchHint.suggestion}
+                    onApply={applyTrialSuggestion}
+                  />
+                ) : null}
 
-                {message && status !== "idle" && (
+                {message && status === "searching" ? (
                   <p className="text-sm text-[#7878A0] mt-4">{message}</p>
+                ) : null}
+
+                {status !== "searching" && (
+                  <TrialExamplePills onSelect={applyTrialSuggestion} />
                 )}
               </>
             )}
