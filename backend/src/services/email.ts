@@ -527,7 +527,7 @@ export async function sendTopUpConfirmationEmail({
 export async function sendTrialEmail(
   email: string,
   step: number,
-  sequenceVersion = 2
+  sequenceVersion = 3
 ): Promise<void> {
   const {
     getTrialEmailBody,
@@ -585,7 +585,7 @@ export async function sendTrialBroadcastEmail(
 export async function sendTrialEmailPreview(
   email: string,
   step: number,
-  sequenceVersion = 2
+  sequenceVersion = 3
 ): Promise<boolean> {
   const { getTrialEmailBody, getTrialEmailSubject } = await import("./trial-email-content");
   const subject = getTrialEmailSubject(sequenceVersion, step);

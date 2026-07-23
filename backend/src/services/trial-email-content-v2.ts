@@ -51,6 +51,7 @@ export const V2_TRIAL_EMAIL_SUBJECTS: Record<number, string> = {
   20: "last one, then we go quiet",
 };
 
+/** @deprecated Post-search copy moved to trial-email-content-v3. Kept for verify scripts. */
 export const TRIAL_POST_SEARCH_EMAIL_SUBJECT = "are you going to email them or not";
 
 const CHECKOUT = emailButton("Get Lifetime Access for $25", "https://leadthur.com/checkout");

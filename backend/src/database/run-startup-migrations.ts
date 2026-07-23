@@ -1,4 +1,5 @@
 import pg from "pg";
+import { mapOldSequenceStepToV3 } from "../services/trial-email-content-v3";
 import { logger } from "../utils/logger";
 
 const FREE_TRIAL_IP_USAGE_SQL = `
@@ -95,6 +96,47 @@ export async function runStartupMigrations(): Promise<void> {
       logger.info("[migrations] Applied trial email sequence v2 startup migration", { ref });
     } else {
       logger.info("[migrations] trial email sequence v2 columns already present", { ref });
+    }
+
+    // Migrate active v1/v2 nurture users onto the 30-email (v3) sequence proportionally.
+    // Idempotent: only rows with sequence_version < 3 are touched.
+    const pending = await client.query<{
+      id: string;
+      email: string;
+      sequence_step: number;
+      sequence_version: number;
+      converted: boolean;
+      sequence_paused: boolean;
+    }>(
+      `select id, email, sequence_step, sequence_version, converted, sequence_paused
+       from public.free_trial_signups
+       where sequence_version < 3`
+    );
+
+    let migrated = 0;
+    let completed = 0;
+    for (const row of pending.rows) {
+      const oldMax = row.sequence_version === 1 ? 15 : 20;
+      const newStep = mapOldSequenceStepToV3(row.sequence_step ?? 0, oldMax);
+      await client.query(
+        `update public.free_trial_signups
+         set sequence_step = $1, sequence_version = 3
+         where id = $2 and sequence_version < 3`,
+        [newStep, row.id]
+      );
+      migrated += 1;
+      if (newStep >= 30) completed += 1;
+    }
+
+    if (migrated > 0) {
+      logger.info("[migrations] Migrated trial email sequence users to v3", {
+        ref,
+        migrated,
+        markedComplete: completed,
+        remainingPending: pending.rows.length - migrated,
+      });
+    } else {
+      logger.info("[migrations] No trial sequence v1/v2 users left to migrate to v3", { ref });
     }
   } catch (err) {
     logger.error("[migrations] Startup migration failed", {
