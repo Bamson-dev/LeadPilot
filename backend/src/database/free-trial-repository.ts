@@ -1,4 +1,5 @@
 import { supabase } from "./client";
+import { CURRENT_TRIAL_SEQUENCE_VERSION } from "../services/trial-email-content";
 
 export interface FreeTrialSignup {
   id: string;
@@ -38,7 +39,7 @@ export async function createTrialSignup(email: string): Promise<FreeTrialSignup>
     .from("free_trial_signups")
     .insert({
       email: normalized,
-      sequence_version: 2,
+      sequence_version: CURRENT_TRIAL_SEQUENCE_VERSION,
     })
     .select("*")
     .single();
