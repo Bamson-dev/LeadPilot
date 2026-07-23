@@ -4,6 +4,7 @@ import type { StreamEvent } from "@leadthur/shared";
 import {
   countSearchLeads,
   getSearchJob,
+  getSearchJobAccess,
   updateSearchJob,
 } from "../database/search-repository";
 import { getLicenseEmailBySearchId } from "../database/license-repository";
@@ -81,7 +82,10 @@ async function resolveJobEmail(
   licenseEmail?: string | null
 ): Promise<string | null> {
   if (licenseEmail?.trim()) return licenseEmail.toLowerCase().trim();
-  return getLicenseEmailBySearchId(searchId);
+  const fromLicense = await getLicenseEmailBySearchId(searchId);
+  if (fromLicense?.trim()) return fromLicense.toLowerCase().trim();
+  const access = await getSearchJobAccess(searchId);
+  return access?.licenseEmail?.toLowerCase().trim() || null;
 }
 
 async function processSearchJob(job: Job<SearchQueueJobData>): Promise<void> {
@@ -101,6 +105,10 @@ async function processSearchJob(job: Job<SearchQueueJobData>): Promise<void> {
   }
 
   const trial = isTrial ?? jobRecord.isTrial ?? false;
+  const access = await getSearchJobAccess(searchId);
+  const resolvedEmail =
+    (await resolveJobEmail(searchId, licenseEmail ?? access?.licenseEmail)) ??
+    undefined;
 
   logSearchLifecycle("job_dequeued", searchId, {
     queue: "bullmq",
@@ -130,7 +138,7 @@ async function processSearchJob(job: Job<SearchQueueJobData>): Promise<void> {
   try {
     await runScraperJobWithHardTimeout(searchId, query, location, emit, {
       licenseKey,
-      licenseEmail,
+      licenseEmail: resolvedEmail,
       isTrial: trial,
       jobStartedAt,
     });
@@ -155,7 +163,7 @@ async function processSearchJob(job: Job<SearchQueueJobData>): Promise<void> {
 
     if (leadsCollected > 0 && !existing?.emailScrapingComplete) {
       await recoverSearchJobEmailScraping(searchId, query, location, emit, {
-        licenseEmail,
+        licenseEmail: resolvedEmail,
         jobStartedAt,
         licenseKey,
       });
