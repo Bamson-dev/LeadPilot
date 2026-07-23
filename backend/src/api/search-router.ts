@@ -578,6 +578,7 @@ export async function handleFreeTrialSearch(
       searchId: searchJob.id,
       query: trimmedQuery,
       location: trimmedLocation,
+      licenseEmail: email,
       isTrial: true,
     });
     const queuePosition = await resolveQueuePosition(searchJob.id);

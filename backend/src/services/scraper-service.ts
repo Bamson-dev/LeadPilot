@@ -101,7 +101,13 @@ async function resolveNotificationEmail(
   licenseEmail?: string | null
 ): Promise<string | null> {
   if (licenseEmail?.trim()) return licenseEmail.toLowerCase().trim();
-  return getLicenseEmailBySearchId(searchId);
+  const fromLicense = await getLicenseEmailBySearchId(searchId);
+  if (fromLicense?.trim()) return fromLicense.toLowerCase().trim();
+  // Trial jobs store the signup email on search_jobs.license_email and do not
+  // create user_searches rows, so fall back to the job record.
+  const { getSearchJobAccess } = await import("../database/search-repository");
+  const access = await getSearchJobAccess(searchId);
+  return access?.licenseEmail?.toLowerCase().trim() || null;
 }
 
 export async function commitPartialSearchResults(
@@ -699,8 +705,14 @@ export async function runScraperJob(
   const isTrial = options?.isTrial ?? jobRecord?.isTrial ?? false;
 
   const resolveLicenseEmail = async (): Promise<string | null> => {
-    if (options?.licenseEmail) return options.licenseEmail;
-    return getLicenseEmailBySearchId(searchId);
+    if (options?.licenseEmail?.trim()) {
+      return options.licenseEmail.toLowerCase().trim();
+    }
+    const fromLicense = await getLicenseEmailBySearchId(searchId);
+    if (fromLicense?.trim()) return fromLicense.toLowerCase().trim();
+    const { getSearchJobAccess } = await import("../database/search-repository");
+    const access = await getSearchJobAccess(searchId);
+    return access?.licenseEmail?.toLowerCase().trim() || null;
   };
 
   const runningEmailTimer = setTimeout(() => {
