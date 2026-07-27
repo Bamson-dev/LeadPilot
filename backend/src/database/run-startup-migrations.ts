@@ -1,5 +1,6 @@
 import pg from "pg";
 import { mapOldSequenceStepToV3 } from "../services/trial-email-content-v3";
+import { computeNextSequenceEmailAt } from "../services/trial-sequence-schedule";
 import { logger } from "../utils/logger";
 
 const FREE_TRIAL_IP_USAGE_SQL = `
@@ -43,6 +44,17 @@ create index if not exists free_trial_signups_post_search_due_idx
   where post_search_email_sent_at is null
     and converted = false
     and sequence_paused = false;
+`;
+
+const TRIAL_SEQUENCE_NEXT_SEND_SQL = `
+alter table public.free_trial_signups
+  add column if not exists next_sequence_email_at timestamptz;
+
+create index if not exists free_trial_signups_next_sequence_due_idx
+  on public.free_trial_signups (next_sequence_email_at)
+  where converted = false
+    and sequence_paused = false
+    and next_sequence_email_at is not null;
 `;
 
 function supabaseProjectRefFromUrl(url: string): string | null {
@@ -98,6 +110,16 @@ export async function runStartupMigrations(): Promise<void> {
       logger.info("[migrations] trial email sequence v2 columns already present", { ref });
     }
 
+    const nextSendColumn = await client.query(
+      "select column_name from information_schema.columns where table_schema = 'public' and table_name = 'free_trial_signups' and column_name = 'next_sequence_email_at'"
+    );
+    if (nextSendColumn.rows.length === 0) {
+      await client.query(TRIAL_SEQUENCE_NEXT_SEND_SQL);
+      logger.info("[migrations] Applied next_sequence_email_at column", { ref });
+    } else {
+      logger.info("[migrations] next_sequence_email_at column already present", { ref });
+    }
+
     // Migrate active v1/v2 nurture users onto the 30-email (v3) sequence proportionally.
     // Idempotent: only rows with sequence_version < 3 are touched.
     const pending = await client.query<{
@@ -105,24 +127,38 @@ export async function runStartupMigrations(): Promise<void> {
       email: string;
       sequence_step: number;
       sequence_version: number;
+      signed_up_at: string;
       converted: boolean;
       sequence_paused: boolean;
     }>(
-      `select id, email, sequence_step, sequence_version, converted, sequence_paused
+      `select id, email, sequence_step, sequence_version, signed_up_at, converted, sequence_paused
        from public.free_trial_signups
        where sequence_version < 3`
     );
 
+    const migrationReferenceTime = new Date();
     let migrated = 0;
     let completed = 0;
     for (const row of pending.rows) {
       const oldMax = row.sequence_version === 1 ? 15 : 20;
       const newStep = mapOldSequenceStepToV3(row.sequence_step ?? 0, oldMax);
+      const nextStep = newStep >= 30 ? null : newStep + 1;
+      const nextSendAt =
+        nextStep === null
+          ? null
+          : computeNextSequenceEmailAt(
+              row.signed_up_at,
+              3,
+              nextStep,
+              migrationReferenceTime
+            );
       await client.query(
         `update public.free_trial_signups
-         set sequence_step = $1, sequence_version = 3
-         where id = $2 and sequence_version < 3`,
-        [newStep, row.id]
+         set sequence_step = $1,
+             sequence_version = 3,
+             next_sequence_email_at = $2
+         where id = $3 and sequence_version < 3`,
+        [newStep, nextSendAt, row.id]
       );
       migrated += 1;
       if (newStep >= 30) completed += 1;
@@ -137,6 +173,46 @@ export async function runStartupMigrations(): Promise<void> {
       });
     } else {
       logger.info("[migrations] No trial sequence v1/v2 users left to migrate to v3", { ref });
+    }
+
+    // Backfill next_sequence_email_at for v3 users migrated before scheduling was added.
+    const needsSchedule = await client.query<{
+      id: string;
+      signed_up_at: string;
+      sequence_step: number;
+    }>(
+      `select id, signed_up_at, sequence_step
+       from public.free_trial_signups
+       where sequence_version = 3
+         and converted = false
+         and sequence_step < 30
+         and next_sequence_email_at is null`
+    );
+
+    let backfilled = 0;
+    const backfillReferenceTime = new Date();
+    for (const row of needsSchedule.rows) {
+      const nextStep = row.sequence_step + 1;
+      const nextSendAt = computeNextSequenceEmailAt(
+        row.signed_up_at,
+        3,
+        nextStep,
+        backfillReferenceTime
+      );
+      await client.query(
+        `update public.free_trial_signups
+         set next_sequence_email_at = $1
+         where id = $2 and next_sequence_email_at is null`,
+        [nextSendAt, row.id]
+      );
+      backfilled += 1;
+    }
+
+    if (backfilled > 0) {
+      logger.info("[migrations] Backfilled next_sequence_email_at for v3 trial users", {
+        ref,
+        backfilled,
+      });
     }
   } catch (err) {
     logger.error("[migrations] Startup migration failed", {
