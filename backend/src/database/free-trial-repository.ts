@@ -12,6 +12,7 @@ export interface FreeTrialSignup {
   sequence_paused: boolean;
   sequence_version: number;
   last_email_sent_at: string | null;
+  next_sequence_email_at: string | null;
   post_search_email_scheduled_at: string | null;
   post_search_email_sent_at: string | null;
   post_search_query: string | null;
@@ -196,14 +197,17 @@ export async function pauseTrialSequence(email: string): Promise<void> {
 
 export async function updateTrialSequenceProgress(
   email: string,
-  sequenceStep: number
+  sequenceStep: number,
+  nextSequenceEmailAt: string | null = null,
+  lastEmailSentAt: Date = new Date()
 ): Promise<void> {
   const normalized = email.toLowerCase().trim();
   const { error } = await supabase
     .from("free_trial_signups")
     .update({
       sequence_step: sequenceStep,
-      last_email_sent_at: new Date().toISOString(),
+      last_email_sent_at: lastEmailSentAt.toISOString(),
+      next_sequence_email_at: nextSequenceEmailAt,
     })
     .eq("email", normalized);
 

@@ -6,17 +6,14 @@ import {
   type FreeTrialSignup,
 } from "../database/free-trial-repository";
 import { sendTrialEmail, sendTrialPostSearchEmail } from "./email";
+import { getMaxSequenceStep } from "./trial-email-content";
 import {
-  getMaxSequenceStep,
-  getTrialStepHoursFromSignup,
-} from "./trial-email-content";
+  isSequenceStepDue,
+  scheduleAfterStepSent,
+} from "./trial-sequence-schedule";
 import { logger } from "../utils/logger";
 
 const HOUR_MS = 60 * 60 * 1000;
-
-function hoursSinceSignup(signedUpAt: string): number {
-  return (Date.now() - new Date(signedUpAt).getTime()) / HOUR_MS;
-}
 
 function nextStepForUser(user: FreeTrialSignup): number | null {
   const maxStep = getMaxSequenceStep(user.sequence_version ?? 1);
@@ -27,10 +24,12 @@ function nextStepForUser(user: FreeTrialSignup): number | null {
 }
 
 function isStepDue(user: FreeTrialSignup, step: number): boolean {
-  const version = user.sequence_version ?? 1;
-  const hoursRequired = getTrialStepHoursFromSignup(version, step);
-  if (hoursRequired === undefined) return false;
-  return hoursSinceSignup(user.signed_up_at) >= hoursRequired;
+  return isSequenceStepDue(
+    user.signed_up_at,
+    user.sequence_version ?? 1,
+    step,
+    user.next_sequence_email_at
+  );
 }
 
 export async function processTrialEmailSequence(): Promise<void> {
@@ -42,7 +41,14 @@ export async function processTrialEmailSequence(): Promise<void> {
 
     try {
       await sendTrialEmail(user.email, nextStep, user.sequence_version ?? 1);
-      await updateTrialSequenceProgress(user.email, nextStep);
+      const sentAt = new Date();
+      const nextSendAt = scheduleAfterStepSent(
+        user.signed_up_at,
+        user.sequence_version ?? 1,
+        nextStep,
+        sentAt
+      );
+      await updateTrialSequenceProgress(user.email, nextStep, nextSendAt, sentAt);
       logger.info("Trial sequence email sent", {
         email: user.email,
         step: nextStep,
