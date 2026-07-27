@@ -66,6 +66,27 @@ async function sendViaResend(params: {
   }
 }
 
+/**
+ * Nurture stream is intentionally separated from Zepto transactional sends.
+ * It uses Resend-only so a Zepto account issue does not block critical system mail.
+ */
+async function sendNurtureEmail(params: {
+  to: string;
+  subject: string;
+  html: string;
+}): Promise<boolean> {
+  const result = await sendViaResend(params);
+  if (!result.success) {
+    logger.error("Nurture email send failed (Resend-only)", {
+      to: params.to,
+      subject: params.subject,
+      error: result.error,
+    });
+    return false;
+  }
+  return true;
+}
+
 export async function sendEmail(params: {
   to: string;
   subject: string;
@@ -116,6 +137,22 @@ async function deliver(params: { to: string; subject: string; html: string }): P
     await sendEmail(params);
   } catch (err) {
     logger.error("Unexpected email delivery error", {
+      to: params.to,
+      subject: params.subject,
+      error: err instanceof Error ? err.message : "unknown",
+    });
+  }
+}
+
+async function deliverNurture(params: {
+  to: string;
+  subject: string;
+  html: string;
+}): Promise<void> {
+  try {
+    await sendNurtureEmail(params);
+  } catch (err) {
+    logger.error("Unexpected nurture email delivery error", {
       to: params.to,
       subject: params.subject,
       error: err instanceof Error ? err.message : "unknown",
@@ -540,7 +577,7 @@ export async function sendTrialEmail(
   }
 
   const html = wrapTrial(body, email, step);
-  await deliver({ to: email, subject, html });
+  await deliverNurture({ to: email, subject, html });
 }
 
 export async function sendTrialPostSearchEmail(
@@ -552,7 +589,7 @@ export async function sendTrialPostSearchEmail(
     await import("./trial-email-content");
   const body = getTrialPostSearchEmailBody(query, location);
   const html = wrapTrial(body, email, TRIAL_POST_SEARCH_TRACKING_STEP);
-  await deliver({
+  await deliverNurture({
     to: email,
     subject: TRIAL_POST_SEARCH_EMAIL_SUBJECT,
     html,
@@ -578,7 +615,7 @@ export async function sendTrialBroadcastEmail(
     recipientEmail: email,
     trialFooterNote: "You are receiving this because you signed up for a LeadThur free trial.",
   });
-  await deliver({ to: email, subject, html });
+  await deliverNurture({ to: email, subject, html });
 }
 
 /** Staging/admin helper for previewing redesigned emails. */
@@ -593,7 +630,7 @@ export async function sendTrialEmailPreview(
   if (!subject || !body) {
     throw new Error(`Invalid trial email step: ${step} (version ${sequenceVersion})`);
   }
-  return sendEmail({ to: email, subject, html: wrapTrial(body, email, step) });
+  return sendNurtureEmail({ to: email, subject, html: wrapTrial(body, email, step) });
 }
 
 /** Staging/admin helper for previewing the results-ready email. */

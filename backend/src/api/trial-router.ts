@@ -6,7 +6,9 @@ import {
   recordTrialEmailOpen,
   updateTrialSequenceProgress,
 } from "../database/free-trial-repository";
+import { isValidEmail } from "../scraper/parsers/email-validation";
 import { sendTrialEmail } from "../services/email";
+import { CURRENT_TRIAL_SEQUENCE_VERSION } from "../services/trial-email-content";
 import { logger } from "../utils/logger";
 
 export const trialRouter = Router();
@@ -26,7 +28,7 @@ trialRouter.post("/signup", async (req: Request, res: Response) => {
     }
 
     const email = rawEmail.toLowerCase().trim();
-    if (!EMAIL_RE.test(email)) {
+    if (!EMAIL_RE.test(email) || !isValidEmail(email)) {
       res.status(400).json({ error: "Invalid email address" });
       return;
     }
@@ -40,7 +42,7 @@ trialRouter.post("/signup", async (req: Request, res: Response) => {
     await createTrialSignup(email);
 
     try {
-      await sendTrialEmail(email, 1, 2);
+      await sendTrialEmail(email, 1, CURRENT_TRIAL_SEQUENCE_VERSION);
       await updateTrialSequenceProgress(email, 1);
     } catch (error) {
       logger.error("Trial welcome email failed", { email, error });
@@ -59,7 +61,7 @@ trialRouter.get("/status", async (req: Request, res: Response) => {
   try {
     const rawEmail = typeof req.query.email === "string" ? req.query.email : "";
     const email = rawEmail.toLowerCase().trim();
-    if (!EMAIL_RE.test(email)) {
+    if (!EMAIL_RE.test(email) || !isValidEmail(email)) {
       res.status(400).json({ error: "Valid email is required" });
       return;
     }
@@ -88,7 +90,7 @@ trialRouter.post("/search-used", async (req: Request, res: Response) => {
     }
 
     const email = rawEmail.toLowerCase().trim();
-    if (!EMAIL_RE.test(email)) {
+    if (!EMAIL_RE.test(email) || !isValidEmail(email)) {
       res.status(400).json({ error: "Invalid email address" });
       return;
     }
@@ -112,7 +114,13 @@ trialRouter.get("/email-opened", async (req: Request, res: Response) => {
   const step = Number(req.query.step);
 
   try {
-    if (EMAIL_RE.test(email) && Number.isInteger(step) && step >= 1 && step <= 100) {
+    if (
+      EMAIL_RE.test(email) &&
+      isValidEmail(email) &&
+      Number.isInteger(step) &&
+      step >= 1 &&
+      step <= 100
+    ) {
       await recordTrialEmailOpen(email, step);
     }
   } catch (err) {
