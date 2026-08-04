@@ -30,7 +30,7 @@ function classifyConnectError(err: unknown): { kind: ConnectErrorKind; message: 
     return {
       kind: "short_password",
       message:
-        "Copy the full 16-character app password from Google’s App Passwords page — not your normal Gmail password.",
+        "Copy the full 16-character app password from Google's App Passwords page — not your normal Gmail password.",
     };
   }
   if (code === "APP_PASSWORDS_DISABLED") {
@@ -81,7 +81,7 @@ export function OutreachGuidedMailboxConnect({
     if (!isValidAppPassword(normalized)) {
       setErrorKind("short_password");
       setErrorMessage(
-        "Copy the full 16-character app password from Google’s App Passwords page — not your normal Gmail password."
+        "Copy the full 16-character app password from Google's App Passwords page — not your normal Gmail password."
       );
       return;
     }
@@ -107,8 +107,8 @@ export function OutreachGuidedMailboxConnect({
   }
 
   return (
-    <div className="mt-5 rounded-xl border border-white/[0.08] bg-[#0F0F14] p-4 sm:p-5 space-y-4">
-      <p className="text-sm text-[#A1A1B5] leading-relaxed">
+    <div className="mt-5 space-y-4 rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface-2)] p-4 sm:p-5">
+      <p className="text-sm leading-relaxed text-[var(--lt-text-muted)]">
         LeadThur needs a Gmail app password so outreach sends from your own address — replies land in
         your inbox. You can remove access anytime in your Google Account security settings.
       </p>
@@ -120,10 +120,10 @@ export function OutreachGuidedMailboxConnect({
             className={[
               "rounded-full px-3 py-1",
               step === n
-                ? "bg-[#A855F7]/20 text-[#E9D5FF]"
+                ? "bg-[var(--lt-accent)]/20 text-[var(--lt-accent-soft)]"
                 : step > n
-                  ? "bg-[#10B981]/15 text-[#6EE7B7]"
-                  : "bg-[#16161E] text-[#6B6B80]",
+                  ? "bg-[var(--lt-success-soft)] text-[var(--lt-success)]"
+                  : "bg-[var(--lt-surface-3)] text-[var(--lt-text-muted)]",
             ].join(" ")}
           >
             Step {n}
@@ -134,8 +134,8 @@ export function OutreachGuidedMailboxConnect({
       {step === 1 && (
         <div className="space-y-4">
           <div>
-            <h3 className="text-base font-semibold text-[#F4F4FF]">Turn on 2-Step Verification</h3>
-            <p className="mt-2 text-sm text-[#8888A8] leading-relaxed">
+            <h3 className="text-base font-semibold text-[var(--lt-text)]">Turn on 2-Step Verification</h3>
+            <p className="mt-2 text-sm leading-relaxed text-[var(--lt-text-subtle)]">
               Google only issues app passwords after 2-Step Verification is on. This takes about a
               minute in your Google Account.
             </p>
@@ -144,7 +144,7 @@ export function OutreachGuidedMailboxConnect({
             href={TWO_STEP_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-lg border border-[#A855F7]/40 bg-[#A855F7]/10 px-4 py-2.5 text-sm font-medium text-[#E9D5FF] hover:bg-[#A855F7]/20"
+            className="inline-flex items-center gap-2 rounded-lg border border-[var(--lt-accent)]/40 bg-[var(--lt-accent)]/10 px-4 py-2.5 text-sm font-medium text-[var(--lt-accent-soft)] hover:bg-[var(--lt-accent)]/20"
           >
             Open Google 2-Step Verification
             <ExternalLink className="h-4 w-4 shrink-0" aria-hidden />
@@ -153,7 +153,7 @@ export function OutreachGuidedMailboxConnect({
             <Button type="button" variant="outline" onClick={onCancel}>
               Cancel
             </Button>
-            <Button type="button" variant="glow" onClick={() => setStep(2)}>
+            <Button type="button" variant="default" onClick={() => setStep(2)}>
               I&apos;ve turned on 2-Step Verification
             </Button>
           </div>
@@ -163,10 +163,10 @@ export function OutreachGuidedMailboxConnect({
       {step === 2 && (
         <div className="space-y-4">
           <div>
-            <h3 className="text-base font-semibold text-[#F4F4FF]">Create an app password</h3>
-            <p className="mt-2 text-sm text-[#8888A8] leading-relaxed">
-              On the App Passwords page, type any name like <strong className="text-[#C0C0D8]">LeadThur</strong>, click{" "}
-              <strong className="text-[#C0C0D8]">Create</strong>, then copy the 16-character password
+            <h3 className="text-base font-semibold text-[var(--lt-text)]">Create an app password</h3>
+            <p className="mt-2 text-sm leading-relaxed text-[var(--lt-text-subtle)]">
+              On the App Passwords page, type any name like <strong className="text-[var(--lt-text)]">LeadThur</strong>, click{" "}
+              <strong className="text-[var(--lt-text)]">Create</strong>, then copy the 16-character password
               Google shows once.
             </p>
           </div>
@@ -174,7 +174,7 @@ export function OutreachGuidedMailboxConnect({
             href={APP_PASSWORDS_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-lg border border-[#A855F7]/40 bg-[#A855F7]/10 px-4 py-2.5 text-sm font-medium text-[#E9D5FF] hover:bg-[#A855F7]/20"
+            className="inline-flex items-center gap-2 rounded-lg border border-[var(--lt-accent)]/40 bg-[var(--lt-accent)]/10 px-4 py-2.5 text-sm font-medium text-[var(--lt-accent-soft)] hover:bg-[var(--lt-accent)]/20"
           >
             Open Google App Passwords
             <ExternalLink className="h-4 w-4 shrink-0" aria-hidden />
@@ -183,7 +183,7 @@ export function OutreachGuidedMailboxConnect({
             <Button type="button" variant="outline" onClick={() => setStep(1)}>
               Back
             </Button>
-            <Button type="button" variant="glow" onClick={() => setStep(3)}>
+            <Button type="button" variant="default" onClick={() => setStep(3)}>
               I have my app password
             </Button>
           </div>
@@ -193,15 +193,15 @@ export function OutreachGuidedMailboxConnect({
       {step === 3 && (
         <form onSubmit={(e) => void handleConnect(e)} className="space-y-4">
           <div>
-            <h3 className="text-base font-semibold text-[#F4F4FF]">Paste and connect</h3>
-            <p className="mt-2 text-sm text-[#8888A8]">
+            <h3 className="text-base font-semibold text-[var(--lt-text)]">Paste and connect</h3>
+            <p className="mt-2 text-sm text-[var(--lt-text-subtle)]">
               Spaces are removed automatically. Use the 16-character app password, not your normal
               Gmail password.
             </p>
           </div>
 
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-[#6B6B80]">Gmail address</label>
+            <label className="mb-1.5 block text-xs font-medium text-[var(--lt-text-muted)]">Gmail address</label>
             <Input
               type="email"
               value={email}
@@ -214,7 +214,7 @@ export function OutreachGuidedMailboxConnect({
           </div>
 
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-[#6B6B80]">App password</label>
+            <label className="mb-1.5 block text-xs font-medium text-[var(--lt-text-muted)]">App password</label>
             <Input
               type="password"
               value={appPassword}
@@ -230,14 +230,14 @@ export function OutreachGuidedMailboxConnect({
           </div>
 
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-[#6B6B80]">Account type</label>
+            <label className="mb-1.5 block text-xs font-medium text-[var(--lt-text-muted)]">Account type</label>
             <select
               value={accountType}
               onChange={(e) =>
                 setAccountType(e.target.value === "workspace" ? "workspace" : "personal")
               }
               disabled={connecting}
-              className="w-full rounded-md border border-white/10 bg-[#16161E] px-3 py-2 text-sm text-[#F4F4FF]"
+              className="w-full rounded-md border border-[var(--lt-border)] bg-[var(--lt-surface-3)] px-3 py-2 text-sm text-[var(--lt-text)]"
             >
               <option value="personal">Personal Gmail</option>
               <option value="workspace">Google Workspace</option>
@@ -246,25 +246,19 @@ export function OutreachGuidedMailboxConnect({
 
           {errorMessage && (
             <div
-              className="rounded-lg border px-3 py-3 text-sm leading-relaxed"
-              style={{
-                borderColor:
-                  errorKind === "app_passwords_blocked"
-                    ? "rgba(251, 191, 36, 0.35)"
-                    : "rgba(248, 113, 113, 0.35)",
-                background:
-                  errorKind === "app_passwords_blocked"
-                    ? "rgba(251, 191, 36, 0.08)"
-                    : "rgba(248, 113, 113, 0.08)",
-                color: errorKind === "app_passwords_blocked" ? "#FDE68A" : "#FCA5A5",
-              }}
+              className={[
+                "rounded-lg border px-3 py-3 text-sm leading-relaxed",
+                errorKind === "app_passwords_blocked"
+                  ? "border-amber-500/35 bg-amber-500/10 text-amber-200"
+                  : "border-[var(--lt-danger)]/35 bg-[var(--lt-danger-soft)] text-[var(--lt-danger)]",
+              ].join(" ")}
               role="alert"
             >
               <p>{errorMessage}</p>
               {errorKind === "login_rejected" && (
                 <button
                   type="button"
-                  className="mt-2 text-xs font-medium text-[#E9D5FF] underline"
+                  className="mt-2 text-xs font-medium text-[var(--lt-accent-soft)] underline"
                   onClick={() => setStep(1)}
                 >
                   Go back to Step 1 — check 2-Step Verification
@@ -275,14 +269,14 @@ export function OutreachGuidedMailboxConnect({
                   href={APP_PASSWORDS_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[#E9D5FF] underline"
+                  className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[var(--lt-accent-soft)] underline"
                 >
                   Open App Passwords page
                   <ExternalLink className="h-3 w-3" aria-hidden />
                 </a>
               )}
               {errorKind === "app_passwords_blocked" && (
-                <p className="mt-2 text-xs text-[#FDE68A]/90">
+                <p className="mt-2 text-xs text-amber-200/90">
                   Need help?{" "}
                   <Link href="/dashboard/plans" className="underline">
                     Contact support via billing
@@ -297,7 +291,7 @@ export function OutreachGuidedMailboxConnect({
             <Button type="button" variant="outline" onClick={() => setStep(2)} disabled={connecting}>
               Back
             </Button>
-            <Button type="submit" variant="glow" disabled={connecting} className="sm:min-w-[10rem]">
+            <Button type="submit" variant="default" disabled={connecting} className="sm:min-w-[10rem]">
               {connecting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" /> Connecting…

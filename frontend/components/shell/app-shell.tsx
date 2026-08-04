@@ -31,8 +31,8 @@ const MOBILE_TABS: { id: ShellNavId; label: string; href: string; icon: typeof H
   { id: "home", label: "Home", href: "/dashboard", icon: Home },
   { id: "discovery", label: "Discovery", href: "/dashboard", icon: Compass },
   { id: "workspace", label: "Saved", href: "/dashboard/saved", icon: FolderOpen },
-  { id: "outreach", label: "Outreach", href: "/dashboard?view=outreach", icon: Send },
-  { id: "mailbox", label: "Mailbox", href: "/dashboard?view=mailbox", icon: Inbox },
+  { id: "outreach", label: "Outreach", href: "/dashboard/outreach", icon: Send },
+  { id: "mailbox", label: "Mailbox", href: "/dashboard/outreach?tab=mailboxes", icon: Inbox },
 ];
 
 export function AppShell({

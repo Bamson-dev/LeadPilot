@@ -55,6 +55,15 @@ function DashboardGateInner() {
   const [savedLists, setSavedLists] = useState<SavedListPreview[]>([]);
 
   useLayoutEffect(() => {
+    if (view === "outreach") {
+      router.replace("/dashboard/outreach");
+      return;
+    }
+    if (view === "mailbox") {
+      router.replace("/dashboard/outreach?tab=mailboxes");
+      return;
+    }
+
     if (isDemo) {
       setAllowed(true);
       return;
@@ -69,7 +78,7 @@ function DashboardGateInner() {
     }
 
     setAllowed(true);
-  }, [isDemo, router, searchParams]);
+  }, [isDemo, router, searchParams, view]);
 
   useEffect(() => {
     if (!allowed || isDemo) return;

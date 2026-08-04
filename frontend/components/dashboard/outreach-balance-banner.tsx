@@ -18,31 +18,25 @@ export function OutreachBalanceBanner({
 }: OutreachBalanceBannerProps) {
   if (loading && !balance) {
     return (
-      <div
-        className="glass rounded-2xl p-4 sm:p-5"
-        style={{ border: "1px solid rgba(124,58,237,0.2)" }}
-      >
-        <p className="text-sm text-[#6B6B80]">Loading send balance…</p>
+      <div className="rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface)] p-4 sm:p-5">
+        <p className="text-sm text-[var(--lt-text-muted)]">Loading send balance…</p>
       </div>
     );
   }
 
   if (!balance) {
     return (
-      <div
-        className="glass rounded-2xl p-4 sm:p-5"
-        style={{ border: "1px solid rgba(124,58,237,0.2)" }}
-      >
-        <p className="text-xs font-medium uppercase tracking-wide text-[#6B6B80]">
+      <div className="rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface)] p-4 sm:p-5">
+        <p className="text-xs font-medium uppercase tracking-wide text-[var(--lt-text-muted)]">
           Email outreach balance
         </p>
-        <p className="mt-2 text-sm text-[#A1A1B5]">
+        <p className="mt-2 text-sm text-[var(--lt-text-muted)]">
           Could not load send balance. Check that{" "}
-          <code className="text-[#F4F4FF]">NEXT_PUBLIC_API_URL</code> points at the
+          <code className="text-[var(--lt-text)]">NEXT_PUBLIC_API_URL</code> points at the
           staging backend, then refresh.
         </p>
         {!hasMailbox && (
-          <p className="mt-3 text-sm text-[#F4F4FF]">
+          <p className="mt-3 text-sm text-[var(--lt-text)]">
             {OUTREACH_FREE_SENDS_ON_CONNECT} free sends unlock when you connect Gmail below.
           </p>
         )}
@@ -56,31 +50,28 @@ export function OutreachBalanceBanner({
   );
 
   return (
-    <div
-      className="glass rounded-2xl p-4 sm:p-5"
-      style={{ border: "1px solid rgba(124,58,237,0.25)" }}
-    >
+    <div className="rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface)] p-4 sm:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-[#6B6B80]">
+          <p className="text-xs font-medium uppercase tracking-wide text-[var(--lt-text-muted)]">
             Email outreach balance
           </p>
           <p
-            className="mt-1 text-3xl font-bold text-[#F4F4FF]"
+            className="mt-1 text-3xl font-bold text-[var(--lt-text)]"
             style={{ fontFamily: "Bricolage Grotesque, sans-serif" }}
           >
             {balance.send_balance.toLocaleString()}
-            <span className="ml-2 text-sm font-normal text-[#6B6B80]">sends left</span>
+            <span className="ml-2 text-sm font-normal text-[var(--lt-text-muted)]">sends left</span>
           </p>
-          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#A1A1B5]">
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--lt-text-muted)]">
             <span>Free trial: {balance.free_trial_remaining}</span>
             <span>Monthly: {balance.monthly_allowance_remaining}</span>
             <span>Purchased: {balance.purchased_credits}</span>
           </div>
         </div>
-        <div className="text-xs text-[#6B6B80] sm:text-right">
+        <div className="text-xs text-[var(--lt-text-muted)] sm:text-right">
           {subscription && (
-            <p className="text-[#F4F4FF] font-medium">{subscription}</p>
+            <p className="font-medium text-[var(--lt-text)]">{subscription}</p>
           )}
           <p className="mt-1">
             Mailboxes: {balance.mailbox_count} / {balance.max_mailboxes}
@@ -89,17 +80,11 @@ export function OutreachBalanceBanner({
       </div>
 
       {!hasMailbox && (
-        <div
-          className="mt-4 rounded-lg px-4 py-3"
-          style={{
-            background: "rgba(124,58,237,0.1)",
-            border: "1px solid rgba(124,58,237,0.25)",
-          }}
-        >
-          <p className="text-sm font-semibold text-[#F4F4FF]">
+        <div className="mt-4 rounded-lg border border-[var(--lt-accent)]/30 bg-[var(--lt-accent)]/10 px-4 py-3">
+          <p className="text-sm font-semibold text-[var(--lt-text)]">
             {OUTREACH_FREE_SENDS_ON_CONNECT} free sends are waiting for you
           </p>
-          <p className="mt-1 text-xs text-[#A1A1B5] leading-relaxed">
+          <p className="mt-1 text-xs text-[var(--lt-text-muted)] leading-relaxed">
             Connect a Gmail mailbox below to unlock your free sends and start emailing
             leads from your results.
           </p>
@@ -107,22 +92,16 @@ export function OutreachBalanceBanner({
       )}
 
       {hasMailbox && balance.free_trial_remaining > 0 && (
-        <p className="mt-3 text-xs text-[#A855F7]">
+        <p className="mt-3 text-xs text-[var(--lt-accent-soft)]">
           {balance.free_trial_remaining} free sends remaining in your trial bucket
         </p>
       )}
 
       {balance.send_balance === 0 && hasMailbox && (
-        <div
-          className="mt-4 rounded-lg px-4 py-3"
-          style={{
-            background: "rgba(248,113,113,0.08)",
-            border: "1px solid rgba(248,113,113,0.25)",
-          }}
-        >
-          <p className="text-sm text-[#FCA5A5]">
+        <div className="mt-4 rounded-lg border border-[var(--lt-danger)]/30 bg-[var(--lt-danger-soft)] px-4 py-3">
+          <p className="text-sm text-[var(--lt-danger)]">
             You have no send credits left.{" "}
-            <Link href="/dashboard/plans" className="underline text-[#F4F4FF]">
+            <Link href="/dashboard/plans" className="underline text-[var(--lt-text)]">
               View plans
             </Link>{" "}
             to add more sends.

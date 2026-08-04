@@ -38,24 +38,24 @@ export function OutreachMailboxSection({
   }
 
   return (
-    <div className="glass rounded-2xl p-4 sm:p-6">
+    <div className="rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface)] p-4 sm:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-bold text-[#F4F4FF]">Gmail mailboxes</h2>
-          <p className="mt-1 text-sm text-[#6B6B80]">
+          <h2 className="text-lg font-bold text-[var(--lt-text)]">Gmail mailboxes</h2>
+          <p className="mt-1 text-sm text-[var(--lt-text-muted)]">
             Connect Gmail to send outreach from your own address ({activeMailboxes.length}/
             {maxMailboxes} connected).
           </p>
-          <p className="mt-1 text-xs text-[#8888A8]">
+          <p className="mt-1 text-xs text-[var(--lt-text-subtle)]">
             Need more sends?{" "}
-            <Link href="/dashboard/plans" className="text-[#A855F7] underline">
+            <Link href="/dashboard/plans" className="text-[var(--lt-accent-soft)] underline">
               Open outreach billing
             </Link>
           </p>
         </div>
         <Button
           type="button"
-          variant="glow"
+          variant="default"
           onClick={() => setOpen((v) => !v)}
           disabled={activeMailboxes.length >= maxMailboxes && !open}
         >
@@ -80,14 +80,14 @@ export function OutreachMailboxSection({
             key={mailbox.id}
             className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4"
           >
-            <p className="font-semibold text-[#F4F4FF]">{mailbox.email_address}</p>
+            <p className="font-semibold text-[var(--lt-text)]">{mailbox.email_address}</p>
             <p className="mt-1 text-sm text-amber-200">
               Sending paused — high bounce rate detected on this mailbox.
             </p>
             {mailbox.last_error && (
               <p className="mt-2 text-xs text-amber-100/90">{mailbox.last_error}</p>
             )}
-            <p className="mt-2 text-xs text-[#8888A8]">
+            <p className="mt-2 text-xs text-[var(--lt-text-subtle)]">
               Remove bad addresses from your list, then disconnect and reconnect this mailbox to
               resume sending.
             </p>
@@ -95,7 +95,7 @@ export function OutreachMailboxSection({
         ))}
 
         {activeMailboxes.length === 0 && pausedMailboxes.length === 0 ? (
-          <p className="text-sm text-[#6B6B80]">
+          <p className="text-sm text-[var(--lt-text-muted)]">
             No Gmail mailbox connected yet. Connect one to unlock your free sends and start
             emailing leads.
           </p>
@@ -103,11 +103,11 @@ export function OutreachMailboxSection({
           activeMailboxes.map((mailbox) => (
             <div
               key={mailbox.id}
-              className="flex flex-col gap-3 rounded-xl border border-white/[0.08] bg-[#0F0F14] p-4 sm:flex-row sm:items-center sm:justify-between"
+              className="flex flex-col gap-3 rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface-2)] p-4 sm:flex-row sm:items-center sm:justify-between"
             >
               <div>
-                <p className="font-semibold text-[#F4F4FF]">{mailbox.email_address}</p>
-                <p className="mt-1 text-xs text-[#6B6B80] capitalize">
+                <p className="font-semibold text-[var(--lt-text)]">{mailbox.email_address}</p>
+                <p className="mt-1 text-xs text-[var(--lt-text-muted)] capitalize">
                   {mailbox.account_type} · Daily sends {mailbox.daily_send_count}/
                   {mailbox.daily_cap}
                 </p>
