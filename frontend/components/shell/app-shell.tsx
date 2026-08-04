@@ -29,8 +29,8 @@ export interface AppShellProps {
 
 const MOBILE_TABS: { id: ShellNavId; label: string; href: string; icon: typeof Home }[] = [
   { id: "home", label: "Home", href: "/dashboard", icon: Home },
-  { id: "discovery", label: "Discovery", href: "/dashboard?view=discover", icon: Compass },
-  { id: "workspace", label: "Workspace", href: "/dashboard?view=workspace", icon: FolderOpen },
+  { id: "discovery", label: "Discovery", href: "/dashboard", icon: Compass },
+  { id: "workspace", label: "Saved", href: "/dashboard/saved", icon: FolderOpen },
   { id: "outreach", label: "Outreach", href: "/dashboard?view=outreach", icon: Send },
   { id: "mailbox", label: "Mailbox", href: "/dashboard?view=mailbox", icon: Inbox },
 ];

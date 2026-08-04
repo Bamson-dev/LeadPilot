@@ -48,16 +48,16 @@ const PRIMARY_NAV: NavItem[] = [
   {
     id: "discovery",
     label: "Discovery",
-    href: "/dashboard?view=discover",
+    href: "/dashboard",
     icon: Compass,
     match: (p) => p === "/dashboard" || p.startsWith("/dashboard/search"),
   },
   {
     id: "workspace",
-    label: "Workspace",
-    href: "/dashboard?view=workspace",
+    label: "Saved Leads",
+    href: "/dashboard/saved",
     icon: FolderOpen,
-    match: (p) => p.startsWith("/dashboard/search"),
+    match: (p) => p.startsWith("/dashboard/saved"),
   },
   {
     id: "outreach",
