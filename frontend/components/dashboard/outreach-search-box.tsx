@@ -3,6 +3,7 @@
 import { Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/utils/utils";
 
 interface OutreachSearchBoxProps {
   businessType: string;
@@ -28,17 +29,12 @@ export function OutreachSearchBox({
   }
 
   return (
-    <div className="rounded-xl border border-white/[0.08] bg-[#0F0F14]/60 p-3 sm:p-4">
+    <div className="rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface)] p-3 sm:p-4">
       <div
-        className="gap-3"
-        style={{
-          display: "flex",
-          flexDirection: isMobile ? "column" : "row",
-          gap: isMobile ? 10 : 12,
-        }}
+        className={cn("gap-3", isMobile ? "flex flex-col gap-2.5" : "flex flex-row gap-3")}
       >
-        <div className={isMobile ? "w-full" : "flex-1 min-w-0"}>
-          <label className="mb-1.5 block text-xs font-medium text-[#6B6B80]">
+        <div className={isMobile ? "w-full" : "min-w-0 flex-1"}>
+          <label className="mb-1.5 block text-xs font-medium text-[var(--lt-text-subtle)]">
             Business type
           </label>
           <Input
@@ -50,8 +46,8 @@ export function OutreachSearchBox({
             className="w-full"
           />
         </div>
-        <div className={isMobile ? "w-full" : "flex-1 min-w-0"}>
-          <label className="mb-1.5 block text-xs font-medium text-[#6B6B80]">
+        <div className={isMobile ? "w-full" : "min-w-0 flex-1"}>
+          <label className="mb-1.5 block text-xs font-medium text-[var(--lt-text-subtle)]">
             Location
           </label>
           <Input
@@ -64,12 +60,13 @@ export function OutreachSearchBox({
           />
         </div>
         <div
-          className={isMobile ? "w-full" : "flex shrink-0 items-end"}
-          style={isMobile ? undefined : { paddingBottom: 1 }}
+          className={cn(
+            isMobile ? "w-full" : "flex shrink-0 items-end pb-px"
+          )}
         >
           <Button
             type="button"
-            variant="glow"
+            variant="default"
             onClick={onSearch}
             disabled={disabled}
             className={isMobile ? "w-full" : "whitespace-nowrap"}

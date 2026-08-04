@@ -1,6 +1,7 @@
 "use client";
 
 import type { Lead } from "@/types/lead";
+import { cn } from "@/utils/utils";
 
 interface PipelineSummaryProps {
   leads: Lead[];
@@ -10,11 +11,11 @@ interface PipelineSummaryProps {
 }
 
 const STATUS_ITEMS = [
-  { key: "new", label: "New", color: "#9CA3AF" },
-  { key: "contacted", label: "Contacted", color: "#0EA5E9" },
-  { key: "interested", label: "Interested", color: "#FBBF24" },
-  { key: "closed", label: "Closed", color: "#10B981" },
-  { key: "not_interested", label: "Not Interested", color: "#EF4444" },
+  { key: "new", label: "New" },
+  { key: "contacted", label: "Contacted" },
+  { key: "interested", label: "Interested" },
+  { key: "closed", label: "Closed" },
+  { key: "not_interested", label: "Not interested" },
 ] as const;
 
 export function PipelineSummary({
@@ -40,59 +41,34 @@ export function PipelineSummary({
   if (leads.length === 0) return null;
 
   return (
-    <div
-      style={{
-        marginBottom: 12,
-        padding: "10px 14px",
-        background: "#0D0D16",
-        border: "1px solid rgba(255,255,255,0.06)",
-        borderRadius: 10,
-        fontSize: 12,
-        color: "#6B6B80",
-        lineHeight: 1.6,
-      }}
-    >
-      {STATUS_ITEMS.map((item, index) => (
-        <span key={item.key}>
-          {index > 0 && <span style={{ margin: "0 6px", color: "#3F3F50" }}>·</span>}
+    <div className="flex flex-wrap items-center gap-1.5 px-1 py-1 text-xs text-[var(--lt-text-muted)]">
+      {STATUS_ITEMS.map((item) => {
+        const active = statusFilter === item.key;
+        return (
           <button
+            key={item.key}
             type="button"
-            onClick={() => onFilterChange(item.key)}
-            style={{
-              background: "transparent",
-              border: "none",
-              padding: 0,
-              cursor: "pointer",
-              color: statusFilter === item.key ? item.color : "#A1A1B5",
-              fontWeight: statusFilter === item.key ? 700 : 500,
-              fontSize: 12,
-              fontFamily: "Inter, sans-serif",
-            }}
+            onClick={() => onFilterChange(active ? "all" : item.key)}
+            className={cn(
+              "rounded-md px-2 py-1 transition-colors",
+              active
+                ? "bg-[var(--lt-cyan-soft)] text-[var(--lt-cyan)]"
+                : "hover:bg-[var(--lt-surface-3)] hover:text-[var(--lt-text)]"
+            )}
           >
-            {item.label}: {counts[item.key]}
+            {item.label}{" "}
+            <span className="tabular-nums font-medium">{counts[item.key]}</span>
           </button>
-        </span>
-      ))}
+        );
+      })}
       {statusFilter !== "all" && (
-        <>
-          <span style={{ margin: "0 6px", color: "#3F3F50" }}>·</span>
-          <button
-            type="button"
-            onClick={() => onFilterChange("all")}
-            style={{
-              background: "transparent",
-              border: "none",
-              padding: 0,
-              cursor: "pointer",
-              color: "#6B6B80",
-              textDecoration: "underline",
-              fontSize: 12,
-              fontFamily: "Inter, sans-serif",
-            }}
-          >
-            Show all
-          </button>
-        </>
+        <button
+          type="button"
+          onClick={() => onFilterChange("all")}
+          className="px-2 py-1 text-[var(--lt-text-subtle)] hover:text-[var(--lt-text)]"
+        >
+          Clear
+        </button>
       )}
     </div>
   );
