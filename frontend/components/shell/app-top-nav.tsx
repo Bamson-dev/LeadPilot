@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BarChart3, Bell, HelpCircle, Settings } from "lucide-react";
+import { BarChart3, Bell, Gift, HelpCircle, Settings } from "lucide-react";
 import { cn } from "@/utils/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -60,6 +60,17 @@ export function AppTopNav({
               </Button>
             </TooltipTrigger>
             <TooltipContent>Insights</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="Affiliate" asChild>
+                <Link href="/dashboard/affiliate">
+                  <Gift className="h-4 w-4" />
+                </Link>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Affiliate</TooltipContent>
           </Tooltip>
 
           <Tooltip>

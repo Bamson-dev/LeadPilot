@@ -35,6 +35,8 @@ function viewToNav(view: string | null): ShellNavId {
       return "mailbox";
     case "insights":
       return "insights";
+    case "affiliate":
+      return "affiliate";
     case "workspace":
       return "workspace";
     case "discover":
@@ -65,6 +67,10 @@ function DashboardGateInner() {
     }
     if (view === "insights") {
       router.replace("/dashboard/insights");
+      return;
+    }
+    if (view === "affiliate") {
+      router.replace("/dashboard/affiliate");
       return;
     }
 

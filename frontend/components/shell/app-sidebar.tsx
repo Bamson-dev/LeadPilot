@@ -9,6 +9,7 @@ import {
   Send,
   Inbox,
   BarChart3,
+  Gift,
   User,
   LifeBuoy,
   Code2,
@@ -79,6 +80,13 @@ const PRIMARY_NAV: NavItem[] = [
     href: "/dashboard/insights",
     icon: BarChart3,
     match: (p) => p.startsWith("/dashboard/insights"),
+  },
+  {
+    id: "affiliate",
+    label: "Affiliate",
+    href: "/dashboard/affiliate",
+    icon: Gift,
+    match: (p) => p.startsWith("/dashboard/affiliate"),
   },
   {
     id: "account",
