@@ -43,24 +43,33 @@ Cannot read deployment commit from the public edge without SSO. Confirm in Verce
 
 ## 3. Backend SHA (live)
 
-**Probe time:** 2026-08-05T18:36:54Z
+### Pass A — pre-redeploy (stuck image)
+
+**Probe time:** 2026-08-05T18:36:54Z → SHA **`9e9d10b…`**
+
+### Pass B — after Coolify redeploy (current)
+
+**Probe time:** 2026-08-05T18:41:48Z
 
 ```json
 {
   "status": "ok",
   "browser": "initializing",
   "queue": { "mode": "inline", "running": 0, "queued": 0 },
-  "gitCommitSha": "9e9d10ba5642f8594c083e2d5bc371fe8bf66612",
+  "gitCommitSha": "d25af0e853d36f39a917db97abe6063e8154ddb6",
   "freeTrialIpCapReady": true
 }
 ```
 
 | Check | Expected | Observed |
 |-------|----------|----------|
-| Health SHA | `43fa038…` or `d25af0e…` | **`9e9d10b…`** |
-| Match tip? | Yes | **No** — **7+ commits behind** |
+| Health SHA | `d25af0e…` | **`d25af0e…`** (match tip) |
 | `GET /api/health` | 200 | **200** |
-| `GET /auth/status` (invalid license) | 401 JSON | **404 HTML** `Cannot GET /auth/status` |
+| `GET /auth/status` | 401 JSON | **404 HTML** `Cannot GET /auth/status` |
+| `GET /balance` | 401/200 JSON | **404 HTML** |
+| `POST` checkout / topup | JSON API | **404 HTML** |
+
+**UI symptom (Billing):** “Checkout issue — Request failed (404)”, Credits `—`, “Usage unavailable”, “Balance unavailable”. Plan cards still render from **static frontend catalog**; Subscribe hits missing `/checkout` → 404.
 
 ---
 
@@ -96,58 +105,80 @@ See §3. Summary: process is up (`status: ok`) but **API routes are not register
 
 ## 7. Remaining deployment issues — root cause
 
-### Why staging is stuck on `9e9d10b`
+### Phase 1 (resolved): image lag
 
-1. **No staging Coolify webhook / GitHub Action**  
-   Pushing `staging` updates GitHub + Vercel FE only. Production Coolify fires on `main` via `COOLIFY_DEPLOY_WEBHOOK_URL`. Staging backend requires **manual Coolify Redeploy**.
+Coolify was behind on `9e9d10b`. **Operator redeployed** — live health now reports tip **`d25af0e`**.
 
-2. **Last Coolify build = `9e9d10b`**  
-   That revision still contains the P0-3 guard:
+### Phase 2 (current): tip image, routes still disabled
 
-   ```ts
-   if (data.FRONTEND_URL.includes("staging.leadthur.com")) { /* reject in production */ }
-   ```
+`server.ts` always serves `/health`. API mounts only after `loadEnv()` succeeds. On failure:
 
-   Staging Coolify typically sets `NODE_ENV=production` + `FRONTEND_URL=https://staging.leadthur.com` → **`loadEnv()` throws** → `registerRoutes()` never runs → `/health` works, **`/auth/status` 404**.
+```text
+Backend configuration failed — /health works, API routes disabled
+```
 
-3. **Fix exists but not deployed**  
-   `b2a3576` removes that ban. All Insights→Admin work is after that commit. None of it is on the live staging container.
+Live tip still returns Express default **404 HTML** for `/auth/*`, `/balance`, `/checkout`, `/topup` → FE Billing shows exactly the screenshot errors.
 
-4. **Cannot redeploy from this agent**  
-   No `COOLIFY_STAGING_DEPLOY_WEBHOOK_URL` in repo workflows; no Coolify API token in the workspace; `gh secret list` not available with Coolify staging secrets exposed. **Operator must redeploy in Coolify UI.**
+### Most likely Coolify env conflict (P0-3)
 
-### Operator redeploy checklist (Coolify staging backend)
+Staging handbook historically recommends:
 
-1. Open Coolify → **staging** backend service (not production).  
-2. Confirm Git **branch = `staging`**.  
-3. Confirm Dockerfile path `backend/Dockerfile`, Base Directory `/`.  
-4. **Redeploy / Force rebuild** (avoid stale image cache if Coolify offers “no cache”).  
-5. Wait until healthy.  
+| Var | Handbook | P0-3 with `NODE_ENV=production` |
+|-----|----------|--------------------------------|
+| `MOCK_OUTREACH_SEND=1` | Recommended for staging | **Forbidden — boot refuses** |
+| `MOCK_MAILBOX_SMTP=1` | Sometimes used | **Forbidden** |
+| `ENABLE_TEST_EMAIL=true` | Optional | **Forbidden** |
+| `DEMO_MODE=1/true` | Optional | **Forbidden** |
+
+Staging Coolify typically uses **`NODE_ENV=production`**. After tip redeploy, the old `FRONTEND_URL` staging ban is gone (`b2a3576`), but **any remaining MOCK_*/ENABLE_TEST_EMAIL/DEMO_MODE still aborts `loadEnv()`** → same health-only failure as before.
+
+Other possible Zod failures (check Coolify logs for the exact message):
+
+- `JWT_SECRET` shorter than 32 chars  
+- `ADMIN_PASSWORD` shorter than 8  
+- `SUPABASE_SERVICE_KEY` contains substring `anon`  
+- Missing `SUPABASE_URL` / `FRONTEND_URL` / `ADMIN_EMAIL`
+
+### Operator fix (env — no code change)
+
+1. Coolify → **staging** backend → **Environment**.  
+2. **Unset / remove** (do not leave `=1` or `=true`):
+   - `MOCK_OUTREACH_SEND`
+   - `MOCK_MAILBOX_SMTP`
+   - `ENABLE_TEST_EMAIL`
+   - `DEMO_MODE`
+3. Keep `NODE_ENV=production`, `FRONTEND_URL=https://staging.leadthur.com`.  
+4. Open **container logs** and confirm line: `Backend routes ready` (not `configuration failed`).  
+5. Restart/redeploy once after env save.  
 6. Verify:
 
 ```bash
 curl -sS https://staging-backend.leadthur.com/health | jq .gitCommitSha
-# expect: d25af0e… or at least starts with b2a3576 / 43fa038 / d25af0e
+# expect: d25af0e…
 
-curl -sS https://staging-backend.leadthur.com/auth/status \
+curl -sS -w "\n%{http_code}\n" https://staging-backend.leadthur.com/auth/status \
   -H 'x-license-key: invalid' -H 'x-license-email: x@y.com'
-# expect: 401 JSON INVALID_LICENSE — NOT 404 HTML
+# expect: 401 JSON — NOT 404 HTML
+
+curl -sS -w "\n%{http_code}\n" https://staging-backend.leadthur.com/balance \
+  -H 'x-license-key: invalid' -H 'x-license-email: x@y.com'
+# expect: 401 JSON — NOT 404
 ```
 
-7. Confirm Vercel staging FE deployment = `d25af0e`.  
-8. Re-run live smoke + P0 scripts against live host (below).
+7. Reload Billing — Checkout / Usage / Balance should stop 404ing (auth errors only if license missing).
+
+**Note:** Unsetting `MOCK_OUTREACH_SEND` means staging uses **real SMTP** for sends. That is required for this RC1 binary under `NODE_ENV=production`. Do not re-enable mocks without a later code change (out of scope for this verification).
 
 ### What was checked from here
 
 | Check | Result |
 |-------|--------|
-| Coolify dashboard / build logs / container logs | **Unavailable** (no credentials) |
-| Deployment hooks for staging | **Not Found** in GHA |
-| Branch mapping in Coolify | Inferred: last build from `staging` at `9e9d10b` |
-| Image/tag caching | Possible contributor; force rebuild recommended |
-| Failed migrations | Not observable; `freeTrialIpCapReady: true` suggests DB reachable |
-| Env vars | Cannot read Coolify; infer `FRONTEND_URL` includes staging + `NODE_ENV=production` from 404 pattern |
-| Restart history | Not available |
+| Coolify dashboard / build logs / container logs | **Unavailable** (no credentials) — need operator paste of `configuration failed` line |
+| Deployment hooks for staging | **Not Found** in GHA (prod only) |
+| Branch / image | Tip SHA **`d25af0e`** now live |
+| Failed migrations | DB reachable (`freeTrialIpCapReady: true`); migrations only run after routes register |
+| Env vars | Cannot read Coolify; **MOCK_* under NODE_ENV=production** is strongest hypothesis |
+| Billing UI 404s | Confirmed against live missing `/balance`, `/checkout`, `/auth` |
 
 ---
 
@@ -157,18 +188,20 @@ curl -sS https://staging-backend.leadthur.com/auth/status \
 
 | Criterion | Status |
 |-----------|--------|
-| FE + BE same RC1 tip on staging | **FAIL** (BE `9e9d10b`, tip `d25af0e`) |
-| Auth API healthy on staging | **FAIL** (404) |
-| Search / mailboxes / outreach live smoke | **Not run** (BE routes down + FE SSO) |
-| P0 scripts vs **live** staging binary | **Cannot pass** until tip is running |
+| BE tip image on staging | **PASS** (`d25af0e`) |
+| API routes registered | **FAIL** (all app paths 404) |
+| FE + BE same tip *and* functional | **FAIL** (FE up; BE health-only) |
+| Billing / auth / search / mailboxes / outreach | **FAIL** (404) |
+| P0 live against running binary | **Blocked** until routes register |
 
 ### **GO** only after
 
-1. Coolify staging BE redeploy to `d25af0e` (or ≥ `b2a3576` with tip preferred).  
-2. Health SHA matches tip.  
-3. `/auth/status` returns 401 for bad license.  
-4. Live P0 + product smoke pass.  
-5. FE Vercel SHA confirmed = tip.
+1. Coolify staging env: remove MOCK_*/ENABLE_TEST_EMAIL/DEMO_MODE (or fix whatever log shows).  
+2. Logs show `Backend routes ready`.  
+3. `/auth/status` → 401 JSON (not 404).  
+4. Billing no longer shows “Request failed (404)”.  
+5. Live smoke + P0 pass.  
+6. FE Vercel SHA confirmed = tip.
 
 ---
 
@@ -212,11 +245,11 @@ Plus licensed smoke: activate → search → mailboxes → outreach.
 
 | # | Finding |
 |---|---------|
-| 1 | Repo tip `d25af0e` is on `origin/staging` |
-| 2 | Frontend expected on tip; SSO blocks public SHA read |
-| 3 | Backend live = **`9e9d10b`** — stuck; API routes **down** |
-| 4 | Cause: **no staging Coolify auto-deploy** + last manual deploy pre-env-fix |
-| 5 | Redeploy **must be done in Coolify** by an operator |
-| 6 | **No-Go** production until FE+BE share verified tip |
+| 1 | Repo + Coolify image tip = **`d25af0e`** (redeploy worked) |
+| 2 | Frontend Billing on staging shows **404 checkout / usage / balance** |
+| 3 | Backend **health-only** — `loadEnv()` still failing after tip |
+| 4 | Likely: **`MOCK_OUTREACH_SEND=1` (or sibling flags) + `NODE_ENV=production`** |
+| 5 | Next: Coolify env cleanup + confirm `Backend routes ready` in logs |
+| 6 | **No-Go** production until routes register and smoke passes |
 
-**Next human action:** Coolify → staging backend → Redeploy from `staging` @ `d25af0e` → ping this thread with new `/health` JSON.
+**Next human action:** Coolify staging env → unset MOCK_*/ENABLE_TEST_EMAIL/DEMO_MODE → restart → paste `/health` + `/auth/status` + the `routes ready` / `configuration failed` log line.
