@@ -1,27 +1,37 @@
-import DOMPurify from "isomorphic-dompurify";
-
-/** Sanitize blog HTML before DOM insertion — strips script/event handlers. */
+/**
+ * Server-safe HTML sanitizer (no jsdom).
+ * Strips script/iframe/form tags, event handlers, and javascript: URLs
+ * so blog content cannot steal license keys from localStorage.
+ */
 export function sanitizeBlogHtml(html: string): string {
   if (!html) return "";
-  return DOMPurify.sanitize(html, {
-    USE_PROFILES: { html: true },
-    FORBID_TAGS: ["script", "iframe", "object", "embed", "form", "input", "link", "meta", "base"],
-    FORBID_ATTR: [
-      "onerror",
-      "onload",
-      "onclick",
-      "onmouseover",
-      "onfocus",
-      "onblur",
-      "onchange",
-      "onsubmit",
-      "onmouseenter",
-      "onmouseleave",
-      "onkeydown",
-      "onkeyup",
-    ],
-    ALLOW_DATA_ATTR: false,
-  });
+
+  let out = html;
+
+  // Remove dangerous elements and their contents
+  out = out.replace(
+    /<\s*(script|iframe|object|embed|form|link|meta|base|style)(\s[^>]*)?>[\s\S]*?<\s*\/\s*\1\s*>/gi,
+    ""
+  );
+  out = out.replace(
+    /<\s*(script|iframe|object|embed|form|link|meta|base|style)(\s[^>]*)?\/?\s*>/gi,
+    ""
+  );
+
+  // Strip inline event handlers (onerror=, onclick=, …)
+  out = out.replace(/\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+
+  // Neutralize javascript: / data:text/html URLs in href/src
+  out = out.replace(
+    /\s(href|src|xlink:href)\s*=\s*(["'])\s*javascript:[\s\S]*?\2/gi,
+    ' $1="#"'
+  );
+  out = out.replace(
+    /\s(href|src)\s*=\s*(["'])\s*data:\s*text\/html[\s\S]*?\2/gi,
+    ' $1="#"'
+  );
+
+  return out;
 }
 
 export type TocHeading = {
