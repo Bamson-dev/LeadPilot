@@ -3,7 +3,8 @@
 **Date:** 2026-08-05  
 **Objective:** Deploy approved RC1 to staging only (no production merge, no new features)  
 **Branch:** `staging`  
-**Release Candidate tip (git):** `a39a2263435cf162e065f25cab75afe57ebdefad`
+**Release Candidate app SHA:** `a39a2263435cf162e065f25cab75afe57ebdefad`  
+**Branch tip (includes this report):** `b852c584a1dc7000ed47f430deb6bfc1a880fd89`
 
 ---
 
