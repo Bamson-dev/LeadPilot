@@ -1,3 +1,29 @@
+import DOMPurify from "isomorphic-dompurify";
+
+/** Sanitize blog HTML before DOM insertion — strips script/event handlers. */
+export function sanitizeBlogHtml(html: string): string {
+  if (!html) return "";
+  return DOMPurify.sanitize(html, {
+    USE_PROFILES: { html: true },
+    FORBID_TAGS: ["script", "iframe", "object", "embed", "form", "input", "link", "meta", "base"],
+    FORBID_ATTR: [
+      "onerror",
+      "onload",
+      "onclick",
+      "onmouseover",
+      "onfocus",
+      "onblur",
+      "onchange",
+      "onsubmit",
+      "onmouseenter",
+      "onmouseleave",
+      "onkeydown",
+      "onkeyup",
+    ],
+    ALLOW_DATA_ATTR: false,
+  });
+}
+
 export type TocHeading = {
   id: string;
   text: string;
@@ -61,10 +87,11 @@ export function prepareArticleContent(html: string): {
   content: string;
   headings: TocHeading[];
 } {
+  const sanitized = sanitizeBlogHtml(html);
   const headings: TocHeading[] = [];
   const seen = new Map<string, number>();
 
-  const content = html.replace(/<h2([^>]*)>([\s\S]*?)<\/h2>/gi, (full, attrs, inner) => {
+  const content = sanitized.replace(/<h2([^>]*)>([\s\S]*?)<\/h2>/gi, (full, attrs, inner) => {
     if (/\bid\s*=/.test(attrs)) {
       const existing = attrs.match(/\bid\s*=\s*["']([^"']+)["']/i)?.[1];
       const text = stripHtml(inner);

@@ -102,7 +102,7 @@ function registerRoutes(): void {
   // Admin blog posts may include base64 cover images and rich HTML — allow larger payloads.
   app.use("/admin", express.json({ limit: "15mb" }));
   app.use(express.json({ limit: "1mb" }));
-  app.use("/auth", authRouter);
+  app.use("/auth", rateLimit, authRouter);
   app.use("/trial", trialRouter);
   app.use("/admin", adminRouter);
   app.use("/affiliate", affiliateRouter);

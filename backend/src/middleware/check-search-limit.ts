@@ -7,6 +7,10 @@ import { supabase } from "../database/client";
 import { sendLimitReachedEmail } from "../services/email";
 import { logger } from "../utils/logger";
 
+/**
+ * Search metering must fail closed.
+ * Any license lookup or limit-check failure returns 503 — never grants free searches.
+ */
 export async function checkSearchLimit(
   req: Request,
   res: Response,
@@ -24,18 +28,18 @@ export async function checkSearchLimit(
       return;
     }
 
-    let license = null;
+    let license;
     try {
       license = await getLicenseByKeyAndEmail(licenseKey, email);
     } catch (dbErr) {
-      logger.error("License lookup DB error — allowing search", {
+      logger.error("License lookup DB error — denying search (fail-closed)", {
         error: dbErr instanceof Error ? dbErr.message : "unknown",
       });
-      req.licenseId = "unknown";
-      req.licenseKey = licenseKey;
-      req.licenseEmail = email;
-      req.searchesRemaining = 99;
-      return next();
+      res.status(503).json({
+        error: "Unable to verify search allowance. Please try again shortly.",
+        code: "METERING_UNAVAILABLE",
+      });
+      return;
     }
 
     if (!license) {
@@ -61,16 +65,19 @@ export async function checkSearchLimit(
       remaining: number;
       reason?: string;
       creditsRemaining?: number;
-    } = {
-      allowed: true,
-      remaining: 99,
     };
+
     try {
       limitCheck = await checkAndIncrementSearchCount(license.id);
     } catch (limitErr) {
-      logger.error("Limit check failed — allowing search", {
+      logger.error("Limit check failed — denying search (fail-closed)", {
         error: limitErr instanceof Error ? limitErr.message : "unknown",
       });
+      res.status(503).json({
+        error: "Unable to verify search allowance. Please try again shortly.",
+        code: "METERING_UNAVAILABLE",
+      });
+      return;
     }
 
     if (!limitCheck.allowed) {
@@ -125,15 +132,12 @@ export async function checkSearchLimit(
     req.creditsRemaining = limitCheck.creditsRemaining;
     next();
   } catch (err) {
-    logger.error("Search limit middleware error — allowing search", {
+    logger.error("Search limit middleware error — denying search (fail-closed)", {
       error: err instanceof Error ? err.message : "unknown",
     });
-    const licenseKey = (req.headers["x-license-key"] as string)?.trim().toUpperCase();
-    const email = (req.headers["x-license-email"] as string)?.toLowerCase().trim();
-    if (licenseKey && email) {
-      req.licenseKey = licenseKey;
-      req.licenseEmail = email;
-    }
-    next();
+    res.status(503).json({
+      error: "Unable to verify search allowance. Please try again shortly.",
+      code: "METERING_UNAVAILABLE",
+    });
   }
 }

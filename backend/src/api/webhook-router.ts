@@ -287,9 +287,9 @@ webhookRouter.post(
                   type: "topup",
                   tierId: tierId ?? undefined,
                   licenseId: meta?.licenseId,
-                  credits: meta?.credits ?? tier?.credits,
+                  // credits intentionally omitted — fulfillTopUpPayment derives from tier catalog only
                   email: email.toLowerCase().trim(),
-                  amountNgn: meta?.amountNgn ?? tier?.amountNgn,
+                  amountNgn: tier?.amountNgn,
                 },
               });
             } catch (err) {

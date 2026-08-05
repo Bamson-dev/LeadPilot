@@ -5,6 +5,10 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import { Inter } from "next/font/google";
 import "../styles/globals.css";
+import {
+  filterSafeExternalScripts,
+  filterSafeInlineScripts,
+} from "@/lib/site-scripts-safety";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -105,44 +109,16 @@ export default async function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   const { headScripts, bodyScripts } = await getSiteScripts();
 
-  // Extract inline script content from saved script tags
-  // next/script requires content as a string prop, not dangerouslySetInnerHTML
-  const extractInlineScripts = (html: string): string[] => {
-    const results: string[] = [];
-    const regex = /<script[^>]*>([\s\S]*?)<\/script>/gi;
-    let match;
-    while ((match = regex.exec(html)) !== null) {
-      if (match[1].trim()) {
-        results.push(match[1].trim());
-      }
-    }
-    // If no script tags found treat entire string as raw JS
-    if (results.length === 0 && html.trim() && !html.includes("<")) {
-      results.push(html.trim());
-    }
-    return results;
-  };
-
-  const extractExternalScripts = (html: string): string[] => {
-    const results: string[] = [];
-    const regex = /<script[^>]*\ssrc=["']([^"']+)["'][^>]*>/gi;
-    let match;
-    while ((match = regex.exec(html)) !== null) {
-      results.push(match[1]);
-    }
-    return results;
-  };
-
-  const headInlineScripts = headScripts ? extractInlineScripts(headScripts) : [];
-  const headExternalScripts = headScripts ? extractExternalScripts(headScripts) : [];
-  const bodyInlineScripts = bodyScripts ? extractInlineScripts(bodyScripts) : [];
-  const bodyExternalScripts = bodyScripts ? extractExternalScripts(bodyScripts) : [];
+  const headInlineScripts = headScripts ? filterSafeInlineScripts(headScripts) : [];
+  const headExternalScripts = headScripts ? filterSafeExternalScripts(headScripts) : [];
+  const bodyInlineScripts = bodyScripts ? filterSafeInlineScripts(bodyScripts) : [];
+  const bodyExternalScripts = bodyScripts ? filterSafeExternalScripts(bodyScripts) : [];
 
   return (
     <html lang="en" className={`dark ${inter.variable}`} data-scroll-behavior="smooth">
       <head />
       <body className={`${inter.variable} font-sans antialiased`}>
-        {/* Head external scripts — load before page renders */}
+        {/* Head external scripts — allowlisted hosts only */}
         {headExternalScripts.map((src, i) => (
           <Script
             key={`head-ext-${i}`}
@@ -151,7 +127,7 @@ export default async function RootLayout({
           />
         ))}
 
-        {/* Head inline scripts — load before interactive */}
+        {/* Head inline scripts — theft patterns (localStorage/cookie) blocked */}
         {headInlineScripts.map((content, i) => (
           <Script
             key={`head-inline-${i}`}
