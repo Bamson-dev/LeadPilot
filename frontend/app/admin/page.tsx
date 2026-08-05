@@ -4,11 +4,15 @@ import { useCallback, useEffect, useState } from "react";
 import { Bricolage_Grotesque } from "next/font/google";
 import { SALE_PRICE_NGN } from "@/constants/pricing";
 import { AccountLookup } from "@/components/admin/account-lookup";
+import { AdminLoginForm } from "@/components/admin/admin-login-form";
+import { AdminSectionNav } from "@/components/admin/admin-section-nav";
 import { BlogManager } from "@/components/admin/blog-manager";
 import { DirectMessaging } from "@/components/admin/direct-messaging";
 import { TrialInsightsTabs } from "@/components/admin/trial-insights-tabs";
 import { TrialBroadcastPanel } from "@/components/admin/trial-broadcast-panel";
 import { AdminQueueStatusBar } from "@/components/admin/queue-status-bar";
+import { Button } from "@/components/ui/button";
+import { Panel, PanelContent, PanelHeader, PanelTitle } from "@/components/ui/panel";
 import {
   adminLogin,
   clearAdminToken,
@@ -518,73 +522,44 @@ export default function AdminPage() {
 
   if (!token) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#09090B] px-4">
-        <form
-          onSubmit={handleLogin}
-          className="glass w-full max-w-md rounded-2xl p-8"
-        >
-          <h1 className={`${bricolage.className} text-2xl font-bold text-[#F4F4FF]`}>
-            LeadThur Admin
-          </h1>
-          <p className="mt-2 text-sm text-[#6B6B80]">Sign in to manage licenses</p>
-
-          <label className="mt-6 block text-xs font-medium text-[#6B6B80]">Email</label>
-          <input
-            type="email"
-            value={loginEmail}
-            onChange={(e) => setLoginEmail(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-[#F4F4FF] outline-none focus:border-[#7C3AED]"
-            required
-          />
-
-          <label className="mt-4 block text-xs font-medium text-[#6B6B80]">Password</label>
-          <input
-            type="password"
-            value={loginPassword}
-            onChange={(e) => setLoginPassword(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-[#F4F4FF] outline-none focus:border-[#7C3AED]"
-            required
-          />
-
-          {loginError && (
-            <p className="mt-4 text-sm text-red-400" role="alert">
-              {loginError}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={loginLoading}
-            className="mt-6 w-full rounded-lg bg-[#7C3AED] py-2.5 font-semibold text-white transition hover:bg-[#6D28D9] disabled:opacity-60"
-          >
-            {loginLoading ? "Signing in…" : "Sign in"}
-          </button>
-        </form>
-      </main>
+      <AdminLoginForm
+        email={loginEmail}
+        password={loginPassword}
+        error={loginError}
+        loading={loginLoading}
+        onEmailChange={setLoginEmail}
+        onPasswordChange={setLoginPassword}
+        onSubmit={handleLogin}
+        titleClassName={`${bricolage.className} text-2xl font-bold text-[var(--lt-text)]`}
+      />
     );
   }
 
   return (
-    <main className="min-h-screen bg-[#09090B] px-4 py-8 sm:px-6">
-      <header className="mx-auto flex max-w-6xl items-center justify-between">
-        <h1 className={`${bricolage.className} text-2xl font-bold text-[#F4F4FF]`}>
-          LeadThur Admin
-        </h1>
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="rounded-lg border border-white/10 px-4 py-2 text-sm text-[#A1A1B5] hover:bg-white/5"
-        >
+    <main className="admin-rc1 min-h-screen bg-[var(--lt-bg)] px-4 py-8 text-[var(--lt-text)] sm:px-6">
+      <header className="mx-auto flex max-w-6xl items-center justify-between gap-3">
+        <div>
+          <h1 className={`${bricolage.className} text-2xl font-bold text-[var(--lt-text)]`}>
+            LeadThur Admin
+          </h1>
+          <p className="mt-1 text-xs text-[var(--lt-text-muted)]">
+            Existing admin workflows only — JWT console, not product AppShell.
+          </p>
+        </div>
+        <Button type="button" variant="outline" size="sm" onClick={handleLogout}>
           Logout
-        </button>
+        </Button>
       </header>
 
-      <div className="mx-auto max-w-6xl">
+      <AdminSectionNav />
+
+      <div className="mx-auto max-w-6xl" id="admin-queue">
         <AdminQueueStatusBar enabled={Boolean(token)} />
       </div>
 
       {/* ACTIVATION TRACKER */}
       <div
+        id="admin-activations"
         className="mx-auto mt-8 max-w-6xl"
         style={{
           background: "#111118",
@@ -984,6 +959,7 @@ export default function AdminPage() {
 
       {/* GLOBAL SCRIPTS MANAGER */}
       <div
+        id="admin-scripts"
         className="mx-auto max-w-6xl"
         style={{
           background: "#111118",
@@ -1158,7 +1134,7 @@ export default function AdminPage() {
           window.location.hostname === "staging.leadthur.com";
 
         return (
-        <div className="mx-auto mt-8 max-w-6xl" style={{ marginBottom: 28 }}>
+        <div className="mx-auto mt-8 max-w-6xl" id="admin-overview" style={{ marginBottom: 28 }}>
           <div
             style={{
               display: "flex",
@@ -1274,6 +1250,7 @@ export default function AdminPage() {
 
       {recentUsers.length > 0 && (
         <div
+          id="admin-users"
           className="mx-auto max-w-6xl"
           style={{
             background: "#111118",
@@ -1423,6 +1400,7 @@ export default function AdminPage() {
       )}
 
       <div
+        id="admin-payouts"
         className="mx-auto mt-8 max-w-6xl"
         style={{
           background: "#111118",
@@ -1636,6 +1614,7 @@ export default function AdminPage() {
 
       {trialStats && (
         <div
+          id="admin-trials"
           className="mx-auto mt-8 max-w-6xl"
           style={{
             background: "#FAFAFA",
@@ -2058,7 +2037,7 @@ export default function AdminPage() {
         </div>
       )}
 
-      <div className="mx-auto mt-8 max-w-6xl">
+      <div className="mx-auto mt-8 max-w-6xl" id="admin-tools">
         <TrialInsightsTabs onSessionExpired={handleLogout} />
         <TrialBroadcastPanel onSessionExpired={handleLogout} />
         <AccountLookup
@@ -2067,6 +2046,9 @@ export default function AdminPage() {
           onPrefillConsumed={() => setPrefillLookupEmail(null)}
         />
         <DirectMessaging onSessionExpired={handleLogout} />
+      </div>
+
+      <div className="mx-auto mt-8 max-w-6xl" id="admin-blog">
         <BlogManager
           blogView={blogView}
           setBlogView={setBlogView}
@@ -2105,38 +2087,41 @@ export default function AdminPage() {
         />
       </div>
 
-      <div className="mx-auto mt-8 max-w-6xl">
-        <section className="glass rounded-2xl p-6">
-          <h2 className="text-lg font-semibold text-[#F4F4FF]">Generate Access</h2>
-          <form onSubmit={handleGenerate} className="mt-4 space-y-3">
-            <label className="text-xs text-[#6B6B80]">Buyer Email Address</label>
-            <input
-              type="email"
-              value={generateEmail}
-              onChange={(e) => setGenerateEmail(e.target.value)}
-              className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-[#F4F4FF] outline-none focus:border-[#7C3AED]"
-              required
-            />
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-lg bg-[#7C3AED] py-2.5 font-semibold text-white hover:bg-[#6D28D9] disabled:opacity-60"
-            >
-              Generate and Send Access
-            </button>
-          </form>
-          {generateMsg && (
-            <p
-              className={`mt-3 text-sm ${generateMsg.type === "ok" ? "text-emerald-400" : "text-red-400"}`}
-            >
-              {generateMsg.text}
-            </p>
-          )}
-        </section>
+      <div className="mx-auto mt-8 max-w-6xl" id="admin-access">
+        <Panel>
+          <PanelHeader>
+            <PanelTitle>Generate Access</PanelTitle>
+          </PanelHeader>
+          <PanelContent>
+            <form onSubmit={handleGenerate} className="space-y-3">
+              <label className="text-xs text-[var(--lt-text-muted)]">Buyer Email Address</label>
+              <input
+                type="email"
+                value={generateEmail}
+                onChange={(e) => setGenerateEmail(e.target.value)}
+                className="w-full rounded-lg border border-[var(--lt-border)] bg-[var(--lt-surface-2)] px-4 py-2.5 text-[var(--lt-text)] outline-none focus:border-[var(--lt-cyan)]"
+                required
+              />
+              <Button type="submit" className="w-full" disabled={loading}>
+                Generate and Send Access
+              </Button>
+            </form>
+            {generateMsg && (
+              <p
+                className={`mt-3 text-sm ${generateMsg.type === "ok" ? "text-[var(--lt-success)]" : "text-[var(--lt-danger)]"}`}
+              >
+                {generateMsg.text}
+              </p>
+            )}
+          </PanelContent>
+        </Panel>
       </div>
 
-      <section className="glass mx-auto mt-8 max-w-6xl overflow-hidden rounded-2xl p-6">
-        <h2 className="text-lg font-semibold text-[#F4F4FF]">Recent Licenses</h2>
+      <section
+        id="admin-licenses"
+        className="mx-auto mt-8 max-w-6xl overflow-hidden rounded-2xl border border-[var(--lt-border)] bg-[var(--lt-surface)] p-6"
+      >
+        <h2 className="text-lg font-semibold text-[var(--lt-text)]">Recent Licenses</h2>
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[900px] text-left text-sm">
             <thead>
