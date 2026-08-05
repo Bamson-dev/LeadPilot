@@ -119,12 +119,23 @@ export function AppShell({
           })}
           <Link
             href="/dashboard/plans"
-            className="flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium text-[var(--lt-text-subtle)]"
+            className={cn(
+              "flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium",
+              activeNav === "billing" || activeNav === "account"
+                ? "text-[var(--lt-cyan)]"
+                : "text-[var(--lt-text-subtle)]"
+            )}
           >
-            <span className="flex h-8 w-10 items-center justify-center rounded-md">
+            <span
+              className={cn(
+                "flex h-8 w-10 items-center justify-center rounded-md",
+                (activeNav === "billing" || activeNav === "account") &&
+                  "bg-[var(--lt-cyan-soft)]"
+              )}
+            >
               <User className="h-4 w-4" />
             </span>
-            Account
+            Billing
           </Link>
         </nav>
       )}

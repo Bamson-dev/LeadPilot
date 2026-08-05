@@ -89,8 +89,8 @@ const PRIMARY_NAV: NavItem[] = [
     match: (p) => p.startsWith("/dashboard/affiliate"),
   },
   {
-    id: "account",
-    label: "Account",
+    id: "billing",
+    label: "Billing",
     href: "/dashboard/plans",
     icon: User,
     match: (p) => p.startsWith("/dashboard/plans"),
