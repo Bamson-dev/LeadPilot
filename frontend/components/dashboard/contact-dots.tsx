@@ -6,7 +6,7 @@ function Dot({ active }: { active: boolean }) {
   return (
     <span
       className={`inline-block h-2 w-2 rounded-full ${
-        active ? "bg-emerald-400" : "bg-zinc-600"
+        active ? "bg-[var(--lt-success)]" : "bg-[var(--lt-text-subtle)]"
       }`}
       title={active ? "Available" : "Not found"}
     />

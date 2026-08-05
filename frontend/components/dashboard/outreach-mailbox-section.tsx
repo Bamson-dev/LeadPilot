@@ -4,9 +4,16 @@ import Link from "next/link";
 import { useState } from "react";
 import { Loader2, Mail, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { OutreachMailbox } from "@/types/outreach";
 import { disconnectMailbox } from "@/services/outreach-api";
 import { OutreachGuidedMailboxConnect } from "@/components/dashboard/outreach-guided-mailbox-connect";
+import {
+  accountTypeLabel,
+  mailboxStatusBadge,
+  mailboxStatusLabel,
+} from "@/lib/mailbox-display";
 
 interface OutreachMailboxSectionProps {
   mailboxes: OutreachMailbox[];
@@ -41,7 +48,7 @@ export function OutreachMailboxSection({
     <div className="rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface)] p-4 sm:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-bold text-[var(--lt-text)]">Gmail mailboxes</h2>
+          <h2 className="text-lg font-semibold text-[var(--lt-text)]">Gmail mailboxes</h2>
           <p className="mt-1 text-sm text-[var(--lt-text-muted)]">
             Connect Gmail to send outreach from your own address ({activeMailboxes.length}/
             {maxMailboxes} connected).
@@ -50,6 +57,10 @@ export function OutreachMailboxSection({
             Need more sends?{" "}
             <Link href="/dashboard/plans" className="text-[var(--lt-accent-soft)] underline">
               Open outreach billing
+            </Link>
+            {" · "}
+            <Link href="/dashboard/mailboxes" className="text-[var(--lt-accent-soft)] underline">
+              Full mailbox workspace
             </Link>
           </p>
         </div>
@@ -76,22 +87,28 @@ export function OutreachMailboxSection({
 
       <div className="mt-5 space-y-3">
         {pausedMailboxes.map((mailbox) => (
-          <div
+          <Alert
             key={mailbox.id}
-            className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4"
+            variant="warning"
+            className="border-[var(--lt-warning)]/30 bg-[var(--lt-warning-soft)]"
           >
-            <p className="font-semibold text-[var(--lt-text)]">{mailbox.email_address}</p>
-            <p className="mt-1 text-sm text-amber-200">
+            <AlertTitle className="flex flex-wrap items-center gap-2">
+              {mailbox.email_address}
+              <StatusBadge status={mailboxStatusBadge(mailbox.status)}>
+                {mailboxStatusLabel(mailbox.status)}
+              </StatusBadge>
+            </AlertTitle>
+            <AlertDescription>
               Sending paused — high bounce rate detected on this mailbox.
-            </p>
-            {mailbox.last_error && (
-              <p className="mt-2 text-xs text-amber-100/90">{mailbox.last_error}</p>
-            )}
-            <p className="mt-2 text-xs text-[var(--lt-text-subtle)]">
-              Remove bad addresses from your list, then disconnect and reconnect this mailbox to
-              resume sending.
-            </p>
-          </div>
+              {mailbox.last_error ? (
+                <span className="mt-1 block">{mailbox.last_error}</span>
+              ) : null}
+              <span className="mt-2 block text-[var(--lt-text-subtle)]">
+                Remove bad addresses from your list, then disconnect and reconnect this mailbox to
+                resume sending.
+              </span>
+            </AlertDescription>
+          </Alert>
         ))}
 
         {activeMailboxes.length === 0 && pausedMailboxes.length === 0 ? (
@@ -106,13 +123,18 @@ export function OutreachMailboxSection({
               className="flex flex-col gap-3 rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface-2)] p-4 sm:flex-row sm:items-center sm:justify-between"
             >
               <div>
-                <p className="font-semibold text-[var(--lt-text)]">{mailbox.email_address}</p>
-                <p className="mt-1 text-xs text-[var(--lt-text-muted)] capitalize">
-                  {mailbox.account_type} · Daily sends {mailbox.daily_send_count}/
-                  {mailbox.daily_cap}
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-semibold text-[var(--lt-text)]">{mailbox.email_address}</p>
+                  <StatusBadge status={mailboxStatusBadge(mailbox.status)}>
+                    {mailboxStatusLabel(mailbox.status)}
+                  </StatusBadge>
+                </div>
+                <p className="mt-1 text-xs text-[var(--lt-text-muted)]">
+                  {accountTypeLabel(mailbox.account_type)} · Daily sends{" "}
+                  {mailbox.daily_send_count}/{mailbox.daily_cap}
                 </p>
                 {mailbox.last_error && (
-                  <p className="mt-1 text-xs text-red-400">{mailbox.last_error}</p>
+                  <p className="mt-1 text-xs text-[var(--lt-danger)]">{mailbox.last_error}</p>
                 )}
               </div>
               <Button

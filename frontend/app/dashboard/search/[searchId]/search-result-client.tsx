@@ -229,7 +229,10 @@ export default function SearchResultPage() {
             activeLead={activeLead}
             leadStatus={activeLead ? leadStatuses[activeLead.id] || "new" : undefined}
             onCloseDetails={() => setActiveLeadId(null)}
-            onSaveLead={(lead) => setLeadStatus(lead.id, "interested")}
+            onSaveLead={(lead) => {
+              setLeadStatus(lead.id, "interested");
+              toast.success("Lead saved");
+            }}
             onAddToOutreach={(lead) => {
               const id = getLeadSelectionId(lead);
               setSelectedLeadIds((prev) => new Set(prev).add(id));

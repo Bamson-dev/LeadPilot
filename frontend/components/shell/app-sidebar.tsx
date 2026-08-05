@@ -8,7 +8,6 @@ import {
   FolderOpen,
   Send,
   Inbox,
-  BarChart3,
   User,
   LifeBuoy,
   Code2,
@@ -50,7 +49,7 @@ const PRIMARY_NAV: NavItem[] = [
     label: "Discovery",
     href: "/dashboard",
     icon: Compass,
-    match: (p) => p === "/dashboard" || p.startsWith("/dashboard/search"),
+    match: (p) => p.startsWith("/dashboard/search"),
   },
   {
     id: "workspace",
@@ -72,12 +71,6 @@ const PRIMARY_NAV: NavItem[] = [
     href: "/dashboard/mailboxes",
     icon: Inbox,
     match: (p) => p.startsWith("/dashboard/mailboxes"),
-  },
-  {
-    id: "insights",
-    label: "Insights",
-    href: "/dashboard?view=insights",
-    icon: BarChart3,
   },
   {
     id: "account",
@@ -184,13 +177,13 @@ export function AppSidebar({
                 </span>
               </Link>
             ))}
-            <button
-              type="button"
+            <Link
+              href="/dashboard"
               className="mt-1 flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-[var(--lt-accent-soft)] hover:bg-[var(--lt-surface-3)]"
             >
               <Plus className="h-3.5 w-3.5" />
-              New list
-            </button>
+              Find leads
+            </Link>
           </>
         )}
       </nav>

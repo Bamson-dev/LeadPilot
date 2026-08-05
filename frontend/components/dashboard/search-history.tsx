@@ -58,8 +58,8 @@ export function SearchHistory({
 
   if (loading) {
     return (
-      <div className="glass rounded-2xl px-6 py-4">
-        <div className="text-sm text-[#6B6B80]">Loading search history…</div>
+      <div className="rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface)] px-6 py-4">
+        <div className="text-sm text-[var(--lt-text-muted)]">Loading search history…</div>
       </div>
     );
   }
@@ -92,7 +92,7 @@ export function SearchHistory({
   };
 
   return (
-    <div className="glass rounded-2xl px-6 pt-4 pb-2">
+    <div className="rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface)] px-6 pt-4 pb-2">
       <div
         role="button"
         tabIndex={0}
@@ -100,39 +100,24 @@ export function SearchHistory({
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") toggleHistory();
         }}
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          cursor: "pointer",
-          padding: "12px 0",
-          borderBottom: historyExpanded ? "1px solid rgba(255,255,255,0.07)" : "none",
-        }}
+        className={`flex cursor-pointer items-center justify-between py-3 ${
+          historyExpanded ? "border-b border-[var(--lt-border)]" : ""
+        }`}
       >
         <div>
-          <div
-            style={{
-              color: "#F4F4FF",
-              fontWeight: 700,
-              fontSize: 15,
-              fontFamily: "Bricolage Grotesque, sans-serif",
-            }}
-          >
+          <div className="text-[15px] font-bold text-[var(--lt-text)]">
             Search History
           </div>
-          <div style={{ color: "#6B6B80", fontSize: 12 }}>
+          <div className="text-xs text-[var(--lt-text-muted)]">
             {history.length > 0
               ? `${history.length} saved searches — view or export anytime`
               : "Your completed searches will appear here"}
           </div>
         </div>
         <span
-          style={{
-            color: "#6B6B80",
-            fontSize: 18,
-            transform: historyExpanded ? "rotate(180deg)" : "rotate(0deg)",
-            transition: "transform 0.2s",
-          }}
+          className={`text-lg text-[var(--lt-text-muted)] transition-transform duration-200 ${
+            historyExpanded ? "rotate-180" : "rotate-0"
+          }`}
         >
           ⌄
         </span>
@@ -141,7 +126,7 @@ export function SearchHistory({
       {historyExpanded && (
         <div className="mt-4 pb-4">
           {history.length === 0 ? (
-            <p className="pb-2 text-sm text-[#6B6B80]">
+            <p className="pb-2 text-sm text-[var(--lt-text-muted)]">
               No saved searches yet. Run a search above and it will show up here when complete.
             </p>
           ) : isMobile ? (
@@ -149,27 +134,13 @@ export function SearchHistory({
               {history.map((item) => (
                 <div
                   key={item.id}
-                  style={{
-                    background: "#16161E",
-                    borderRadius: 10,
-                    padding: 14,
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: 12,
-                  }}
+                  className="flex items-center justify-between gap-3 rounded-[10px] bg-[var(--lt-surface-2)] p-3.5"
                 >
                   <div className="min-w-0">
-                    <div
-                      style={{
-                        color: "#F4F4FF",
-                        fontSize: 13,
-                        fontWeight: 600,
-                      }}
-                    >
+                    <div className="text-[13px] font-semibold text-[var(--lt-text)]">
                       {item.query} in {item.location}
                     </div>
-                    <div style={{ color: "#6B6B80", fontSize: 11, marginTop: 2 }}>
+                    <div className="mt-0.5 text-[11px] text-[var(--lt-text-muted)]">
                       {item.total_found} potential clients ·{" "}
                       {new Date(item.created_at).toLocaleDateString()}
                     </div>
@@ -179,15 +150,7 @@ export function SearchHistory({
                       type="button"
                       disabled={!item.search_id}
                       onClick={() => void handleView(item)}
-                      style={{
-                        background: "rgba(124,58,237,0.15)",
-                        border: "none",
-                        color: "#A855F7",
-                        padding: "6px 10px",
-                        borderRadius: 6,
-                        fontSize: 11,
-                        cursor: item.search_id ? "pointer" : "not-allowed",
-                      }}
+                      className="cursor-pointer rounded-md border-0 bg-[var(--lt-accent)]/15 px-2.5 py-1.5 text-[11px] text-[var(--lt-accent-soft)] disabled:cursor-not-allowed"
                     >
                       View
                     </button>
@@ -195,15 +158,7 @@ export function SearchHistory({
                       type="button"
                       disabled={!item.search_id || exportingId === item.id}
                       onClick={() => void handleExport(item)}
-                      style={{
-                        background: "rgba(255,255,255,0.05)",
-                        border: "none",
-                        color: "#6B6B80",
-                        padding: "6px 10px",
-                        borderRadius: 6,
-                        fontSize: 11,
-                        cursor: item.search_id ? "pointer" : "not-allowed",
-                      }}
+                      className="cursor-pointer rounded-md border-0 bg-[var(--lt-surface-3)] px-2.5 py-1.5 text-[11px] text-[var(--lt-text-muted)] disabled:cursor-not-allowed"
                     >
                       {exportingId === item.id ? "…" : "Leads"}
                     </button>
@@ -215,7 +170,7 @@ export function SearchHistory({
             <div className="overflow-x-auto">
               <table className="w-full min-w-[640px] text-sm">
                 <thead>
-                  <tr className="border-b border-white/[0.08] text-left text-xs uppercase tracking-wider text-[#6B6B80]">
+                  <tr className="border-b border-[var(--lt-border)] text-left text-xs uppercase tracking-wider text-[var(--lt-text-muted)]">
                     <th className="px-3 py-2">Business Type</th>
                     <th className="px-3 py-2">Location</th>
                     <th className="px-3 py-2">Leads Found</th>
@@ -227,9 +182,9 @@ export function SearchHistory({
                   {history.map((item) => (
                     <tr
                       key={item.id}
-                      className="border-b border-white/[0.04] text-[#A1A1B5]"
+                      className="border-b border-[var(--lt-border)] text-[var(--lt-text-muted)]"
                     >
-                      <td className="px-3 py-3 text-white">{item.query}</td>
+                      <td className="px-3 py-3 text-[var(--lt-text)]">{item.query}</td>
                       <td className="px-3 py-3">{item.location}</td>
                       <td className="px-3 py-3">{item.total_found}</td>
                       <td className="px-3 py-3 whitespace-nowrap">

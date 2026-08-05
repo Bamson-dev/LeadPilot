@@ -74,7 +74,7 @@ function MailboxRow({
               {mailbox.daily_send_count}/{mailbox.daily_cap}
             </span>
           </div>
-          <Progress value={usage} aria-hidden />
+          <Progress value={usage} aria-label={`Daily send usage ${usage}%`} />
         </div>
         <div className="mt-2">
           <StatusBadge status={mailboxHealthBadge(health)}>
@@ -132,7 +132,7 @@ function MailboxRow({
               {mailbox.daily_send_count}/{mailbox.daily_cap}
             </span>
           </div>
-          <Progress value={usage} aria-hidden />
+          <Progress value={usage} aria-label={`Daily send usage ${usage}%`} />
         </div>
       </td>
     </tr>

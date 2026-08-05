@@ -16,8 +16,8 @@ export function RegionCityChips({
   if (suggestions.length === 0) return null;
 
   return (
-    <div className="rounded-xl border border-violet-500/25 bg-violet-500/10 px-4 py-4 space-y-3">
-      <p className="text-sm text-violet-100 leading-relaxed">
+    <div className="rounded-xl border border-[var(--lt-accent)]/25 bg-[var(--lt-accent)]/10 px-4 py-4 space-y-3">
+      <p className="text-sm text-[var(--lt-text)] leading-relaxed">
         {message ??
           "LeadThur works best for specific cities. Pick a city below to search with the same business type."}
       </p>
@@ -27,7 +27,7 @@ export function RegionCityChips({
             key={item.city}
             type="button"
             onClick={() => onSelectCity(item.city)}
-            className="min-h-[44px] rounded-full border border-violet-400/35 bg-violet-400/10 px-4 py-2.5 text-sm font-medium text-violet-50 transition hover:bg-violet-400/20 active:scale-[0.98]"
+            className="min-h-[44px] rounded-full border border-[var(--lt-accent)]/35 bg-[var(--lt-accent)]/10 px-4 py-2.5 text-sm font-medium text-[var(--lt-text)] transition hover:bg-[var(--lt-accent)]/20 active:scale-[0.98]"
           >
             {item.label}
           </button>

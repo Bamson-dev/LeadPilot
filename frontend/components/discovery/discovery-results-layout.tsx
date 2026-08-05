@@ -11,7 +11,6 @@ import {
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { cn } from "@/utils/utils";
 import type { Lead } from "@/types/lead";
-import { toast } from "@/components/ui/toast";
 
 export interface DiscoveryResultsLayoutProps {
   children: React.ReactNode;
@@ -43,7 +42,6 @@ export function DiscoveryResultsLayout({
 
   function handleSave(lead: Lead) {
     onSaveLead?.(lead);
-    toast.success("Lead saved");
   }
 
   if (isMobile) {

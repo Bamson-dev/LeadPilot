@@ -10,7 +10,6 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import {
   Compass,
   FolderOpen,
-  Home,
   Inbox,
   Send,
   User,
@@ -27,8 +26,7 @@ export interface AppShellProps {
   contentClassName?: string;
 }
 
-const MOBILE_TABS: { id: ShellNavId; label: string; href: string; icon: typeof Home }[] = [
-  { id: "home", label: "Home", href: "/dashboard", icon: Home },
+const MOBILE_TABS: { id: ShellNavId; label: string; href: string; icon: typeof Compass }[] = [
   { id: "discovery", label: "Discovery", href: "/dashboard", icon: Compass },
   { id: "workspace", label: "Saved", href: "/dashboard/saved", icon: FolderOpen },
   { id: "outreach", label: "Outreach", href: "/dashboard/outreach", icon: Send },

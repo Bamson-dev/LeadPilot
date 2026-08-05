@@ -126,7 +126,7 @@ export function OutreachWorkspace({
       />
 
       <div
-        className="flex gap-1 overflow-x-auto border-b border-white/[0.08] pb-px [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex gap-1 overflow-x-auto border-b border-[var(--lt-border)] pb-px [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         role="tablist"
         aria-label="Outreach sections"
       >
@@ -142,8 +142,8 @@ export function OutreachWorkspace({
               className={[
                 "shrink-0 rounded-t-md px-3 py-2 text-sm font-medium transition-colors sm:px-4",
                 selected
-                  ? "border-b-2 border-[#A855F7] bg-[#16161E] text-[#F4F4FF]"
-                  : "text-[#6B6B80] hover:text-[#A1A1B5]",
+                  ? "border-b-2 border-[var(--lt-accent)] bg-[var(--lt-surface-2)] text-[var(--lt-text)]"
+                  : "text-[var(--lt-text-muted)] hover:text-[var(--lt-text)]",
               ].join(" ")}
             >
               {tab.label}

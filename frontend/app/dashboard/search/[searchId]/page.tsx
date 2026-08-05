@@ -21,7 +21,7 @@ export default function Page() {
     <AppShell
       credits={credits}
       userEmail={email}
-      activeNav="workspace"
+      activeNav="discovery"
       contentClassName="px-4 pt-4 sm:px-6"
     >
       <Suspense

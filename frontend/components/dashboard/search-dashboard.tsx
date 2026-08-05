@@ -310,6 +310,7 @@ export function SearchDashboard() {
 
   function handleSaveLead(lead: Lead) {
     setLeadStatus(lead.id, "interested");
+    toast.success("Lead saved");
   }
 
   function handleAddToOutreach(lead: Lead) {
@@ -585,16 +586,16 @@ export function SearchDashboard() {
             <div className="space-y-4">
               {isQueuedWaiting && <SearchQueueCard queuePosition={queuePosition} />}
               {savedBanner && (
-                <div className="rounded-lg border border-violet-500/30 bg-violet-500/10 px-4 py-3 text-sm text-[#A1A1B5]">
+                <div className="rounded-lg border border-[var(--lt-accent)]/30 bg-[var(--lt-accent)]/10 px-4 py-3 text-sm text-[var(--lt-text-muted)]">
                   {savedBanner}
                 </div>
               )}
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <LiveCounter count={displayCount} isSearching={isSearching} />
                 {(isSearching || phaseMessage) && !isQueuedWaiting && (
-                  <span className="flex items-center gap-2 text-sm text-[#A1A1B5] sm:max-w-[65%]">
+                  <span className="flex items-center gap-2 text-sm text-[var(--lt-text-muted)] sm:max-w-[65%]">
                     {isSearching && !isQueuedWaiting && (
-                      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#A855F7]" />
+                      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--lt-accent)]" />
                     )}
                     {phaseMessage}
                   </span>

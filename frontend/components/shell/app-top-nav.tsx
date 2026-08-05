@@ -53,11 +53,16 @@ export function AppTopNav({
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label="Notifications">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Notifications (unavailable)"
+                disabled
+              >
                 <Bell className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Notifications</TooltipContent>
+            <TooltipContent>Notifications unavailable</TooltipContent>
           </Tooltip>
 
           <Tooltip>
