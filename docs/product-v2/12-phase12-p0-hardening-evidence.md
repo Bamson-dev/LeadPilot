@@ -13,7 +13,7 @@
 |----|--------|---------------------------|
 | P0-1 Search metering fail-open | **CLOSED** | DB/limit errors return **503** `METERING_UNAVAILABLE`; no `"unknown"` license / 99 remaining |
 | P0-2 Top-up credit trust | **CLOSED** | Credits = **tier catalog only**; paid amount must meet `amountKobo` / `amountUsd`; `metadata.credits` ignored |
-| P0-3 MOCK / test modes | **CLOSED** | Production boot **refuses** `MOCK_OUTREACH_SEND=1`, `MOCK_MAILBOX_SMTP=1`, `ENABLE_TEST_EMAIL`, `DEMO_MODE`, staging `FRONTEND_URL` |
+| P0-3 MOCK / test modes | **CLOSED** | Production boot **refuses** `MOCK_OUTREACH_SEND=1`, `MOCK_MAILBOX_SMTP=1`, `ENABLE_TEST_EMAIL`, `DEMO_MODE`. Staging Coolify may use `NODE_ENV=production` + staging `FRONTEND_URL` (required for route registration). |
 | P0-4 RLS on sensitive tables | **CLOSED** | RLS enabled + `REVOKE` from `anon`/`authenticated` on prod + staging; migration `038` + startup apply |
 | P0-5 XSS × localStorage | **CLOSED** | Blog HTML sanitized (DOMPurify); site scripts allowlisted + theft-pattern blocked |
 | P0-6 Open `/admin/test-email` | **CLOSED** | Requires `NODE_ENV !== production` **and** `ENABLE_TEST_EMAIL=true` **and** `requireAdminAuth` |
@@ -71,7 +71,7 @@ node backend/scripts/verify-p0-hardening.mjs
 ### P0-3 / P0-6 — Environment + test-email safety
 
 **Changes:**
-- `backend/src/config/env.ts` — production `superRefine` rejects MOCK_*, ENABLE_TEST_EMAIL, DEMO_MODE, staging FRONTEND_URL  
+- `backend/src/config/env.ts` — production `superRefine` rejects MOCK_*, ENABLE_TEST_EMAIL, DEMO_MODE (staging FRONTEND_URL allowed so Coolify staging with NODE_ENV=production can register routes)  
 - `backend/.env.example` — MOCK flags commented; never default on  
 - `backend/src/api/admin-router.ts` — test-email only if non-prod + ENABLE_TEST_EMAIL + `requireAdminAuth`  
 - `backend/src/server.ts` — `rateLimit` on `/auth`

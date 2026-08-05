@@ -31,14 +31,9 @@ const envSchema = z
           path: ["FRONTEND_URL"],
         });
       }
-      if (data.FRONTEND_URL.includes("staging.leadthur.com")) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message:
-            "FRONTEND_URL must not point at staging in production (blocks open test-email and misrouting)",
-          path: ["FRONTEND_URL"],
-        });
-      }
+      // Staging Coolify also uses NODE_ENV=production with FRONTEND_URL=staging.leadthur.com.
+      // Do not reject that — it would leave /health up and all API routes unregistered.
+      // Open test-email is gated separately (NODE_ENV !== "production" && ENABLE_TEST_EMAIL).
       if (data.SUPABASE_SERVICE_KEY.includes("anon")) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
