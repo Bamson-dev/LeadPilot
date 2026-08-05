@@ -63,6 +63,10 @@ function DashboardGateInner() {
       router.replace("/dashboard/mailboxes");
       return;
     }
+    if (view === "insights") {
+      router.replace("/dashboard/insights");
+      return;
+    }
 
     if (isDemo) {
       setAllowed(true);

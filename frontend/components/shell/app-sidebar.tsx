@@ -8,6 +8,7 @@ import {
   FolderOpen,
   Send,
   Inbox,
+  BarChart3,
   User,
   LifeBuoy,
   Code2,
@@ -71,6 +72,13 @@ const PRIMARY_NAV: NavItem[] = [
     href: "/dashboard/mailboxes",
     icon: Inbox,
     match: (p) => p.startsWith("/dashboard/mailboxes"),
+  },
+  {
+    id: "insights",
+    label: "Insights",
+    href: "/dashboard/insights",
+    icon: BarChart3,
+    match: (p) => p.startsWith("/dashboard/insights"),
   },
   {
     id: "account",
