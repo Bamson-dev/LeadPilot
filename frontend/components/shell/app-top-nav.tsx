@@ -90,7 +90,7 @@ export function AppTopNav({
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="icon" aria-label="Settings" asChild>
-                <Link href="/dashboard/plans">
+                <Link href="/dashboard/settings">
                   <Settings className="h-4 w-4" />
                 </Link>
               </Button>

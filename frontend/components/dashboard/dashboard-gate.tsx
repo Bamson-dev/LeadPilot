@@ -73,6 +73,10 @@ function DashboardGateInner() {
       router.replace("/dashboard/affiliate");
       return;
     }
+    if (view === "settings" || view === "account") {
+      router.replace("/dashboard/settings");
+      return;
+    }
 
     if (isDemo) {
       setAllowed(true);
