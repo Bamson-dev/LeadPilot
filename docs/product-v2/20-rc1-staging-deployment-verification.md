@@ -1,255 +1,206 @@
 # LeadThur V2 RC1 — Staging Deployment Verification Report
 
-**Date:** 2026-08-05  
-**Investigator:** Cursor agent (no Coolify dashboard credentials in repo)  
+**Completed:** 2026-08-05 23:47 UTC (2026-08-06 00:47 UTC+1)  
 **Objective:** Confirm frontend + backend run the same verified RC1 release on staging  
-**Constraint:** No feature/UI/backend behavior changes — verification only
+**Constraint honored:** No features, no UI changes, no backend behavior changes. Resolution was **environment-only**.
 
 ---
 
-## 0. Documentation push status
+## Executive summary
 
-| Item | Status |
-|------|--------|
-| Commit `d25af0e` on `origin/staging` | **Yes** — already published (`docs(v2): RC1 final release report…`) |
-| Working tree vs `origin/staging` | In sync for tracked RC1 commits |
+Staging backend was serving a **health-only process**: `/health` returned 200 while every application route returned Express's default `Cannot GET …` HTML. Two separate causes, resolved in sequence:
 
----
+1. **Image lag** — Coolify was still running `9e9d10b`, seven commits behind. Resolved by redeploy.
+2. **Environment misconfiguration** — four flags forbidden under `NODE_ENV=production` aborted `loadEnv()`, so `registerRoutes()` never ran. Resolved by deleting them in Coolify.
 
-## 1. Git SHA deployed (repository)
-
-| Ref | SHA | Message |
-|-----|-----|---------|
-| `origin/staging` tip | `d25af0e853d36f39a917db97abe6063e8154ddb6` | RC1 final release report |
-| Feature-complete Admin tip | `43fa038fd8c343c16042899c4d6a79855f51148f` | RC1 Admin Workspace |
-| Env fix required for staging Coolify | `b2a35765f35d3dfcf62f404e0a04acf447f66040` | Allow staging `FRONTEND_URL` under `NODE_ENV=production` |
-
-**Target for staging backend:** tip `d25af0e` (or at least ≥ `b2a3576`).  
-**User-noted target `43fa038`:** acceptable app feature tip; current tip also includes docs-only `d25af0e` after Admin.
+Backend is now fully operational on the RC1 tip. **Frontend revision and licensed end-to-end flows remain unverified** — see [Outstanding items](#7-outstanding-items).
 
 ---
+
+## 1. Git SHA deployed
+
+| Ref | SHA | Contents |
+|-----|-----|----------|
+| Live backend | `69ed7371ef692e52e9a04813bd96688ddafa5784` | Current `origin/staging` tip |
+| RC1 feature-complete tip | `43fa038fd8c343c16042899c4d6a79855f51148f` | Admin Workspace — included |
+| RC1 release report | `d25af0e853d36f39a917db97abe6063e8154ddb6` | Included |
+| Staging env guard fix | `b2a35765f35d3dfcf62f404e0a04acf447f66040` | Included |
+
+The live SHA is **ahead of** the originally expected `43fa038` because two docs-only commits (`477ed80`, `69ed737`) landed afterward. All RC1 application code is present; no application code differs between `43fa038` and `69ed737`.
+
+**Deployment mechanism finding:** staging backend **does** auto-deploy on push to `staging`. This was proven when docs commit `69ed737` appeared in `/health` without manual action. The earlier conclusion that no staging automation existed was wrong — `.github/workflows/deploy.yml` is indeed production-only, but Coolify has its own git-push trigger on the service. The initial `9e9d10b` lag was a one-off stall, not a structural gap.
 
 ## 2. Frontend SHA
 
-| Surface | Status |
-|---------|--------|
-| Expected | Vercel deploys from `staging` branch → tip `d25af0e` |
-| Live verification | **Blocked** — `https://staging.leadthur.com` returns **302 → Vercel SSO** |
-| `x-vercel-id` present | Yes (edge responding) |
+**UNVERIFIED.** `https://staging.leadthur.com` returns `302` to `vercel.com/sso-api`. Deployment protection prevents reading the build revision from outside.
 
-Cannot read deployment commit from the public edge without SSO. Confirm in Vercel → Project → Deployments → Production/Preview for branch `staging` = `d25af0e`.
+Vercel edge is healthy (`x-vercel-id: lhr1::…`). Requires manual confirmation in Vercel → Deployments that branch `staging` is built at `69ed737`.
 
----
+## 3. Backend SHA
 
-## 3. Backend SHA (live)
+`69ed737` — matches repository tip. Confirmed via `/health`.
 
-### Pass A — pre-redeploy (stuck image)
+## 4. Deployment timestamp
 
-**Probe time:** 2026-08-05T18:36:54Z → SHA **`9e9d10b…`**
+| Event | Time (UTC) |
+|-------|-----------|
+| Failed boot with bad env | 2026-08-05T19:17:41Z |
+| Operator deleted four env vars + restart | ~2026-08-05T23:4xZ |
+| First healthy verification | 2026-08-05T23:46:48Z |
 
-### Pass B — after Coolify redeploy (current)
+## 5. Build status
 
-**Probe time:** 2026-08-05T18:41:48Z
+| Item | Result |
+|------|--------|
+| Coolify image at tip | **PASS** |
+| Route registration | **PASS** — `Backend routes ready` |
+| Browser pool | **PASS** — `browser: "ready"` (was `initializing`) |
+| Queue backend | **PASS** — `mode: "bullmq"` (Redis connected, not inline fallback) |
+| Startup migrations | **PASS** — `freeTrialIpCapReady: true` |
+| Local `tsc` / lint / `next build` at tip | **PASS** |
+
+## 6. Health endpoint output
 
 ```json
 {
   "status": "ok",
-  "browser": "initializing",
-  "queue": { "mode": "inline", "running": 0, "queued": 0 },
-  "gitCommitSha": "d25af0e853d36f39a917db97abe6063e8154ddb6",
+  "browser": "ready",
+  "deepseek": { "configured": true, "keyFingerprint": "sk-c...925f" },
+  "queue": { "running": 0, "queued": 0, "maxConcurrent": 1, "mode": "bullmq" },
+  "memory": { "totalGB": "11.7", "usedPercent": 33, "safe": true },
+  "timestamp": "2026-08-05T23:46:48.139Z",
+  "version": "1.0.0",
+  "gitCommitSha": "69ed7371ef692e52e9a04813bd96688ddafa5784",
   "freeTrialIpCapReady": true
 }
 ```
 
-| Check | Expected | Observed |
-|-------|----------|----------|
-| Health SHA | `d25af0e…` | **`d25af0e…`** (match tip) |
-| `GET /api/health` | 200 | **200** |
-| `GET /auth/status` | 401 JSON | **404 HTML** `Cannot GET /auth/status` |
-| `GET /balance` | 401/200 JSON | **404 HTML** |
-| `POST` checkout / topup | JSON API | **404 HTML** |
+---
 
-**UI symptom (Billing):** “Checkout issue — Request failed (404)”, Credits `—`, “Usage unavailable”, “Balance unavailable”. Plan cards still render from **static frontend catalog**; Subscribe hits missing `/checkout` → 404.
+## Root cause detail
+
+### Confirmed operator log
+
+```json
+{"level":"error","message":"Backend configuration failed — /health works, API routes disabled",
+ "timestamp":"2026-08-05T19:17:41.316Z",
+ "error":"Invalid environment configuration:
+MOCK_OUTREACH_SEND: MOCK_OUTREACH_SEND=1 is forbidden in production (would fake successful sends)
+MOCK_MAILBOX_SMTP: MOCK_MAILBOX_SMTP=1 is forbidden in production (would skip Gmail credential verify)
+ENABLE_TEST_EMAIL: ENABLE_TEST_EMAIL=true is forbidden in production
+DEMO_MODE: DEMO_MODE is forbidden in production"}
+```
+
+### Mechanism
+
+`backend/Dockerfile:37` bakes `ENV NODE_ENV=production`, so the P0-3 `superRefine` bans in `backend/src/config/env.ts` apply on staging. With all four flags set, `loadEnv()` threw. `backend/src/server.ts` catches that and logs "API routes disabled" while leaving the module-level `/health` mount active — producing a server that passes Coolify's health check while serving no application routes.
+
+Every console error you saw (`/balance`, `/auth/usage`, `/mailboxes`, `/search/history`, `/checkout`) was a symptom of this single failure, not five separate bugs.
+
+### Fix applied (environment only)
+
+Deleted in Coolify staging backend: `MOCK_OUTREACH_SEND`, `MOCK_MAILBOX_SMTP`, `ENABLE_TEST_EMAIL`, `DEMO_MODE`. Kept `NODE_ENV=production` and `FRONTEND_URL=https://staging.leadthur.com`.
+
+**Consequence:** staging now performs **real Gmail SMTP sends** and **real mailbox credential verification**. Mock-based QA is unavailable on this binary. Use disposable recipients.
 
 ---
 
-## 4. Deployment timestamp
+## Live verification results
 
-| Event | Time (local / UTC) |
-|-------|--------------------|
-| Live health `timestamp` | `2026-08-05T18:36:54.181Z` |
-| Commit `9e9d10b` authored | 2026-08-05 13:10 +0100 |
-| Env fix `b2a3576` authored | 2026-08-05 13:22 +0100 (never applied on this container) |
-| Tip `d25af0e` authored | 2026-08-05 19:35 +0100 |
+### Route registration — all previously-404 paths now correct
 
-Coolify last successful deploy for this service is inferred as **around `9e9d10b`** — no automated redeploy after that.
+| Endpoint | Status | Body |
+|----------|--------|------|
+| `GET /auth/status` | **401 JSON** | `{"valid":false,"reason":"Invalid license key","code":"INVALID_LICENSE"}` |
+| `GET /auth/usage` | **401 JSON** | `{"error":"Invalid license"}` |
+| `GET /balance` | **401 JSON** | `{"error":"Invalid license"}` |
+| `GET /mailboxes` | **401 JSON** | `{"error":"Invalid license"}` |
+| `GET /search/history` | **401 JSON** | `{"error":"Invalid license"}` |
+| `GET /sends` | **401 JSON** | `{"error":"Invalid license"}` |
+| `GET /affiliate/stats` | **401 JSON** | `{"error":"Invalid license"}` |
+| `POST /send` | **401 JSON** | `{"error":"Invalid license"}` |
+| `POST /checkout` (outreach) | **401 JSON** | `{"error":"Invalid license"}` |
+| `GET /email-templates` | **200 JSON** | template list returned |
+| `GET /topup/tiers` | **200 JSON** | full tier catalog |
+| `POST /topup/initialize` | **400 JSON** | `{"error":"License, email, and tier are required"}` |
+| `POST /checkout/initialize` | **400 JSON** | `{"error":"Email is required"}` |
+| `POST /freetrial` | **400 JSON** | `{"error":"Business type and location are required"}` |
+| `GET /public/blog/posts` | **200 JSON** | posts returned |
+| `GET /public/blog/categories` | **200 JSON** | categories returned |
+| `GET /public/site-scripts` | **200 JSON** | Meta Pixel head scripts |
+| `GET /admin/stats` | **401 JSON** | `{"error":"Unauthorized"}` |
+| `GET /admin/licenses` | **401 JSON** | `{"error":"Unauthorized"}` |
+| `GET /admin/blog/posts` | **401 JSON** | `{"error":"Unauthorized"}` |
 
----
+No Express HTML 404s remain on any real route. Content type is `application/json` throughout.
 
-## 5. Build status
+### P0 gates against the live deployment
 
-| Build | Status | Notes |
-|-------|--------|-------|
-| Local `next build` at tip | PASS (prior stabilization) | — |
-| Local backend `tsc` at tip | PASS | — |
-| Coolify staging image for tip | **Unknown / not running** | Live container reports old SHA |
-| GitHub Actions staging BE | **Not Found** | `deploy.yml` is **`main` → production only** |
+| Gate | Check | Result |
+|------|-------|--------|
+| **P0-6** | `POST /admin/test-email` unauthenticated | **PASS** — 404, endpoint not mounted in production |
+| **P0-3** | `/demo/search` after `DEMO_MODE` removal | **PASS** — 404, demo router not mounted |
+| **P0-3** | Mocks refused under production | **PASS** — proven by the boot refusal itself |
+| Admin auth | All `/admin/*` without JWT | **PASS** — 401 `Unauthorized` |
+| Security headers | `/auth/status` response | **PASS** — `x-content-type-options: nosniff`, `x-frame-options: DENY`, `referrer-policy: strict-origin-when-cross-origin`, no `x-powered-by` |
+| CORS allowlist | `Origin: https://staging.leadthur.com` | **PASS** — reflected |
+| CORS allowlist | `Origin: https://evil.example.com` | **PASS** — not reflected |
 
----
+### P0 source evidence scripts
 
-## 6. Health endpoint output
-
-See §3. Summary: process is up (`status: ok`) but **API routes are not registered**.
-
----
-
-## 7. Remaining deployment issues — root cause
-
-### Phase 1 (resolved): image lag
-
-Coolify was behind on `9e9d10b`. **Operator redeployed** — live health now reports tip **`d25af0e`**.
-
-### Phase 2 (current): tip image, routes still disabled
-
-`server.ts` always serves `/health`. API mounts only after `loadEnv()` succeeds. On failure:
+Both re-run at tip after the deployment was confirmed healthy:
 
 ```text
-Backend configuration failed — /health works, API routes disabled
+node backend/scripts/verify-p0-hardening.mjs  → 15 passed
+node backend/scripts/verify-p0-xss.mjs        → 6 passed (P0-5)
 ```
 
-Live tip still returns Express default **404 HTML** for `/auth/*`, `/balance`, `/checkout`, `/topup` → FE Billing shows exactly the screenshot errors.
-
-### Most likely Coolify env conflict (P0-3)
-
-Staging handbook historically recommends:
-
-| Var | Handbook | P0-3 with `NODE_ENV=production` |
-|-----|----------|--------------------------------|
-| `MOCK_OUTREACH_SEND=1` | Recommended for staging | **Forbidden — boot refuses** |
-| `MOCK_MAILBOX_SMTP=1` | Sometimes used | **Forbidden** |
-| `ENABLE_TEST_EMAIL=true` | Optional | **Forbidden** |
-| `DEMO_MODE=1/true` | Optional | **Forbidden** |
-
-Staging Coolify typically uses **`NODE_ENV=production`**. After tip redeploy, the old `FRONTEND_URL` staging ban is gone (`b2a3576`), but **any remaining MOCK_*/ENABLE_TEST_EMAIL/DEMO_MODE still aborts `loadEnv()`** → same health-only failure as before.
-
-Other possible Zod failures (check Coolify logs for the exact message):
-
-- `JWT_SECRET` shorter than 32 chars  
-- `ADMIN_PASSWORD` shorter than 8  
-- `SUPABASE_SERVICE_KEY` contains substring `anon`  
-- Missing `SUPABASE_URL` / `FRONTEND_URL` / `ADMIN_EMAIL`
-
-### Operator fix (env — no code change)
-
-1. Coolify → **staging** backend → **Environment**.  
-2. **Unset / remove** (do not leave `=1` or `=true`):
-   - `MOCK_OUTREACH_SEND`
-   - `MOCK_MAILBOX_SMTP`
-   - `ENABLE_TEST_EMAIL`
-   - `DEMO_MODE`
-3. Keep `NODE_ENV=production`, `FRONTEND_URL=https://staging.leadthur.com`.  
-4. Open **container logs** and confirm line: `Backend routes ready` (not `configuration failed`).  
-5. Restart/redeploy once after env save.  
-6. Verify:
-
-```bash
-curl -sS https://staging-backend.leadthur.com/health | jq .gitCommitSha
-# expect: d25af0e…
-
-curl -sS -w "\n%{http_code}\n" https://staging-backend.leadthur.com/auth/status \
-  -H 'x-license-key: invalid' -H 'x-license-email: x@y.com'
-# expect: 401 JSON — NOT 404 HTML
-
-curl -sS -w "\n%{http_code}\n" https://staging-backend.leadthur.com/balance \
-  -H 'x-license-key: invalid' -H 'x-license-email: x@y.com'
-# expect: 401 JSON — NOT 404
-```
-
-7. Reload Billing — Checkout / Usage / Balance should stop 404ing (auth errors only if license missing).
-
-**Note:** Unsetting `MOCK_OUTREACH_SEND` means staging uses **real SMTP** for sends. That is required for this RC1 binary under `NODE_ENV=production`. Do not re-enable mocks without a later code change (out of scope for this verification).
-
-### What was checked from here
-
-| Check | Result |
-|-------|--------|
-| Coolify dashboard / build logs / container logs | **Unavailable** (no credentials) — need operator paste of `configuration failed` line |
-| Deployment hooks for staging | **Not Found** in GHA (prod only) |
-| Branch / image | Tip SHA **`d25af0e`** now live |
-| Failed migrations | DB reachable (`freeTrialIpCapReady: true`); migrations only run after routes register |
-| Env vars | Cannot read Coolify; **MOCK_* under NODE_ENV=production** is strongest hypothesis |
-| Billing UI 404s | Confirmed against live missing `/balance`, `/checkout`, `/auth` |
+Covers P0-1 metering fail-closed, P0-2 top-up tier verification and underpay rejection, P0-3 production env bans, P0-4 RLS deny-by-default, P0-5 XSS sanitization, P0-6 test-email gating.
 
 ---
 
-## 8. Go / No-Go
+## 7. Outstanding items
 
-### **NO-GO for production**
+### Blocking a production Go
 
-| Criterion | Status |
-|-----------|--------|
-| BE tip image on staging | **PASS** (`d25af0e`) |
-| API routes registered | **FAIL** (all app paths 404) |
-| FE + BE same tip *and* functional | **FAIL** (FE up; BE health-only) |
-| Billing / auth / search / mailboxes / outreach | **FAIL** (404) |
-| P0 live against running binary | **Blocked** until routes register |
+| # | Item | Owner action |
+|---|------|--------------|
+| 1 | **Frontend SHA unverified** | Confirm in Vercel that branch `staging` is deployed at `69ed737` |
+| 2 | **Licensed end-to-end flows unverified** | Needs a valid staging license key: activation → search → mailbox connect → outreach send |
 
-### **GO** only after
+Item 2 covers license activation, search execution and metering, mailbox connect with real credential verification, and a live outreach send. Unauthenticated gates are confirmed correct, but authenticated success paths have not been exercised against this deployment.
 
-1. Coolify staging env: remove MOCK_*/ENABLE_TEST_EMAIL/DEMO_MODE (or fix whatever log shows).  
-2. Logs show `Backend routes ready`.  
-3. `/auth/status` → 401 JSON (not 404).  
-4. Billing no longer shows “Request failed (404)”.  
-5. Live smoke + P0 pass.  
-6. FE Vercel SHA confirmed = tip.
+### Non-blocking (P1, pre-existing)
 
----
-
-## P0 verification (this session)
-
-### Against **code at tip** (local)
-
-```text
-node backend/scripts/verify-p0-hardening.mjs  → PASS (prior run)
-node backend/scripts/verify-p0-xss.mjs        → PASS (prior run)
-```
-
-### Against **live staging** (`9e9d10b`)
-
-| Check | Result |
-|-------|--------|
-| Live binary includes P0 metering fail-closed | **Unknown / unlikely full set** — SHA predates later commits; env guard still broken |
-| Live `/admin/test-email` | Not re-probed this pass (previously open on older SHA; tip gates it) |
-| Live API smoke | **FAIL** — routes unregistered |
-
-**After Coolify redeploy**, re-run:
-
-```bash
-# SHA gate
-curl -sS https://staging-backend.leadthur.com/health | jq .
-
-# Auth gate
-curl -sS -w "\n%{http_code}\n" https://staging-backend.leadthur.com/auth/status \
-  -H 'x-license-key: invalid' -H 'x-license-email: x@y.com'
-
-# Source evidence still green
-node backend/scripts/verify-p0-hardening.mjs
-node backend/scripts/verify-p0-xss.mjs
-```
-
-Plus licensed smoke: activate → search → mailboxes → outreach.
+| # | Item | Evidence |
+|---|------|----------|
+| 1 | `POST /webhooks/paystack` with bogus signature returns **200 `ok`** | Confirmed live this session. Signature likely validated before side effects, but a 2xx on an invalid signature is misleading and should return 4xx |
+| 2 | Stale staging docs actively brick deployments | `backend/.env.staging.example` recommends `MOCK_OUTREACH_SEND=1` and claims `NODE_ENV` stays development — contradicted by `Dockerfile:37`. Same advice in `docs/staging/01`, `04`, `07`, and the staging handbook. **This is what caused today's outage** |
+| 3 | No mock-based QA path on staging | Consequence of `NODE_ENV=production` + P0-3. Needs a deliberate design decision, not an env hack |
+| 4 | No staging job in GitHub Actions | Coolify's own trigger covers it, but the deploy path is undocumented and invisible in CI |
+| 5 | Health endpoint hides config failures | Diagnosing today required operator log access. A non-secret readiness signal distinguishing "routes registered" from "health-only" would have cut this to one probe |
+| 6 | Container logs `port: 3001` vs Dockerfile default 3000 | Cosmetic; Coolify overrides `PORT` and proxies correctly |
+| 7 | Carried forward from RC1 report | Device binding, SSE license query, Paystack items |
 
 ---
 
-## Summary
+## 8. Go / No-Go recommendation
 
-| # | Finding |
-|---|---------|
-| 1 | Repo + Coolify image tip = **`d25af0e`** (redeploy worked) |
-| 2 | Frontend Billing on staging shows **404 checkout / usage / balance** |
-| 3 | Backend **health-only** — `loadEnv()` still failing after tip |
-| 4 | Likely: **`MOCK_OUTREACH_SEND=1` (or sibling flags) + `NODE_ENV=production`** |
-| 5 | Next: Coolify env cleanup + confirm `Backend routes ready` in logs |
-| 6 | **No-Go** production until routes register and smoke passes |
+### Staging backend: **GO**
 
-**Next human action:** Coolify staging env → unset MOCK_*/ENABLE_TEST_EMAIL/DEMO_MODE → restart → paste `/health` + `/auth/status` + the `routes ready` / `configuration failed` log line.
+Running the RC1 tip with all routes registered, P0 gates enforced, security headers and CORS correct, browser pool ready, and BullMQ connected.
+
+### Production: **NO-GO** — pending two verifications
+
+Not because anything is known broken, but because two required checks are outstanding:
+
+1. Frontend revision confirmation in Vercel (SSO blocks external verification)
+2. Licensed end-to-end smoke against this deployment
+
+Neither is expected to fail. Once both are green, this becomes a **GO** for production promotion.
+
+### Additional pre-production requirement
+
+Production Coolify must be audited for the same four flags **before** promoting. If production carries `MOCK_OUTREACH_SEND`, `MOCK_MAILBOX_SMTP`, `ENABLE_TEST_EMAIL`, or `DEMO_MODE`, the backend will refuse to register routes exactly as staging did — and production has no SSO to mask a partial outage. This is now the single highest-value pre-deploy check.
+
+Also confirm production `FRONTEND_URL=https://www.leadthur.com` with no staging substring.
