@@ -69,10 +69,9 @@ const PRIMARY_NAV: NavItem[] = [
   {
     id: "mailbox",
     label: "Mailbox",
-    href: "/dashboard/outreach?tab=mailboxes",
+    href: "/dashboard/mailboxes",
     icon: Inbox,
-    // Active state comes from AppShell `activeId` (mailboxes tab).
-    match: () => false,
+    match: (p) => p.startsWith("/dashboard/mailboxes"),
   },
   {
     id: "insights",

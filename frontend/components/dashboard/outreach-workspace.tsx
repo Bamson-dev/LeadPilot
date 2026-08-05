@@ -204,7 +204,8 @@ export function OutreachWorkspace({
   );
 }
 
-/** Switch to Mailboxes tab from child components (e.g. ResultsTable no-mailbox guard). */
+/** Open the dedicated Mailboxes workspace (e.g. from no-mailbox guards). */
 export function requestMailboxesTab() {
-  window.dispatchEvent(new Event("leadthur:switch-mailboxes-tab"));
+  if (typeof window === "undefined") return;
+  window.location.assign("/dashboard/mailboxes");
 }

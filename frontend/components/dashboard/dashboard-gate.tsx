@@ -60,7 +60,7 @@ function DashboardGateInner() {
       return;
     }
     if (view === "mailbox") {
-      router.replace("/dashboard/outreach?tab=mailboxes");
+      router.replace("/dashboard/mailboxes");
       return;
     }
 

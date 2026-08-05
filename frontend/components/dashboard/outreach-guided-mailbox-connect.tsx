@@ -54,16 +54,24 @@ function classifyConnectError(err: unknown): { kind: ConnectErrorKind; message: 
 interface OutreachGuidedMailboxConnectProps {
   onConnected: () => void;
   onCancel: () => void;
+  initialEmail?: string;
+  initialAccountType?: "personal" | "workspace";
+  submitLabel?: string;
 }
 
 export function OutreachGuidedMailboxConnect({
   onConnected,
   onCancel,
+  initialEmail = "",
+  initialAccountType = "personal",
+  submitLabel = "Connect mailbox",
 }: OutreachGuidedMailboxConnectProps) {
   const [step, setStep] = useState<ConnectStep>(1);
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(initialEmail);
   const [appPassword, setAppPassword] = useState("");
-  const [accountType, setAccountType] = useState<"personal" | "workspace">("personal");
+  const [accountType, setAccountType] = useState<"personal" | "workspace">(
+    initialAccountType
+  );
   const [connecting, setConnecting] = useState(false);
   const [errorKind, setErrorKind] = useState<ConnectErrorKind | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -297,7 +305,7 @@ export function OutreachGuidedMailboxConnect({
                   <Loader2 className="h-4 w-4 animate-spin" /> Connecting…
                 </>
               ) : (
-                "Connect mailbox"
+                submitLabel
               )}
             </Button>
           </div>
