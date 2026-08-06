@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  Fragment,
 } from "react";
 import type { BusinessLead } from "@leadthur/shared";
 import {
@@ -41,6 +42,10 @@ const MAX_TRIAL_LEADS = 15;
 const CHECKOUT_URL = "/checkout";
 const TRIAL_STATS_KEY = "lp_trial_stats";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PAYWALL_SENTINEL_INDEX = 9;
+const PAYWALL_MIN_SAMPLE_LEADS = 10;
+const PAYWALL_SCROLL_DELAY_MS = 2000;
+const PAYWALL_MIN_DWELL_MS = 4000;
 
 const PAYWALL_TIER_ONE = [
   { label: "1,000+ potential clients per search forever", compareAt: "$60" },
@@ -342,8 +347,12 @@ export default function FreeTrialPage() {
     message: string;
     suggestion?: TrialSearchSuggestion;
   } | null>(null);
+  const [paywallSentinelVisible, setPaywallSentinelVisible] = useState(false);
 
   const paywallTriggeredRef = useRef(false);
+  const paywallSentinelMobileRef = useRef<HTMLDivElement | null>(null);
+  const paywallSentinelDesktopRef = useRef<HTMLDivElement | null>(null);
+  const resultsReadyAtRef = useRef<number | null>(null);
   const enrichmentPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const searchFinishedRef = useRef(false);
@@ -353,6 +362,10 @@ export default function FreeTrialPage() {
   const businessesFoundCount = useMemo(
     () => Math.max(activeSearchTotalFound, leads.length),
     [activeSearchTotalFound, leads.length]
+  );
+  const paywallSentinelIndex = useMemo(
+    () => Math.min(PAYWALL_SENTINEL_INDEX, Math.max(leads.length - 1, 0)),
+    [leads.length]
   );
 
   const openUpgrade = useCallback(() => setShowUpgradePanel(true), []);
@@ -411,6 +424,8 @@ export default function FreeTrialPage() {
     setAggregateStats({ totalFound: 0, verifiedEmailCount: 0 });
     setMessage("");
     paywallTriggeredRef.current = false;
+    resultsReadyAtRef.current = null;
+    setPaywallSentinelVisible(false);
     setSearchHint(null);
     stopEnrichmentPoll();
     closeEventSource();
@@ -599,12 +614,68 @@ export default function FreeTrialPage() {
   }, [status, query, location, message]);
 
   useEffect(() => {
+    if (searchResultsReady) {
+      if (resultsReadyAtRef.current === null) {
+        resultsReadyAtRef.current = Date.now();
+      }
+    } else {
+      resultsReadyAtRef.current = null;
+    }
+  }, [searchResultsReady]);
+
+  useEffect(() => {
+    const nodes = [paywallSentinelMobileRef.current, paywallSentinelDesktopRef.current].filter(
+      Boolean
+    ) as HTMLDivElement[];
+
+    if (nodes.length === 0 || !searchResultsReady || leads.length === 0) {
+      setPaywallSentinelVisible(false);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        setPaywallSentinelVisible(entries.some((entry) => entry.isIntersecting));
+      },
+      { threshold: 0.25 }
+    );
+
+    nodes.forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
+  }, [searchResultsReady, leads.length, paywallSentinelIndex]);
+
+  useEffect(() => {
     if (!searchResultsReady || paywallTriggeredRef.current || leads.length === 0) {
       return;
     }
-    paywallTriggeredRef.current = true;
-    setShowUpgradePanel(true);
-  }, [searchResultsReady, leads.length]);
+
+    const showPaywall = () => {
+      if (paywallTriggeredRef.current) return;
+      paywallTriggeredRef.current = true;
+      setShowUpgradePanel(true);
+    };
+
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    // Path A: user has scrolled into ~10 visible rows
+    if (leads.length >= PAYWALL_MIN_SAMPLE_LEADS && paywallSentinelVisible) {
+      timers.push(setTimeout(showPaywall, PAYWALL_SCROLL_DELAY_MS));
+    }
+
+    // Path B: minimum dwell time so first rows stay unobstructed
+    if (leads.length >= PAYWALL_MIN_SAMPLE_LEADS && resultsReadyAtRef.current) {
+      const elapsed = Date.now() - resultsReadyAtRef.current;
+      const wait = Math.max(PAYWALL_MIN_DWELL_MS - elapsed, PAYWALL_SCROLL_DELAY_MS);
+      timers.push(setTimeout(showPaywall, wait));
+    }
+
+    // Path C: smaller samples — still wait until user views the results list
+    if (leads.length > 0 && leads.length < PAYWALL_MIN_SAMPLE_LEADS && paywallSentinelVisible) {
+      timers.push(setTimeout(showPaywall, PAYWALL_SCROLL_DELAY_MS + 500));
+    }
+
+    return () => timers.forEach(clearTimeout);
+  }, [searchResultsReady, leads.length, paywallSentinelVisible]);
 
   async function handleGateSubmit() {
     const email = gateEmail.toLowerCase().trim();
@@ -706,6 +777,8 @@ export default function FreeTrialPage() {
     setSearchResultsReady(false);
     setActiveSearchTotalFound(0);
     paywallTriggeredRef.current = false;
+    resultsReadyAtRef.current = null;
+    setPaywallSentinelVisible(false);
     setShowUpgradePanel(false);
     setActiveSearchQuery(trimmedQuery);
     setActiveSearchLocation(trimmedLocation);
@@ -977,8 +1050,13 @@ export default function FreeTrialPage() {
                 </div>
 
                 <div className="flex flex-col gap-2 md:hidden">
-                  {leads.map((lead) => (
-                    <LeadRowMobile key={lead.id} lead={lead} />
+                  {leads.map((lead, index) => (
+                    <Fragment key={lead.id}>
+                      <LeadRowMobile lead={lead} />
+                      {index === paywallSentinelIndex ? (
+                        <div ref={paywallSentinelMobileRef} className="h-px w-full" aria-hidden />
+                      ) : null}
+                    </Fragment>
                   ))}
                 </div>
 
@@ -986,6 +1064,8 @@ export default function FreeTrialPage() {
                   leads={leads}
                   lockedDisplayValue={lockedDisplayValue}
                   truncateAddress={truncateAddress}
+                  paywallSentinelRef={paywallSentinelDesktopRef}
+                  paywallSentinelAfterIndex={paywallSentinelIndex}
                 />
               </section>
             )}
@@ -993,10 +1073,7 @@ export default function FreeTrialPage() {
         )}
       <TrialPaywallPanel
         visible={showUpgradePanel && gatePassed}
-        totalFound={activeSearchTotalFound}
         visibleSampleCount={leads.length}
-        activeSearchQuery={activeSearchQuery}
-        activeSearchLocation={activeSearchLocation}
         tierOne={PAYWALL_TIER_ONE}
         tierTwo={PAYWALL_TIER_TWO}
         salePriceUsd={SALE_PRICE_USD}

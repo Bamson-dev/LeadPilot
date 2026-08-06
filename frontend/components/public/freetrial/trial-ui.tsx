@@ -210,10 +210,14 @@ export function TrialResultsTable({
   leads,
   lockedDisplayValue,
   truncateAddress,
+  paywallSentinelRef,
+  paywallSentinelAfterIndex = 9,
 }: {
   leads: TrialLeadRow[];
   lockedDisplayValue: (value: string, fallback: string) => string;
   truncateAddress: (address: string, maxLen: number) => string;
+  paywallSentinelRef?: React.RefObject<HTMLDivElement | null>;
+  paywallSentinelAfterIndex?: number;
 }) {
   return (
     <Panel className="hidden overflow-hidden md:block">
@@ -232,24 +236,28 @@ export function TrialResultsTable({
         const ratingDisplay = lead.rating != null ? `★ ${lead.rating}` : "n/a";
 
         return (
-          <div
-            key={lead.id}
-            className="grid grid-cols-[1.8fr_2fr_1.4fr_2fr_1fr] items-center border-b border-[var(--lt-border)] px-4 py-3.5 text-sm last:border-b-0 animate-in fade-in slide-in-from-bottom-1 duration-300"
-            style={{ animationDelay: `${i * 40}ms` }}
-          >
-            <span className="font-semibold text-[var(--lt-text)]">{lead.business_name}</span>
-            <span className="text-[var(--lt-text-muted)]" title={lead.address || undefined}>
-              {lead.address ? truncateAddress(lead.address, 35) : "n/a"}
-            </span>
-            <span>
-              <TrialPhoneValue phone={lead.phone} />
-            </span>
-            <span>
-              <LockedContactValue value={emailDisplay} />
-            </span>
-            <span>
-              <LockedContactValue value={ratingDisplay} />
-            </span>
+          <div key={lead.id}>
+            <div
+              className="grid grid-cols-[1.8fr_2fr_1.4fr_2fr_1fr] items-center border-b border-[var(--lt-border)] px-4 py-3.5 text-sm last:border-b-0 animate-in fade-in slide-in-from-bottom-1 duration-300"
+              style={{ animationDelay: `${i * 40}ms` }}
+            >
+              <span className="font-semibold text-[var(--lt-text)]">{lead.business_name}</span>
+              <span className="text-[var(--lt-text-muted)]" title={lead.address || undefined}>
+                {lead.address ? truncateAddress(lead.address, 35) : "n/a"}
+              </span>
+              <span>
+                <TrialPhoneValue phone={lead.phone} />
+              </span>
+              <span>
+                <LockedContactValue value={emailDisplay} />
+              </span>
+              <span>
+                <LockedContactValue value={ratingDisplay} />
+              </span>
+            </div>
+            {paywallSentinelRef && i === paywallSentinelAfterIndex ? (
+              <div ref={paywallSentinelRef} className="h-px w-full" aria-hidden />
+            ) : null}
           </div>
         );
       })}
@@ -293,28 +301,20 @@ export function TrialSearchProgress({
 
 export function TrialPaywallPanel({
   visible,
-  totalFound,
   visibleSampleCount,
-  activeSearchQuery,
-  activeSearchLocation,
   tierOne,
   tierTwo,
   salePriceUsd,
   checkoutUrl,
 }: {
   visible: boolean;
-  totalFound: number;
   visibleSampleCount: number;
-  activeSearchQuery: string;
-  activeSearchLocation: string;
   tierOne: readonly { label: string; compareAt: string }[];
   tierTwo: readonly string[];
   salePriceUsd: number;
   checkoutUrl: string;
 }) {
   if (!visible) return null;
-
-  const foundLabel = totalFound > 0 ? totalFound.toLocaleString() : "1,000+";
 
   return (
     <div
@@ -324,22 +324,18 @@ export function TrialPaywallPanel({
       <Panel className="pointer-events-auto mx-auto max-h-[min(78vh,560px)] max-w-md overflow-y-auto border-[var(--lt-accent)]/40 shadow-[0_0_80px_rgba(124,58,237,0.2)]">
         <PanelContent className="space-y-4 p-6">
           <div className="space-y-2">
-            <p className="m-0 text-lg font-extrabold text-[var(--lt-text)]">
-              You found {foundLabel} businesses
-              {activeSearchQuery && activeSearchLocation
-                ? ` for ${activeSearchQuery} in ${activeSearchLocation}`
-                : ""}
-              .
+            <p className="m-0 text-lg font-extrabold leading-snug text-[var(--lt-text)]">
+              Showing {visibleSampleCount} of 1,000+ businesses matching your search.
             </p>
             <p className="m-0 text-sm leading-relaxed text-[var(--lt-text-muted)]">
-              Right now, you&apos;re only seeing a small sample ({visibleSampleCount}).
+              You&apos;re currently viewing only a small sample.
             </p>
             <p className="m-0 text-sm leading-relaxed text-[var(--lt-text-muted)]">
-              The businesses you&apos;re looking for are already here.
+              Thousands of matching businesses are available.
             </p>
             <p className="m-0 text-sm leading-relaxed text-[var(--lt-text-muted)]">
-              The sooner you unlock them, the sooner you can start winning clients before someone
-              else does.
+              Unlock the complete list with verified phone numbers, email addresses, CSV export and
+              built-in outreach.
             </p>
           </div>
 
