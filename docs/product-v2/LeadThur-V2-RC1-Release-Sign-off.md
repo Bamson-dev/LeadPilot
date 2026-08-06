@@ -3,7 +3,8 @@
 **Release version:** `v2.0.0-rc1`  
 **Sign-off date:** 2026-08-06  
 **Git branch:** `staging`  
-**Release commit (tagged):** `6791edad7138c6272753039fb85af28f824d809c`  
+**Release commit (tagged):** `74faf76` (`v2.0.0-rc1`)  
+**Application tip (pre-sign-off docs):** `6791eda` (billing plan-switch fix)  
 **Scope:** Close RC1 development — no new features, redesigns, refactors, or architecture changes.
 
 ---
@@ -24,8 +25,8 @@
 
 | Ref | SHA | Notes |
 |-----|-----|-------|
-| **Tagged release (`v2.0.0-rc1`)** | `6791eda…` | Tip of `origin/staging` at sign-off |
-| RC1 application tip (pre-billing fix) | `43fa038…` | All V2 workspaces feature-complete |
+| **Tagged release (`v2.0.0-rc1`)** | `74faf76…` | Sign-off + staging docs; tag on this commit |
+| Application tip | `6791eda…` | Billing Paystack anytime fix |
 | Repository | `https://github.com/Bamson-dev/LeadPilot.git` branch `staging` |
 
 ---
