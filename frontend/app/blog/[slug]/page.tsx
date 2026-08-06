@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BlogArticleView } from "@/components/blog/blog-article-view";
+import { PublicFunnelNav } from "@/components/public/public-funnel-shell";
+import { PublicPageFooter } from "@/components/public/public-page-footer";
+import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
 import { buildArticleSchema, buildFaqPageSchema } from "@/lib/blog-schema";
 import {
   keyTakeawaysFromExcerpt,
@@ -130,7 +134,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
   const faqSchema = buildFaqPageSchema(post.content);
 
   return (
-    <div style={{ minHeight: "100vh", fontFamily: "Inter, sans-serif" }}>
+    <div className="min-h-screen bg-white">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
@@ -146,61 +150,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
         />
       )}
 
-      <nav
-        style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 100,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "16px 24px",
-          background: "rgba(5,5,8,0.95)",
-          backdropFilter: "blur(12px)",
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
-        }}
-      >
-        <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
-          <div
-            style={{
-              width: 34,
-              height: 34,
-              background: "#7C3AED",
-              borderRadius: 9,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 12,
-              fontWeight: 800,
-              color: "white",
-            }}
-          >
-            LT
-          </div>
-          <span style={{ fontSize: 18, fontWeight: 800, color: "#F2F1FF" }}>
-            Lead<span style={{ color: "#A78BFA" }}>Thur</span>
-          </span>
-        </Link>
-        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-          <Link href="/blog" style={{ color: "#8888A8", fontSize: 14, textDecoration: "none" }}>
-            ← All Articles
-          </Link>
-          <Link
-            href="/freetrial"
-            style={{
-              background: "#7C3AED",
-              color: "white",
-              padding: "8px 16px",
-              borderRadius: 8,
-              fontSize: 13,
-              fontWeight: 700,
-              textDecoration: "none",
-            }}
-          >
-            Try Free
-          </Link>
-        </div>
-      </nav>
+      <PublicFunnelNav active="blog" />
 
       <BlogArticleView
         post={post}
@@ -211,133 +161,28 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
         articleUrl={articleUrl}
       />
 
-      <div
-        style={{
-          background: "rgba(124,58,237,0.08)",
-          borderTop: "1px solid rgba(124,58,237,0.2)",
-          borderBottom: "1px solid rgba(124,58,237,0.2)",
-          padding: "60px 24px",
-          textAlign: "center",
-        }}
-      >
-        <div
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 7,
-            background: "rgba(16,185,129,0.08)",
-            border: "1px solid rgba(16,185,129,0.2)",
-            padding: "6px 14px",
-            borderRadius: 100,
-            fontSize: 11,
-            color: "#10B981",
-            fontWeight: 700,
-            marginBottom: 20,
-            textTransform: "uppercase",
-            letterSpacing: "0.08em",
-          }}
-        >
+      <section className="border-y border-[var(--lt-accent)]/20 bg-[var(--lt-accent)]/5 px-4 py-14 text-center md:py-16">
+        <Chip className="mb-5 border-[var(--lt-success)]/25 bg-[var(--lt-success)]/10 text-[var(--lt-success)]">
           Try it free
-        </div>
-        <h2
-          style={{
-            fontSize: 32,
-            fontWeight: 900,
-            letterSpacing: -1,
-            color: "#F2F1FF",
-            marginBottom: 12,
-            lineHeight: 1.1,
-          }}
-        >
+        </Chip>
+        <h2 className="mb-3 text-3xl font-black tracking-tight text-[var(--lt-text)] md:text-4xl">
           Ready to stop searching manually?
         </h2>
-        <p
-          style={{
-            fontSize: 16,
-            color: "#8888A8",
-            lineHeight: 1.7,
-            maxWidth: 480,
-            margin: "0 auto 28px",
-          }}
-        >
+        <p className="mx-auto mb-7 max-w-md text-base leading-relaxed text-[var(--lt-text-muted)]">
           Find 1,000+ businesses with their phone numbers, emails, and websites in any city in 60
           seconds. No signup needed to try.
         </p>
-        <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-          <Link
-            href="/freetrial"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              background: "#7C3AED",
-              color: "white",
-              fontWeight: 800,
-              fontSize: 15,
-              padding: "14px 32px",
-              borderRadius: 12,
-              textDecoration: "none",
-              boxShadow: "0 0 40px rgba(124,58,237,0.4)",
-            }}
-          >
-            Try LeadThur Free →
-          </Link>
-          <Link
-            href="/blog"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              background: "transparent",
-              color: "#A78BFA",
-              fontWeight: 700,
-              fontSize: 15,
-              padding: "14px 32px",
-              borderRadius: 12,
-              textDecoration: "none",
-              border: "1px solid rgba(167,139,250,0.3)",
-            }}
-          >
-            More Articles
-          </Link>
+        <div className="flex flex-wrap justify-center gap-3">
+          <Button size="lg" className="h-12 px-8 font-extrabold" asChild>
+            <Link href="/freetrial">Try LeadThur Free →</Link>
+          </Button>
+          <Button size="lg" variant="outline" className="h-12 px-8" asChild>
+            <Link href="/blog">More Articles</Link>
+          </Button>
         </div>
-      </div>
+      </section>
 
-      <div
-        style={{
-          background: "#050508",
-          borderTop: "1px solid rgba(255,255,255,0.06)",
-          padding: "28px 24px",
-          textAlign: "center",
-          fontSize: 12,
-          color: "#555570",
-        }}
-      >
-        <p style={{ marginBottom: 8 }}>
-          <strong style={{ color: "#F2F1FF" }}>LeadThur</strong> — Business Discovery Intelligence
-        </p>
-        <p>Built by Pdigital Marketstore Ltd (RC 8015428) · Lagos, Nigeria</p>
-        <div
-          style={{
-            marginTop: 12,
-            display: "flex",
-            gap: 16,
-            justifyContent: "center",
-            flexWrap: "wrap",
-          }}
-        >
-          <Link href="/privacy" style={{ color: "#A78BFA", textDecoration: "none" }}>
-            Privacy Policy
-          </Link>
-          <Link href="/terms" style={{ color: "#A78BFA", textDecoration: "none" }}>
-            Terms of Service
-          </Link>
-          <Link href="/about" style={{ color: "#A78BFA", textDecoration: "none" }}>
-            About
-          </Link>
-          <Link href="/blog" style={{ color: "#A78BFA", textDecoration: "none" }}>
-            Blog
-          </Link>
-        </div>
-      </div>
+      <PublicPageFooter />
     </div>
   );
 }

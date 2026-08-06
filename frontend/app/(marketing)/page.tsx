@@ -20,17 +20,10 @@ import { StatsBar } from "@/components/marketing/homepage/StatsBar";
 import { TrustpilotSection } from "@/components/marketing/homepage/TrustpilotSection";
 import { UserTestimonialsSection } from "@/components/marketing/homepage/UserTestimonialsSection";
 import { WhoIsForSection } from "@/components/marketing/homepage/WhoIsForSection";
-import { C } from "@/components/marketing/homepage/theme";
 
 export default function MarketingHomePage() {
   return (
-    <div
-      style={{
-        backgroundColor: C.bg,
-        color: C.text,
-        minHeight: "100vh",
-      }}
-    >
+    <div className="min-h-screen bg-[var(--lt-bg)] text-[var(--lt-text)]">
       <AnnouncementBar />
       <Nav />
       <Hero />

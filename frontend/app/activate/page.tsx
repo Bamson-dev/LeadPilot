@@ -4,6 +4,11 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { activateLicense } from "@/services/auth-api";
 import { setStoredLicense, hasStoredLicense } from "@/lib/license";
+import { PublicFunnelShell } from "@/components/public/public-funnel-shell";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Panel, PanelContent } from "@/components/ui/panel";
 
 export default function ActivatePage() {
   const router = useRouter();
@@ -53,47 +58,58 @@ export default function ActivatePage() {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#09090B] px-4">
-      <form onSubmit={handleSubmit} className="glass w-full max-w-md rounded-2xl p-8">
-        <h1 className="text-2xl font-bold text-[#F4F4FF]">Log in to LeadThur</h1>
-        <p className="mt-2 text-sm text-[#6B6B80]">
-          Enter the email and license key from your purchase or activation email to open your
-          dashboard.
-        </p>
+    <PublicFunnelShell
+      ctaHref="/freetrial"
+      ctaLabel="Try Free"
+      showFooter={false}
+      mainClassName="flex min-h-[calc(100vh-4rem)] max-w-md items-center justify-center py-10 md:py-12"
+    >
+      <Panel className="w-full">
+        <PanelContent className="p-6 md:p-8">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <h1 className="m-0 text-2xl font-bold text-[var(--lt-text)]">Log in to LeadThur</h1>
+              <p className="mt-2 text-sm text-[var(--lt-text-muted)]">
+                Enter the email and license key from your purchase or activation email to open your
+                dashboard.
+              </p>
+            </div>
 
-        <label className="mt-6 block text-xs font-medium text-[#6B6B80]">Email</label>
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-[#F4F4FF] outline-none focus:border-[#7C3AED]"
-          required
-        />
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-[var(--lt-text-muted)]">Email</label>
+              <Input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="min-h-11"
+                required
+              />
+            </div>
 
-        <label className="mt-4 block text-xs font-medium text-[#6B6B80]">License key</label>
-        <input
-          type="text"
-          value={key}
-          onChange={(e) => setKey(e.target.value.toUpperCase())}
-          placeholder="LP-XXXXXXXX-XXXXXXXX"
-          className="mt-1 w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 font-mono text-sm text-[#F4F4FF] outline-none focus:border-[#7C3AED]"
-          required
-        />
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-[var(--lt-text-muted)]">License key</label>
+              <Input
+                type="text"
+                value={key}
+                onChange={(e) => setKey(e.target.value.toUpperCase())}
+                placeholder="LP-XXXXXXXX-XXXXXXXX"
+                className="min-h-11 font-mono text-sm"
+                required
+              />
+            </div>
 
-        {error && (
-          <p className="mt-4 text-sm text-red-400" role="alert">
-            {error}
-          </p>
-        )}
+            {error ? (
+              <Alert variant="danger" role="alert">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            ) : null}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="mt-6 w-full rounded-lg bg-[#7C3AED] py-2.5 font-semibold text-white hover:bg-[#6D28D9] disabled:opacity-60"
-        >
-          {loading ? "Signing in…" : "Log in"}
-        </button>
-      </form>
-    </main>
+            <Button type="submit" size="lg" className="h-11 w-full font-semibold" disabled={loading}>
+              {loading ? "Signing in…" : "Log in"}
+            </Button>
+          </form>
+        </PanelContent>
+      </Panel>
+    </PublicFunnelShell>
   );
 }

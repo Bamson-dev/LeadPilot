@@ -6,7 +6,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
 } from "react";
 import type { BusinessLead } from "@leadthur/shared";
 import {
@@ -17,6 +16,23 @@ import {
 import { isSearchFullyComplete } from "@/utils/search-completion";
 import { getApiUrl } from "@/utils/env";
 import { SALE_PRICE_USD } from "@/constants/pricing";
+import { PublicFunnelShell } from "@/components/public/public-funnel-shell";
+import {
+  LeadRowMobile,
+  LockIcon,
+  StarRating,
+  TrialExamplePills,
+  TrialPaywallPanel,
+  TrialResultsTable,
+  TrialSearchGuidance,
+  TrialSearchHint,
+  type TrialLeadRow,
+} from "@/components/public/freetrial/trial-ui";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Panel, PanelContent } from "@/components/ui/panel";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const MAX_TRIAL_LEADS = 15;
 const CHECKOUT_URL = "/checkout";
@@ -44,75 +60,11 @@ const PAYWALL_TIER_TWO = [
 
 type TrialStatus = "idle" | "searching" | "complete" | "limit";
 
-interface TrialLead {
-  id: string;
-  business_name: string;
-  address: string | null;
-  phone: string | null;
-  email: string | null;
-  verifiedEmails: string[];
-  emails: string[];
-  website: string | null;
-  rating: number | null;
-  reviews_count: number | null;
-}
+interface TrialLead extends TrialLeadRow {}
 
 interface TrialAggregateStats {
   totalFound: number;
   verifiedEmailCount: number;
-}
-
-const FONT_STACK =
-  '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
-
-const LOCKED_FIELD_STYLE: CSSProperties = {
-  filter: "blur(5px)",
-  userSelect: "none",
-  fontSize: 12,
-  color: "#C0C0D8",
-  background: "rgba(124,58,237,0.08)",
-  padding: "2px 8px",
-  borderRadius: 4,
-};
-
-function PaywallValueRow({
-  label,
-  compareAt,
-  free,
-}: {
-  label: string;
-  compareAt?: string;
-  free?: boolean;
-}) {
-  return (
-    <li
-      style={{
-        fontSize: 14,
-        color: "#C0C0D8",
-        lineHeight: 1.45,
-        display: "flex",
-        justifyContent: "space-between",
-        gap: 12,
-        alignItems: "flex-start",
-      }}
-    >
-      <span>{label}</span>
-      {compareAt ? (
-        <span
-          style={{
-            textDecoration: "line-through",
-            color: "#7878A0",
-            fontWeight: 600,
-            flexShrink: 0,
-          }}
-        >
-          {compareAt}
-        </span>
-      ) : free ? (
-        <span style={{ color: "#34D399", fontWeight: 700, flexShrink: 0 }}>FREE</span>
-      ) : null}
-    </li>
-  );
 }
 
 function isSearchReadyForPaywall(progress: {
@@ -265,20 +217,6 @@ function hasTrialPhone(phone: string | null | undefined): boolean {
   return Boolean(phone?.trim());
 }
 
-function TrialPhoneValue({ phone }: { phone: string | null }) {
-  if (hasTrialPhone(phone)) {
-    return (
-      <span style={{ fontSize: 13, color: "#C0C0D8", fontWeight: 600 }}>{phone!.trim()}</span>
-    );
-  }
-
-  return (
-    <span style={LOCKED_FIELD_STYLE} aria-label="Phone not listed">
-      Not listed
-    </span>
-  );
-}
-
 function truncateAddress(address: string, maxLen: number): string {
   if (address.length <= maxLen) return address;
   return `${address.slice(0, maxLen)}…`;
@@ -391,232 +329,6 @@ async function fetchVisibleLeads(
   } catch {
     return [];
   }
-}
-
-function LockIcon({ size = 16 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-    </svg>
-  );
-}
-
-function LockedContactValue({ value }: { value: string }) {
-  return (
-    <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <span style={LOCKED_FIELD_STYLE}>{value}</span>
-      <span
-        style={{
-          fontSize: 10,
-          color: "#A78BFA",
-          fontWeight: 600,
-          display: "inline-flex",
-          gap: 4,
-          flexShrink: 0,
-        }}
-      >
-        <LockIcon size={12} />
-        Locked
-      </span>
-    </span>
-  );
-}
-
-function StarRating() {
-  return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 6,
-        marginBottom: 20,
-      }}
-    >
-      <div style={{ color: "#FBBF24", fontSize: 18, letterSpacing: 2 }} aria-label="Five star rating">
-        ★★★★★
-      </div>
-      <p style={{ margin: 0, fontSize: 13, color: "#7878A0" }}>
-        Trusted by freelancers and agencies finding clients every day
-      </p>
-    </div>
-  );
-}
-
-function TrialSearchGuidance() {
-  return (
-    <div
-      className="mb-4 rounded-xl px-4 py-3"
-      style={{
-        background: "rgba(124,58,237,0.08)",
-        border: "1px solid rgba(124,58,237,0.2)",
-      }}
-    >
-      <p style={{ margin: 0, fontSize: 13, color: "#E9D5FF", fontWeight: 600 }}>
-        Search one business type in one city
-      </p>
-      <p style={{ margin: "6px 0 0", fontSize: 12, color: "#9CA3AF", lineHeight: 1.5 }}>
-        Good: <span style={{ color: "#C4B5FD" }}>restaurants</span> in{" "}
-        <span style={{ color: "#C4B5FD" }}>London UK</span>
-      </p>
-      <p style={{ margin: "4px 0 0", fontSize: 12, color: "#6B7280", lineHeight: 1.5 }}>
-        Avoid lists of countries, job titles, or comma-separated business types.
-      </p>
-    </div>
-  );
-}
-
-function TrialExamplePills({
-  onSelect,
-}: {
-  onSelect: (example: TrialSearchSuggestion) => void;
-}) {
-  return (
-    <div style={{ marginTop: 16 }}>
-      <p
-        style={{
-          fontSize: 11,
-          color: "#555575",
-          marginBottom: 10,
-          textAlign: "center",
-        }}
-      >
-        Try one of these
-      </p>
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 8,
-          justifyContent: "center",
-        }}
-      >
-        {TRIAL_SEARCH_EXAMPLES.map((ex) => (
-          <button
-            key={`${ex.query}-${ex.location}`}
-            type="button"
-            onClick={() => onSelect(ex)}
-            style={{
-              minHeight: 48,
-              minWidth: 48,
-              padding: "12px 16px",
-              background: "transparent",
-              border: "1px solid rgba(124,58,237,0.25)",
-              color: "#A78BFA",
-              borderRadius: 100,
-              fontSize: 12,
-              cursor: "pointer",
-              fontWeight: 500,
-              fontFamily: "inherit",
-            }}
-          >
-            {ex.query} in {ex.location}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function TrialSearchHint({
-  message,
-  suggestion,
-  onApply,
-}: {
-  message: string;
-  suggestion?: TrialSearchSuggestion;
-  onApply: (suggestion: TrialSearchSuggestion) => void;
-}) {
-  return (
-    <div
-      role="alert"
-      className="mt-4 rounded-xl px-4 py-3"
-      style={{
-        background: "rgba(245,158,11,0.1)",
-        border: "1px solid rgba(245,158,11,0.3)",
-      }}
-    >
-      <p style={{ margin: 0, fontSize: 13, color: "#FCD34D", lineHeight: 1.5 }}>
-        {message}
-      </p>
-      {suggestion ? (
-        <button
-          type="button"
-          onClick={() => onApply(suggestion)}
-          style={{
-            marginTop: 10,
-            background: "transparent",
-            border: "1px solid rgba(245,158,11,0.4)",
-            color: "#FDE68A",
-            borderRadius: 8,
-            padding: "8px 12px",
-            fontSize: 12,
-            fontWeight: 600,
-            cursor: "pointer",
-            fontFamily: "inherit",
-          }}
-        >
-          Try {suggestion.query} in {suggestion.location} instead
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
-function LeadRowMobile({ lead }: { lead: TrialLead }) {
-  const emailDisplay = lockedDisplayValue(
-    lead.verifiedEmails[0] ?? lead.emails[0] ?? lead.email ?? "",
-    "contact@business.com"
-  );
-  const ratingDisplay =
-    lead.rating != null
-      ? `★ ${lead.rating}${lead.reviews_count != null ? ` (${lead.reviews_count.toLocaleString()} reviews)` : ""}`
-      : "n/a";
-
-  return (
-    <div
-      style={{
-        background: "#111118",
-        border: "1px solid rgba(255,255,255,0.07)",
-        borderRadius: 12,
-        padding: 16,
-        animation: "fadeIn 0.3s ease",
-      }}
-    >
-      <div style={{ fontWeight: 700, fontSize: 15, color: "#F0EFFF", marginBottom: 8 }}>
-        {lead.business_name}
-      </div>
-      {lead.address && (
-        <div style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "flex-start" }}>
-          <span style={{ color: "#555575", fontSize: 12, flexShrink: 0 }}>Address</span>
-          <span style={{ color: "#C0C0D8", fontSize: 12, lineHeight: 1.4 }}>{lead.address}</span>
-        </div>
-      )}
-      <div style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "center", flexWrap: "wrap" }}>
-        <span style={{ color: "#555575", fontSize: 12, flexShrink: 0 }}>Phone</span>
-        <TrialPhoneValue phone={lead.phone} />
-      </div>
-      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
-        <span style={{ color: "#555575", fontSize: 12, flexShrink: 0 }}>Email</span>
-        <LockedContactValue value={emailDisplay} />
-      </div>
-      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-        <span style={{ color: "#555575", fontSize: 12, flexShrink: 0 }}>Rating</span>
-        <LockedContactValue value={ratingDisplay} />
-      </div>
-    </div>
-  );
 }
 
 export default function FreeTrialPage() {
@@ -1105,305 +817,136 @@ export default function FreeTrialPage() {
     setMessage("");
   }
 
-  const tapTarget: CSSProperties = {
-    minHeight: 48,
-    minWidth: 48,
-    padding: "12px 16px",
-  };
-
   const bottomPad = showUpgradePanel ? 420 : 40;
 
   return (
-    <div
-      className="min-h-screen text-[#F0EFFF]"
-      style={{
-        background: "#06060A",
-        fontFamily: FONT_STACK,
-        paddingBottom: bottomPad,
-      }}
-    >
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-      `}</style>
-
-      <header
-        className="flex items-center justify-between px-4 md:px-8 py-3 border-b"
-        style={{ borderColor: "rgba(255,255,255,0.06)" }}
-      >
-        <a
-          href={SITE_URL}
-          className="text-lg font-bold tracking-tight"
-          style={{ color: "#F0EFFF", ...tapTarget, display: "inline-flex", alignItems: "center" }}
-        >
-          LeadThur
-        </a>
-        <a
-          href={CHECKOUT_URL}
-          style={{
-            color: "#A78BFA",
-            fontSize: 14,
-            fontWeight: 600,
-            textDecoration: "underline",
-            ...tapTarget,
-            display: "inline-flex",
-            alignItems: "center",
-          }}
-        >
-          Get Full Access
-        </a>
-      </header>
-
-      <main className="max-w-3xl mx-auto px-4 md:px-8 py-8 md:py-12">
+    <PublicFunnelShell bottomPad={bottomPad} showFooter={!showUpgradePanel}>
         {bootstrapping && gatePassed ? (
-          <div
-            className="text-center rounded-2xl py-12 px-6"
-            style={{
-              background: "#111118",
-              border: "1px solid rgba(124,58,237,0.25)",
-              color: "#7878A0",
-            }}
-          >
-            <span
-              style={{
-                width: 20,
-                height: 20,
-                border: "2px solid rgba(124,58,237,0.3)",
-                borderTop: "2px solid #A78BFA",
-                borderRadius: "50%",
-                display: "inline-block",
-                animation: "spin 0.8s linear infinite",
-                marginBottom: 12,
-              }}
-            />
-            <p style={{ margin: 0, fontSize: 14 }}>Loading your free trial...</p>
-          </div>
+          <Panel className="py-12 text-center">
+            <PanelContent className="flex flex-col items-center gap-3">
+              <Skeleton className="h-5 w-5 rounded-full" />
+              <p className="m-0 text-sm text-[var(--lt-text-muted)]">Loading your free trial...</p>
+            </PanelContent>
+          </Panel>
         ) : !gatePassed ? (
-          <section
-            className="mx-auto max-w-md rounded-2xl p-6 md:p-8 text-center"
-            style={{
-              background: "#111118",
-              border: "1px solid rgba(124,58,237,0.25)",
-            }}
-          >
-            <StarRating />
-            <p
-              className="text-base md:text-lg mb-6 leading-relaxed"
-              style={{ color: "#C0C0D8", marginTop: 0 }}
-            >
-              Type one business type and one city. Get real businesses with phone numbers
-              and email addresses in about 60 seconds. Twice, free.
-            </p>
-            <input
-              type="email"
-              placeholder="your@email.com"
-              value={gateEmail}
-              onChange={(e) => setGateEmail(e.target.value)}
-              disabled={gateLoading}
-              className="w-full rounded-lg text-base outline-none mb-2"
-              style={{
-                ...tapTarget,
-                background: "#0D0D16",
-                border: "1px solid rgba(255,255,255,0.08)",
-                color: "#F0EFFF",
-              }}
-              onKeyDown={(e) => e.key === "Enter" && void handleGateSubmit()}
-            />
-            {gateError && <p className="text-sm text-red-400 mb-2">{gateError}</p>}
-            {message && !gateError && (
-              <p className="text-sm mb-2" style={{ color: "#A78BFA" }}>
-                {message}
+          <Panel className="mx-auto max-w-md text-center">
+            <PanelContent className="space-y-5 p-6 md:p-8">
+              <StarRating />
+              <p className="m-0 text-base leading-relaxed text-[var(--lt-text-muted)] md:text-lg">
+                Type one business type and one city. Get real businesses with phone numbers
+                and email addresses in about 60 seconds. Twice, free.
               </p>
-            )}
-            <button
-              type="button"
-              onClick={() => void handleGateSubmit()}
-              disabled={gateLoading || !gateEmail.trim()}
-              className="w-full font-extrabold rounded-xl mb-2"
-              style={{
-                ...tapTarget,
-                background: gateLoading ? "#4C1D95" : "#7C3AED",
-                color: "white",
-                cursor: gateLoading ? "not-allowed" : "pointer",
-                fontSize: 17,
-                border: "none",
-                boxShadow: gateLoading ? "none" : "0 0 48px rgba(124,58,237,0.45)",
-              }}
-            >
-              {gateLoading ? "Starting..." : "Start My 2 Free Searches"}
-            </button>
-            <p className="text-xs text-[#555575] mt-2" style={{ marginBottom: 0 }}>
-              No card. No spam. Two searches, then you decide.
-            </p>
-          </section>
+              <Input
+                type="email"
+                placeholder="your@email.com"
+                value={gateEmail}
+                onChange={(e) => setGateEmail(e.target.value)}
+                disabled={gateLoading}
+                className="min-h-12 text-base"
+                onKeyDown={(e) => e.key === "Enter" && void handleGateSubmit()}
+              />
+              {gateError ? (
+                <Alert variant="danger">
+                  <AlertDescription>{gateError}</AlertDescription>
+                </Alert>
+              ) : null}
+              {message && !gateError ? (
+                <p className="m-0 text-sm text-[var(--lt-accent-soft)]">{message}</p>
+              ) : null}
+              <Button
+                type="button"
+                size="lg"
+                className="h-12 w-full text-base font-extrabold"
+                onClick={() => void handleGateSubmit()}
+                disabled={gateLoading || !gateEmail.trim()}
+              >
+                {gateLoading ? "Starting..." : "Start My 2 Free Searches"}
+              </Button>
+              <p className="m-0 text-xs text-[var(--lt-text-subtle)]">
+                No card. No spam. Two searches, then you decide.
+              </p>
+            </PanelContent>
+          </Panel>
         ) : (
           <>
             {searchesRemaining > 0 && status !== "limit" && (
-              <div
-                className="mb-6 text-center text-sm font-semibold rounded-lg py-3 px-4"
-                style={{
-                  background: "rgba(124,58,237,0.12)",
-                  border: "1px solid rgba(124,58,237,0.25)",
-                  color: "#E9D5FF",
-                }}
-              >
-                {searchesRemaining === 2 ? "2 free searches left" : "1 free search left"}
-              </div>
+              <Alert className="mb-6 border-[var(--lt-accent)]/25 bg-[var(--lt-accent)]/10 text-center">
+                <AlertDescription className="font-semibold text-[var(--lt-accent-soft)]">
+                  {searchesRemaining === 2 ? "2 free searches left" : "1 free search left"}
+                </AlertDescription>
+              </Alert>
             )}
 
             {status === "limit" && (
-              <section
-                className="mb-8 rounded-2xl p-6 text-center"
-                style={{
-                  background: "#111118",
-                  border: "1px solid rgba(124,58,237,0.25)",
-                }}
-              >
-                <p
-                  style={{
-                    margin: "0 0 16px",
-                    fontSize: 16,
-                    fontWeight: 700,
-                    color: "#F0EFFF",
-                    lineHeight: 1.5,
-                  }}
-                >
-                  You have used both free searches. Lifetime access lets you keep building your
-                  pipeline with full emails, phone numbers, and one click outreach.
-                </p>
-                <button
-                  type="button"
-                  onClick={openUpgrade}
-                  style={{
-                    ...tapTarget,
-                    width: "100%",
-                    maxWidth: 420,
-                    margin: "0 auto 12px",
-                    display: "block",
-                    background: "#7C3AED",
-                    color: "#fff",
-                    fontWeight: 800,
-                    border: "none",
-                    borderRadius: 12,
-                    cursor: "pointer",
-                    boxShadow: "0 0 40px rgba(124,58,237,0.4)",
-                  }}
-                >
-                  Get lifetime access for ${SALE_PRICE_USD}
-                </button>
-                <button
-                  type="button"
-                  onClick={resetTrialSession}
-                  style={{
-                    ...tapTarget,
-                    width: "100%",
-                    maxWidth: 420,
-                    margin: "0 auto",
-                    display: "block",
-                    background: "transparent",
-                    color: "#9CA3AF",
-                    fontWeight: 600,
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    borderRadius: 12,
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                    fontSize: 14,
-                  }}
-                >
-                  Start fresh with a different email
-                </button>
-              </section>
+              <Panel className="mb-8 text-center">
+                <PanelContent className="space-y-4 p-6">
+                  <p className="m-0 text-base font-bold leading-relaxed text-[var(--lt-text)]">
+                    You have used both free searches. Lifetime access lets you keep building your
+                    pipeline with full emails, phone numbers, and one click outreach.
+                  </p>
+                  <Button size="lg" className="mx-auto h-12 w-full max-w-md font-extrabold" onClick={openUpgrade}>
+                    Get lifetime access for ${SALE_PRICE_USD}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mx-auto h-12 w-full max-w-md"
+                    onClick={resetTrialSession}
+                  >
+                    Start fresh with a different email
+                  </Button>
+                </PanelContent>
+              </Panel>
             )}
 
             {status !== "limit" && (
               <>
                 <TrialSearchGuidance />
 
-                <div className="flex flex-col gap-2 mb-2">
-                  <label style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 600 }}>
-                    Business type
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. restaurants, dentists, gyms"
-                    value={query}
-                    onChange={(e) => {
-                      setQuery(e.target.value);
-                      if (searchHint) setSearchHint(null);
-                    }}
-                    disabled={status === "searching"}
-                    className="w-full rounded-lg text-sm outline-none"
-                    style={{
-                      ...tapTarget,
-                      background: "#111118",
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      color: "#F0EFFF",
-                    }}
-                    onKeyDown={(e) => e.key === "Enter" && void runTrialSearch()}
-                  />
-                  <label
-                    style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 600, marginTop: 4 }}
-                  >
-                    City or area
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. London UK, Dubai UAE"
-                    value={location}
-                    onChange={(e) => {
-                      setLocation(e.target.value);
-                      if (searchHint) setSearchHint(null);
-                    }}
-                    disabled={status === "searching"}
-                    className="w-full rounded-lg text-sm outline-none"
-                    style={{
-                      ...tapTarget,
-                      background: "#111118",
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      color: "#F0EFFF",
-                    }}
-                    onKeyDown={(e) => e.key === "Enter" && void runTrialSearch()}
-                  />
-                </div>
+                <Panel className="mb-4">
+                  <PanelContent className="space-y-3 p-4">
+                    <label className="text-xs font-semibold text-[var(--lt-text-muted)]">
+                      Business type
+                    </label>
+                    <Input
+                      type="text"
+                      placeholder="e.g. restaurants, dentists, gyms"
+                      value={query}
+                      onChange={(e) => {
+                        setQuery(e.target.value);
+                        if (searchHint) setSearchHint(null);
+                      }}
+                      disabled={status === "searching"}
+                      className="min-h-12"
+                      onKeyDown={(e) => e.key === "Enter" && void runTrialSearch()}
+                    />
+                    <label className="text-xs font-semibold text-[var(--lt-text-muted)]">
+                      City or area
+                    </label>
+                    <Input
+                      type="text"
+                      placeholder="e.g. London UK, Dubai UAE"
+                      value={location}
+                      onChange={(e) => {
+                        setLocation(e.target.value);
+                        if (searchHint) setSearchHint(null);
+                      }}
+                      disabled={status === "searching"}
+                      className="min-h-12"
+                      onKeyDown={(e) => e.key === "Enter" && void runTrialSearch()}
+                    />
+                  </PanelContent>
+                </Panel>
 
-                <button
+                <Button
                   type="button"
+                  size="lg"
+                  className="h-12 w-full text-base font-extrabold"
                   onClick={() => void runTrialSearch()}
                   disabled={status === "searching" || !query.trim() || !location.trim()}
-                  className="w-full font-extrabold rounded-xl"
-                  style={{
-                    ...tapTarget,
-                    background: status === "searching" ? "#4C1D95" : "#7C3AED",
-                    color: "white",
-                    fontSize: 16,
-                    border: "none",
-                    cursor: status === "searching" ? "not-allowed" : "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 10,
-                    boxShadow: status === "searching" ? "none" : "0 0 40px rgba(124,58,237,0.4)",
-                  }}
                 >
-                  {status === "searching" ? (
-                    <>
-                      <span
-                        style={{
-                          width: 16,
-                          height: 16,
-                          border: "2px solid rgba(255,255,255,0.3)",
-                          borderTop: "2px solid white",
-                          borderRadius: "50%",
-                          display: "inline-block",
-                          animation: "spin 0.8s linear infinite",
-                        }}
-                      />
-                      Searching...
-                    </>
-                  ) : (
-                    "Run free search"
-                  )}
-                </button>
+                  {status === "searching" ? "Searching..." : "Run free search"}
+                </Button>
 
                 {searchHint ? (
                   <TrialSearchHint
@@ -1414,7 +957,7 @@ export default function FreeTrialPage() {
                 ) : null}
 
                 {message && status === "searching" ? (
-                  <p className="text-sm text-[#7878A0] mt-4">{message}</p>
+                  <p className="mt-4 text-sm text-[var(--lt-text-muted)]">{message}</p>
                 ) : null}
 
                 {status !== "searching" && (
@@ -1425,56 +968,25 @@ export default function FreeTrialPage() {
 
             {leads.length > 0 && (
               <section className="mt-8">
-                <div
-                  className="flex flex-col gap-2 mb-4 md:flex-row md:flex-wrap"
-                  style={{ alignItems: "stretch" }}
-                >
-                  <button
+                <div className="mb-4 flex flex-col gap-2 md:flex-row">
+                  <Button
                     type="button"
+                    variant="soft"
+                    className="min-h-12 flex-1"
                     onClick={openUpgrade}
-                    style={{
-                      ...tapTarget,
-                      flex: 1,
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 8,
-                      background: "rgba(124,58,237,0.15)",
-                      border: "1px solid rgba(124,58,237,0.35)",
-                      color: "#C4B5FD",
-                      borderRadius: 12,
-                      fontWeight: 700,
-                      fontSize: 14,
-                      cursor: "pointer",
-                      fontFamily: "inherit",
-                    }}
                   >
                     <LockIcon />
                     Send email to {tableSendCount} businesses, locked
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
+                    variant="outline"
+                    className="min-h-12 flex-1"
                     onClick={openUpgrade}
-                    style={{
-                      ...tapTarget,
-                      flex: 1,
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 8,
-                      background: "rgba(255,255,255,0.04)",
-                      border: "1px solid rgba(255,255,255,0.12)",
-                      color: "#9CA3AF",
-                      borderRadius: 12,
-                      fontWeight: 700,
-                      fontSize: 14,
-                      cursor: "pointer",
-                      fontFamily: "inherit",
-                    }}
                   >
                     <LockIcon />
                     Export {exportCount} rows, locked
-                  </button>
+                  </Button>
                 </div>
 
                 <div className="flex flex-col gap-2 md:hidden">
@@ -1483,208 +995,27 @@ export default function FreeTrialPage() {
                   ))}
                 </div>
 
-                <div
-                  className="hidden md:block"
-                  style={{
-                    background: "#0D0D16",
-                    border: "1px solid rgba(255,255,255,0.07)",
-                    borderRadius: 16,
-                    overflow: "hidden",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1.8fr 2fr 1.4fr 2fr 1fr",
-                      padding: "12px 16px",
-                      background: "#111118",
-                      borderBottom: "1px solid rgba(255,255,255,0.07)",
-                      fontSize: 10,
-                      fontWeight: 700,
-                      color: "#555575",
-                      letterSpacing: "0.1em",
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    <span>Business</span>
-                    <span>Address</span>
-                    <span>Phone</span>
-                    <span>Email</span>
-                    <span>Rating</span>
-                  </div>
-                  {leads.map((lead, i) => {
-                    const emailDisplay = lockedDisplayValue(
-                      lead.verifiedEmails[0] ?? lead.emails[0] ?? lead.email ?? "",
-                      "contact@business.com"
-                    );
-                    const ratingDisplay =
-                      lead.rating != null ? `★ ${lead.rating}` : "n/a";
-
-                    return (
-                      <div
-                        key={lead.id}
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1.8fr 2fr 1.4fr 2fr 1fr",
-                          padding: "14px 16px",
-                          borderBottom: "1px solid rgba(255,255,255,0.04)",
-                          fontSize: 13,
-                          alignItems: "center",
-                          animation: "fadeIn 0.3s ease",
-                          animationDelay: `${i * 40}ms`,
-                        }}
-                      >
-                        <span style={{ fontWeight: 700, color: "#F0EFFF" }}>{lead.business_name}</span>
-                        <span style={{ color: "#7878A0" }} title={lead.address || undefined}>
-                          {lead.address ? truncateAddress(lead.address, 35) : "n/a"}
-                        </span>
-                        <span>
-                          <TrialPhoneValue phone={lead.phone} />
-                        </span>
-                        <span>
-                          <LockedContactValue value={emailDisplay} />
-                        </span>
-                        <span>
-                          <LockedContactValue value={ratingDisplay} />
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div ref={resultsEndRef} style={{ height: 1, width: "100%" }} aria-hidden />
+                <TrialResultsTable
+                  leads={leads}
+                  lockedDisplayValue={lockedDisplayValue}
+                  truncateAddress={truncateAddress}
+                />
+                <div ref={resultsEndRef} className="h-px w-full" aria-hidden />
               </section>
             )}
           </>
         )}
-      </main>
-
-      <footer
-        className="text-center text-xs py-8 px-4 border-t"
-        style={{ borderColor: "rgba(255,255,255,0.06)", color: "#555575" }}
-      >
-        <a
-          href={SITE_URL}
-          className="hover:text-[#7878A0]"
-          style={{ minHeight: 48, display: "inline-flex", alignItems: "center" }}
-        >
-          LeadThur · Business Discovery Intelligence
-        </a>
-      </footer>
-
-      {showUpgradePanel && gatePassed && (
-        <div
-          className="fixed bottom-0 left-0 right-0 z-50"
-          style={{
-            background: "linear-gradient(to top, rgba(6,6,10,0.97) 70%, transparent)",
-            padding: "24px 16px 20px",
-            pointerEvents: "none",
-          }}
-        >
-          <div
-            className="mx-auto max-w-md rounded-2xl p-6"
-            style={{
-              background: "rgba(17,17,24,0.96)",
-              border: "1px solid rgba(124,58,237,0.45)",
-              boxShadow: "0 0 80px rgba(124,58,237,0.25)",
-              pointerEvents: "auto",
-              maxHeight: "min(78vh, 560px)",
-              overflowY: "auto",
-            }}
-          >
-            <p style={{ fontSize: 15, fontWeight: 600, color: "#C0C0D8", lineHeight: 1.55, margin: "0 0 12px" }}>
-              You are seeing {MAX_TRIAL_LEADS} of 1,000+ businesses found for {activeSearchQuery} in{" "}
-              {activeSearchLocation}.
-            </p>
-            <p style={{ fontSize: 20, fontWeight: 800, color: "#F0EFFF", lineHeight: 1.35, margin: "0 0 16px" }}>
-              {PAYWALL_HEADING}
-            </p>
-
-            <p
-              style={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: "#A78BFA",
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                margin: "0 0 8px",
-              }}
-            >
-              What you are getting
-            </p>
-            <ul
-              style={{
-                listStyle: "none",
-                margin: "0 0 16px",
-                padding: 0,
-                display: "flex",
-                flexDirection: "column",
-                gap: 8,
-              }}
-            >
-              {PAYWALL_TIER_ONE.map((item) => (
-                <PaywallValueRow key={item.label} label={item.label} compareAt={item.compareAt} />
-              ))}
-            </ul>
-
-            <p
-              style={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: "#34D399",
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                margin: "0 0 8px",
-              }}
-            >
-              Included when you claim a slot today
-            </p>
-            <ul
-              style={{
-                listStyle: "none",
-                margin: "0 0 16px",
-                padding: 0,
-                display: "flex",
-                flexDirection: "column",
-                gap: 8,
-              }}
-            >
-              {PAYWALL_TIER_TWO.map((item) => (
-                <PaywallValueRow key={item} label={item} free />
-              ))}
-            </ul>
-
-            <div style={{ margin: "0 0 16px", textAlign: "center" }}>
-              <p style={{ margin: "0 0 6px", fontSize: 14, color: "#7878A0" }}>
-                <span style={{ textDecoration: "line-through", marginRight: 8 }}>Total value $300</span>
-              </p>
-              <p style={{ margin: "0 0 10px", fontSize: 14, color: "#7878A0" }}>
-                <span style={{ textDecoration: "line-through" }}>$100 per year</span>
-              </p>
-              <p style={{ margin: 0, fontSize: 34, fontWeight: 900, color: "#F0EFFF", lineHeight: 1.1 }}>
-                ${SALE_PRICE_USD}
-              </p>
-              <p style={{ margin: "6px 0 0", fontSize: 14, fontWeight: 700, color: "#C0C0D8" }}>
-                Once. Never again.
-              </p>
-            </div>
-
-            <a
-              href={CHECKOUT_URL}
-              className="block font-extrabold rounded-xl text-center"
-              style={{
-                ...tapTarget,
-                background: "#7C3AED",
-                color: "white",
-                textDecoration: "none",
-                boxShadow: "0 0 40px rgba(124,58,237,0.45)",
-                fontSize: 16,
-              }}
-            >
-              Get lifetime access for ${SALE_PRICE_USD}
-            </a>
-          </div>
-        </div>
-      )}
-    </div>
+      <TrialPaywallPanel
+        visible={showUpgradePanel && gatePassed}
+        maxTrialLeads={MAX_TRIAL_LEADS}
+        activeSearchQuery={activeSearchQuery}
+        activeSearchLocation={activeSearchLocation}
+        paywallHeading={PAYWALL_HEADING}
+        tierOne={PAYWALL_TIER_ONE}
+        tierTwo={PAYWALL_TIER_TWO}
+        salePriceUsd={SALE_PRICE_USD}
+        checkoutUrl={CHECKOUT_URL}
+      />
+    </PublicFunnelShell>
   );
 }

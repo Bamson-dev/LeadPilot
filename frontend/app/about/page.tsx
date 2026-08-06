@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { PublicContentShell } from "@/components/public/public-content-shell";
+import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
+import { Panel, PanelContent } from "@/components/ui/panel";
 
 export const metadata: Metadata = {
   title: "About LeadThur — Built in Lagos. Used Worldwide.",
@@ -41,368 +45,144 @@ export const metadata: Metadata = {
   },
 };
 
+const STATS = [
+  { number: "195+", label: "Countries covered" },
+  { number: "1,000+", label: "Leads per search" },
+  { number: "60s", label: "To first result" },
+];
+
+const PROMISES = [
+  "We will always be honest about what LeadThur can and cannot do.",
+  "We will always respond to support messages personally.",
+  "We will always build features that make your work easier not more complicated.",
+  "We will never sell your data to anyone.",
+];
+
+const CONTACTS = [
+  { label: "Email", value: "support@leadthur.com", href: "mailto:support@leadthur.com" },
+  { label: "WhatsApp", value: "+2349067285890", href: "https://wa.link/87ruc1" },
+  { label: "Website", value: "leadthur.com", href: "https://www.leadthur.com" },
+];
+
 export default function AboutPage() {
   return (
-    <div
-      style={{
-        background: "#050508",
-        minHeight: "100vh",
-        color: "#F2F1FF",
-        fontFamily: "Inter, sans-serif",
-      }}
-    >
-      <nav
-        style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 100,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "16px 24px",
-          background: "rgba(5,5,8,0.95)",
-          backdropFilter: "blur(12px)",
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
-        }}
-      >
-        <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
-          <div
-            style={{
-              width: 34,
-              height: 34,
-              background: "#7C3AED",
-              borderRadius: 9,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 12,
-              fontWeight: 800,
-              color: "white",
-            }}
-          >
-            LT
-          </div>
-          <span style={{ fontSize: 18, fontWeight: 800, color: "#F2F1FF" }}>
-            Lead<span style={{ color: "#A78BFA" }}>Thur</span>
-          </span>
-        </Link>
-        <Link href="/" style={{ color: "#A78BFA", fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
-          ← Back to Home
-        </Link>
-      </nav>
+    <PublicContentShell mainClassName="max-w-2xl">
+      <Chip className="mb-6 border-[var(--lt-accent)]/25 bg-[var(--lt-accent)]/10 text-[var(--lt-accent-soft)]">
+        Built in Lagos. Used worldwide.
+      </Chip>
 
-      <div style={{ maxWidth: 720, margin: "0 auto", padding: "80px 24px 60px" }}>
-        <div
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 7,
-            background: "rgba(167,139,250,0.08)",
-            border: "1px solid rgba(167,139,250,0.2)",
-            padding: "7px 16px",
-            borderRadius: 100,
-            fontSize: 12,
-            color: "#A78BFA",
-            fontWeight: 600,
-            marginBottom: 24,
-          }}
-        >
-          Built in Lagos. Used worldwide.
-        </div>
+      <h1 className="mb-5 text-4xl font-black leading-tight tracking-tight text-[var(--lt-text)] md:text-5xl">
+        About LeadThur
+      </h1>
 
-        <h1
-          style={{
-            fontSize: 52,
-            fontWeight: 900,
-            letterSpacing: -2,
-            color: "#F2F1FF",
-            marginBottom: 20,
-            lineHeight: 1.05,
-          }}
-        >
-          About LeadThur
-        </h1>
+      <p className="mb-12 text-lg leading-relaxed text-[var(--lt-text-muted)]">
+        LeadThur is a business contact discovery platform built for freelancers, agency owners,
+        consultants, digital marketers, and anyone who sells services to other businesses.
+      </p>
 
-        <p style={{ fontSize: 18, color: "#8888A8", lineHeight: 1.8, marginBottom: 48 }}>
-          LeadThur is a business contact discovery platform built for freelancers, agency owners,
-          consultants, digital marketers, and anyone who sells services to other businesses.
-        </p>
-
-        <div
-          style={{
-            background: "#111118",
-            border: "1px solid rgba(255,255,255,0.07)",
-            borderRadius: 16,
-            padding: 32,
-            marginBottom: 32,
-          }}
-        >
-          <h2
-            style={{
-              fontSize: 24,
-              fontWeight: 800,
-              color: "#F2F1FF",
-              marginBottom: 16,
-              letterSpacing: -0.5,
-            }}
-          >
+      <Panel className="mb-8">
+        <PanelContent className="space-y-4 p-6 md:p-8">
+          <h2 className="m-0 text-2xl font-extrabold tracking-tight text-[var(--lt-text)]">
             Why We Built This
           </h2>
-          <p style={{ fontSize: 15, color: "#8888A8", lineHeight: 1.8, marginBottom: 16 }}>
+          <p className="m-0 text-sm leading-relaxed text-[var(--lt-text-muted)] md:text-base">
             LeadThur was created by Bamidele, founder of Pdigital Marketstore Ltd, after experiencing
             firsthand how much time service providers waste searching for clients manually.
           </p>
-          <p style={{ fontSize: 15, color: "#8888A8", lineHeight: 1.8, marginBottom: 16 }}>
+          <p className="m-0 text-sm leading-relaxed text-[var(--lt-text-muted)] md:text-base">
             The average freelancer spends 3 to 5 hours every week just finding businesses to pitch.
             That is time that should be spent doing the work, not hunting for it.
           </p>
-          <p style={{ fontSize: 15, color: "#8888A8", lineHeight: 1.8 }}>
+          <p className="m-0 text-sm leading-relaxed text-[var(--lt-text-muted)] md:text-base">
             We built LeadThur to give that time back. Type any business type and any city. Get a full
             list of contacts instantly. No manual searching. No tab switching. No copying numbers into
             spreadsheets. Just results.
           </p>
-        </div>
+        </PanelContent>
+      </Panel>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(3, 1fr)",
-            gap: 12,
-            marginBottom: 32,
-          }}
-        >
-          {[
-            { number: "195+", label: "Countries covered" },
-            { number: "1,000+", label: "Leads per search" },
-            { number: "60s", label: "To first result" },
-          ].map((stat) => (
-            <div
-              key={stat.label}
-              style={{
-                background: "#111118",
-                border: "1px solid rgba(255,255,255,0.07)",
-                borderRadius: 12,
-                padding: "20px 16px",
-                textAlign: "center",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 36,
-                  fontWeight: 900,
-                  color: "#A78BFA",
-                  letterSpacing: -1,
-                  marginBottom: 4,
-                }}
-              >
+      <div className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {STATS.map((stat) => (
+          <Panel key={stat.label}>
+            <PanelContent className="p-5 text-center">
+              <div className="text-3xl font-black tracking-tight text-[var(--lt-accent-soft)]">
                 {stat.number}
               </div>
-              <div style={{ fontSize: 12, color: "#555570" }}>{stat.label}</div>
-            </div>
-          ))}
-        </div>
+              <div className="mt-1 text-xs text-[var(--lt-text-subtle)]">{stat.label}</div>
+            </PanelContent>
+          </Panel>
+        ))}
+      </div>
 
-        <div
-          style={{
-            background: "#111118",
-            border: "1px solid rgba(255,255,255,0.07)",
-            borderRadius: 16,
-            padding: 32,
-            marginBottom: 32,
-          }}
-        >
-          <h2
-            style={{
-              fontSize: 24,
-              fontWeight: 800,
-              color: "#F2F1FF",
-              marginBottom: 16,
-              letterSpacing: -0.5,
-            }}
-          >
+      <Panel className="mb-8">
+        <PanelContent className="space-y-4 p-6 md:p-8">
+          <h2 className="m-0 text-2xl font-extrabold tracking-tight text-[var(--lt-text)]">
             Who We Are
           </h2>
-          <p style={{ fontSize: 15, color: "#8888A8", lineHeight: 1.8, marginBottom: 16 }}>
+          <p className="m-0 text-sm leading-relaxed text-[var(--lt-text-muted)] md:text-base">
             LeadThur is owned and operated by Pdigital Marketstore Ltd (RC 8015428), a digital
             technology company based in Lagos, Nigeria.
           </p>
-          <p style={{ fontSize: 15, color: "#8888A8", lineHeight: 1.8, marginBottom: 16 }}>
+          <p className="m-0 text-sm leading-relaxed text-[var(--lt-text-muted)] md:text-base">
             We serve freelancers, agencies, and digital marketers across Nigeria, Ghana, Kenya, South
             Africa, the United Arab Emirates, the United Kingdom, Canada, and beyond.
           </p>
-          <p style={{ fontSize: 15, color: "#8888A8", lineHeight: 1.8 }}>
+          <p className="m-0 text-sm leading-relaxed text-[var(--lt-text-muted)] md:text-base">
             We are a small team that cares deeply about the product we are building and the people
             using it. Every feature on LeadThur came from a real user request. Every update we ship
             solves a real problem.
           </p>
-        </div>
+        </PanelContent>
+      </Panel>
 
-        <div
-          style={{
-            background: "rgba(124,58,237,0.06)",
-            border: "1px solid rgba(124,58,237,0.2)",
-            borderRadius: 16,
-            padding: 32,
-            marginBottom: 48,
-          }}
-        >
-          <h2
-            style={{
-              fontSize: 24,
-              fontWeight: 800,
-              color: "#F2F1FF",
-              marginBottom: 16,
-              letterSpacing: -0.5,
-            }}
-          >
+      <Panel className="mb-12 border-[var(--lt-accent)]/25 bg-[var(--lt-accent)]/5">
+        <PanelContent className="space-y-4 p-6 md:p-8">
+          <h2 className="m-0 text-2xl font-extrabold tracking-tight text-[var(--lt-text)]">
             Our Promise
           </h2>
-          {[
-            "We will always be honest about what LeadThur can and cannot do.",
-            "We will always respond to support messages personally.",
-            "We will always build features that make your work easier not more complicated.",
-            "We will never sell your data to anyone.",
-          ].map((promise, i) => (
-            <div
-              key={i}
-              style={{
-                display: "flex",
-                gap: 12,
-                alignItems: "flex-start",
-                marginBottom: i < 3 ? 12 : 0,
-              }}
-            >
-              <span
-                style={{
-                  color: "#10B981",
-                  fontWeight: 800,
-                  fontSize: 15,
-                  marginTop: 1,
-                  flexShrink: 0,
-                }}
-              >
-                ✓
-              </span>
-              <p style={{ fontSize: 15, color: "#8888A8", lineHeight: 1.7, margin: 0 }}>{promise}</p>
-            </div>
-          ))}
-        </div>
+          <ul className="m-0 flex list-none flex-col gap-3 p-0">
+            {PROMISES.map((promise) => (
+              <li key={promise} className="flex items-start gap-3 text-sm leading-relaxed text-[var(--lt-text-muted)] md:text-base">
+                <span className="mt-0.5 shrink-0 font-extrabold text-[var(--lt-success)]">✓</span>
+                <span>{promise}</span>
+              </li>
+            ))}
+          </ul>
+        </PanelContent>
+      </Panel>
 
-        <div
-          style={{
-            background: "#111118",
-            border: "1px solid rgba(255,255,255,0.07)",
-            borderRadius: 16,
-            padding: 32,
-            marginBottom: 48,
-          }}
-        >
-          <h2
-            style={{
-              fontSize: 24,
-              fontWeight: 800,
-              color: "#F2F1FF",
-              marginBottom: 16,
-              letterSpacing: -0.5,
-            }}
-          >
+      <Panel className="mb-12">
+        <PanelContent className="space-y-5 p-6 md:p-8">
+          <h2 className="m-0 text-2xl font-extrabold tracking-tight text-[var(--lt-text)]">
             Get In Touch
           </h2>
-          <p style={{ fontSize: 15, color: "#8888A8", lineHeight: 1.8, marginBottom: 20 }}>
+          <p className="m-0 text-sm leading-relaxed text-[var(--lt-text-muted)] md:text-base">
             If you have a question, a suggestion, or a problem reach us at any time. A real person
             will reply.
           </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {[
-              { label: "Email", value: "support@leadthur.com", href: "mailto:support@leadthur.com" },
-              { label: "WhatsApp", value: "+2349067285890", href: "https://wa.link/87ruc1" },
-              { label: "Website", value: "leadthur.com", href: "https://www.leadthur.com" },
-            ].map((contact) => (
-              <div key={contact.label} style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                <span
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 700,
-                    color: "#555570",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                    width: 72,
-                    flexShrink: 0,
-                  }}
-                >
+          <div className="flex flex-col gap-3">
+            {CONTACTS.map((contact) => (
+              <div key={contact.label} className="flex items-center gap-3">
+                <span className="w-20 shrink-0 text-xs font-bold uppercase tracking-wider text-[var(--lt-text-subtle)]">
                   {contact.label}
                 </span>
                 <a
                   href={contact.href}
-                  style={{
-                    fontSize: 15,
-                    color: "#A78BFA",
-                    fontWeight: 600,
-                    textDecoration: "none",
-                  }}
+                  className="text-sm font-semibold text-[var(--lt-accent-soft)] no-underline hover:underline"
                 >
                   {contact.value}
                 </a>
               </div>
             ))}
           </div>
-        </div>
+        </PanelContent>
+      </Panel>
 
-        <div style={{ textAlign: "center" }}>
-          <Link
-            href="/"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              background: "#7C3AED",
-              color: "white",
-              fontWeight: 800,
-              fontSize: 16,
-              padding: "16px 40px",
-              borderRadius: 14,
-              textDecoration: "none",
-              boxShadow: "0 0 50px rgba(124,58,237,0.4)",
-            }}
-          >
-            Try LeadThur Free →
-          </Link>
-        </div>
+      <div className="text-center">
+        <Button size="lg" className="h-12 px-10 text-base font-extrabold" asChild>
+          <Link href="/freetrial">Try LeadThur Free →</Link>
+        </Button>
       </div>
-
-      <div
-        style={{
-          borderTop: "1px solid rgba(255,255,255,0.06)",
-          padding: "28px 24px",
-          textAlign: "center",
-          fontSize: 12,
-          color: "#555570",
-        }}
-      >
-        <p style={{ marginBottom: 8 }}>
-          <strong style={{ color: "#F2F1FF" }}>LeadThur</strong> — Business Discovery Intelligence
-        </p>
-        <p>Built by Pdigital Marketstore Ltd (RC 8015428) · Lagos, Nigeria</p>
-        <div
-          style={{
-            marginTop: 12,
-            display: "flex",
-            gap: 16,
-            justifyContent: "center",
-            flexWrap: "wrap",
-          }}
-        >
-          <Link href="/privacy" style={{ color: "#A78BFA", textDecoration: "none", fontSize: 12 }}>
-            Privacy Policy
-          </Link>
-          <Link href="/terms" style={{ color: "#A78BFA", textDecoration: "none", fontSize: 12 }}>
-            Terms of Service
-          </Link>
-          <Link href="/about" style={{ color: "#A78BFA", textDecoration: "none", fontSize: 12 }}>
-            About
-          </Link>
-        </div>
-      </div>
-    </div>
+    </PublicContentShell>
   );
 }
