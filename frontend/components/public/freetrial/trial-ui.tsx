@@ -1,6 +1,6 @@
 "use client";
 
-import { Lock } from "lucide-react";
+import { Loader2, Lock } from "lucide-react";
 import {
   TRIAL_SEARCH_EXAMPLES,
   type TrialSearchSuggestion,
@@ -257,28 +257,64 @@ export function TrialResultsTable({
   );
 }
 
+export function TrialSearchProgress({
+  message,
+  businessesFound,
+  searching,
+}: {
+  message: string;
+  businessesFound: number;
+  searching: boolean;
+}) {
+  if (!searching && businessesFound === 0) return null;
+
+  return (
+    <Alert
+      className="mt-4 border-[var(--lt-accent)]/25 bg-[var(--lt-accent)]/10"
+      role="status"
+      aria-live="polite"
+    >
+      <AlertDescription className="space-y-2">
+        {searching ? (
+          <div className="flex items-center gap-2.5">
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[var(--lt-accent-soft)]" aria-hidden />
+            <p className="m-0 text-sm font-medium text-[var(--lt-text)]">{message}</p>
+          </div>
+        ) : null}
+        {businessesFound > 0 ? (
+          <p className="m-0 text-sm font-bold text-[var(--lt-accent-soft)]">
+            {businessesFound.toLocaleString()} businesses found
+          </p>
+        ) : null}
+      </AlertDescription>
+    </Alert>
+  );
+}
+
 export function TrialPaywallPanel({
   visible,
-  maxTrialLeads,
+  totalFound,
+  visibleSampleCount,
   activeSearchQuery,
   activeSearchLocation,
-  paywallHeading,
   tierOne,
   tierTwo,
   salePriceUsd,
   checkoutUrl,
 }: {
   visible: boolean;
-  maxTrialLeads: number;
+  totalFound: number;
+  visibleSampleCount: number;
   activeSearchQuery: string;
   activeSearchLocation: string;
-  paywallHeading: string;
   tierOne: readonly { label: string; compareAt: string }[];
   tierTwo: readonly string[];
   salePriceUsd: number;
   checkoutUrl: string;
 }) {
   if (!visible) return null;
+
+  const foundLabel = totalFound > 0 ? totalFound.toLocaleString() : "1,000+";
 
   return (
     <div
@@ -287,17 +323,29 @@ export function TrialPaywallPanel({
     >
       <Panel className="pointer-events-auto mx-auto max-h-[min(78vh,560px)] max-w-md overflow-y-auto border-[var(--lt-accent)]/40 shadow-[0_0_80px_rgba(124,58,237,0.2)]">
         <PanelContent className="space-y-4 p-6">
-          <p className="m-0 text-sm font-semibold leading-relaxed text-[var(--lt-text-muted)]">
-            You are seeing {maxTrialLeads} of 1,000+ businesses found for {activeSearchQuery}{" "}
-            in {activeSearchLocation}.
-          </p>
-          <p className="m-0 text-xl font-extrabold leading-tight text-[var(--lt-text)]">
-            {paywallHeading}
-          </p>
+          <div className="space-y-2">
+            <p className="m-0 text-lg font-extrabold text-[var(--lt-text)]">
+              You found {foundLabel} businesses
+              {activeSearchQuery && activeSearchLocation
+                ? ` for ${activeSearchQuery} in ${activeSearchLocation}`
+                : ""}
+              .
+            </p>
+            <p className="m-0 text-sm leading-relaxed text-[var(--lt-text-muted)]">
+              Right now, you&apos;re only seeing a small sample ({visibleSampleCount}).
+            </p>
+            <p className="m-0 text-sm leading-relaxed text-[var(--lt-text-muted)]">
+              The businesses you&apos;re looking for are already here.
+            </p>
+            <p className="m-0 text-sm leading-relaxed text-[var(--lt-text-muted)]">
+              The sooner you unlock them, the sooner you can start winning clients before someone
+              else does.
+            </p>
+          </div>
 
           <div>
             <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-[var(--lt-accent-soft)]">
-              What you are getting
+              What you unlock
             </p>
             <ul className="m-0 flex list-none flex-col gap-2 p-0">
               {tierOne.map((item) => (
@@ -308,7 +356,7 @@ export function TrialPaywallPanel({
 
           <div>
             <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-[var(--lt-success)]">
-              Included when you claim a slot today
+              Included with lifetime access
             </p>
             <ul className="m-0 flex list-none flex-col gap-2 p-0">
               {tierTwo.map((item) => (
@@ -329,7 +377,7 @@ export function TrialPaywallPanel({
           </div>
 
           <Button size="lg" className="h-12 w-full text-base font-extrabold shadow-lg" asChild>
-            <a href={checkoutUrl}>Get lifetime access for ${salePriceUsd}</a>
+            <a href={checkoutUrl}>Unlock Every Business Now</a>
           </Button>
         </PanelContent>
       </Panel>

@@ -16,6 +16,7 @@ import {
 import { isSearchFullyComplete } from "@/utils/search-completion";
 import { getApiUrl } from "@/utils/env";
 import { SALE_PRICE_USD } from "@/constants/pricing";
+import { TRIAL_EMAIL_KEY } from "@/constants/trial";
 import { PublicFunnelShell } from "@/components/public/public-funnel-shell";
 import {
   LeadRowMobile,
@@ -26,6 +27,7 @@ import {
   TrialResultsTable,
   TrialSearchGuidance,
   TrialSearchHint,
+  TrialSearchProgress,
   type TrialLeadRow,
 } from "@/components/public/freetrial/trial-ui";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -33,14 +35,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Panel, PanelContent } from "@/components/ui/panel";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Loader2 } from "lucide-react";
 
 const MAX_TRIAL_LEADS = 15;
 const CHECKOUT_URL = "/checkout";
-const TRIAL_EMAIL_KEY = "lp_trial_email";
 const TRIAL_STATS_KEY = "lp_trial_stats";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-const PAYWALL_HEADING = "Pay once. Find clients forever.";
 
 const PAYWALL_TIER_ONE = [
   { label: "1,000+ potential clients per search forever", compareAt: "$60" },
@@ -326,7 +326,7 @@ export default function FreeTrialPage() {
   const [message, setMessage] = useState("");
   const [showUpgradePanel, setShowUpgradePanel] = useState(false);
   const [searchResultsReady, setSearchResultsReady] = useState(false);
-  const [scrolledToResultsEnd, setScrolledToResultsEnd] = useState(false);
+  const [activeSearchTotalFound, setActiveSearchTotalFound] = useState(0);
   const [activeSearchQuery, setActiveSearchQuery] = useState("");
   const [activeSearchLocation, setActiveSearchLocation] = useState("");
   const [gatePassed, setGatePassed] = useState(false);
@@ -347,10 +347,13 @@ export default function FreeTrialPage() {
   const enrichmentPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const searchFinishedRef = useRef(false);
-  const resultsEndRef = useRef<HTMLDivElement | null>(null);
 
   const tableSendCount = useMemo(() => sendButtonCount(leads), [leads]);
   const exportCount = leads.length;
+  const businessesFoundCount = useMemo(
+    () => Math.max(activeSearchTotalFound, leads.length),
+    [activeSearchTotalFound, leads.length]
+  );
 
   const openUpgrade = useCallback(() => setShowUpgradePanel(true), []);
 
@@ -404,7 +407,7 @@ export default function FreeTrialPage() {
     setSearchesRemaining(2);
     setShowUpgradePanel(false);
     setSearchResultsReady(false);
-    setScrolledToResultsEnd(false);
+    setActiveSearchTotalFound(0);
     setAggregateStats({ totalFound: 0, verifiedEmailCount: 0 });
     setMessage("");
     paywallTriggeredRef.current = false;
@@ -424,6 +427,9 @@ export default function FreeTrialPage() {
       setMessage("");
 
       const stats = await fetchSearchStats(searchId, trialEmail);
+      if (stats.totalFound > 0) {
+        setActiveSearchTotalFound(stats.totalFound);
+      }
       setAggregateStats((prev) => {
         const next = {
           totalFound: prev.totalFound + stats.totalFound,
@@ -456,6 +462,10 @@ export default function FreeTrialPage() {
           setLeads(progress.leads);
         }
 
+        if (progress.totalFound > 0) {
+          setActiveSearchTotalFound(progress.totalFound);
+        }
+
         if (isSearchReadyForPaywall(progress)) {
           setSearchResultsReady(true);
         }
@@ -466,7 +476,7 @@ export default function FreeTrialPage() {
           );
         } else if (progress.status === "pending" || progress.status === "running") {
           if (progress.leads.length === 0) {
-            setMessage("Scanning for businesses. This can take about 60 seconds...");
+            setMessage("Searching Google Maps...");
           }
         }
 
@@ -572,11 +582,11 @@ export default function FreeTrialPage() {
     if (message.includes("queued") || message.includes("in line")) return;
 
     const progressMessages = [
-      `Scanning for ${query} in ${location}...`,
-      "Extracting business details...",
-      "Collecting phone numbers and addresses...",
-      "Finding verified email addresses...",
-      "Almost done. Finalizing results...",
+      "Searching Google Maps...",
+      "Collecting businesses...",
+      "Checking websites...",
+      "Finding email addresses...",
+      "Preparing results...",
     ];
 
     let msgIndex = 0;
@@ -589,28 +599,11 @@ export default function FreeTrialPage() {
   }, [status, query, location, message]);
 
   useEffect(() => {
-    if (!searchResultsReady || !scrolledToResultsEnd || paywallTriggeredRef.current) {
+    if (!searchResultsReady || paywallTriggeredRef.current || leads.length === 0) {
       return;
     }
     paywallTriggeredRef.current = true;
     setShowUpgradePanel(true);
-  }, [searchResultsReady, scrolledToResultsEnd]);
-
-  useEffect(() => {
-    const sentinel = resultsEndRef.current;
-    if (!sentinel || !searchResultsReady) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setScrolledToResultsEnd(true);
-        }
-      },
-      { root: null, threshold: 0.6 }
-    );
-
-    observer.observe(sentinel);
-    return () => observer.disconnect();
   }, [searchResultsReady, leads.length]);
 
   async function handleGateSubmit() {
@@ -711,12 +704,12 @@ export default function FreeTrialPage() {
     setStatus("searching");
     setLeads([]);
     setSearchResultsReady(false);
-    setScrolledToResultsEnd(false);
+    setActiveSearchTotalFound(0);
     paywallTriggeredRef.current = false;
     setShowUpgradePanel(false);
     setActiveSearchQuery(trimmedQuery);
     setActiveSearchLocation(trimmedLocation);
-    setMessage(`Scanning for ${trimmedQuery} in ${trimmedLocation}...`);
+    setMessage("Searching Google Maps...");
 
     try {
       const res = await fetch(`${apiUrl}/freetrial`, {
@@ -870,7 +863,7 @@ export default function FreeTrialPage() {
                     pipeline with full emails, phone numbers, and one click outreach.
                   </p>
                   <Button size="lg" className="mx-auto h-12 w-full max-w-md font-extrabold" onClick={openUpgrade}>
-                    Get lifetime access for ${SALE_PRICE_USD}
+                    Unlock Every Business Now
                   </Button>
                   <Button
                     type="button"
@@ -926,11 +919,18 @@ export default function FreeTrialPage() {
                 <Button
                   type="button"
                   size="lg"
-                  className="h-12 w-full text-base font-extrabold"
+                  className="h-12 w-full gap-2 text-base font-extrabold"
                   onClick={() => void runTrialSearch()}
                   disabled={status === "searching" || !query.trim() || !location.trim()}
                 >
-                  {status === "searching" ? "Searching..." : "Run free search"}
+                  {status === "searching" ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                      Searching...
+                    </>
+                  ) : (
+                    "Run free search"
+                  )}
                 </Button>
 
                 {searchHint ? (
@@ -941,9 +941,11 @@ export default function FreeTrialPage() {
                   />
                 ) : null}
 
-                {message && status === "searching" ? (
-                  <p className="mt-4 text-sm text-[var(--lt-text-muted)]">{message}</p>
-                ) : null}
+                <TrialSearchProgress
+                  message={message}
+                  businessesFound={businessesFoundCount}
+                  searching={status === "searching"}
+                />
 
                 {status !== "searching" && (
                   <TrialExamplePills onSelect={applyTrialSuggestion} />
@@ -985,17 +987,16 @@ export default function FreeTrialPage() {
                   lockedDisplayValue={lockedDisplayValue}
                   truncateAddress={truncateAddress}
                 />
-                <div ref={resultsEndRef} className="h-px w-full" aria-hidden />
               </section>
             )}
           </>
         )}
       <TrialPaywallPanel
         visible={showUpgradePanel && gatePassed}
-        maxTrialLeads={MAX_TRIAL_LEADS}
+        totalFound={activeSearchTotalFound}
+        visibleSampleCount={leads.length}
         activeSearchQuery={activeSearchQuery}
         activeSearchLocation={activeSearchLocation}
-        paywallHeading={PAYWALL_HEADING}
         tierOne={PAYWALL_TIER_ONE}
         tierTwo={PAYWALL_TIER_TWO}
         salePriceUsd={SALE_PRICE_USD}

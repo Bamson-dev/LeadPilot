@@ -198,8 +198,7 @@ export function PricingSection() {
             lineHeight: 1.5,
           }}
         >
-          6 of 20 lifetime slots left at this price. When the last slot goes, everyone after you
-          pays $100 every year.
+          Pay once. Keep every contact you find, forever. No monthly subscription.
         </p>
       </div>
     </section>

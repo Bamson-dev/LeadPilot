@@ -65,7 +65,7 @@ export function FinalCTASection() {
           Claim My Lifetime Access
         </Link>
         <p style={{ fontSize: 14, color: C.muted, margin: 0, lineHeight: 1.5 }}>
-          $25 once. 30 day refund promise. 6 slots left before it goes to $100 a year.
+          $25 once. 30-day refund promise. Unlimited searches after you unlock.
         </p>
       </div>
     </section>

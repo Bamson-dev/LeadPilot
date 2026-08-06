@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useFlutterwave, closePaymentModal } from "flutterwave-react-v3";
 import { detectCountry } from "@/lib/geolocation";
 import { SALE_PRICE_USD } from "@/constants/pricing";
+import { TRIAL_EMAIL_KEY } from "@/constants/trial";
 import { getApiUrl } from "@/utils/env";
 import {
   CheckoutTierOnePanel,
@@ -52,6 +53,14 @@ export default function CheckoutPage() {
       setCountry(code);
       setDetecting(false);
     });
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const savedEmail = localStorage.getItem(TRIAL_EMAIL_KEY)?.trim();
+    if (savedEmail && savedEmail.includes("@")) {
+      setEmail(savedEmail);
+    }
   }, []);
 
   function getRefCode(): string | null {
