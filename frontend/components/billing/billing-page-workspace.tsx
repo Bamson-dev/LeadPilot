@@ -106,6 +106,22 @@ function subscriptionBadge(
   }
 }
 
+function subscriptionCheckoutButtonLabel(
+  tier: OutreachSubscriptionTier,
+  balance: OutreachBalance | null,
+  isLoading: boolean
+): string {
+  if (isLoading) return "Opening Paystack…";
+
+  const hasActive =
+    balance?.subscription_status === "active" && Boolean(balance?.subscription_tier);
+  const isCurrent = balance?.subscription_tier === tier.id && hasActive;
+
+  if (isCurrent) return "Renew on Paystack";
+  if (hasActive) return `Switch to ${tier.label}`;
+  return "Subscribe";
+}
+
 function KpiCard({
   label,
   value,
@@ -200,14 +216,6 @@ export function BillingPageWorkspace() {
 
   async function startSubscriptionCheckout(tier: OutreachSubscriptionTier) {
     setError(null);
-    const hasActivePlan = balance?.subscription_status === "active";
-    const currentTier = balance?.subscription_tier;
-    if (hasActivePlan && currentTier && currentTier !== tier.id) {
-      setError(
-        `You already have an active ${currentTier} subscription. Plan switching is blocked in this release — manage your current plan first, then subscribe to ${tier.label}.`
-      );
-      return;
-    }
     const key = `subscription:${tier.id}`;
     setLoadingKey(key);
     try {
@@ -447,9 +455,9 @@ export function BillingPageWorkspace() {
                   </dl>
                 )}
                 <p className="text-xs text-[var(--lt-text-subtle)]">
-                  Cancel / upgrade / downgrade from the app is not supported. Plan switching
-                  while another tier is active remains blocked. Lifecycle updates come from
-                  Paystack webhooks.
+                  Subscribe, renew, upgrade, or switch plans anytime via Paystack checkout.
+                  Credit packs add send balance immediately after payment. Plan tier updates
+                  when Paystack confirms the charge.
                 </p>
               </PanelContent>
             </Panel>
@@ -468,11 +476,9 @@ export function BillingPageWorkspace() {
                 {OUTREACH_SUBSCRIPTION_TIERS.map((tier) => {
                   const key = `subscription:${tier.id}`;
                   const isLoading = loadingKey === key;
-                  const isCurrent = balance?.subscription_tier === tier.id;
-                  const blockedByActivePlan =
-                    balance?.subscription_status === "active" &&
-                    Boolean(balance?.subscription_tier) &&
-                    !isCurrent;
+                  const isCurrent =
+                    balance?.subscription_tier === tier.id &&
+                    balance?.subscription_status === "active";
                   return (
                     <article
                       key={tier.id}
@@ -500,13 +506,7 @@ export function BillingPageWorkspace() {
                         disabled={isLoading}
                         onClick={() => void startSubscriptionCheckout(tier)}
                       >
-                        {isLoading
-                          ? "Opening Paystack…"
-                          : blockedByActivePlan
-                            ? "Manage current plan first"
-                            : isCurrent
-                              ? "Current plan"
-                              : "Subscribe"}
+                        {subscriptionCheckoutButtonLabel(tier, balance, isLoading)}
                       </Button>
                     </article>
                   );
