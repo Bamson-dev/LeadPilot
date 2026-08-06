@@ -153,18 +153,20 @@ export function DirectMessaging({ onSessionExpired }: DirectMessagingProps) {
               { token: "{{email}}", desc: "Email address" },
               { token: "{{dashboardUrl}}", desc: "Dashboard link" },
             ].map((t) => (
-              <button
+              <Button
                 key={t.token}
                 type="button"
+                variant="ghost"
+                size="sm"
                 onClick={() => void navigator.clipboard.writeText(t.token)}
                 title="Click to copy"
-                className="rounded-md border-0 bg-transparent p-0"
+                className="h-auto rounded-md p-0 hover:bg-transparent"
               >
                 <Chip className="border-[var(--lt-accent)]/20 bg-[var(--lt-accent)]/10 text-[var(--lt-accent-soft)]">
                   {t.token}
                   <span className="font-normal text-[var(--lt-text-subtle)]"> — {t.desc}</span>
                 </Chip>
-              </button>
+              </Button>
             ))}
           </div>
         </PanelContent>

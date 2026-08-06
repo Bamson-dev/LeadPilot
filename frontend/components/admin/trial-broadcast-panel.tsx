@@ -22,6 +22,8 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Panel, PanelContent } from "@/components/ui/panel";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/utils/utils";
 
 type Audience = "unconverted" | "all";
@@ -149,39 +151,44 @@ export function TrialBroadcastPanel({
       >
         <div className="mb-4 space-y-2">
           <p className={cn(adminLabelClass, "uppercase tracking-wide")}>Audience</p>
-          {(
-            [
-              {
-                value: "unconverted" as const,
-                title: "Unconverted trial users only",
-                description:
-                  "People who tried the trial but have not paid yet. Excludes unsubscribers.",
-              },
-              {
-                value: "all" as const,
-                title: "All trial users",
-                description:
-                  "Everyone who signed up for the trial including converted users. Excludes unsubscribers.",
-              },
-            ] as const
-          ).map((option) => (
-            <label
-              key={option.value}
-              className="flex cursor-pointer items-start gap-2 rounded-lg border border-[var(--lt-border)] bg-[var(--lt-bg)] p-3"
-            >
-              <input
-                type="radio"
-                name="audience"
-                checked={audience === option.value}
-                onChange={() => setAudience(option.value)}
-                className="mt-1"
-              />
-              <div>
-                <p className="text-sm font-semibold text-[var(--lt-text)]">{option.title}</p>
-                <p className="text-xs text-[var(--lt-text-subtle)]">{option.description}</p>
-              </div>
-            </label>
-          ))}
+          <RadioGroup
+            value={audience}
+            onValueChange={(value) => setAudience(value as Audience)}
+            className="space-y-2"
+          >
+            {(
+              [
+                {
+                  value: "unconverted" as const,
+                  title: "Unconverted trial users only",
+                  description:
+                    "People who tried the trial but have not paid yet. Excludes unsubscribers.",
+                },
+                {
+                  value: "all" as const,
+                  title: "All trial users",
+                  description:
+                    "Everyone who signed up for the trial including converted users. Excludes unsubscribers.",
+                },
+              ] as const
+            ).map((option) => (
+              <label
+                key={option.value}
+                htmlFor={`audience-${option.value}`}
+                className="flex cursor-pointer items-start gap-2 rounded-lg border border-[var(--lt-border)] bg-[var(--lt-bg)] p-3"
+              >
+                <RadioGroupItem
+                  id={`audience-${option.value}`}
+                  value={option.value}
+                  className="mt-1"
+                />
+                <div>
+                  <p className="text-sm font-semibold text-[var(--lt-text)]">{option.title}</p>
+                  <p className="text-xs text-[var(--lt-text-subtle)]">{option.description}</p>
+                </div>
+              </label>
+            ))}
+          </RadioGroup>
         </div>
 
         <div className="mb-4 space-y-2">
@@ -200,23 +207,23 @@ export function TrialBroadcastPanel({
           <label className={cn(adminLabelClass, "block uppercase tracking-wide")} htmlFor="broadcast-body">
             Body
           </label>
-          <textarea
+          <Textarea
             id="broadcast-body"
             value={body}
             onChange={(e) => setBody(e.target.value)}
             placeholder="write your message here. keep it simple and human. this will be wrapped in the LeadThur email template automatically."
-            className="min-h-[200px] w-full resize-y rounded-lg border border-[var(--lt-border)] bg-[var(--lt-bg)] px-3 py-2 text-sm text-[var(--lt-text)] outline-none focus:border-[var(--lt-accent)]"
+            className="min-h-[200px] bg-[var(--lt-bg)] focus-visible:border-[var(--lt-accent)]"
           />
         </div>
 
         <Panel className="mb-4">
           <PanelContent className="p-4">
             <p className={cn(adminLabelClass, "mb-2 uppercase tracking-wide")}>Live Preview</p>
-            <div className="mx-auto max-w-[560px] rounded-lg border border-[#E5E7EB] bg-white p-5">
-              <h3 className="mb-3 text-lg font-bold text-[#09090b]">
+            <div className="mx-auto max-w-[560px] rounded-lg border border-[var(--lt-border)] bg-[var(--lt-surface)] p-5">
+              <h3 className="mb-3 text-lg font-bold text-[var(--lt-text)]">
                 {subject.trim() || "your subject will appear here"}
               </h3>
-              <p className="whitespace-pre-wrap text-sm leading-7 text-[#3f3f46]">
+              <p className="whitespace-pre-wrap text-sm leading-7 text-[var(--lt-text-muted)]">
                 {body.trim() || "your broadcast message preview appears here as you type."}
               </p>
               <span className="mt-5 block rounded-lg bg-[var(--lt-accent)] px-4 py-3 text-center text-sm font-bold text-white">
