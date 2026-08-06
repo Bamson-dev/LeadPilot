@@ -31,6 +31,15 @@ Required minimum:
 - `PORT=3000`
 - `NODE_ENV=production`
 
+**Forbidden on Coolify (P0-3 — backend will boot health-only if set):**
+
+- `MOCK_OUTREACH_SEND=1`
+- `MOCK_MAILBOX_SMTP=1`
+- `ENABLE_TEST_EMAIL=true`
+- `DEMO_MODE=1` or `true`
+
+Confirm production Coolify has **none** of the above before promoting RC1. If any are set, `/health` returns 200 but all API routes return 404.
+
 Optional for staging QA (does **not** bypass per-email trial search limits):
 
 - `RATE_LIMIT_IP_ALLOWLIST=162.120.188.117` — comma-separated IPs that skip the per-IP request rate limit on `/freetrial` and other rate-limited routes
