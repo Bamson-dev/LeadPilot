@@ -36,7 +36,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 const MAX_TRIAL_LEADS = 15;
 const CHECKOUT_URL = "/checkout";
-const SITE_URL = "https://www.leadthur.com";
 const TRIAL_EMAIL_KEY = "lp_trial_email";
 const TRIAL_STATS_KEY = "lp_trial_stats";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -60,7 +59,7 @@ const PAYWALL_TIER_TWO = [
 
 type TrialStatus = "idle" | "searching" | "complete" | "limit";
 
-interface TrialLead extends TrialLeadRow {}
+type TrialLead = TrialLeadRow;
 
 interface TrialAggregateStats {
   totalFound: number;
@@ -178,16 +177,6 @@ function normalizeLead(raw: BusinessLead): TrialLead {
   };
 }
 
-function mergeLeadUpdate(prev: TrialLead, raw: BusinessLead): TrialLead {
-  const next = normalizeLead(raw);
-  return {
-    ...prev,
-    ...next,
-    business_name: prev.business_name || next.business_name,
-    address: prev.address || next.address,
-  };
-}
-
 function countVerifiedInLeads(leads: TrialLead[]): number {
   return leads.filter((lead) => lead.verifiedEmails.length > 0).length;
 }
@@ -211,10 +200,6 @@ function sendButtonCount(leads: TrialLead[]): number {
 
 function lockedDisplayValue(value: string, fallback: string): string {
   return value.trim() || fallback;
-}
-
-function hasTrialPhone(phone: string | null | undefined): boolean {
-  return Boolean(phone?.trim());
 }
 
 function truncateAddress(address: string, maxLen: number): string {
@@ -348,7 +333,7 @@ export default function FreeTrialPage() {
   const [gateEmail, setGateEmail] = useState("");
   const [gateLoading, setGateLoading] = useState(false);
   const [gateError, setGateError] = useState("");
-  const [aggregateStats, setAggregateStats] = useState<TrialAggregateStats>({
+  const [, setAggregateStats] = useState<TrialAggregateStats>({
     totalFound: 0,
     verifiedEmailCount: 0,
   });

@@ -7,7 +7,6 @@ import {
 } from "@leadthur/shared";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Panel, PanelContent } from "@/components/ui/panel";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { cn } from "@/utils/utils";
