@@ -2,6 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getTrialSignups, type TrialSignupRow } from "@/services/admin-api";
+import {
+  AdminConvertedBadge,
+  AdminLoading,
+  AdminPanel,
+  adminErrorClass,
+  adminMutedClass,
+  adminTableClass,
+  adminTableHeadRowClass,
+  adminTableRowClass,
+} from "@/components/admin/admin-ui";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Input } from "@/components/ui/input";
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
@@ -57,47 +70,40 @@ export function TrialSignupsPanel({
   }, [signups, search, sortDesc]);
 
   return (
-    <section className="glass mt-8 rounded-2xl p-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold text-[#F4F4FF]">Free Trial Signups</h2>
-          <p className="text-sm text-[#8888A8]">{total} total signups</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-[#C0C0D8] hover:bg-white/5"
-        >
+    <AdminPanel
+      title="Free Trial Signups"
+      description={`${total} total signups`}
+      action={
+        <Button type="button" variant="outline" size="sm" onClick={() => void load()}>
           Refresh
-        </button>
-      </div>
-
+        </Button>
+      }
+      className="mt-0"
+    >
       <div className="mb-4 flex flex-wrap gap-3">
-        <input
+        <Input
           type="search"
           placeholder="Search by email..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="min-w-[220px] flex-1 rounded-lg border border-white/10 bg-[#111118] px-3 py-2 text-sm text-[#F4F4FF] outline-none"
+          className="min-w-[220px] flex-1"
         />
-        <button
-          type="button"
-          onClick={() => setSortDesc((v) => !v)}
-          className="rounded-lg border border-white/10 px-3 py-2 text-xs text-[#C0C0D8] hover:bg-white/5"
-        >
+        <Button type="button" variant="outline" size="sm" onClick={() => setSortDesc((v) => !v)}>
           Sort by date {sortDesc ? "↓" : "↑"}
-        </button>
+        </Button>
       </div>
 
       {loading ? (
-        <p className="text-sm text-[#8888A8]">Loading signups...</p>
+        <AdminLoading label="Loading signups..." />
       ) : error ? (
-        <p className="text-sm text-red-400">{error}</p>
+        <p className={adminErrorClass}>{error}</p>
+      ) : filtered.length === 0 ? (
+        <EmptyState title="No signups found" />
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
+          <table className={adminTableClass}>
             <thead>
-              <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wide text-[#8888A8]">
+              <tr className={adminTableHeadRowClass}>
                 <th className="px-3 py-2">Email</th>
                 <th className="px-3 py-2">Signed Up</th>
                 <th className="px-3 py-2">Searches Used</th>
@@ -106,36 +112,21 @@ export function TrialSignupsPanel({
             </thead>
             <tbody>
               {filtered.map((row) => (
-                <tr key={row.email} className="border-b border-white/5">
-                  <td className="px-3 py-3 font-medium text-[#F4F4FF]">{row.email}</td>
-                  <td className="px-3 py-3 text-[#C0C0D8]">{formatDate(row.signed_up_at)}</td>
-                  <td className="px-3 py-3 text-[#C0C0D8]">{row.searches_used}</td>
+                <tr key={row.email} className={adminTableRowClass}>
+                  <td className="px-3 py-3 font-medium text-[var(--lt-text)]">{row.email}</td>
+                  <td className="px-3 py-3 text-[var(--lt-text-muted)]">
+                    {formatDate(row.signed_up_at)}
+                  </td>
+                  <td className="px-3 py-3 text-[var(--lt-text-muted)]">{row.searches_used}</td>
                   <td className="px-3 py-3">
-                    <span
-                      className="inline-block rounded-full px-2.5 py-1 text-xs font-semibold"
-                      style={{
-                        background: row.converted
-                          ? "rgba(16,185,129,0.15)"
-                          : "rgba(124,58,237,0.15)",
-                        color: row.converted ? "#10B981" : "#A78BFA",
-                      }}
-                    >
-                      {row.converted ? "Converted" : "Active"}
-                    </span>
+                    <AdminConvertedBadge converted={row.converted} />
                   </td>
                 </tr>
               ))}
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="px-3 py-8 text-center text-[#8888A8]">
-                    No signups found.
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
       )}
-    </section>
+    </AdminPanel>
   );
 }

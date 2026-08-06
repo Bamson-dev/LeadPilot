@@ -1,5 +1,7 @@
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Panel, PanelContent } from "@/components/ui/panel";
+import { adminLabelClass } from "@/components/admin/admin-ui";
 
 interface AdminLoginFormProps {
   email: string;
@@ -26,49 +28,49 @@ export function AdminLoginForm({
     <main className="flex min-h-screen items-center justify-center bg-[var(--lt-bg)] px-4">
       <Panel className="w-full max-w-md">
         <PanelContent className="p-8">
-          <form onSubmit={onSubmit}>
-            <h1
-              className={
-                titleClassName ??
-                "text-2xl font-bold tracking-tight text-[var(--lt-text)]"
-              }
-            >
-              LeadThur Admin
-            </h1>
-            <p className="mt-2 text-sm text-[var(--lt-text-muted)]">
-              Sign in to manage licenses, trials, blog, and payouts. Separate JWT
-              auth — not the product license key.
-            </p>
+          <form onSubmit={onSubmit} className="space-y-4">
+            <div>
+              <h1
+                className={
+                  titleClassName ??
+                  "text-2xl font-bold tracking-tight text-[var(--lt-text)]"
+                }
+              >
+                LeadThur Admin
+              </h1>
+              <p className="mt-2 text-sm text-[var(--lt-text-muted)]">
+                Sign in to manage licenses, trials, blog, and payouts. Separate JWT
+                auth — not the product license key.
+              </p>
+            </div>
 
-            <label className="mt-6 block text-xs font-medium text-[var(--lt-text-muted)]">
-              Email
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => onEmailChange(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-[var(--lt-border)] bg-[var(--lt-surface-2)] px-4 py-2.5 text-[var(--lt-text)] outline-none focus:border-[var(--lt-cyan)]"
-              required
-            />
+            <div className="space-y-2">
+              <label className={adminLabelClass}>Email</label>
+              <Input
+                type="email"
+                value={email}
+                onChange={(e) => onEmailChange(e.target.value)}
+                required
+              />
+            </div>
 
-            <label className="mt-4 block text-xs font-medium text-[var(--lt-text-muted)]">
-              Password
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => onPasswordChange(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-[var(--lt-border)] bg-[var(--lt-surface-2)] px-4 py-2.5 text-[var(--lt-text)] outline-none focus:border-[var(--lt-cyan)]"
-              required
-            />
+            <div className="space-y-2">
+              <label className={adminLabelClass}>Password</label>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => onPasswordChange(e.target.value)}
+                required
+              />
+            </div>
 
             {error ? (
-              <p className="mt-4 text-sm text-[var(--lt-danger)]" role="alert">
+              <p className="text-sm text-[var(--lt-danger)]" role="alert">
                 {error}
               </p>
             ) : null}
 
-            <Button type="submit" className="mt-6 w-full" disabled={loading}>
+            <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Signing in…" : "Sign in"}
             </Button>
           </form>

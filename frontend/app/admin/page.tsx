@@ -4,15 +4,35 @@ import { useCallback, useEffect, useState } from "react";
 import { Bricolage_Grotesque } from "next/font/google";
 import { SALE_PRICE_NGN } from "@/constants/pricing";
 import { AccountLookup } from "@/components/admin/account-lookup";
+import {
+  ActivationTrackerSection,
+  type ActivationData,
+} from "@/components/admin/activation-tracker-section";
 import { AdminLoginForm } from "@/components/admin/admin-login-form";
 import { AdminSectionNav } from "@/components/admin/admin-section-nav";
+import {
+  AdminSection,
+  AdminSectionHeader,
+  adminLabelClass,
+  adminSectionBodyClass,
+  adminTableClass,
+  adminTableHeadRowClass,
+  adminTableRowClass,
+} from "@/components/admin/admin-ui";
 import { BlogManager } from "@/components/admin/blog-manager";
 import { DirectMessaging } from "@/components/admin/direct-messaging";
+import { GlobalScriptsSection } from "@/components/admin/global-scripts-section";
+import { TrialActivitySection } from "@/components/admin/trial-activity-section";
 import { TrialInsightsTabs } from "@/components/admin/trial-insights-tabs";
 import { TrialBroadcastPanel } from "@/components/admin/trial-broadcast-panel";
 import { AdminQueueStatusBar } from "@/components/admin/queue-status-bar";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Input } from "@/components/ui/input";
 import { Panel, PanelContent, PanelHeader, PanelTitle } from "@/components/ui/panel";
+import { StatusBadge, type StatusBadgeStatus } from "@/components/ui/status-badge";
 import {
   adminLogin,
   clearAdminToken,
@@ -44,22 +64,6 @@ function formatDate(value: string | null): string {
   if (!value) return "—";
   return new Date(value).toLocaleString();
 }
-
-type DailyActivation = {
-  date: string;
-  count: number;
-  label: string;
-};
-
-type ActivationData = {
-  total: number;
-  daily: DailyActivation[];
-  peak: number;
-  average: number;
-  from: string;
-  to: string;
-  days: number;
-};
 
 export default function AdminPage() {
   const [token, setToken] = useState<string | null>(null);
@@ -557,576 +561,29 @@ export default function AdminPage() {
         <AdminQueueStatusBar enabled={Boolean(token)} />
       </div>
 
-      {/* ACTIVATION TRACKER */}
-      <div
-        id="admin-activations"
-        className="mx-auto mt-8 max-w-6xl"
-        style={{
-          background: "#111118",
-          border: "1px solid rgba(255,255,255,0.07)",
-          borderRadius: 14,
-          overflow: "hidden",
-          marginBottom: 24,
-        }}
-      >
-        <div
-          style={{
-            padding: "14px 16px",
-            borderBottom: "1px solid rgba(255,255,255,0.07)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            flexWrap: "wrap",
-            gap: 8,
-          }}
-        >
-          <div>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: "#F2F1FF", margin: 0 }}>
-              Activation Tracker
-            </h3>
-            <p style={{ fontSize: 11, color: "#555570", marginTop: 3 }}>
-              Daily signups and activations over time
-            </p>
-          </div>
-          {activations && (
-            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#555570" }}>
-              <span
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: "50%",
-                  background: "#10B981",
-                  display: "inline-block",
-                }}
-              />
-              Live data from Supabase
-            </div>
-          )}
-        </div>
+      <ActivationTrackerSection
+        activations={activations}
+        activationsLoading={activationsLoading}
+        activePreset={activePreset}
+        showCustom={showCustom}
+        customFrom={customFrom}
+        customTo={customTo}
+        setActivePreset={setActivePreset}
+        setShowCustom={setShowCustom}
+        setCustomFrom={setCustomFrom}
+        setCustomTo={setCustomTo}
+        loadActivations={loadActivations}
+      />
 
-        <div style={{ padding: 16 }}>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
-            {[
-              { label: "Today", value: "today" },
-              { label: "Yesterday", value: "yesterday" },
-              { label: "7 Days", value: "7days" },
-              { label: "14 Days", value: "14days" },
-              { label: "30 Days", value: "30days" },
-              { label: "This Month", value: "thismonth" },
-            ].map((preset) => (
-              <button
-                key={preset.value}
-                onClick={() => {
-                  setActivePreset(preset.value);
-                  setShowCustom(false);
-                  void loadActivations(preset.value);
-                }}
-                style={{
-                  background:
-                    activePreset === preset.value && !showCustom ? "#7C3AED" : "rgba(255,255,255,0.04)",
-                  border: `1px solid ${
-                    activePreset === preset.value && !showCustom ? "#7C3AED" : "rgba(255,255,255,0.08)"
-                  }`,
-                  borderRadius: 8,
-                  padding: "6px 12px",
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: activePreset === preset.value && !showCustom ? "white" : "#8888A8",
-                  cursor: "pointer",
-                  fontFamily: "Inter, sans-serif",
-                  transition: "all 0.15s",
-                }}
-              >
-                {preset.label}
-              </button>
-            ))}
-            <button
-              onClick={() => setShowCustom(!showCustom)}
-              style={{
-                background: showCustom ? "#7C3AED" : "rgba(255,255,255,0.04)",
-                border: `1px solid ${showCustom ? "#7C3AED" : "rgba(255,255,255,0.08)"}`,
-                borderRadius: 8,
-                padding: "6px 12px",
-                fontSize: 12,
-                fontWeight: 600,
-                color: showCustom ? "white" : "#8888A8",
-                cursor: "pointer",
-                fontFamily: "Inter, sans-serif",
-                transition: "all 0.15s",
-              }}
-            >
-              Custom Range
-            </button>
-          </div>
-
-          {showCustom && (
-            <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "flex-end" }}>
-              <div>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: 10,
-                    color: "#555570",
-                    fontWeight: 700,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                    marginBottom: 5,
-                  }}
-                >
-                  From
-                </label>
-                <input
-                  type="date"
-                  value={customFrom}
-                  onChange={(e) => setCustomFrom(e.target.value)}
-                  style={{
-                    background: "#0A0A10",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: 8,
-                    padding: "8px 12px",
-                    fontSize: 12,
-                    color: "#F2F1FF",
-                    fontFamily: "Inter, sans-serif",
-                    outline: "none",
-                  }}
-                />
-              </div>
-              <div>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: 10,
-                    color: "#555570",
-                    fontWeight: 700,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                    marginBottom: 5,
-                  }}
-                >
-                  To
-                </label>
-                <input
-                  type="date"
-                  value={customTo}
-                  onChange={(e) => setCustomTo(e.target.value)}
-                  style={{
-                    background: "#0A0A10",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: 8,
-                    padding: "8px 12px",
-                    fontSize: 12,
-                    color: "#F2F1FF",
-                    fontFamily: "Inter, sans-serif",
-                    outline: "none",
-                  }}
-                />
-              </div>
-              <button
-                onClick={() => {
-                  if (customFrom && customTo) {
-                    void loadActivations(undefined, customFrom, customTo);
-                  }
-                }}
-                disabled={!customFrom || !customTo}
-                style={{
-                  background: customFrom && customTo ? "#7C3AED" : "#1A1A24",
-                  border: "none",
-                  borderRadius: 8,
-                  padding: "8px 16px",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: "white",
-                  cursor: customFrom && customTo ? "pointer" : "not-allowed",
-                  fontFamily: "Inter, sans-serif",
-                  opacity: customFrom && customTo ? 1 : 0.5,
-                }}
-              >
-                Apply
-              </button>
-            </div>
-          )}
-
-          {activationsLoading && (
-            <div style={{ textAlign: "center", padding: "32px 0", fontSize: 13, color: "#555570" }}>
-              Loading activations...
-            </div>
-          )}
-
-          {!activationsLoading && activations && (
-            <>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 20 }}>
-                {[
-                  { label: "Total Activations", value: activations.total, color: "#A78BFA", highlight: true },
-                  { label: "Daily Average", value: activations.average, color: "#10B981", highlight: false },
-                  { label: "Peak Day", value: activations.peak, color: "#F59E0B", highlight: false },
-                  { label: "Days Tracked", value: activations.days, color: "#8888A8", highlight: false },
-                ].map((stat) => (
-                  <div
-                    key={stat.label}
-                    style={{
-                      background: stat.highlight ? "rgba(124,58,237,0.08)" : "rgba(255,255,255,0.03)",
-                      border: `1px solid ${
-                        stat.highlight ? "rgba(124,58,237,0.2)" : "rgba(255,255,255,0.06)"
-                      }`,
-                      borderRadius: 10,
-                      padding: "12px 14px",
-                      textAlign: "center",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: 28,
-                        fontWeight: 900,
-                        color: stat.color,
-                        lineHeight: 1,
-                        marginBottom: 5,
-                        letterSpacing: "-1px",
-                      }}
-                    >
-                      {stat.value}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 10,
-                        color: "#555570",
-                        fontWeight: 600,
-                        textTransform: "uppercase",
-                        letterSpacing: "0.07em",
-                      }}
-                    >
-                      {stat.label}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {activations.daily.length > 0 ? (
-                <div>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: "#555570",
-                      fontWeight: 700,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.08em",
-                      marginBottom: 12,
-                    }}
-                  >
-                    Daily Breakdown
-                  </div>
-
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "flex-end",
-                      gap: 4,
-                      height: 120,
-                      paddingBottom: 24,
-                      position: "relative",
-                      borderBottom: "1px solid rgba(255,255,255,0.06)",
-                    }}
-                  >
-                    {activations.daily.map((day) => {
-                      const heightPercent = activations.peak > 0 ? (day.count / activations.peak) * 100 : 0;
-                      const barHeight = Math.max(heightPercent * 0.96, day.count > 0 ? 4 : 0);
-                      return (
-                        <div
-                          key={day.date}
-                          style={{
-                            flex: 1,
-                            display: "flex",
-                            flexDirection: "column",
-                            alignItems: "center",
-                            justifyContent: "flex-end",
-                            height: "100%",
-                            gap: 4,
-                            position: "relative",
-                          }}
-                          title={`${day.label}: ${day.count} activation${day.count !== 1 ? "s" : ""}`}
-                        >
-                          {day.count > 0 && (
-                            <div
-                              style={{
-                                fontSize: 10,
-                                fontWeight: 700,
-                                color: "#A78BFA",
-                                position: "absolute",
-                                bottom: `${barHeight + 26}px`,
-                                left: "50%",
-                                transform: "translateX(-50%)",
-                              }}
-                            >
-                              {day.count}
-                            </div>
-                          )}
-                          <div
-                            style={{
-                              width: "100%",
-                              height: `${barHeight}%`,
-                              background:
-                                day.count === activations.peak && day.count > 0
-                                  ? "#7C3AED"
-                                  : day.count > 0
-                                    ? "rgba(124,58,237,0.45)"
-                                    : "rgba(255,255,255,0.04)",
-                              borderRadius: "4px 4px 0 0",
-                              transition: "all 0.3s ease",
-                              minHeight: day.count > 0 ? 4 : 0,
-                              position: "absolute",
-                              bottom: 20,
-                            }}
-                          />
-                          <div
-                            style={{
-                              fontSize: 9,
-                              color: "#555570",
-                              position: "absolute",
-                              bottom: 2,
-                              left: "50%",
-                              transform: "translateX(-50%)",
-                              whiteSpace: "nowrap",
-                              fontWeight: 600,
-                            }}
-                          >
-                            {day.label.split(" ")[0]}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div style={{ marginTop: 16 }}>
-                    {[...activations.daily].reverse().map((day) => (
-                      <div
-                        key={day.date}
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          padding: "8px 0",
-                          borderBottom: "1px solid rgba(255,255,255,0.04)",
-                          fontSize: 12,
-                        }}
-                      >
-                        <span style={{ color: "#8888A8", fontWeight: 500 }}>{day.label}</span>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <div
-                            style={{
-                              width: 80,
-                              height: 4,
-                              background: "rgba(255,255,255,0.06)",
-                              borderRadius: 2,
-                              overflow: "hidden",
-                            }}
-                          >
-                            <div
-                              style={{
-                                width: activations.peak > 0 ? `${(day.count / activations.peak) * 100}%` : "0%",
-                                height: "100%",
-                                background:
-                                  day.count === activations.peak ? "#7C3AED" : "rgba(124,58,237,0.5)",
-                                borderRadius: 2,
-                              }}
-                            />
-                          </div>
-                          <span
-                            style={{
-                              color: day.count > 0 ? "#F2F1FF" : "#555570",
-                              fontWeight: 700,
-                              minWidth: 20,
-                              textAlign: "right",
-                            }}
-                          >
-                            {day.count}
-                          </span>
-                          <span style={{ color: "#555570", fontSize: 10 }}>
-                            {day.count === 1 ? "activation" : "activations"}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div style={{ textAlign: "center", padding: "32px 0", fontSize: 13, color: "#555570" }}>
-                  No activations found for this period. Try a wider date range.
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* GLOBAL SCRIPTS MANAGER */}
-      <div
-        id="admin-scripts"
-        className="mx-auto max-w-6xl"
-        style={{
-          background: "#111118",
-          border: "1px solid rgba(255,255,255,0.07)",
-          borderRadius: 14,
-          overflow: "hidden",
-          marginBottom: 24,
-        }}
-      >
-        <div
-          style={{
-            padding: "14px 16px",
-            borderBottom: "1px solid rgba(255,255,255,0.07)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <div>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: "#F2F1FF", margin: 0 }}>
-              Global Scripts
-            </h3>
-            <p style={{ fontSize: 11, color: "#555570", marginTop: 3 }}>
-              Inject tracking codes and scripts into every page sitewide
-            </p>
-          </div>
-        </div>
-
-        <div style={{ padding: 16 }}>
-          <div
-            style={{
-              background: "rgba(251,191,36,0.06)",
-              border: "1px solid rgba(251,191,36,0.15)",
-              borderRadius: 8,
-              padding: "10px 14px",
-              marginBottom: 20,
-              fontSize: 12,
-              color: "#FBBF24",
-              lineHeight: 1.6,
-            }}
-          >
-            Scripts added here inject into every page on leadthur.com. A broken script can affect
-            the entire site. Test on staging before saving to production. Keep a backup before
-            making changes.
-          </div>
-
-          <div style={{ marginBottom: 16 }}>
-            <label
-              style={{
-                display: "block",
-                fontSize: 11,
-                fontWeight: 700,
-                color: "#8888A8",
-                textTransform: "uppercase" as const,
-                letterSpacing: "0.08em",
-                marginBottom: 6,
-              }}
-            >
-              Head Scripts
-            </label>
-            <p style={{ fontSize: 11, color: "#555570", marginBottom: 8, lineHeight: 1.5 }}>
-              Paste Google Analytics, Meta Pixel, or any script that belongs inside the head tag.
-            </p>
-            <textarea
-              value={headScripts}
-              onChange={(e) => setHeadScripts(e.target.value)}
-              placeholder={`Paste the full tracking code exactly as provided.\n\nInclude the outer <script> tags.\n\nExample Meta Pixel:\n<script>\n  fbq('init', 'YOUR_PIXEL_ID');\n  fbq('track', 'PageView');\n</script>\n<noscript>...</noscript>`}
-              rows={8}
-              style={{
-                width: "100%",
-                background: "#0A0A10",
-                border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: 8,
-                padding: "12px 14px",
-                fontSize: 12,
-                color: "#F2F1FF",
-                fontFamily: "monospace",
-                resize: "vertical" as const,
-                outline: "none",
-                lineHeight: 1.6,
-              }}
-            />
-          </div>
-
-          <div style={{ marginBottom: 16 }}>
-            <label
-              style={{
-                display: "block",
-                fontSize: 11,
-                fontWeight: 700,
-                color: "#8888A8",
-                textTransform: "uppercase" as const,
-                letterSpacing: "0.08em",
-                marginBottom: 6,
-              }}
-            >
-              Body Scripts
-            </label>
-            <p style={{ fontSize: 11, color: "#555570", marginBottom: 8, lineHeight: 1.5 }}>
-              Paste scripts that belong before the closing body tag. Use for chat widgets or
-              heatmaps.
-            </p>
-            <textarea
-              value={bodyScripts}
-              onChange={(e) => setBodyScripts(e.target.value)}
-              placeholder={`<!-- Example: Meta Pixel -->\n<script>\n  fbq('init', 'YOUR_PIXEL_ID');\n  fbq('track', 'PageView');\n</script>`}
-              rows={8}
-              style={{
-                width: "100%",
-                background: "#0A0A10",
-                border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: 8,
-                padding: "12px 14px",
-                fontSize: 12,
-                color: "#F2F1FF",
-                fontFamily: "monospace",
-                resize: "vertical" as const,
-                outline: "none",
-                lineHeight: 1.6,
-              }}
-            />
-          </div>
-
-          <button
-            onClick={saveScripts}
-            disabled={scriptsSaving}
-            style={{
-              background: scriptsSaving ? "#1A1A24" : "#7C3AED",
-              color: "white",
-              border: "none",
-              borderRadius: 8,
-              padding: "12px 24px",
-              fontSize: 13,
-              fontWeight: 700,
-              cursor: scriptsSaving ? "not-allowed" : "pointer",
-              fontFamily: "Inter, sans-serif",
-              opacity: scriptsSaving ? 0.7 : 1,
-              transition: "all 0.2s",
-            }}
-          >
-            {scriptsSaving ? "Saving..." : "Save Scripts"}
-          </button>
-
-          {scriptsMsg && (
-            <div
-              style={{
-                marginTop: 12,
-                padding: "10px 14px",
-                background: scriptsMsg.includes("saved")
-                  ? "rgba(16,185,129,0.08)"
-                  : "rgba(239,68,68,0.08)",
-                border: `1px solid ${
-                  scriptsMsg.includes("saved")
-                    ? "rgba(16,185,129,0.2)"
-                    : "rgba(239,68,68,0.2)"
-                }`,
-                borderRadius: 8,
-                fontSize: 12,
-                color: scriptsMsg.includes("saved") ? "#10B981" : "#EF4444",
-                fontWeight: 600,
-              }}
-            >
-              {scriptsMsg}
-            </div>
-          )}
-        </div>
-      </div>
+      <GlobalScriptsSection
+        headScripts={headScripts}
+        bodyScripts={bodyScripts}
+        scriptsSaving={scriptsSaving}
+        scriptsMsg={scriptsMsg}
+        setHeadScripts={setHeadScripts}
+        setBodyScripts={setBodyScripts}
+        saveScripts={saveScripts}
+      />
 
       {overview && (() => {
         const isDemoMode =
@@ -1134,171 +591,89 @@ export default function AdminPage() {
           window.location.hostname === "staging.leadthur.com";
 
         return (
-        <div className="mx-auto mt-8 max-w-6xl" id="admin-overview" style={{ marginBottom: 28 }}>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: 14,
-            }}
-          >
-            <h2
-              style={{
-                fontSize: 16,
-                fontWeight: 800,
-                color: "#F0EFFF",
-                margin: 0,
-                letterSpacing: -0.5,
-              }}
-            >
-              Overview
-            </h2>
-            <span style={{ fontSize: 11, color: "#555575" }}>
-              Updates every 60 seconds
-            </span>
-          </div>
+          <section id="admin-overview" className="mx-auto mb-7 mt-8 max-w-6xl">
+            <div className="mb-3.5 flex items-center justify-between">
+              <h2 className="m-0 text-base font-extrabold tracking-tight text-[var(--lt-text)]">
+                Overview
+              </h2>
+              <span className="text-[11px] text-[var(--lt-text-subtle)]">
+                Updates every 60 seconds
+              </span>
+            </div>
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(2, 1fr)",
-              gap: 10,
-            }}
-          >
-            {[
-              {
-                label: "Total Users",
-                value: isDemoMode ? 447 : overview.totalUsers,
-                sub: `${overview.newUsersToday} new today`,
-                color: "#7C3AED",
-              },
-              {
-                label: "Active Users",
-                value: isDemoMode ? 389 : overview.activeUsers,
-                sub: `${overview.suspendedUsers} suspended`,
-                color: "#10B981",
-              },
-              {
-                label: "New This Week",
-                value: isDemoMode ? 61 : overview.newUsersThisWeek,
-                sub: "activated accounts",
-                color: "#0891B2",
-              },
-              {
-                label: "Est. Revenue",
-                value: isDemoMode
-                  ? "₦6,705,000"
-                  : `₦${overview.estimatedRevenue.toLocaleString()}`,
-                sub: isDemoMode
-                  ? "at ₦15,000 per user"
-                  : `at ₦${SALE_PRICE_NGN.toLocaleString()} per user`,
-                color: "#F59E0B",
-              },
-              {
-                label: "Paid Searches",
-                value: isDemoMode ? "5,400" : overview.totalSearches,
-                sub: "by paying users",
-                color: "#7C3AED",
-              },
-              {
-                label: "Trial Searches",
-                value: isDemoMode ? "1,163" : overview.totalTrialSearches,
-                sub: "free preview usage",
-                color: "#6B7280",
-              },
-            ].map((stat) => (
-              <div
-                key={stat.label}
-                style={{
-                  background: "#111118",
-                  border: "1px solid rgba(255,255,255,0.07)",
-                  borderRadius: 12,
-                  padding: "16px 14px",
-                }}
-              >
+            <div className="grid grid-cols-2 gap-2.5">
+              {[
+                {
+                  label: "Total Users",
+                  value: isDemoMode ? 447 : overview.totalUsers,
+                  sub: `${overview.newUsersToday} new today`,
+                  colorClass: "text-[var(--lt-accent)]",
+                },
+                {
+                  label: "Active Users",
+                  value: isDemoMode ? 389 : overview.activeUsers,
+                  sub: `${overview.suspendedUsers} suspended`,
+                  colorClass: "text-[var(--lt-success)]",
+                },
+                {
+                  label: "New This Week",
+                  value: isDemoMode ? 61 : overview.newUsersThisWeek,
+                  sub: "activated accounts",
+                  colorClass: "text-[var(--lt-cyan)]",
+                },
+                {
+                  label: "Est. Revenue",
+                  value: isDemoMode
+                    ? "₦6,705,000"
+                    : `₦${overview.estimatedRevenue.toLocaleString()}`,
+                  sub: isDemoMode
+                    ? "at ₦15,000 per user"
+                    : `at ₦${SALE_PRICE_NGN.toLocaleString()} per user`,
+                  colorClass: "text-[var(--lt-warning)]",
+                },
+                {
+                  label: "Paid Searches",
+                  value: isDemoMode ? "5,400" : overview.totalSearches,
+                  sub: "by paying users",
+                  colorClass: "text-[var(--lt-accent)]",
+                },
+                {
+                  label: "Trial Searches",
+                  value: isDemoMode ? "1,163" : overview.totalTrialSearches,
+                  sub: "free preview usage",
+                  colorClass: "text-[var(--lt-text-muted)]",
+                },
+              ].map((stat) => (
                 <div
-                  style={{
-                    fontSize: 28,
-                    fontWeight: 900,
-                    color: stat.color,
-                    letterSpacing: -1,
-                    marginBottom: 4,
-                    fontFamily: "Inter, sans-serif",
-                    lineHeight: 1,
-                  }}
+                  key={stat.label}
+                  className="rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface)] px-3.5 py-4"
                 >
-                  {stat.value}
+                  <div
+                    className={`mb-1 text-[28px] font-black leading-none tracking-tight ${stat.colorClass}`}
+                  >
+                    {stat.value}
+                  </div>
+                  <div className="mb-0.5 text-xs font-bold text-[var(--lt-text)]">{stat.label}</div>
+                  <div className="text-[10px] text-[var(--lt-text-subtle)]">{stat.sub}</div>
                 </div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 700,
-                    color: "#F0EFFF",
-                    marginBottom: 3,
-                  }}
-                >
-                  {stat.label}
-                </div>
-                <div style={{ fontSize: 10, color: "#555575" }}>{stat.sub}</div>
-              </div>
-            ))}
-          </div>
-        </div>
+              ))}
+            </div>
+          </section>
         );
       })()}
 
       {recentUsers.length > 0 && (
-        <div
-          id="admin-users"
-          className="mx-auto max-w-6xl"
-          style={{
-            background: "#111118",
-            border: "1px solid rgba(255,255,255,0.07)",
-            borderRadius: 14,
-            overflow: "hidden",
-            marginBottom: 24,
-          }}
-        >
-          <div
-            style={{
-              padding: "14px 16px",
-              borderBottom: "1px solid rgba(255,255,255,0.07)",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: "#F0EFFF", margin: 0 }}>
-              Recent Users
-            </h3>
-            <span style={{ fontSize: 11, color: "#555575" }}>Last 10 signups</span>
-          </div>
-
-          <div style={{ overflowX: "auto" }}>
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                fontSize: 12,
-              }}
-            >
+        <AdminSection id="admin-users" className="mb-6">
+          <AdminSectionHeader
+            title="Recent Users"
+            description="Last 10 signups"
+          />
+          <div className="overflow-x-auto">
+            <table className={adminTableClass}>
               <thead>
-                <tr style={{ background: "#0D0D16" }}>
+                <tr className={adminTableHeadRowClass}>
                   {["Email", "Status", "Searches", "Joined", "Action"].map((h) => (
-                    <th
-                      key={h}
-                      style={{
-                        padding: "10px 14px",
-                        textAlign: "left",
-                        fontWeight: 700,
-                        color: "#555575",
-                        fontSize: 10,
-                        textTransform: "uppercase",
-                        letterSpacing: "0.06em",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
+                    <th key={h} className="px-3.5 py-2.5 whitespace-nowrap">
                       {h}
                     </th>
                   ))}
@@ -1306,301 +681,160 @@ export default function AdminPage() {
               </thead>
               <tbody>
                 {recentUsers.map((user) => (
-                  <tr
-                    key={user.email}
-                    style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}
-                  >
-                    <td
-                      style={{
-                        padding: "12px 14px",
-                        color: "#F0EFFF",
-                        fontWeight: 500,
-                        maxWidth: 180,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
+                  <tr key={user.email} className={adminTableRowClass}>
+                    <td className="max-w-[180px] truncate px-3.5 py-3 font-medium text-[var(--lt-text)]">
                       {user.email}
                     </td>
-                    <td style={{ padding: "12px 14px" }}>
-                      <span
-                        style={{
-                          background: user.is_suspended
-                            ? "rgba(239,68,68,0.1)"
+                    <td className="px-3.5 py-3">
+                      <StatusBadge
+                        status={
+                          (user.is_suspended
+                            ? "error"
                             : user.activated
-                              ? "rgba(16,185,129,0.1)"
-                              : "rgba(251,191,36,0.1)",
-                          color: user.is_suspended
-                            ? "#EF4444"
+                              ? "active"
+                              : "processing") as StatusBadgeStatus
+                        }
+                        label={
+                          user.is_suspended
+                            ? "Suspended"
                             : user.activated
-                              ? "#10B981"
-                              : "#FBBF24",
-                          padding: "3px 10px",
-                          borderRadius: 100,
-                          fontSize: 10,
-                          fontWeight: 700,
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {user.is_suspended
-                          ? "Suspended"
-                          : user.activated
-                            ? "Active"
-                            : "Pending"}
-                      </span>
+                              ? "Active"
+                              : "Pending"
+                        }
+                      />
                     </td>
-                    <td style={{ padding: "12px 14px", color: "#7878A0" }}>
+                    <td className="px-3.5 py-3 text-[var(--lt-text-muted)]">
                       {user.searches_used || 0}
                     </td>
-                    <td
-                      style={{
-                        padding: "12px 14px",
-                        color: "#7878A0",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
+                    <td className="whitespace-nowrap px-3.5 py-3 text-[var(--lt-text-muted)]">
                       {new Date(user.created_at).toLocaleDateString("en-GB", {
                         day: "numeric",
                         month: "short",
                         year: "2-digit",
                       })}
                     </td>
-                    <td style={{ padding: "12px 14px" }}>
-                      <button
+                    <td className="px-3.5 py-3">
+                      <Button
                         type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-[11px]"
                         onClick={() => {
                           setPrefillLookupEmail(user.email);
                           document
                             .getElementById("account-lookup")
                             ?.scrollIntoView({ behavior: "smooth" });
                         }}
-                        style={{
-                          background: "rgba(124,58,237,0.1)",
-                          border: "1px solid rgba(124,58,237,0.2)",
-                          color: "#A78BFA",
-                          padding: "5px 12px",
-                          borderRadius: 6,
-                          fontSize: 11,
-                          fontWeight: 700,
-                          cursor: "pointer",
-                          fontFamily: "Inter, sans-serif",
-                          whiteSpace: "nowrap",
-                        }}
                       >
                         Manage
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
+        </AdminSection>
       )}
 
-      <div
-        id="admin-payouts"
-        className="mx-auto mt-8 max-w-6xl"
-        style={{
-          background: "#111118",
-          border: "1px solid rgba(255,255,255,0.07)",
-          borderRadius: 14,
-          overflow: "hidden",
-          marginBottom: 24,
-        }}
-      >
-        <div
-          style={{
-            padding: "14px 16px",
-            borderBottom: "1px solid rgba(255,255,255,0.07)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: "#F2F1FF", margin: 0 }}>
-            Affiliate Payouts
-          </h3>
-          <span
-            style={{
-              background:
+      <AdminSection id="admin-payouts" className="mb-6">
+        <AdminSectionHeader
+          title="Affiliate Payouts"
+          action={
+            <Chip
+              className={
                 payouts.filter((p) => p.status === "pending").length > 0
-                  ? "rgba(251,191,36,0.15)"
-                  : "rgba(255,255,255,0.06)",
-              color:
-                payouts.filter((p) => p.status === "pending").length > 0
-                  ? "#FBBF24"
-                  : "#7878A0",
-              fontSize: 11,
-              fontWeight: 700,
-              padding: "3px 10px",
-              borderRadius: 100,
-            }}
-          >
-            {payouts.filter((p) => p.status === "pending").length} pending
-          </span>
-        </div>
+                  ? "border-[var(--lt-warning)]/30 bg-[var(--lt-warning-soft)] text-[var(--lt-warning)]"
+                  : undefined
+              }
+            >
+              {payouts.filter((p) => p.status === "pending").length} pending
+            </Chip>
+          }
+        />
 
         {payoutMsg && (
-          <div
-            style={{
-              padding: "12px 16px",
-              background: "rgba(16,185,129,0.08)",
-              borderBottom: "1px solid rgba(16,185,129,0.15)",
-              fontSize: 13,
-              color: "#10B981",
-              fontWeight: 600,
-            }}
-          >
+          <Alert variant="success" className="rounded-none border-x-0 border-t-0 text-sm font-semibold">
             {payoutMsg}
-          </div>
+          </Alert>
         )}
 
         {payouts.length === 0 ? (
-          <div
-            style={{
-              padding: "32px 16px",
-              textAlign: "center",
-              fontSize: 13,
-              color: "#7878A0",
-            }}
-          >
-            No payout requests yet.
+          <div className={adminSectionBodyClass}>
+            <EmptyState title="No payout requests yet." />
           </div>
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+          <div className="overflow-x-auto">
+            <table className={adminTableClass}>
               <thead>
-                <tr style={{ background: "#0D0D16" }}>
-                  {["Email", "Amount", "Bank", "Account", "Status", "Date", "Action"].map(
-                    (h) => (
-                      <th
-                        key={h}
-                        style={{
-                          padding: "10px 14px",
-                          textAlign: "left",
-                          fontWeight: 700,
-                          color: "#7878A0",
-                          fontSize: 10,
-                          textTransform: "uppercase",
-                          letterSpacing: "0.06em",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {h}
-                      </th>
-                    )
-                  )}
+                <tr className={adminTableHeadRowClass}>
+                  {["Email", "Amount", "Bank", "Account", "Status", "Date", "Action"].map((h) => (
+                    <th key={h} className="px-3.5 py-2.5 whitespace-nowrap">
+                      {h}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {payouts.map((payout) => (
-                  <tr
-                    key={payout.id}
-                    style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}
-                  >
-                    <td style={{ padding: "12px 14px", color: "#F2F1FF", fontWeight: 500 }}>
+                  <tr key={payout.id} className={adminTableRowClass}>
+                    <td className="px-3.5 py-3 font-medium text-[var(--lt-text)]">
                       {payout.referrer_email}
                     </td>
-                    <td style={{ padding: "12px 14px", color: "#10B981", fontWeight: 700 }}>
+                    <td className="px-3.5 py-3 font-bold text-[var(--lt-success)]">
                       ₦{payout.amount_ngn.toLocaleString()}
                     </td>
-                    <td style={{ padding: "12px 14px", color: "#8888A8" }}>
-                      {payout.bank_name}
-                    </td>
-                    <td style={{ padding: "12px 14px", color: "#8888A8" }}>
+                    <td className="px-3.5 py-3 text-[var(--lt-text-muted)]">{payout.bank_name}</td>
+                    <td className="px-3.5 py-3 text-[var(--lt-text-muted)]">
                       {payout.account_number} — {payout.account_name}
                     </td>
-                    <td style={{ padding: "12px 14px" }}>
-                      <span
-                        style={{
-                          background:
-                            payout.status === "paid"
-                              ? "rgba(16,185,129,0.1)"
-                              : payout.status === "failed"
-                                ? "rgba(239,68,68,0.1)"
-                                : payout.status === "processing"
-                                  ? "rgba(59,130,246,0.1)"
-                                  : "rgba(251,191,36,0.1)",
-                          color:
-                            payout.status === "paid"
-                              ? "#10B981"
-                              : payout.status === "failed"
-                                ? "#EF4444"
-                                : payout.status === "processing"
-                                  ? "#60A5FA"
-                                  : "#FBBF24",
-                          padding: "3px 10px",
-                          borderRadius: 100,
-                          fontSize: 10,
-                          fontWeight: 700,
-                          textTransform: "capitalize",
-                        }}
-                      >
-                        {payout.status}
-                      </span>
+                    <td className="px-3.5 py-3">
+                      <StatusBadge
+                        status={
+                          (payout.status === "paid"
+                            ? "active"
+                            : payout.status === "failed"
+                              ? "error"
+                              : payout.status === "processing"
+                                ? "enriched"
+                                : "processing") as StatusBadgeStatus
+                        }
+                        label={payout.status}
+                        className="capitalize"
+                      />
                     </td>
-                    <td
-                      style={{
-                        padding: "12px 14px",
-                        color: "#7878A0",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
+                    <td className="whitespace-nowrap px-3.5 py-3 text-[var(--lt-text-muted)]">
                       {new Date(payout.created_at).toLocaleDateString("en-GB", {
                         day: "numeric",
                         month: "short",
                         year: "2-digit",
                       })}
                     </td>
-                    <td style={{ padding: "12px 14px" }}>
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <td className="px-3.5 py-3">
+                      <div className="flex flex-wrap gap-1.5">
                         {payout.status === "pending" && (
-                          <button
+                          <Button
                             type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-[11px] text-[var(--lt-cyan)]"
                             onClick={() => void handleMarkProcessing(payout.id)}
-                            style={{
-                              background: "transparent",
-                              color: "#60A5FA",
-                              border: "1px solid rgba(59,130,246,0.35)",
-                              borderRadius: 6,
-                              padding: "6px 10px",
-                              fontSize: 11,
-                              fontWeight: 700,
-                              cursor: "pointer",
-                              fontFamily: "Inter, sans-serif",
-                              whiteSpace: "nowrap",
-                            }}
                           >
                             Processing
-                          </button>
+                          </Button>
                         )}
                         {(payout.status === "pending" ||
                           payout.status === "processing" ||
                           payout.status === "failed") && (
-                          <button
+                          <Button
                             type="button"
+                            size="sm"
+                            className="h-7 text-[11px]"
                             onClick={() => void handlePayout(payout)}
                             disabled={payingOut === payout.id}
-                            style={{
-                              background:
-                                payingOut === payout.id
-                                  ? "rgba(16,185,129,0.1)"
-                                  : "#10B981",
-                              color: "white",
-                              border: "none",
-                              borderRadius: 6,
-                              padding: "6px 14px",
-                              fontSize: 11,
-                              fontWeight: 700,
-                              cursor: payingOut === payout.id ? "not-allowed" : "pointer",
-                              fontFamily: "Inter, sans-serif",
-                              whiteSpace: "nowrap",
-                            }}
                           >
                             {payingOut === payout.id ? "Saving..." : "Mark Paid"}
-                          </button>
+                          </Button>
                         )}
                       </div>
                     </td>
@@ -1610,431 +844,15 @@ export default function AdminPage() {
             </table>
           </div>
         )}
-      </div>
+      </AdminSection>
 
       {trialStats && (
-        <div
-          id="admin-trials"
-          className="mx-auto mt-8 max-w-6xl"
-          style={{
-            background: "#FAFAFA",
-            border: "1px solid #E5E5E5",
-            borderRadius: 16,
-            padding: 24,
-          }}
-        >
-          <div
-            role="button"
-            tabIndex={0}
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              cursor: "pointer",
-              marginBottom: trialSectionOpen ? 20 : 0,
-            }}
-            onClick={() => setTrialSectionOpen(!trialSectionOpen)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                setTrialSectionOpen(!trialSectionOpen);
-              }
-            }}
-          >
-            <div>
-              <h3
-                style={{
-                  fontSize: 16,
-                  fontWeight: 800,
-                  color: "#111111",
-                  margin: 0,
-                  marginBottom: 3,
-                }}
-              >
-                Free Trial Activity
-              </h3>
-              <p style={{ fontSize: 12, color: "#888888", margin: 0 }}>
-                Track who is testing LeadThur before buying
-              </p>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div
-                style={{
-                  background: "#7C3AED",
-                  color: "white",
-                  fontSize: 11,
-                  fontWeight: 700,
-                  padding: "4px 10px",
-                  borderRadius: 100,
-                }}
-              >
-                {trialStats.trialsToday} today
-              </div>
-              <span
-                style={{
-                  color: "#888888",
-                  fontSize: 18,
-                  transform: trialSectionOpen ? "rotate(180deg)" : "rotate(0)",
-                  transition: "transform 0.2s",
-                }}
-              >
-                ⌄
-              </span>
-            </div>
-          </div>
-
-          {trialSectionOpen && (
-            <>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(2, 1fr)",
-                  gap: 10,
-                  marginBottom: 20,
-                }}
-              >
-                {[
-                  {
-                    label: "Total Trial Searches",
-                    value: trialStats.totalTrials,
-                    color: "#7C3AED",
-                  },
-                  {
-                    label: "Searches Today",
-                    value: trialStats.trialsToday,
-                    color: "#0891B2",
-                  },
-                  {
-                    label: "This Week",
-                    value: trialStats.trialsThisWeek,
-                    color: "#059669",
-                  },
-                  {
-                    label: "This Month",
-                    value: trialStats.trialsThisMonth,
-                    color: "#D97706",
-                  },
-                  {
-                    label: "New Licenses Today",
-                    value: trialStats.licensesToday,
-                    color: "#059669",
-                  },
-                  {
-                    label: "Est. Conversion Rate",
-                    value: `${trialStats.conversionRate}%`,
-                    color: "#7C3AED",
-                  },
-                ].map((stat) => (
-                  <div
-                    key={stat.label}
-                    style={{
-                      background: "#ffffff",
-                      border: "1px solid #EEEEEE",
-                      borderRadius: 10,
-                      padding: "14px 16px",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: 22,
-                        fontWeight: 800,
-                        color: stat.color,
-                        marginBottom: 3,
-                        fontFamily: "Inter, sans-serif",
-                      }}
-                    >
-                      {stat.value}
-                    </div>
-                    <div style={{ fontSize: 11, color: "#888888", fontWeight: 600 }}>
-                      {stat.label}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {trialActivity && trialActivity.dailyActivity.length > 0 && (
-                <div
-                  style={{
-                    background: "#ffffff",
-                    border: "1px solid #EEEEEE",
-                    borderRadius: 10,
-                    padding: 16,
-                    marginBottom: 16,
-                  }}
-                >
-                  <p
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: "#555555",
-                      marginBottom: 12,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                    }}
-                  >
-                    Last 7 Days
-                  </p>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "flex-end",
-                      gap: 8,
-                      height: 80,
-                    }}
-                  >
-                    {trialActivity.dailyActivity.map((day) => {
-                      const maxCount = Math.max(
-                        ...trialActivity.dailyActivity.map((d) => d.count)
-                      );
-                      const height =
-                        maxCount > 0
-                          ? Math.max((day.count / maxCount) * 70, day.count > 0 ? 8 : 2)
-                          : 2;
-                      const label = new Date(day.date).toLocaleDateString("en-GB", {
-                        weekday: "short",
-                      });
-                      return (
-                        <div
-                          key={day.date}
-                          style={{
-                            flex: 1,
-                            display: "flex",
-                            flexDirection: "column",
-                            alignItems: "center",
-                            gap: 4,
-                          }}
-                        >
-                          <div style={{ fontSize: 10, color: "#888888", fontWeight: 700 }}>
-                            {day.count || ""}
-                          </div>
-                          <div
-                            style={{
-                              width: "100%",
-                              height: `${height}px`,
-                              background: day.count > 0 ? "#7C3AED" : "#EEEEEE",
-                              borderRadius: 4,
-                              transition: "height 0.3s ease",
-                              opacity: day.count > 0 ? 1 : 0.4,
-                            }}
-                          />
-                          <div style={{ fontSize: 9, color: "#AAAAAA" }}>{label}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {trialActivity && trialActivity.topQueries.length > 0 && (
-                <div
-                  style={{
-                    background: "#ffffff",
-                    border: "1px solid #EEEEEE",
-                    borderRadius: 10,
-                    padding: 16,
-                    marginBottom: 16,
-                  }}
-                >
-                  <p
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: "#555555",
-                      marginBottom: 12,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                    }}
-                  >
-                    Top Searches This Month
-                  </p>
-                  {trialActivity.topQueries.map((q) => {
-                    const maxCount = trialActivity.topQueries[0]?.count || 1;
-                    const width = (q.count / maxCount) * 100;
-                    return (
-                      <div key={q.query} style={{ marginBottom: 10 }}>
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            marginBottom: 4,
-                          }}
-                        >
-                          <span
-                            style={{
-                              fontSize: 12,
-                              color: "#333333",
-                              fontWeight: 500,
-                              textTransform: "capitalize",
-                            }}
-                          >
-                            {q.query}
-                          </span>
-                          <span
-                            style={{
-                              fontSize: 11,
-                              color: "#7C3AED",
-                              fontWeight: 700,
-                            }}
-                          >
-                            {q.count}x
-                          </span>
-                        </div>
-                        <div
-                          style={{
-                            height: 4,
-                            background: "#F0F0F0",
-                            borderRadius: 100,
-                            overflow: "hidden",
-                          }}
-                        >
-                          <div
-                            style={{
-                              height: "100%",
-                              width: `${width}%`,
-                              background: "linear-gradient(90deg, #7C3AED, #A78BFA)",
-                              borderRadius: 100,
-                              transition: "width 0.5s ease",
-                            }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {trialActivity && trialActivity.recentTrials.length > 0 && (
-                <div
-                  style={{
-                    background: "#ffffff",
-                    border: "1px solid #EEEEEE",
-                    borderRadius: 10,
-                    overflow: "hidden",
-                  }}
-                >
-                  <div
-                    style={{
-                      padding: "12px 16px",
-                      borderBottom: "1px solid #EEEEEE",
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                  >
-                    <p
-                      style={{
-                        fontSize: 12,
-                        fontWeight: 700,
-                        color: "#555555",
-                        margin: 0,
-                        textTransform: "uppercase",
-                        letterSpacing: "0.06em",
-                      }}
-                    >
-                      Recent Trial Searches
-                    </p>
-                    <span style={{ fontSize: 11, color: "#888888" }}>Last 50</span>
-                  </div>
-
-                  <div style={{ overflowX: "auto" }}>
-                    <table
-                      style={{
-                        width: "100%",
-                        borderCollapse: "collapse",
-                        fontSize: 12,
-                      }}
-                    >
-                      <thead>
-                        <tr style={{ background: "#F8F8F8" }}>
-                          {["Business Type", "Location", "Results", "Time"].map((h) => (
-                            <th
-                              key={h}
-                              style={{
-                                padding: "10px 14px",
-                                textAlign: "left",
-                                fontWeight: 700,
-                                color: "#888888",
-                                fontSize: 10,
-                                textTransform: "uppercase",
-                                letterSpacing: "0.06em",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {h}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {trialActivity.recentTrials.map((trial, i) => (
-                          <tr
-                            key={trial.id}
-                            style={{
-                              borderTop: "1px solid #F0F0F0",
-                              background: i % 2 === 0 ? "#ffffff" : "#FAFAFA",
-                            }}
-                          >
-                            <td
-                              style={{
-                                padding: "10px 14px",
-                                color: "#111111",
-                                fontWeight: 600,
-                                textTransform: "capitalize",
-                              }}
-                            >
-                              {trial.query}
-                            </td>
-                            <td
-                              style={{
-                                padding: "10px 14px",
-                                color: "#555555",
-                                textTransform: "capitalize",
-                              }}
-                            >
-                              {trial.location}
-                            </td>
-                            <td style={{ padding: "10px 14px" }}>
-                              <span
-                                style={{
-                                  background:
-                                    trial.total_found > 0
-                                      ? "rgba(16,185,129,0.1)"
-                                      : "rgba(0,0,0,0.06)",
-                                  color: trial.total_found > 0 ? "#059669" : "#888888",
-                                  padding: "2px 8px",
-                                  borderRadius: 100,
-                                  fontSize: 11,
-                                  fontWeight: 700,
-                                }}
-                              >
-                                {trial.total_found || 0}
-                              </span>
-                            </td>
-                            <td
-                              style={{
-                                padding: "10px 14px",
-                                color: "#888888",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {new Date(trial.created_at).toLocaleString("en-GB", {
-                                day: "numeric",
-                                month: "short",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
+        <TrialActivitySection
+          trialStats={trialStats}
+          trialActivity={trialActivity}
+          trialSectionOpen={trialSectionOpen}
+          setTrialSectionOpen={setTrialSectionOpen}
+        />
       )}
 
       <div className="mx-auto mt-8 max-w-6xl" id="admin-tools">
@@ -2094,12 +912,11 @@ export default function AdminPage() {
           </PanelHeader>
           <PanelContent>
             <form onSubmit={handleGenerate} className="space-y-3">
-              <label className="text-xs text-[var(--lt-text-muted)]">Buyer Email Address</label>
-              <input
+              <label className={adminLabelClass}>Buyer Email Address</label>
+              <Input
                 type="email"
                 value={generateEmail}
                 onChange={(e) => setGenerateEmail(e.target.value)}
-                className="w-full rounded-lg border border-[var(--lt-border)] bg-[var(--lt-surface-2)] px-4 py-2.5 text-[var(--lt-text)] outline-none focus:border-[var(--lt-cyan)]"
                 required
               />
               <Button type="submit" className="w-full" disabled={loading}>
@@ -2117,69 +934,73 @@ export default function AdminPage() {
         </Panel>
       </div>
 
-      <section
-        id="admin-licenses"
-        className="mx-auto mt-8 max-w-6xl overflow-hidden rounded-2xl border border-[var(--lt-border)] bg-[var(--lt-surface)] p-6"
-      >
-        <h2 className="text-lg font-semibold text-[var(--lt-text)]">Recent Licenses</h2>
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[900px] text-left text-sm">
-            <thead>
-              <tr className="border-b border-white/10 text-xs text-[#6B6B80]">
-                <th className="pb-3 pr-4">Email</th>
-                <th className="pb-3 pr-4">License Key</th>
-                <th className="pb-3 pr-4">Status</th>
-                <th className="pb-3 pr-4">Activated Date</th>
-                <th className="pb-3 pr-4">Payment</th>
-                <th className="pb-3 pr-4">Searches</th>
-                <th className="pb-3 pr-4">Exports</th>
-                <th className="pb-3">Created</th>
-              </tr>
-            </thead>
-            <tbody>
-              {licenses.map((row) => (
-                <tr key={row.id} className="border-b border-white/5 text-[#C4C4D4]">
-                  <td className="py-3 pr-4">{row.email}</td>
-                  <td className="py-3 pr-4 font-mono text-xs">{row.key}</td>
-                  <td className="py-3 pr-4">
-                    {row.is_suspended ? (
-                      <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-xs text-red-400">
-                        Suspended
-                      </span>
-                    ) : row.activated ? (
-                      <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-400">
-                        Activated
-                      </span>
-                    ) : (
-                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-[#9CA3AF]">
-                        Pending
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3 pr-4">{formatDate(row.activated_at)}</td>
-                  <td className="py-3 pr-4">
-                    <span className="rounded-full bg-[#7C3AED]/15 px-2 py-0.5 text-xs text-[#C4B5FD]">
-                      {row.payment_channel === "paystack" ? "Paystack" : "Bank Transfer"}
-                    </span>
-                  </td>
-                  <td className="py-3 pr-4">
-                    {row.search_count ?? row.searches_used} / {row.monthly_search_limit ?? 100}
-                  </td>
-                  <td className="py-3 pr-4">{row.exports_used}</td>
-                  <td className="py-3">{formatDate(row.created_at)}</td>
+      <AdminSection id="admin-licenses" className="mb-6 p-0">
+        <AdminSectionHeader title="Recent Licenses" />
+        <div className={adminSectionBodyClass}>
+          <div className="overflow-x-auto">
+            <table className={`${adminTableClass} min-w-[900px]`}>
+              <thead>
+                <tr className={adminTableHeadRowClass}>
+                  <th className="px-3 py-2 pr-4">Email</th>
+                  <th className="px-3 py-2 pr-4">License Key</th>
+                  <th className="px-3 py-2 pr-4">Status</th>
+                  <th className="px-3 py-2 pr-4">Activated Date</th>
+                  <th className="px-3 py-2 pr-4">Payment</th>
+                  <th className="px-3 py-2 pr-4">Searches</th>
+                  <th className="px-3 py-2 pr-4">Exports</th>
+                  <th className="px-3 py-2">Created</th>
                 </tr>
-              ))}
-              {licenses.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="py-8 text-center text-[#6B6B80]">
-                    No licenses yet
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {licenses.map((row) => (
+                  <tr key={row.id} className={adminTableRowClass}>
+                    <td className="px-3 py-3 pr-4 text-[var(--lt-text)]">{row.email}</td>
+                    <td className="px-3 py-3 pr-4 font-mono text-xs text-[var(--lt-text-muted)]">
+                      {row.key}
+                    </td>
+                    <td className="px-3 py-3 pr-4">
+                      <StatusBadge
+                        status={
+                          (row.is_suspended
+                            ? "error"
+                            : row.activated
+                              ? "active"
+                              : "paused") as StatusBadgeStatus
+                        }
+                        label={
+                          row.is_suspended
+                            ? "Suspended"
+                            : row.activated
+                              ? "Activated"
+                              : "Pending"
+                        }
+                      />
+                    </td>
+                    <td className="px-3 py-3 pr-4 text-[var(--lt-text-muted)]">
+                      {formatDate(row.activated_at)}
+                    </td>
+                    <td className="px-3 py-3 pr-4">
+                      <StatusBadge status="replied" label={row.payment_channel === "paystack" ? "Paystack" : "Bank Transfer"} />
+                    </td>
+                    <td className="px-3 py-3 pr-4 text-[var(--lt-text-muted)]">
+                      {row.search_count ?? row.searches_used} / {row.monthly_search_limit ?? 100}
+                    </td>
+                    <td className="px-3 py-3 pr-4 text-[var(--lt-text-muted)]">{row.exports_used}</td>
+                    <td className="px-3 py-3 text-[var(--lt-text-muted)]">{formatDate(row.created_at)}</td>
+                  </tr>
+                ))}
+                {licenses.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="py-8 text-center text-[var(--lt-text-subtle)]">
+                      No licenses yet
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </section>
+      </AdminSection>
     </main>
   );
 }

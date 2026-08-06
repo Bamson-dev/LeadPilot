@@ -5,6 +5,19 @@ import {
   getEmailPerformance,
   type EmailPerformanceRow,
 } from "@/services/admin-api";
+import {
+  AdminLoading,
+  AdminPanel,
+  adminErrorClass,
+  adminTableClass,
+  adminTableHeadRowClass,
+  adminTableRowClass,
+  rateStatusClass,
+} from "@/components/admin/admin-ui";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Panel, PanelContent } from "@/components/ui/panel";
+import { cn } from "@/utils/utils";
 
 const EMAIL_SUBJECTS: Record<number, string> = {
   1: "you are 60 seconds from your first client",
@@ -33,13 +46,6 @@ function formatLastOpened(value: string | null): string {
     hour: "numeric",
     minute: "2-digit",
   });
-}
-
-function rateColor(rate: number | null): string {
-  if (rate === null) return "#8888A8";
-  if (rate > 40) return "#10B981";
-  if (rate >= 20) return "#F59E0B";
-  return "#EF4444";
 }
 
 export function TrialEmailPerformancePanel({
@@ -96,57 +102,58 @@ export function TrialEmailPerformancePanel({
   }, [rows]);
 
   return (
-    <section className="glass mt-8 rounded-2xl p-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold text-[#F4F4FF]">Email Performance</h2>
-          <p className="text-sm text-[#8888A8]">Subject performance across 15 trial emails</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-[#C0C0D8] hover:bg-white/5"
-        >
+    <AdminPanel
+      title="Email Performance"
+      description="Subject performance across 15 trial emails"
+      action={
+        <Button type="button" variant="outline" size="sm" onClick={() => void load()}>
           Refresh
-        </button>
-      </div>
-
+        </Button>
+      }
+      className="mt-0"
+    >
       {loading ? (
-        <p className="text-sm text-[#8888A8]">Loading email performance...</p>
+        <AdminLoading label="Loading email performance..." />
       ) : error ? (
-        <p className="text-sm text-red-400">{error}</p>
+        <p className={adminErrorClass}>{error}</p>
       ) : !hasOpenData ? (
-        <div className="rounded-xl border border-white/10 bg-[#111118] px-6 py-14 text-center">
-          <p className="text-sm text-[#C0C0D8]">
-            No email opens recorded yet. Opens will appear here as trial users receive and open
-            their emails.
-          </p>
-        </div>
+        <EmptyState
+          title="No email opens recorded yet"
+          description="Opens will appear here as trial users receive and open their emails."
+        />
       ) : (
         <>
           <div className="mb-4 grid gap-3 md:grid-cols-3">
-            <div className="rounded-xl border border-white/10 bg-[#111118] p-4">
-              <p className="text-xs uppercase tracking-wide text-[#8888A8]">Total Trial Signups</p>
-              <p className="mt-1 text-2xl font-bold text-[#F4F4FF]">{totalSignups}</p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-[#111118] p-4">
-              <p className="text-xs uppercase tracking-wide text-[#8888A8]">Average Open Rate</p>
-              <p className="mt-1 text-2xl font-bold text-[#A78BFA]">{summary.averageRate}%</p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-[#111118] p-4">
-              <p className="text-xs uppercase tracking-wide text-[#8888A8]">Best Performing</p>
-              <p className="mt-1 text-sm font-semibold text-[#F4F4FF]">
-                {summary.best
+            {[
+              { label: "Total Trial Signups", value: totalSignups, className: "text-[var(--lt-text)]" },
+              {
+                label: "Average Open Rate",
+                value: `${summary.averageRate}%`,
+                className: "text-[var(--lt-accent-soft)]",
+              },
+              {
+                label: "Best Performing",
+                value: summary.best
                   ? `Step ${summary.best.step}: ${EMAIL_SUBJECTS[summary.best.step]}`
-                  : "—"}
-              </p>
-            </div>
+                  : "—",
+                className: "text-sm font-semibold text-[var(--lt-text)]",
+              },
+            ].map((stat) => (
+              <Panel key={stat.label}>
+                <PanelContent className="p-4">
+                  <p className="text-xs uppercase tracking-wide text-[var(--lt-text-subtle)]">
+                    {stat.label}
+                  </p>
+                  <p className={cn("mt-1 text-2xl font-bold", stat.className)}>{stat.value}</p>
+                </PanelContent>
+              </Panel>
+            ))}
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
+            <table className={adminTableClass}>
               <thead>
-                <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wide text-[#8888A8]">
+                <tr className={adminTableHeadRowClass}>
                   <th className="px-3 py-2">Step</th>
                   <th className="px-3 py-2">Subject</th>
                   <th className="px-3 py-2">Sends</th>
@@ -157,18 +164,19 @@ export function TrialEmailPerformancePanel({
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={row.step} className="border-b border-white/5">
-                    <td className="px-3 py-3 font-semibold text-[#A78BFA]">{row.step}</td>
-                    <td className="px-3 py-3 text-[#F4F4FF]">{EMAIL_SUBJECTS[row.step]}</td>
-                    <td className="px-3 py-3 text-[#C0C0D8]">{row.sends}</td>
-                    <td className="px-3 py-3 text-[#C0C0D8]">{row.opens}</td>
-                    <td
-                      className="px-3 py-3 font-semibold"
-                      style={{ color: rateColor(row.open_rate) }}
-                    >
+                  <tr key={row.step} className={adminTableRowClass}>
+                    <td className="px-3 py-3 font-semibold text-[var(--lt-accent-soft)]">
+                      {row.step}
+                    </td>
+                    <td className="px-3 py-3 text-[var(--lt-text)]">
+                      {EMAIL_SUBJECTS[row.step]}
+                    </td>
+                    <td className="px-3 py-3 text-[var(--lt-text-muted)]">{row.sends}</td>
+                    <td className="px-3 py-3 text-[var(--lt-text-muted)]">{row.opens}</td>
+                    <td className={cn("px-3 py-3 font-semibold", rateStatusClass(row.open_rate))}>
                       {row.open_rate === null ? "—" : `${row.open_rate}%`}
                     </td>
-                    <td className="px-3 py-3 text-[#8888A8]">
+                    <td className="px-3 py-3 text-[var(--lt-text-subtle)]">
                       {formatLastOpened(row.last_opened_at)}
                     </td>
                   </tr>
@@ -178,6 +186,6 @@ export function TrialEmailPerformancePanel({
           </div>
         </>
       )}
-    </section>
+    </AdminPanel>
   );
 }

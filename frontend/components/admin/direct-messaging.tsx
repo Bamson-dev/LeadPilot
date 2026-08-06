@@ -2,8 +2,19 @@
 
 import { useState } from "react";
 import RichEmailEditor from "@/components/RichEmailEditor";
+import {
+  AdminChipButton,
+  AdminPanel,
+  adminLabelClass,
+} from "@/components/admin/admin-ui";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
+import { Input } from "@/components/ui/input";
+import { Panel, PanelContent } from "@/components/ui/panel";
 import { getAdminToken } from "@/services/admin-api";
 import { getApiUrl } from "@/utils/env";
+import { cn } from "@/utils/utils";
 
 interface DirectMessagingProps {
   onSessionExpired: () => void;
@@ -84,134 +95,59 @@ export function DirectMessaging({ onSessionExpired }: DirectMessagingProps) {
   const [msgResult, setMsgResult] = useState("");
   const [msgHtmlBody, setMsgHtmlBody] = useState("");
 
+  const resultSuccess =
+    msgResult.includes("success") || msgResult.includes("sent");
+
   return (
-    <div
-      style={{
-        background: "#111118",
-        border: "1px solid rgba(255,255,255,0.07)",
-        borderRadius: 14,
-        overflow: "hidden",
-        marginBottom: 24,
-        marginTop: 24,
-      }}
+    <AdminPanel
+      title="Direct Messaging"
+      description="Send branded emails to individual users or all active users."
+      className="mt-6"
     >
-      <div
-        style={{
-          padding: "14px 16px",
-          borderBottom: "1px solid rgba(255,255,255,0.07)",
-        }}
-      >
-        <h3 style={{ fontSize: 14, fontWeight: 700, color: "#F2F1FF", margin: 0 }}>
-          Direct Messaging
-        </h3>
-        <p style={{ fontSize: 11, color: "#555570", marginTop: 3 }}>
-          Send branded emails to individual users or all active users
-        </p>
+      <div className="mb-5 flex flex-wrap gap-2">
+        {(["single", "broadcast"] as const).map((mode) => (
+          <AdminChipButton
+            key={mode}
+            active={msgMode === mode}
+            onClick={() => setMsgMode(mode)}
+          >
+            {mode === "single" ? "Single User" : "Broadcast to All"}
+          </AdminChipButton>
+        ))}
       </div>
 
-      <div style={{ padding: 16 }}>
-        <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-          {(["single", "broadcast"] as const).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => setMsgMode(mode)}
-              style={{
-                background: msgMode === mode ? "#7C3AED" : "rgba(255,255,255,0.04)",
-                border: `1px solid ${msgMode === mode ? "#7C3AED" : "rgba(255,255,255,0.08)"}`,
-                borderRadius: 8,
-                padding: "7px 16px",
-                fontSize: 12,
-                fontWeight: 700,
-                color: msgMode === mode ? "white" : "#8888A8",
-                cursor: "pointer",
-                fontFamily: "Inter, sans-serif",
-              }}
-            >
-              {mode === "single" ? "Single User" : "Broadcast to All"}
-            </button>
-          ))}
-        </div>
-
-        {msgMode === "single" && (
-          <div style={{ marginBottom: 14 }}>
-            <label
-              style={{
-                display: "block",
-                fontSize: 11,
-                fontWeight: 700,
-                color: "#8888A8",
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                marginBottom: 6,
-              }}
-            >
-              Recipient Email
-            </label>
-            <input
-              value={msgRecipient}
-              onChange={(e) => setMsgRecipient(e.target.value)}
-              placeholder="user@example.com"
-              style={{
-                width: "100%",
-                background: "#0A0A10",
-                border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: 8,
-                padding: "10px 14px",
-                fontSize: 13,
-                color: "#F2F1FF",
-                fontFamily: "Inter, sans-serif",
-                outline: "none",
-              }}
-            />
-          </div>
-        )}
-
-        <div style={{ marginBottom: 14 }}>
-          <label
-            style={{
-              display: "block",
-              fontSize: 11,
-              fontWeight: 700,
-              color: "#8888A8",
-              textTransform: "uppercase",
-              letterSpacing: "0.08em",
-              marginBottom: 6,
-            }}
-          >
-            Subject Line
+      {msgMode === "single" && (
+        <div className="mb-4 space-y-2">
+          <label className={cn(adminLabelClass, "uppercase tracking-wide")} htmlFor="msg-recipient">
+            Recipient Email
           </label>
-          <input
-            value={msgSubject}
-            onChange={(e) => setMsgSubject(e.target.value)}
-            placeholder="e.g. Important update about your LeadThur account"
-            style={{
-              width: "100%",
-              background: "#0A0A10",
-              border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: 8,
-              padding: "10px 14px",
-              fontSize: 13,
-              color: "#F2F1FF",
-              fontFamily: "Inter, sans-serif",
-              outline: "none",
-            }}
+          <Input
+            id="msg-recipient"
+            value={msgRecipient}
+            onChange={(e) => setMsgRecipient(e.target.value)}
+            placeholder="user@example.com"
           />
         </div>
+      )}
 
-        <div
-          style={{
-            background: "rgba(124,58,237,0.06)",
-            border: "1px solid rgba(124,58,237,0.15)",
-            borderRadius: 8,
-            padding: "10px 14px",
-            marginBottom: 12,
-          }}
-        >
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#A78BFA", marginBottom: 6 }}>
+      <div className="mb-4 space-y-2">
+        <label className={cn(adminLabelClass, "uppercase tracking-wide")} htmlFor="msg-subject">
+          Subject Line
+        </label>
+        <Input
+          id="msg-subject"
+          value={msgSubject}
+          onChange={(e) => setMsgSubject(e.target.value)}
+          placeholder="e.g. Important update about your LeadThur account"
+        />
+      </div>
+
+      <Panel className="mb-4">
+        <PanelContent className="space-y-2 p-4">
+          <p className="text-xs font-bold text-[var(--lt-accent-soft)]">
             Personalisation Tokens — click to copy
-          </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          </p>
+          <div className="flex flex-wrap gap-2">
             {[
               { token: "{{firstName}}", desc: "First name" },
               { token: "{{email}}", desc: "Email address" },
@@ -221,204 +157,140 @@ export function DirectMessaging({ onSessionExpired }: DirectMessagingProps) {
                 key={t.token}
                 type="button"
                 onClick={() => void navigator.clipboard.writeText(t.token)}
-                style={{
-                  background: "rgba(124,58,237,0.1)",
-                  border: "1px solid rgba(124,58,237,0.2)",
-                  borderRadius: 6,
-                  padding: "4px 10px",
-                  fontSize: 11,
-                  color: "#A78BFA",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  fontFamily: "Inter, sans-serif",
-                }}
                 title="Click to copy"
+                className="rounded-md border-0 bg-transparent p-0"
               >
-                {t.token}
-                <span style={{ color: "#555570", fontWeight: 400 }}> — {t.desc}</span>
+                <Chip className="border-[var(--lt-accent)]/20 bg-[var(--lt-accent)]/10 text-[var(--lt-accent-soft)]">
+                  {t.token}
+                  <span className="font-normal text-[var(--lt-text-subtle)]"> — {t.desc}</span>
+                </Chip>
               </button>
             ))}
           </div>
-        </div>
+        </PanelContent>
+      </Panel>
 
-        <div style={{ marginBottom: 14 }}>
-          <label
-            style={{
-              display: "block",
-              fontSize: 11,
-              fontWeight: 700,
-              color: "#8888A8",
-              textTransform: "uppercase",
-              letterSpacing: "0.08em",
-              marginBottom: 6,
-            }}
-          >
-            Email Body
-          </label>
-          <RichEmailEditor
-            value={msgHtmlBody}
-            onChange={setMsgHtmlBody}
-            placeholder="Write your email here. Select text to format it. Use the toolbar to add links, images, and more."
-          />
-        </div>
+      <div className="mb-4 space-y-2">
+        <label className={cn(adminLabelClass, "uppercase tracking-wide")}>Email Body</label>
+        <RichEmailEditor
+          value={msgHtmlBody}
+          onChange={setMsgHtmlBody}
+          placeholder="Write your email here. Select text to format it. Use the toolbar to add links, images, and more."
+        />
+      </div>
 
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
-          <button
-            type="button"
-            onClick={() => {
-              if (isEmptyHtml(msgHtmlBody)) {
-                alert("Write something in the email body first.");
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            if (isEmptyHtml(msgHtmlBody)) {
+              alert("Write something in the email body first.");
+              return;
+            }
+            const win = window.open("", "_blank");
+            if (win) {
+              win.document.write(
+                buildPreviewHtml(msgHtmlBody, msgSubject, msgMode, msgRecipient)
+              );
+              win.document.close();
+            }
+          }}
+        >
+          Preview Email
+        </Button>
+
+        <Button
+          type="button"
+          disabled={msgSending}
+          onClick={() => {
+            void (async () => {
+              if (!msgSubject) {
+                setMsgResult("Add a subject line before sending.");
                 return;
               }
-              const win = window.open("", "_blank");
-              if (win) {
-                win.document.write(
-                  buildPreviewHtml(msgHtmlBody, msgSubject, msgMode, msgRecipient)
-                );
-                win.document.close();
+              if (msgMode === "single" && !msgRecipient) {
+                setMsgResult("Add a recipient email before sending.");
+                return;
               }
-            }}
-            style={{
-              background: "transparent",
-              border: "1px solid rgba(124,58,237,0.4)",
-              borderRadius: 8,
-              padding: "10px 20px",
-              fontSize: 12,
-              fontWeight: 700,
-              color: "#A78BFA",
-              cursor: "pointer",
-              fontFamily: "Inter, sans-serif",
-            }}
-          >
-            Preview Email
-          </button>
+              if (isEmptyHtml(msgHtmlBody)) {
+                setMsgResult("Write something in the email body before sending.");
+                return;
+              }
+              if (msgMode === "broadcast") {
+                const confirmed = window.confirm(
+                  `Send "${msgSubject}" to ALL active users? This cannot be undone.`
+                );
+                if (!confirmed) return;
+              }
 
-          <button
-            type="button"
-            onClick={() => {
-              void (async () => {
-                if (!msgSubject) {
-                  setMsgResult("Add a subject line before sending.");
+              setMsgSending(true);
+              setMsgResult("");
+
+              const apiUrl = getApiUrl();
+              if (!apiUrl) {
+                setMsgResult("API URL is not configured.");
+                setMsgSending(false);
+                return;
+              }
+
+              try {
+                const endpoint = msgMode === "single" ? "send-message" : "broadcast-message";
+
+                const res = await fetch(`${apiUrl}/admin/${endpoint}`, {
+                  method: "POST",
+                  headers: getAdminHeaders(),
+                  body: JSON.stringify({
+                    email: msgRecipient,
+                    subject: msgSubject,
+                    htmlBody: msgHtmlBody,
+                  }),
+                });
+
+                if (res.status === 401) {
+                  onSessionExpired();
                   return;
                 }
-                if (msgMode === "single" && !msgRecipient) {
-                  setMsgResult("Add a recipient email before sending.");
-                  return;
-                }
-                if (isEmptyHtml(msgHtmlBody)) {
-                  setMsgResult("Write something in the email body before sending.");
-                  return;
-                }
-                if (msgMode === "broadcast") {
-                  const confirmed = window.confirm(
-                    `Send "${msgSubject}" to ALL active users? This cannot be undone.`
+
+                const data = (await res.json()) as {
+                  success?: boolean;
+                  error?: string;
+                  message?: string;
+                };
+
+                if (data.success) {
+                  setMsgResult(
+                    msgMode === "single"
+                      ? `Email sent successfully to ${msgRecipient}.`
+                      : data.message || "Broadcast sent to all active users."
                   );
-                  if (!confirmed) return;
+                  setMsgHtmlBody("");
+                  setMsgSubject("");
+                  setMsgRecipient("");
+                } else {
+                  setMsgResult(data.error || "Failed to send.");
                 }
-
-                setMsgSending(true);
-                setMsgResult("");
-
-                const apiUrl = getApiUrl();
-                if (!apiUrl) {
-                  setMsgResult("API URL is not configured.");
-                  setMsgSending(false);
-                  return;
-                }
-
-                try {
-                  const endpoint =
-                    msgMode === "single" ? "send-message" : "broadcast-message";
-
-                  const res = await fetch(`${apiUrl}/admin/${endpoint}`, {
-                    method: "POST",
-                    headers: getAdminHeaders(),
-                    body: JSON.stringify({
-                      email: msgRecipient,
-                      subject: msgSubject,
-                      htmlBody: msgHtmlBody,
-                    }),
-                  });
-
-                  if (res.status === 401) {
-                    onSessionExpired();
-                    return;
-                  }
-
-                  const data = (await res.json()) as {
-                    success?: boolean;
-                    error?: string;
-                    message?: string;
-                  };
-
-                  if (data.success) {
-                    setMsgResult(
-                      msgMode === "single"
-                        ? `Email sent successfully to ${msgRecipient}.`
-                        : data.message || "Broadcast sent to all active users."
-                    );
-                    setMsgHtmlBody("");
-                    setMsgSubject("");
-                    setMsgRecipient("");
-                  } else {
-                    setMsgResult(data.error || "Failed to send.");
-                  }
-                } catch {
-                  setMsgResult("Failed to send. Check your connection.");
-                } finally {
-                  setMsgSending(false);
-                }
-              })();
-            }}
-            disabled={msgSending}
-            style={{
-              background: msgSending ? "#1A1A24" : "#7C3AED",
-              color: "white",
-              border: "none",
-              borderRadius: 8,
-              padding: "10px 24px",
-              fontSize: 13,
-              fontWeight: 700,
-              cursor: msgSending ? "not-allowed" : "pointer",
-              fontFamily: "Inter, sans-serif",
-              opacity: msgSending ? 0.7 : 1,
-            }}
-          >
-            {msgSending
-              ? "Sending..."
-              : msgMode === "single"
-                ? "Send Message"
-                : "Broadcast to All Users"}
-          </button>
-        </div>
-
-        {msgResult && (
-          <div
-            style={{
-              marginTop: 12,
-              padding: "10px 14px",
-              background:
-                msgResult.includes("success") || msgResult.includes("sent")
-                  ? "rgba(16,185,129,0.08)"
-                  : "rgba(239,68,68,0.08)",
-              border: `1px solid ${
-                msgResult.includes("success") || msgResult.includes("sent")
-                  ? "rgba(16,185,129,0.2)"
-                  : "rgba(239,68,68,0.2)"
-              }`,
-              borderRadius: 8,
-              fontSize: 12,
-              color:
-                msgResult.includes("success") || msgResult.includes("sent")
-                  ? "#10B981"
-                  : "#EF4444",
-              fontWeight: 600,
-            }}
-          >
-            {msgResult}
-          </div>
-        )}
+              } catch {
+                setMsgResult("Failed to send. Check your connection.");
+              } finally {
+                setMsgSending(false);
+              }
+            })();
+          }}
+        >
+          {msgSending
+            ? "Sending..."
+            : msgMode === "single"
+              ? "Send Message"
+              : "Broadcast to All Users"}
+        </Button>
       </div>
-    </div>
+
+      {msgResult ? (
+        <Alert variant={resultSuccess ? "success" : "danger"} className="mt-4">
+          {msgResult}
+        </Alert>
+      ) : null}
+    </AdminPanel>
   );
 }

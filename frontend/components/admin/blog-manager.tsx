@@ -3,8 +3,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import RichEmailEditor from "@/components/RichEmailEditor";
+import {
+  AdminLoading,
+  AdminPanel,
+  adminLabelClass,
+} from "@/components/admin/admin-ui";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Input } from "@/components/ui/input";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { getAdminToken } from "@/services/admin-api";
 import { getApiUrl } from "@/utils/env";
+import { cn } from "@/utils/utils";
 
 type BlogPostRow = {
   id: string;
@@ -298,160 +309,57 @@ export function BlogManager(_props?: BlogManagerProps) {
   }
 
   return (
-    <div
-      style={{
-        background: "#111118",
-        border: "1px solid rgba(255,255,255,0.07)",
-        borderRadius: 14,
-        overflow: "hidden",
-        marginBottom: 24,
-      }}
+    <AdminPanel
+      title="Blog Manager"
+      description="Write and publish articles to leadthur.com/blog"
+      action={
+        <Button type="button" size="sm" onClick={openNewPost}>
+          + New Article
+        </Button>
+      }
+      className="mt-0"
     >
-      <div
-        style={{
-          padding: "14px 16px",
-          borderBottom: "1px solid rgba(255,255,255,0.07)",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <div>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: "#F2F1FF", margin: 0 }}>
-            Blog Manager
-          </h3>
-          <p style={{ fontSize: 11, color: "#555570", marginTop: 3 }}>
-            Write and publish articles to leadthur.com/blog
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            type="button"
-            onClick={openNewPost}
-            style={{
-              background: "#7C3AED",
-              color: "white",
-              border: "none",
-              borderRadius: 8,
-              padding: "6px 14px",
-              fontSize: 12,
-              fontWeight: 700,
-              cursor: "pointer",
-              fontFamily: "Inter, sans-serif",
-            }}
-          >
-            + New Article
-          </button>
-        </div>
-      </div>
-
-      <div style={{ padding: 16 }}>
         {blogView === "list" && (
           <>
             {listSuccessMsg && (
-              <div
-                style={{
-                  marginBottom: 14,
-                  padding: "10px 14px",
-                  background: "rgba(16,185,129,0.08)",
-                  border: "1px solid rgba(16,185,129,0.2)",
-                  borderRadius: 8,
-                  fontSize: 12,
-                  color: "#10B981",
-                  fontWeight: 600,
-                }}
-              >
+              <Alert variant="success" className="mb-4">
                 {listSuccessMsg}
-              </div>
+              </Alert>
             )}
 
             {blogLoading ? (
-              <div style={{ textAlign: "center", padding: "32px 0", fontSize: 13, color: "#555570" }}>
-                Loading articles...
-              </div>
+              <AdminLoading label="Loading articles..." />
             ) : blogPosts.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "40px 0" }}>
-                <div style={{ fontSize: 32, marginBottom: 12 }}>✍️</div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: "#F2F1FF", marginBottom: 8 }}>
-                  No articles yet
-                </div>
-                <div style={{ fontSize: 13, color: "#555570", marginBottom: 20 }}>
-                  Click New Article to write your first post
-                </div>
-              </div>
+              <EmptyState
+                title="No articles yet"
+                description="Click New Article to write your first post."
+              />
             ) : (
               <div>
                 {blogPosts.map((post) => (
                   <div
                     key={post.id}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "flex-start",
-                      padding: "14px 0",
-                      borderBottom: "1px solid rgba(255,255,255,0.05)",
-                      gap: 12,
-                    }}
+                    className="flex items-start justify-between gap-3 border-b border-[var(--lt-border)] py-3.5"
                   >
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                        <span
-                          style={{
-                            fontSize: 10,
-                            fontWeight: 700,
-                            padding: "2px 8px",
-                            borderRadius: 100,
-                            background:
-                              post.status === "published"
-                                ? "rgba(16,185,129,0.1)"
-                                : "rgba(255,255,255,0.05)",
-                            color: post.status === "published" ? "#10B981" : "#8888A8",
-                            border: `1px solid ${
-                              post.status === "published"
-                                ? "rgba(16,185,129,0.2)"
-                                : "rgba(255,255,255,0.08)"
-                            }`,
-                            textTransform: "uppercase",
-                            letterSpacing: "0.06em",
-                          }}
-                        >
-                          {post.status}
-                        </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
+                        <StatusBadge
+                          status={post.status === "published" ? "active" : "paused"}
+                          label={post.status}
+                        />
                         {post.featured && (
-                          <span
-                            style={{
-                              fontSize: 10,
-                              fontWeight: 700,
-                              padding: "2px 8px",
-                              borderRadius: 100,
-                              background: "rgba(245,158,11,0.1)",
-                              color: "#F59E0B",
-                              border: "1px solid rgba(245,158,11,0.2)",
-                              textTransform: "uppercase",
-                              letterSpacing: "0.06em",
-                            }}
-                          >
-                            Featured
-                          </span>
+                          <StatusBadge status="processing" label="Featured" />
                         )}
                         {post.category && (
-                          <span style={{ fontSize: 10, color: "#A78BFA", fontWeight: 600 }}>
+                          <span className="text-[10px] font-semibold text-[var(--lt-accent-soft)]">
                             {post.category}
                           </span>
                         )}
                       </div>
-                      <div
-                        style={{
-                          fontSize: 14,
-                          fontWeight: 700,
-                          color: "#F2F1FF",
-                          marginBottom: 4,
-                          lineHeight: 1.4,
-                        }}
-                      >
+                      <div className="mb-1 text-sm font-bold leading-snug text-[var(--lt-text)]">
                         {post.title}
                       </div>
-                      <div style={{ fontSize: 11, color: "#555570" }}>
+                      <div className="text-[11px] text-[var(--lt-text-subtle)]">
                         {post.read_time} min read ·{" "}
                         {new Date(post.created_at).toLocaleDateString("en-GB", {
                           day: "numeric",
@@ -461,62 +369,32 @@ export function BlogManager(_props?: BlogManagerProps) {
                         {post.status === "published" && ` · leadthur.com/blog/${post.slug}`}
                       </div>
                     </div>
-                    <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                      <button
+                    <div className="flex shrink-0 gap-1.5">
+                      <Button
                         type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-[11px]"
                         onClick={() => void openEditPost(post)}
-                        style={{
-                          background: "rgba(124,58,237,0.1)",
-                          border: "1px solid rgba(124,58,237,0.2)",
-                          borderRadius: 6,
-                          padding: "5px 12px",
-                          fontSize: 11,
-                          fontWeight: 700,
-                          color: "#A78BFA",
-                          cursor: "pointer",
-                          fontFamily: "Inter, sans-serif",
-                        }}
                       >
                         Edit
-                      </button>
+                      </Button>
                       {post.status === "published" && (
-                        <Link
-                          href={`/blog/${post.slug}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{
-                            background: "rgba(16,185,129,0.08)",
-                            border: "1px solid rgba(16,185,129,0.2)",
-                            borderRadius: 6,
-                            padding: "5px 12px",
-                            fontSize: 11,
-                            fontWeight: 700,
-                            color: "#10B981",
-                            cursor: "pointer",
-                            fontFamily: "Inter, sans-serif",
-                            textDecoration: "none",
-                          }}
-                        >
-                          View
-                        </Link>
+                        <Button variant="outline" size="sm" className="h-7 text-[11px]" asChild>
+                          <Link href={`/blog/${post.slug}`} target="_blank" rel="noopener noreferrer">
+                            View
+                          </Link>
+                        </Button>
                       )}
-                      <button
+                      <Button
                         type="button"
+                        variant="destructive"
+                        size="sm"
+                        className="h-7 text-[11px]"
                         onClick={() => void deleteBlogPost(post.id)}
-                        style={{
-                          background: "rgba(239,68,68,0.08)",
-                          border: "1px solid rgba(239,68,68,0.2)",
-                          borderRadius: 6,
-                          padding: "5px 10px",
-                          fontSize: 11,
-                          fontWeight: 700,
-                          color: "#EF4444",
-                          cursor: "pointer",
-                          fontFamily: "Inter, sans-serif",
-                        }}
                       >
                         Delete
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 ))}
@@ -527,29 +405,12 @@ export function BlogManager(_props?: BlogManagerProps) {
 
         {blogView === "editor" && (
           <div>
-            <button
-              type="button"
-              onClick={backToList}
-              style={{
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                borderRadius: 8,
-                padding: "6px 14px",
-                fontSize: 12,
-                fontWeight: 700,
-                color: "#8888A8",
-                cursor: "pointer",
-                fontFamily: "Inter, sans-serif",
-                marginBottom: 16,
-              }}
-            >
+            <Button type="button" variant="outline" size="sm" className="mb-4" onClick={backToList}>
               ← Back to Articles
-            </button>
+            </Button>
 
             {editorLoading ? (
-              <div style={{ textAlign: "center", padding: "40px 0", fontSize: 13, color: "#555570" }}>
-                Loading article...
-              </div>
+              <AdminLoading label="Loading article..." />
             ) : (
               <>
                 {editingPost && (
@@ -1021,42 +882,23 @@ export function BlogManager(_props?: BlogManagerProps) {
                 </div>
 
                 {blogMsg && (
-                  <div
-                    style={{
-                      marginTop: 12,
-                      padding: "10px 14px",
-                      background:
-                        blogMsg.includes("success") ||
-                        blogMsg.includes("published") ||
-                        blogMsg.includes("saved")
-                          ? "rgba(16,185,129,0.08)"
-                          : "rgba(239,68,68,0.08)",
-                      border: `1px solid ${
-                        blogMsg.includes("success") ||
-                        blogMsg.includes("published") ||
-                        blogMsg.includes("saved")
-                          ? "rgba(16,185,129,0.2)"
-                          : "rgba(239,68,68,0.2)"
-                      }`,
-                      borderRadius: 8,
-                      fontSize: 12,
-                      color:
-                        blogMsg.includes("success") ||
-                        blogMsg.includes("published") ||
-                        blogMsg.includes("saved")
-                          ? "#10B981"
-                          : "#EF4444",
-                      fontWeight: 600,
-                    }}
+                  <Alert
+                    variant={
+                      blogMsg.includes("success") ||
+                      blogMsg.includes("published") ||
+                      blogMsg.includes("saved")
+                        ? "success"
+                        : "danger"
+                    }
+                    className="mt-3"
                   >
                     {blogMsg}
-                  </div>
+                  </Alert>
                 )}
               </>
             )}
           </div>
         )}
-      </div>
-    </div>
+    </AdminPanel>
   );
 }

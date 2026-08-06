@@ -1,7 +1,26 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
+import {
+  AdminConfirmDialog,
+  AdminPanel,
+  adminErrorClass,
+  adminLabelClass,
+  adminMutedClass,
+  adminSectionBodyClass,
+} from "@/components/admin/admin-ui";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Panel, PanelContent } from "@/components/ui/panel";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { StatusBadge, type StatusBadgeStatus } from "@/components/ui/status-badge";
 import {
   lookupLicense,
   resendAccess,
@@ -13,6 +32,8 @@ import {
   updateSearchLimit,
   type AdminLicense,
 } from "@/services/admin-api";
+import { cn } from "@/utils/utils";
+import { useCallback, useEffect, useState } from "react";
 
 function formatDate(value: string | null | undefined): string {
   if (!value) return "—";
@@ -24,26 +45,10 @@ function truncateKey(key: string): string {
   return `${key.slice(0, 12)}...`;
 }
 
-function statusBadge(license: AdminLicense) {
-  if (license.is_suspended) {
-    return (
-      <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-xs text-red-400">
-        Suspended
-      </span>
-    );
-  }
-  if (license.activated) {
-    return (
-      <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-400">
-        Activated
-      </span>
-    );
-  }
-  return (
-    <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-[#9CA3AF]">
-      Pending
-    </span>
-  );
+function licenseStatus(license: AdminLicense): { status: StatusBadgeStatus; label: string } {
+  if (license.is_suspended) return { status: "error", label: "Suspended" };
+  if (license.activated) return { status: "active", label: "Activated" };
+  return { status: "paused", label: "Pending" };
 }
 
 interface AccountLookupProps {
@@ -62,9 +67,7 @@ export function AccountLookup({
   const [notFound, setNotFound] = useState(false);
   const [searching, setSearching] = useState(false);
 
-  const [actionMsg, setActionMsg] = useState<{ type: "ok" | "err"; text: string } | null>(
-    null
-  );
+  const [actionMsg, setActionMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
   const [showSuspendForm, setShowSuspendForm] = useState(false);
@@ -241,17 +244,26 @@ export function AccountLookup({
     }
   }
 
-  return (
-    <section id="account-lookup" className="glass mx-auto max-w-6xl rounded-2xl p-6">
-      <h2 className="text-lg font-semibold text-[#F4F4FF]">Account Lookup</h2>
-      <p className="mt-1 text-sm text-[#6B6B80]">
-        Search any buyer by email and manage their account from here.
-      </p>
+  const resultTone = (text: string) =>
+    text.toLowerCase().includes("updated") ||
+    text.toLowerCase().includes("success") ||
+    text.toLowerCase().includes("reset")
+      ? "text-[var(--lt-success)]"
+      : "text-[var(--lt-danger)]";
 
-      <form onSubmit={handleSearch} className="mt-4 flex flex-col gap-3 sm:flex-row">
-        <div className="flex-1">
-          <label className="text-xs text-[#6B6B80]">Search by email address</label>
-          <input
+  return (
+    <AdminPanel
+      title="Account Lookup"
+      description="Search any buyer by email and manage their account from here."
+      className="mt-0"
+    >
+      <form onSubmit={handleSearch} className="flex flex-col gap-3 sm:flex-row">
+        <div className="flex-1 space-y-1">
+          <label className={adminLabelClass} htmlFor="account-lookup-email">
+            Search by email address
+          </label>
+          <Input
+            id="account-lookup-email"
             type="text"
             value={searchEmail}
             onChange={(e) => {
@@ -262,284 +274,269 @@ export function AccountLookup({
               }
             }}
             placeholder="buyer@email.com"
-            className="mt-1 w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-[#F4F4FF] outline-none focus:border-[#7C3AED]"
           />
         </div>
-        <button
-          type="submit"
-          disabled={searching}
-          className="mt-6 sm:mt-0 sm:self-end rounded-lg bg-[#7C3AED] px-6 py-2.5 font-semibold text-white hover:bg-[#6D28D9] disabled:opacity-60"
-        >
-          {searching ? (
-            <Loader2 className="mx-auto h-4 w-4 animate-spin" />
-          ) : (
-            "Search"
-          )}
-        </button>
+        <Button type="submit" disabled={searching} className="sm:self-end">
+          {searching ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : "Search"}
+        </Button>
       </form>
 
-      {notFound && (
-        <p className="mt-4 text-sm text-[#9CA3AF]">
-          No account found for that email address.
-        </p>
-      )}
+      {notFound && <p className={cn("mt-4", adminMutedClass)}>No account found for that email address.</p>}
 
       {license && (
-        <div className="mt-6 rounded-xl border border-white/10 bg-white/[0.02] p-5">
+        <div className="mt-6 rounded-xl border border-[var(--lt-border)] bg-[var(--lt-bg)] p-5">
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
             <div>
-              <dt className="text-[#6B6B80]">Email</dt>
-              <dd className="font-medium text-[#F4F4FF]">{license.email}</dd>
+              <dt className={adminLabelClass}>Email</dt>
+              <dd className="font-medium text-[var(--lt-text)]">{license.email}</dd>
             </div>
             <div>
-              <dt className="text-[#6B6B80]">License Key</dt>
-              <dd className="font-mono text-[#C4B5FD]">{truncateKey(license.key)}</dd>
+              <dt className={adminLabelClass}>License Key</dt>
+              <dd className="font-mono text-[var(--lt-accent-soft)]">{truncateKey(license.key)}</dd>
             </div>
             <div>
-              <dt className="text-[#6B6B80]">Status</dt>
-              <dd className="mt-0.5">{statusBadge(license)}</dd>
-            </div>
-            <div>
-              <dt className="text-[#6B6B80]">Payment Channel</dt>
+              <dt className={adminLabelClass}>Status</dt>
               <dd className="mt-0.5">
-                <span className="rounded-full bg-[#7C3AED]/15 px-2 py-0.5 text-xs text-[#C4B5FD]">
-                  {license.payment_channel === "paystack" ? "Paystack" : "Bank Transfer"}
-                </span>
+                <StatusBadge status={licenseStatus(license).status} label={licenseStatus(license).label} />
               </dd>
             </div>
             <div>
-              <dt className="text-[#6B6B80]">Searches Used</dt>
-              <dd className="text-[#F4F4FF]">
+              <dt className={adminLabelClass}>Payment Channel</dt>
+              <dd className="mt-0.5">
+                <StatusBadge
+                  status="active"
+                  label={license.payment_channel === "paystack" ? "Paystack" : "Bank Transfer"}
+                />
+              </dd>
+            </div>
+            <div>
+              <dt className={adminLabelClass}>Searches Used</dt>
+              <dd className="text-[var(--lt-text)]">
                 {searchCount} of {monthlyLimit}
               </dd>
             </div>
             <div>
-              <dt className="text-[#6B6B80]">Max Devices Allowed</dt>
-              <dd className="font-semibold text-[#F4F4FF]">{maxDevices}</dd>
+              <dt className={adminLabelClass}>Max Devices Allowed</dt>
+              <dd className="font-semibold text-[var(--lt-text)]">{maxDevices}</dd>
             </div>
             <div>
-              <dt className="text-[#6B6B80]">Activated Date</dt>
-              <dd className="text-[#F4F4FF]">{formatDate(license.activated_at)}</dd>
+              <dt className={adminLabelClass}>Activated Date</dt>
+              <dd className="text-[var(--lt-text)]">{formatDate(license.activated_at)}</dd>
             </div>
             <div>
-              <dt className="text-[#6B6B80]">Created Date</dt>
-              <dd className="text-[#F4F4FF]">{formatDate(license.created_at)}</dd>
+              <dt className={adminLabelClass}>Created Date</dt>
+              <dd className="text-[var(--lt-text)]">{formatDate(license.created_at)}</dd>
             </div>
             {license.is_suspended && license.suspension_reason && (
               <div className="sm:col-span-2">
-                <dt className="text-[#6B6B80]">Suspension Reason</dt>
-                <dd className="text-red-300">{license.suspension_reason}</dd>
+                <dt className={adminLabelClass}>Suspension Reason</dt>
+                <dd className="text-[var(--lt-danger)]">{license.suspension_reason}</dd>
               </div>
             )}
           </dl>
 
           <div className="mt-6 flex flex-wrap gap-2">
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               disabled={actionLoading}
               onClick={() =>
                 runAction(() => resendAccess(license.email) as Promise<{ message?: string }>)
               }
-              className="rounded-lg border border-white/15 px-4 py-2 text-sm text-[#A1A1B5] hover:bg-white/5 disabled:opacity-50"
             >
               {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Resend Email"}
-            </button>
+            </Button>
 
-            <button
+            <Button
               type="button"
+              size="sm"
               disabled={actionLoading}
               onClick={() => setConfirmReset(true)}
-              className="rounded-lg bg-blue-600/80 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600 disabled:opacity-50"
             >
               Reset Searches
-            </button>
+            </Button>
 
             {!license.is_suspended ? (
-              <button
+              <Button
                 type="button"
+                variant="destructive"
+                size="sm"
                 disabled={actionLoading}
-                onClick={() => {
-                  setShowSuspendForm((v) => !v);
-                }}
-                className="rounded-lg bg-red-600/80 px-4 py-2 text-sm font-medium text-white hover:bg-red-600 disabled:opacity-50"
+                onClick={() => setShowSuspendForm((v) => !v)}
               >
                 Suspend
-              </button>
+              </Button>
             ) : (
-              <button
+              <Button
                 type="button"
+                size="sm"
                 disabled={actionLoading}
                 onClick={() =>
                   runAction(
                     () => unsuspendAccount(license.email) as Promise<{ message?: string }>
                   )
                 }
-                className="rounded-lg bg-emerald-600/80 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-600 disabled:opacity-50"
               >
                 Unsuspend
-              </button>
+              </Button>
             )}
           </div>
 
-          {/* Search Limit Management */}
-          <div
-            style={{
-              background: "#0A0A10",
-              border: "1px solid rgba(255,255,255,0.07)",
-              borderRadius: 10,
-              padding: 14,
-              marginTop: 12,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: "#8888A8",
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                marginBottom: 12,
-              }}
-            >
-              Search Limit Management
-            </div>
-
-            <div style={{ fontSize: 12, color: "#555570", marginBottom: 12 }}>
-              Current usage:{" "}
-              <strong style={{ color: "#F2F1FF" }}>
-                {searchCount} of {monthlyLimit}
-              </strong>
-              {" · "}
-              Free monthly limit:{" "}
-              <strong style={{ color: "#F2F1FF" }}>{monthlyLimit} searches</strong>
-              {(license.search_credits ?? 0) > 0 && (
-                <>
-                  {" · "}
-                  Top-up credits:{" "}
-                  <strong style={{ color: "#A78BFA" }}>{license.search_credits}</strong>
-                </>
-              )}
-            </div>
-
-            <div style={{ fontSize: 11, color: "#8888A8", marginBottom: 6 }}>
-              Change monthly free search limit
-            </div>
-            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <select
-                value={
-                  [50, 100, 200, 500, 1000, 2000, 5000].includes(parseInt(searchLimitInput, 10))
-                    ? searchLimitInput
-                    : "custom"
-                }
-                onChange={(e) => {
-                  if (e.target.value !== "custom") {
-                    setSearchLimitInput(e.target.value);
+          <Panel className="mt-3">
+            <PanelContent className={cn(adminSectionBodyClass, "space-y-3")}>
+              <p className={cn(adminLabelClass, "uppercase tracking-wide")}>Search Limit Management</p>
+              <p className="text-xs text-[var(--lt-text-subtle)]">
+                Current usage:{" "}
+                <strong className="text-[var(--lt-text)]">
+                  {searchCount} of {monthlyLimit}
+                </strong>
+                {" · "}
+                Free monthly limit:{" "}
+                <strong className="text-[var(--lt-text)]">{monthlyLimit} searches</strong>
+                {(license.search_credits ?? 0) > 0 && (
+                  <>
+                    {" · "}
+                    Top-up credits:{" "}
+                    <strong className="text-[var(--lt-accent-soft)]">{license.search_credits}</strong>
+                  </>
+                )}
+              </p>
+              <p className={adminLabelClass}>Change monthly free search limit</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Select
+                  value={
+                    [50, 100, 200, 500, 1000, 2000, 5000].includes(parseInt(searchLimitInput, 10))
+                      ? searchLimitInput
+                      : "custom"
                   }
-                }}
-                style={{
-                  background: "#0A0A10",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: 8,
-                  padding: "7px 12px",
-                  fontSize: 12,
-                  color: "#F2F1FF",
-                  fontFamily: "Inter, sans-serif",
-                  outline: "none",
-                  cursor: "pointer",
-                }}
-              >
-                <option value="50" style={{ background: "#111118" }}>
-                  50 searches
-                </option>
-                <option value="100" style={{ background: "#111118" }}>
-                  100 searches (default)
-                </option>
-                <option value="200" style={{ background: "#111118" }}>
-                  200 searches
-                </option>
-                <option value="500" style={{ background: "#111118" }}>
-                  500 searches
-                </option>
-                <option value="1000" style={{ background: "#111118" }}>
-                  1,000 searches
-                </option>
-                <option value="2000" style={{ background: "#111118" }}>
-                  2,000 searches
-                </option>
-                <option value="5000" style={{ background: "#111118" }}>
-                  5,000 searches
-                </option>
-                <option value="custom" style={{ background: "#111118" }}>
-                  Custom amount
-                </option>
-              </select>
-              <input
-                type="number"
-                min={0}
-                max={100000}
-                value={searchLimitInput}
-                onChange={(e) => setSearchLimitInput(e.target.value)}
-                style={{
-                  width: 100,
-                  background: "#0A0A10",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: 8,
-                  padding: "7px 12px",
-                  fontSize: 12,
-                  color: "#F2F1FF",
-                  fontFamily: "Inter, sans-serif",
-                  outline: "none",
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => void handleUpdateSearchLimit()}
-                disabled={searchLimitLoading}
-                style={{
-                  background: searchLimitLoading ? "#1A1A24" : "#7C3AED",
-                  border: "none",
-                  borderRadius: 8,
-                  padding: "8px 16px",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: "white",
-                  cursor: searchLimitLoading ? "not-allowed" : "pointer",
-                  fontFamily: "Inter, sans-serif",
-                  opacity: searchLimitLoading ? 0.7 : 1,
-                }}
-              >
-                {searchLimitLoading ? "Saving..." : "Update Search Limit"}
-              </button>
-            </div>
-            {searchLimitResult && (
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 12,
-                  color:
-                    searchLimitResult.toLowerCase().includes("updated") ||
-                    searchLimitResult.toLowerCase().includes("success")
-                      ? "#10B981"
-                      : "#EF4444",
-                  fontWeight: 600,
-                }}
-              >
-                {searchLimitResult}
+                  onValueChange={(value) => {
+                    if (value !== "custom") setSearchLimitInput(value);
+                  }}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Select limit" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="50">50 searches</SelectItem>
+                    <SelectItem value="100">100 searches (default)</SelectItem>
+                    <SelectItem value="200">200 searches</SelectItem>
+                    <SelectItem value="500">500 searches</SelectItem>
+                    <SelectItem value="1000">1,000 searches</SelectItem>
+                    <SelectItem value="2000">2,000 searches</SelectItem>
+                    <SelectItem value="5000">5,000 searches</SelectItem>
+                    <SelectItem value="custom">Custom amount</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100000}
+                  value={searchLimitInput}
+                  onChange={(e) => setSearchLimitInput(e.target.value)}
+                  className="w-24"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => void handleUpdateSearchLimit()}
+                  disabled={searchLimitLoading}
+                >
+                  {searchLimitLoading ? "Saving..." : "Update Search Limit"}
+                </Button>
               </div>
-            )}
-          </div>
+              {searchLimitResult ? (
+                <p className={cn("text-xs font-semibold", resultTone(searchLimitResult))}>
+                  {searchLimitResult}
+                </p>
+              ) : null}
+            </PanelContent>
+          </Panel>
+
+          <Panel className="mt-3">
+            <PanelContent className={cn(adminSectionBodyClass, "space-y-3")}>
+              <p className={cn(adminLabelClass, "uppercase tracking-wide")}>Device Management</p>
+              <p className="text-xs text-[var(--lt-text-subtle)]">
+                Current limit: <strong className="text-[var(--lt-text)]">{maxDevices} devices</strong>
+                {" · "}
+                Slots used:{" "}
+                <strong className="text-[var(--lt-text)]">
+                  {
+                    [
+                      license.device_one,
+                      license.device_two,
+                      license.device_three,
+                      license.device_four,
+                    ].filter((v) => v !== null && v !== undefined && String(v).trim() !== "").length
+                  }
+                </strong>
+              </p>
+              <div>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => void handleResetDevices()}
+                  disabled={resetLoading}
+                >
+                  {resetLoading ? "Resetting..." : "Reset All Devices"}
+                </Button>
+                <p className="mt-1 text-[10px] text-[var(--lt-text-subtle)]">
+                  Clears all registered devices. User can log in fresh from up to {maxDevices} new
+                  devices.
+                </p>
+                {resetResult ? (
+                  <p className={cn("mt-2 text-xs font-semibold", resultTone(resetResult))}>
+                    {resetResult}
+                  </p>
+                ) : null}
+              </div>
+              <div>
+                <p className={adminLabelClass}>Change device limit</p>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <Select value={newDeviceLimit} onValueChange={setNewDeviceLimit}>
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[1, 2, 3, 4, 5, 6, 8, 10].map((n) => (
+                        <SelectItem key={n} value={String(n)}>
+                          {n} {n === 4 ? "(default)" : ""} device{n !== 1 ? "s" : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => void handleUpgradeDevices()}
+                    disabled={upgradeLoading}
+                  >
+                    {upgradeLoading ? "Updating..." : "Update Device Limit"}
+                  </Button>
+                </div>
+                {upgradeResult ? (
+                  <p className={cn("mt-2 text-xs font-semibold", resultTone(upgradeResult))}>
+                    {upgradeResult}
+                  </p>
+                ) : null}
+              </div>
+            </PanelContent>
+          </Panel>
 
           {showSuspendForm && !license.is_suspended && (
-            <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/5 p-3">
-              <input
+            <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--lt-danger)]/30 bg-[var(--lt-danger)]/5 p-3">
+              <Input
                 type="text"
                 value={suspendReason}
                 onChange={(e) => setSuspendReason(e.target.value)}
                 placeholder="Reason (optional)"
-                className="min-w-[200px] flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[#F4F4FF]"
+                className="min-w-[200px] flex-1"
               />
-              <button
+              <Button
                 type="button"
+                variant="destructive"
+                size="sm"
                 disabled={actionLoading}
                 onClick={() =>
                   runAction(
@@ -552,197 +549,35 @@ export function AccountLookup({
                     setSuspendReason("");
                   })
                 }
-                className="rounded-lg bg-red-600 px-4 py-1.5 text-sm text-white"
               >
                 Confirm Suspend
-              </button>
+              </Button>
             </div>
           )}
 
-          {/* Device Management */}
-          <div
-            style={{
-              background: "#0A0A10",
-              border: "1px solid rgba(255,255,255,0.07)",
-              borderRadius: 10,
-              padding: 14,
-              marginTop: 12,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: "#8888A8",
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                marginBottom: 12,
-              }}
-            >
-              Device Management
-            </div>
-
-            <div style={{ fontSize: 12, color: "#555570", marginBottom: 12 }}>
-              Current limit:{" "}
-              <strong style={{ color: "#F2F1FF" }}>{maxDevices} devices</strong>
-              {" · "}
-              Slots used:{" "}
-              <strong style={{ color: "#F2F1FF" }}>
-                {
-                  [
-                    license.device_one,
-                    license.device_two,
-                    license.device_three,
-                    license.device_four,
-                  ].filter((v) => v !== null && v !== undefined && String(v).trim() !== "")
-                    .length
-                }
-              </strong>
-            </div>
-
-            <div style={{ marginBottom: 14 }}>
-              <button
-                type="button"
-                onClick={() => void handleResetDevices()}
-                disabled={resetLoading}
-                style={{
-                  background: resetLoading ? "#1A1A24" : "rgba(239,68,68,0.1)",
-                  border: "1px solid rgba(239,68,68,0.3)",
-                  borderRadius: 8,
-                  padding: "8px 16px",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: "#EF4444",
-                  cursor: resetLoading ? "not-allowed" : "pointer",
-                  fontFamily: "Inter, sans-serif",
-                  opacity: resetLoading ? 0.7 : 1,
-                }}
-              >
-                {resetLoading ? "Resetting..." : "Reset All Devices"}
-              </button>
-              <div style={{ fontSize: 10, color: "#555570", marginTop: 5 }}>
-                Clears all registered devices. User can log in fresh from up to {maxDevices} new
-                devices.
-              </div>
-              {resetResult && (
-                <div
-                  style={{
-                    marginTop: 8,
-                    fontSize: 12,
-                    color:
-                      resetResult.toLowerCase().includes("reset") ||
-                      resetResult.toLowerCase().includes("success")
-                        ? "#10B981"
-                        : "#EF4444",
-                    fontWeight: 600,
-                  }}
-                >
-                  {resetResult}
-                </div>
-              )}
-            </div>
-
-            <div>
-              <div style={{ fontSize: 11, color: "#8888A8", marginBottom: 6 }}>
-                Change device limit
-              </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                <select
-                  value={newDeviceLimit}
-                  onChange={(e) => setNewDeviceLimit(e.target.value)}
-                  style={{
-                    background: "#0A0A10",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: 8,
-                    padding: "7px 12px",
-                    fontSize: 12,
-                    color: "#F2F1FF",
-                    fontFamily: "Inter, sans-serif",
-                    outline: "none",
-                    cursor: "pointer",
-                  }}
-                >
-                  {[1, 2, 3, 4, 5, 6, 8, 10].map((n) => (
-                    <option key={n} value={n} style={{ background: "#111118" }}>
-                      {n} {n === 4 ? "(default)" : ""} device{n !== 1 ? "s" : ""}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => void handleUpgradeDevices()}
-                  disabled={upgradeLoading}
-                  style={{
-                    background: upgradeLoading ? "#1A1A24" : "#7C3AED",
-                    border: "none",
-                    borderRadius: 8,
-                    padding: "8px 16px",
-                    fontSize: 12,
-                    fontWeight: 700,
-                    color: "white",
-                    cursor: upgradeLoading ? "not-allowed" : "pointer",
-                    fontFamily: "Inter, sans-serif",
-                    opacity: upgradeLoading ? 0.7 : 1,
-                  }}
-                >
-                  {upgradeLoading ? "Updating..." : "Update Device Limit"}
-                </button>
-              </div>
-              {upgradeResult && (
-                <div
-                  style={{
-                    marginTop: 8,
-                    fontSize: 12,
-                    color:
-                      upgradeResult.toLowerCase().includes("updated") ||
-                      upgradeResult.toLowerCase().includes("success")
-                        ? "#10B981"
-                        : "#EF4444",
-                    fontWeight: 600,
-                  }}
-                >
-                  {upgradeResult}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {confirmReset && (
-            <div className="mt-4 rounded-lg border border-blue-500/30 bg-blue-500/5 p-3 text-sm text-[#A1A1B5]">
-              <p>Reset search count to 0 for this user?</p>
-              <div className="mt-2 flex gap-2">
-                <button
-                  type="button"
-                  disabled={actionLoading}
-                  onClick={() =>
-                    runAction(
-                      () => resetSearches(license.email) as Promise<{ message?: string }>
-                    ).then(() => setConfirmReset(false))
-                  }
-                  className="rounded-lg bg-blue-600 px-3 py-1.5 text-white"
-                >
-                  Confirm
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmReset(false)}
-                  className="rounded-lg border border-white/15 px-3 py-1.5"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
+          <AdminConfirmDialog
+            open={confirmReset}
+            title="Reset searches"
+            description="Reset search count to 0 for this user?"
+            confirmLabel="Confirm"
+            onCancel={() => setConfirmReset(false)}
+            onConfirm={() =>
+              void runAction(
+                () => resetSearches(license.email) as Promise<{ message?: string }>
+              ).then(() => setConfirmReset(false))
+            }
+          />
 
           {actionMsg && (
-            <p
-              className={`mt-4 text-sm ${actionMsg.type === "ok" ? "text-emerald-400" : "text-red-400"}`}
+            <Alert
+              variant={actionMsg.type === "ok" ? "success" : "danger"}
+              className="mt-4"
             >
               {actionMsg.text}
-            </p>
+            </Alert>
           )}
         </div>
       )}
-    </section>
+    </AdminPanel>
   );
 }
