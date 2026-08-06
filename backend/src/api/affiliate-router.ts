@@ -10,6 +10,8 @@ import {
   resolveBankAccount,
 } from "../services/paystack-client";
 import { sendPayoutRequestedEmail } from "../services/email";
+import { trackEvent } from "../observability/track";
+import { EVENT_NAMES } from "../observability/event-taxonomy";
 import { logger } from "../utils/logger";
 
 const router = Router();
@@ -189,6 +191,14 @@ router.post("/request-payout", requireLicense, async (req: Request, res: Respons
     });
 
     if (insertError) throw new Error(insertError.message);
+
+    trackEvent({
+      eventName: EVENT_NAMES.WITHDRAWAL_REQUESTED,
+      source: "server",
+      userEmail: email,
+      properties: { amountNgn: pendingNgn },
+      idempotencyKey: `withdrawal_requested:${email}:${pendingNgn}`,
+    });
 
     try {
       await sendPayoutRequestedEmail(

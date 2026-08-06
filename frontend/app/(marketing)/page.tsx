@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { AnnouncementBar } from "@/components/marketing/homepage/AnnouncementBar";
 import { DemoVideoSection } from "@/components/marketing/homepage/DemoVideoSection";
 import { DifferenceSection } from "@/components/marketing/homepage/DifferenceSection";
@@ -20,8 +21,13 @@ import { StatsBar } from "@/components/marketing/homepage/StatsBar";
 import { TrustpilotSection } from "@/components/marketing/homepage/TrustpilotSection";
 import { UserTestimonialsSection } from "@/components/marketing/homepage/UserTestimonialsSection";
 import { WhoIsForSection } from "@/components/marketing/homepage/WhoIsForSection";
+import { track } from "@/lib/analytics";
 
 export default function MarketingHomePage() {
+  useEffect(() => {
+    track("landing_viewed", { idempotencyKey: `landing_viewed:${Math.floor(Date.now() / 60_000)}` });
+  }, []);
+
   return (
     <div className="min-h-screen bg-[var(--lt-bg)] text-[var(--lt-text)]">
       <AnnouncementBar />

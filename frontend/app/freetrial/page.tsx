@@ -19,6 +19,7 @@ import { getApiUrl } from "@/utils/env";
 import { SALE_PRICE_USD } from "@/constants/pricing";
 import { TRIAL_EMAIL_KEY } from "@/constants/trial";
 import { PublicFunnelShell } from "@/components/public/public-funnel-shell";
+import { track } from "@/lib/analytics";
 import {
   LeadRowMobile,
   LockIcon,
@@ -653,6 +654,10 @@ export default function FreeTrialPage() {
       if (paywallTriggeredRef.current) return;
       paywallTriggeredRef.current = true;
       setShowUpgradePanel(true);
+      track("paywall_viewed", {
+        properties: { leads: leads.length },
+        idempotencyKey: `paywall_viewed:${getTrialEmail() || "anon"}:${Math.floor(Date.now() / 60_000)}`,
+      });
     };
 
     const timers: ReturnType<typeof setTimeout>[] = [];
@@ -727,6 +732,18 @@ export default function FreeTrialPage() {
       setSearchesUsed(0);
       setSearchesRemaining(2);
       void refreshTrialStatus(email);
+      track("trial_email_submitted", {
+        userEmail: email,
+        idempotencyKey: `trial_email_submitted:${email}`,
+      });
+      track("trial_started", {
+        userEmail: email,
+        idempotencyKey: `trial_started:${email}`,
+      });
+      track("freetrial_viewed", {
+        userEmail: email,
+        idempotencyKey: `freetrial_viewed:${email}`,
+      });
     } catch (err) {
       setGateError(err instanceof Error ? err.message : "Signup failed. Please try again.");
     } finally {

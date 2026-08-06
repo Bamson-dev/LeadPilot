@@ -9,6 +9,8 @@ import {
   filterSafeExternalScripts,
   filterSafeInlineScripts,
 } from "@/lib/site-scripts-safety";
+import { AnalyticsPageTracker } from "@/components/analytics/analytics-page-tracker";
+import { AnalyticsBehaviourTracker } from "@/components/analytics/analytics-behaviour-tracker";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -138,6 +140,8 @@ export default async function RootLayout({
         ))}
 
         {children}
+        <AnalyticsPageTracker />
+        <AnalyticsBehaviourTracker />
 
         {/* Body external scripts */}
         {bodyExternalScripts.map((src, i) => (

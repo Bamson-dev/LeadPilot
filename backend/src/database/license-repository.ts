@@ -1,6 +1,8 @@
 import { randomBytes } from "crypto";
 import { supabase } from "./client";
 import { generateUniqueRefCode } from "../services/license-service";
+import { trackEvent } from "../observability/track";
+import { EVENT_NAMES } from "../observability/event-taxonomy";
 import { logger } from "../utils/logger";
 
 export interface LicenseKey {
@@ -78,7 +80,17 @@ export async function createLicenseKey(params: {
     throw new Error(error?.message ?? "Failed to create license key");
   }
 
-  return normalizeLicenseRow(data as Record<string, unknown>);
+  const license = normalizeLicenseRow(data as Record<string, unknown>);
+  trackEvent({
+    eventName: EVENT_NAMES.REFERRAL_SIGNUP,
+    source: "server",
+    userEmail: email,
+    licenseId: license.id,
+    properties: { refCode },
+    idempotencyKey: `referral_signup:${license.id}`,
+  });
+
+  return license;
 }
 
 export async function getLicenseKeyByKey(key: string): Promise<LicenseKey | null> {

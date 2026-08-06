@@ -9,6 +9,8 @@ import { ensureRefCodeForEmail } from "../services/license-service";
 import { getLicenseUsage } from "../services/topup-service";
 import { sendWelcomeEmail } from "../services/email";
 import { supabase } from "../database/client";
+import { trackEvent } from "../observability/track";
+import { EVENT_NAMES } from "../observability/event-taxonomy";
 import { logger } from "../utils/logger";
 
 export const authRouter = Router();
@@ -66,6 +68,14 @@ authRouter.post("/activate", async (req: Request, res: Response) => {
     }
 
     await ensureRefCodeForEmail(normalizedEmail);
+
+    trackEvent({
+      eventName: EVENT_NAMES.LICENSE_ACTIVATED,
+      source: "server",
+      userEmail: normalizedEmail,
+      licenseId: license.id,
+      idempotencyKey: `license_activated:${license.id}`,
+    });
 
     res.json({
       success: true,

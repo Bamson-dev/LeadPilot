@@ -21,6 +21,8 @@ import {
   isMailthurPaystackEvent,
 } from "../services/paystack-webhook-forward";
 import { logger } from "../utils/logger";
+import { trackEvent } from "../observability/track";
+import { EVENT_NAMES } from "../observability/event-taxonomy";
 
 export const webhookRouter = Router();
 
@@ -94,6 +96,16 @@ webhookRouter.post(
               event: event.event,
               error: err instanceof Error ? err.message : "unknown",
             });
+            trackEvent({
+              eventName: EVENT_NAMES.WEBHOOK_FAILURE,
+              source: "webhook",
+              properties: {
+                gateway: "paystack",
+                scope: "outreach",
+                event: event.event ?? null,
+                message: err instanceof Error ? err.message : "unknown",
+              },
+            });
           });
         });
         return;
@@ -141,6 +153,19 @@ webhookRouter.post(
             } catch (err) {
               logger.error("Top up webhook processing failed", {
                 error: err instanceof Error ? err.message : "unknown",
+              });
+              trackEvent({
+                eventName: EVENT_NAMES.WEBHOOK_FAILURE,
+                source: "webhook",
+                properties: {
+                  gateway: "paystack",
+                  scope: "topup",
+                  reference: reference ?? null,
+                  message: err instanceof Error ? err.message : "unknown",
+                },
+                idempotencyKey: reference
+                  ? `webhook_failure:paystack:topup:${reference}`
+                  : undefined,
               });
             }
           })();
@@ -198,12 +223,30 @@ webhookRouter.post(
             logger.error("Webhook processing failed", {
               error: err instanceof Error ? err.message : "unknown",
             });
+            trackEvent({
+              eventName: EVENT_NAMES.WEBHOOK_FAILURE,
+              source: "webhook",
+              properties: {
+                gateway: "paystack",
+                scope: "lifetime",
+                message: err instanceof Error ? err.message : "unknown",
+              },
+            });
           }
         })();
       });
     } catch (err) {
       logger.error("Webhook handler error", {
         error: err instanceof Error ? err.message : "unknown",
+      });
+      trackEvent({
+        eventName: EVENT_NAMES.WEBHOOK_FAILURE,
+        source: "webhook",
+        properties: {
+          gateway: "paystack",
+          scope: "handler",
+          message: err instanceof Error ? err.message : "unknown",
+        },
       });
       res.status(200).send("ok");
     }
@@ -296,6 +339,17 @@ webhookRouter.post(
               logger.error("Flutterwave top up webhook processing failed", {
                 error: err instanceof Error ? err.message : "unknown",
               });
+              trackEvent({
+                eventName: EVENT_NAMES.WEBHOOK_FAILURE,
+                source: "webhook",
+                properties: {
+                  gateway: "flutterwave",
+                  scope: "topup",
+                  reference,
+                  message: err instanceof Error ? err.message : "unknown",
+                },
+                idempotencyKey: `webhook_failure:flutterwave:topup:${reference}`,
+              });
             }
           })();
         });
@@ -342,12 +396,33 @@ webhookRouter.post(
             logger.error("Flutterwave webhook processing failed", {
               error: err instanceof Error ? err.message : "unknown",
             });
+            trackEvent({
+              eventName: EVENT_NAMES.WEBHOOK_FAILURE,
+              source: "webhook",
+              userEmail: email,
+              properties: {
+                gateway: "flutterwave",
+                scope: "lifetime",
+                reference,
+                message: err instanceof Error ? err.message : "unknown",
+              },
+              idempotencyKey: `webhook_failure:flutterwave:lifetime:${reference}`,
+            });
           }
         })();
       });
     } catch (err) {
       logger.error("Flutterwave webhook handler error", {
         error: err instanceof Error ? err.message : "unknown",
+      });
+      trackEvent({
+        eventName: EVENT_NAMES.WEBHOOK_FAILURE,
+        source: "webhook",
+        properties: {
+          gateway: "flutterwave",
+          scope: "handler",
+          message: err instanceof Error ? err.message : "unknown",
+        },
       });
       res.status(500).json({ error: "Webhook processing failed" });
     }

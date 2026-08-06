@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Panel, PanelContent } from "@/components/ui/panel";
 import { cn } from "@/utils/utils";
+import { track } from "@/lib/analytics";
 
 const FLW_PUBLIC_KEY = process.env.NEXT_PUBLIC_FLUTTERWAVE_PUBLIC_KEY ?? "";
 
@@ -61,6 +62,12 @@ export default function CheckoutPage() {
     if (savedEmail && savedEmail.includes("@")) {
       setEmail(savedEmail);
     }
+  }, []);
+
+  useEffect(() => {
+    track("checkout_started", {
+      idempotencyKey: `checkout_started:${Math.floor(Date.now() / 60_000)}`,
+    });
   }, []);
 
   function getRefCode(): string | null {
@@ -125,6 +132,11 @@ export default function CheckoutPage() {
 
       if (!res.ok) throw new Error("Failed to initialize payment");
       const data = (await res.json()) as { authorizationUrl?: string; authorization_url?: string };
+      track("payment_initiated", {
+        userEmail: email,
+        properties: { provider: "paystack" },
+        idempotencyKey: `payment_initiated:paystack:${email}:${Math.floor(Date.now() / 30_000)}`,
+      });
       window.location.href = data.authorizationUrl || data.authorization_url || "";
     } catch {
       setError("Something went wrong. Please try again.");

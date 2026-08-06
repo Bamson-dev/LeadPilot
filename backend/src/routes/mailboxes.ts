@@ -6,6 +6,8 @@ import {
   listMailboxesForUser,
   MailboxConnectError,
 } from "../services/mailbox-service";
+import { trackEvent } from "../observability/track";
+import { EVENT_NAMES } from "../observability/event-taxonomy";
 import { logger } from "../utils/logger";
 
 export const mailboxesRouter = Router();
@@ -36,6 +38,19 @@ mailboxesRouter.post("/connect", requireLicense, async (req: Request, res: Respo
       emailAddress: email_address,
       appPassword: app_password,
       accountType,
+    });
+
+    trackEvent({
+      eventName: EVENT_NAMES.MAILBOX_CONNECTED,
+      source: "server",
+      userEmail: req.licenseEmail,
+      licenseId: req.licenseId,
+      properties: {
+        accountType,
+        firstConnect: result.firstConnect,
+        mailboxId: result.mailbox.id,
+      },
+      idempotencyKey: `mailbox_connected:${userId}:${result.mailbox.id}`,
     });
 
     res.status(201).json({
@@ -104,6 +119,14 @@ mailboxesRouter.delete("/:id", requireLicense, async (req: Request, res: Respons
 
     const mailboxId = String(req.params.id);
     await disconnectMailboxForUser(userId, mailboxId);
+    trackEvent({
+      eventName: EVENT_NAMES.MAILBOX_DISCONNECTED,
+      source: "server",
+      userEmail: req.licenseEmail,
+      licenseId: req.licenseId,
+      properties: { mailboxId },
+      idempotencyKey: `mailbox_disconnected:${userId}:${mailboxId}:${Math.floor(Date.now() / 60_000)}`,
+    });
     res.json({ success: true });
   } catch (error) {
     logger.error("DELETE /mailboxes/:id failed", {

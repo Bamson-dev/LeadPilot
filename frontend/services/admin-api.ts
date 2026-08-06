@@ -509,3 +509,152 @@ export async function sendBroadcast(subject: string, htmlBody: string) {
   if (!res.ok) throw new Error("Failed to send broadcast");
   return res.json() as Promise<{ success: boolean; message?: string; count?: number }>;
 }
+
+function observabilityUrl(path: string, params?: Record<string, string | number | undefined>) {
+  const url = new URL(`${getApiUrl()}/admin/observability${path}`);
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== "") url.searchParams.set(k, String(v));
+    }
+  }
+  return url.toString();
+}
+
+export async function getObservabilityOverview(from?: string, to?: string) {
+  const res = await fetch(observabilityUrl("/overview", { from, to }), {
+    headers: getAdminHeaders(),
+    cache: "no-store",
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to load observability overview");
+  return res.json() as Promise<{
+    from: string;
+    to: string;
+    counts: Record<string, number>;
+    openAlerts: number;
+    note?: string;
+  }>;
+}
+
+export async function getObservabilityFunnels(from?: string, to?: string) {
+  const res = await fetch(observabilityUrl("/funnels", { from, to }), {
+    headers: getAdminHeaders(),
+    cache: "no-store",
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to load funnels");
+  return res.json() as Promise<{
+    from: string;
+    to: string;
+    steps: Array<{ step: string; count: number; conversionFromPrev: number }>;
+  }>;
+}
+
+export async function getObservabilityEvents(params?: {
+  from?: string;
+  to?: string;
+  eventName?: string;
+  category?: string;
+  q?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const res = await fetch(
+    observabilityUrl("/events", {
+      from: params?.from,
+      to: params?.to,
+      eventName: params?.eventName,
+      category: params?.category,
+      q: params?.q,
+      limit: params?.limit,
+      offset: params?.offset,
+    }),
+    { headers: getAdminHeaders(), cache: "no-store" }
+  );
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to load events");
+  return res.json() as Promise<{
+    events: Array<Record<string, unknown>>;
+    total: number;
+    limit: number;
+    offset: number;
+  }>;
+}
+
+export async function getObservabilitySearches(from?: string, to?: string) {
+  const res = await fetch(observabilityUrl("/searches", { from, to }), {
+    headers: getAdminHeaders(),
+    cache: "no-store",
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to load search observability");
+  return res.json() as Promise<{
+    summary: { started: number; completed: number; failed: number };
+    events: Array<Record<string, unknown>>;
+    total: number;
+  }>;
+}
+
+export async function getObservabilityInfrastructure() {
+  const res = await fetch(observabilityUrl("/infrastructure"), {
+    headers: getAdminHeaders(),
+    cache: "no-store",
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to load infrastructure");
+  return res.json() as Promise<{
+    snapshot: Record<string, unknown>;
+    catalogue: Array<{ key: string; title: string; severity: string; description: string }>;
+  }>;
+}
+
+export async function getObservabilityErrors(from?: string, to?: string) {
+  const res = await fetch(observabilityUrl("/errors", { from, to }), {
+    headers: getAdminHeaders(),
+    cache: "no-store",
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to load errors");
+  return res.json() as Promise<{ events: Array<Record<string, unknown>>; total: number }>;
+}
+
+export async function getObservabilityAlerts(status = "open") {
+  const res = await fetch(observabilityUrl("/alerts", { status }), {
+    headers: getAdminHeaders(),
+    cache: "no-store",
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to load alerts");
+  return res.json() as Promise<{
+    alerts: Array<Record<string, unknown>>;
+    total: number;
+    catalogue: Array<{ key: string; title: string; severity: string; description: string }>;
+  }>;
+}
+
+export async function getObservabilityKpis(from?: string, to?: string) {
+  const res = await fetch(observabilityUrl("/kpis", { from, to }), {
+    headers: getAdminHeaders(),
+    cache: "no-store",
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to load KPIs");
+  return res.json() as Promise<{
+    kpis: {
+      trialToPaidRate: number | null;
+      paidToActivationRate: number | null;
+      activationToFirstSearchRate: number | null;
+      firstToSecondSearchRate: number | null;
+      secondSearchToOutreachRate: number | null;
+      checkoutAbandonRate: number | null;
+      paymentSuccessRate: number | null;
+      mailboxAdoptionRate: number | null;
+      counts: Record<string, number>;
+    };
+  }>;
+}
+
+export function getObservabilityEventsCsvUrl(from?: string, to?: string): string {
+  return observabilityUrl("/events.csv", { from, to });
+}
+

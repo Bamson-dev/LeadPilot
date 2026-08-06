@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Panel, PanelContent } from "@/components/ui/panel";
+import { track } from "@/lib/analytics";
 
 export default function ActivatePage() {
   const router = useRouter();
@@ -49,6 +50,14 @@ export default function ActivatePage() {
       const normalizedKey = key.trim();
       await activateLicense(normalizedEmail, normalizedKey);
       setStoredLicense(normalizedEmail, normalizedKey);
+      track("license_activated", {
+        userEmail: normalizedEmail,
+        idempotencyKey: `license_activated:${normalizedEmail}`,
+      });
+      track("dashboard_entered", {
+        userEmail: normalizedEmail,
+        idempotencyKey: `dashboard_entered:${normalizedEmail}:${Math.floor(Date.now() / 60_000)}`,
+      });
       router.push("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Activation failed");
