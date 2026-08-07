@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { EnterpriseSolutionsSection } from "@/components/public/enterprise-solutions-section";
 
 export const metadata: Metadata = {
   title: "Privacy Policy — LeadThur",
@@ -172,6 +173,8 @@ export default function PrivacyPage() {
           </div>
         ))}
       </div>
+
+      <EnterpriseSolutionsSection />
 
       <div
         style={{

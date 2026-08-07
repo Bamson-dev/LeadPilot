@@ -9,6 +9,7 @@ import { FAQSection } from "@/components/marketing/homepage/FAQSection";
 import { FeatureGridSection } from "@/components/marketing/homepage/FeatureGridSection";
 import { FinalCTASection } from "@/components/marketing/homepage/FinalCTASection";
 import { Footer } from "@/components/marketing/homepage/Footer";
+import { EnterpriseSolutionsSection } from "@/components/public/enterprise-solutions-section";
 import { FreeTrialInviteSection } from "@/components/marketing/homepage/FreeTrialInviteSection";
 import { GuaranteeSection } from "@/components/marketing/homepage/GuaranteeSection";
 import { Hero } from "@/components/marketing/homepage/Hero";
@@ -48,6 +49,7 @@ export default function MarketingHomePage() {
       <WhoIsForSection />
       <FAQSection />
       <FinalCTASection />
+      <EnterpriseSolutionsSection />
       <Footer />
     </div>
   );

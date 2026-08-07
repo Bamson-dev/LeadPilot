@@ -1,8 +1,11 @@
 import Link from "next/link";
+import { EnterpriseSolutionsSection } from "@/components/public/enterprise-solutions-section";
 
 export function PublicPageFooter() {
   return (
-    <footer className="border-t border-[var(--lt-border)] bg-[var(--lt-bg)] px-4 py-8 text-center text-xs text-[var(--lt-text-subtle)]">
+    <>
+      <EnterpriseSolutionsSection />
+      <footer className="border-t border-[var(--lt-border)] bg-[var(--lt-bg)] px-4 py-8 text-center text-xs text-[var(--lt-text-subtle)]">
       <p className="mb-2">
         <strong className="text-[var(--lt-text)]">LeadThur</strong> — Business Discovery Intelligence
       </p>
@@ -22,5 +25,6 @@ export function PublicPageFooter() {
         </Link>
       </div>
     </footer>
+    </>
   );
 }

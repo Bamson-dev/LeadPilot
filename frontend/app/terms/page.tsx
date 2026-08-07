@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { EnterpriseSolutionsSection } from "@/components/public/enterprise-solutions-section";
 
 export const metadata: Metadata = {
   title: "Terms of Service — LeadThur",
@@ -180,6 +181,8 @@ export default function TermsPage() {
           </div>
         ))}
       </div>
+
+      <EnterpriseSolutionsSection />
 
       <div
         style={{

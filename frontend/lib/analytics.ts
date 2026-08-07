@@ -56,7 +56,7 @@ interface TrackPayload {
   properties?: Props;
 }
 
-let queue: TrackPayload[] = [];
+const queue: TrackPayload[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 const sentKeys = new Set<string>();
 
