@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Code2, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { Panel, PanelContent } from "@/components/ui/panel";
@@ -13,74 +14,84 @@ const WHATSAPP_URL = buildWhatsappUrl(WHATSAPP_PHONE, WHATSAPP_MESSAGE);
 const SERVICES = [
   {
     title: "White-label LeadThur",
-    description: "Launch your own branded lead generation platform powered by LeadThur.",
+    icon: Layers,
+    description:
+      "Launch your own branded lead generation platform without building everything from scratch.",
     detail:
-      "Perfect for agencies, entrepreneurs and businesses looking to offer lead generation under their own brand.",
+      "Perfect for agencies, entrepreneurs and businesses that want to offer lead generation under their own brand.",
   },
   {
     title: "Custom Software Development",
+    icon: Code2,
     description: "Need software built specifically for your business?",
     detail:
-      "We design and build secure, scalable software tailored to your operations, customers and workflows.",
+      "We design and build secure, scalable software tailored to your operations, customers and workflow. From internal business systems to customer-facing platforms, we build software that solves real business problems.",
   },
 ] as const;
 
 export function EnterpriseSolutionsSection() {
   return (
     <section
-      aria-labelledby="enterprise-solutions-heading"
-      className="border-t border-[var(--lt-border)] bg-[var(--lt-bg)] px-4 py-12 md:px-8 md:py-16"
+      aria-labelledby="built-for-your-business-heading"
+      className="border-t border-[var(--lt-border)] bg-[var(--lt-bg)] px-4 py-14 md:px-8 md:py-20"
     >
       <div className="mx-auto w-full max-w-5xl">
-        <Chip className="mb-4 border-[var(--lt-border)] bg-[var(--lt-surface)] text-[var(--lt-text-muted)]">
-          Enterprise &amp; Custom Solutions
+        <Chip className="mb-5 border-[var(--lt-border)] bg-[var(--lt-surface)] text-[var(--lt-text-muted)]">
+          Built for Your Business
         </Chip>
 
         <h2
-          id="enterprise-solutions-heading"
-          className="mb-4 text-3xl font-black tracking-tight text-[var(--lt-text)] md:text-4xl"
+          id="built-for-your-business-heading"
+          className="mb-5 text-3xl font-black tracking-tight text-[var(--lt-text)] md:text-4xl"
         >
           Need Software Built for Your Business?
         </h2>
 
-        <div className="mb-10 max-w-3xl space-y-4 text-base leading-relaxed text-[var(--lt-text-muted)] md:text-lg">
-          <p>Love what LeadThur can do?</p>
+        <div className="mb-12 max-w-3xl space-y-4 text-base leading-relaxed text-[var(--lt-text-muted)] md:text-lg">
           <p>
-            We also help businesses launch software products and build custom platforms that automate
-            operations, generate leads and improve growth.
+            If LeadThur has shown you what&apos;s possible, imagine what software built specifically
+            for your business could do.
           </p>
           <p>
-            Whether you want your own branded version of LeadThur or software built specifically for
-            your company, our team can help.
+            We help businesses build custom software that automates operations, generates leads,
+            improves customer experience and supports growth.
+          </p>
+          <p>
+            We also offer white-label licensing for businesses that want to launch their own branded
+            lead generation platform powered by LeadThur.
           </p>
         </div>
 
-        <div className="mb-10 grid gap-4 md:grid-cols-2 md:gap-6">
-          {SERVICES.map((service) => (
-            <Panel key={service.title}>
-              <PanelContent className="space-y-3 p-6 md:p-8">
-                <h3 className="text-xl font-extrabold text-[var(--lt-text)]">{service.title}</h3>
-                <p className="leading-relaxed text-[var(--lt-text-muted)]">{service.description}</p>
-                <p className="text-sm leading-relaxed text-[var(--lt-text-subtle)]">{service.detail}</p>
-              </PanelContent>
-            </Panel>
-          ))}
+        <div className="mb-12 grid gap-4 sm:grid-cols-2 md:gap-6">
+          {SERVICES.map((service) => {
+            const Icon = service.icon;
+            return (
+              <Panel key={service.title}>
+                <PanelContent className="space-y-3 p-6 md:p-8">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-md border border-[var(--lt-border)] bg-[var(--lt-surface-3)] text-[var(--lt-text-muted)]">
+                    <Icon className="h-5 w-5" aria-hidden />
+                  </div>
+                  <h3 className="text-xl font-extrabold text-[var(--lt-text)]">{service.title}</h3>
+                  <p className="leading-relaxed text-[var(--lt-text-muted)]">{service.description}</p>
+                  <p className="text-sm leading-relaxed text-[var(--lt-text-subtle)]">{service.detail}</p>
+                </PanelContent>
+              </Panel>
+            );
+          })}
         </div>
 
         <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:gap-6">
           {WHATSAPP_URL ? (
-            <Button
-              size="lg"
-              className="h-12 min-h-11 px-8 text-base font-extrabold"
-              asChild
-            >
+            <Button size="lg" className="h-12 min-h-11 px-8 text-base font-extrabold" asChild>
               <Link href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer">
-                Chat on WhatsApp
+                Chat With Us on WhatsApp
               </Link>
             </Button>
           ) : null}
-          <p className="text-sm text-[var(--lt-text-subtle)]">
-            Let&apos;s discuss the right solution for your business.
+          <p className="max-w-sm text-sm leading-relaxed text-[var(--lt-text-subtle)]">
+            Every business is different.
+            <br />
+            Let&apos;s discuss the right solution for yours.
           </p>
         </div>
       </div>
