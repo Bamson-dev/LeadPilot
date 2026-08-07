@@ -5,6 +5,7 @@ import { logger } from "../utils/logger";
 import { FUNNEL_STEPS, EVENT_NAMES } from "./event-taxonomy";
 import { ALERT_CATALOGUE, evaluateAlertsFromCounts } from "./alerts";
 import { getApiLatencySnapshot } from "./latency-metrics";
+import { registerObservabilityPolishRoutes } from "./admin-observability-polish";
 import { getAdminQueueMetrics } from "../queue/search-queue";
 import { getRedisUrl } from "../queue/redis-connection";
 
@@ -23,6 +24,28 @@ function parsePaging(req: Request): { limit: number; offset: number } {
   const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
   const offset = Math.max(Number(req.query.offset) || 0, 0);
   return { limit, offset };
+}
+
+function applyEventDimensionFilters<T extends { eq: (col: string, val: string) => T }>(
+  query: T,
+  req: Request
+): T {
+  let q = query;
+  const country = typeof req.query.country === "string" ? req.query.country : null;
+  const device = typeof req.query.device === "string" ? req.query.device : null;
+  const browser = typeof req.query.browser === "string" ? req.query.browser : null;
+  const utmSource = typeof req.query.utmSource === "string" ? req.query.utmSource : null;
+  const utmMedium = typeof req.query.utmMedium === "string" ? req.query.utmMedium : null;
+  const utmCampaign = typeof req.query.utmCampaign === "string" ? req.query.utmCampaign : null;
+  const referrer = typeof req.query.referrer === "string" ? req.query.referrer : null;
+  if (country) q = q.eq("country", country);
+  if (device) q = q.eq("device", device);
+  if (browser) q = q.eq("browser", browser);
+  if (utmSource) q = q.eq("utm_source", utmSource);
+  if (utmMedium) q = q.eq("utm_medium", utmMedium);
+  if (utmCampaign) q = q.eq("utm_campaign", utmCampaign);
+  if (referrer) q = q.eq("referrer", referrer);
+  return q;
 }
 
 router.get("/overview", requireAdminAuth, async (req: Request, res: Response) => {
@@ -125,13 +148,34 @@ router.get("/funnels", requireAdminAuth, async (req: Request, res: Response) => 
     const { from, to } = parseRange(req);
     const steps = await Promise.all(
       FUNNEL_STEPS.map(async (step) => {
-        const { count } = await supabase
+        let query = supabase
           .from("analytics_events")
-          .select("id", { count: "exact", head: true })
+          .select("id,occurred_at,session_id,duration_ms", { count: "exact" })
           .eq("event_name", step)
           .gte("occurred_at", from)
-          .lte("occurred_at", to);
-        return { step, count: count ?? 0 };
+          .lte("occurred_at", to)
+          .limit(2000);
+        query = applyEventDimensionFilters(query as never, req) as typeof query;
+        const { data, count, error } = await query;
+        if (error) throw error;
+
+        const durations = (data || [])
+          .map((r) => r.duration_ms)
+          .filter((d): d is number => typeof d === "number" && d >= 0)
+          .sort((a, b) => a - b);
+        const avgDurationMs =
+          durations.length > 0
+            ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
+            : null;
+        const medianDurationMs =
+          durations.length > 0 ? durations[Math.floor(durations.length / 2)] ?? null : null;
+
+        return {
+          step,
+          count: count ?? 0,
+          avgDurationMs,
+          medianDurationMs,
+        };
       })
     );
 
@@ -139,10 +183,25 @@ router.get("/funnels", requireAdminAuth, async (req: Request, res: Response) => 
       const prev = index === 0 ? row.count : steps[index - 1].count;
       const conversionFromPrev =
         prev > 0 ? Math.round((row.count / prev) * 1000) / 10 : row.count > 0 ? 100 : 0;
-      return { ...row, conversionFromPrev };
+      const dropOffFromPrev =
+        prev > 0 ? Math.round(((prev - row.count) / prev) * 1000) / 10 : 0;
+      return { ...row, conversionFromPrev, dropOffFromPrev };
     });
 
-    res.json({ from, to, steps: withRates });
+    res.json({
+      from,
+      to,
+      filters: {
+        country: req.query.country || null,
+        device: req.query.device || null,
+        browser: req.query.browser || null,
+        utmSource: req.query.utmSource || null,
+        utmMedium: req.query.utmMedium || null,
+        utmCampaign: req.query.utmCampaign || null,
+        referrer: req.query.referrer || null,
+      },
+      steps: withRates,
+    });
   } catch (err) {
     logger.error("[observability] funnels failed", {
       error: err instanceof Error ? err.message : "unknown",
@@ -268,14 +327,32 @@ router.get("/infrastructure", requireAdminAuth, async (_req: Request, res: Respo
       return count ?? 0;
     };
 
-    const [searchFailures1h, smtpFailures1h, browserCrashes1h, webhookFailures1h, apiErrors1h] =
+    const [searchFailures1h, smtpFailures1h, browserCrashes1h, webhookFailures1h, apiErrors1h, activationFailures1h] =
       await Promise.all([
         countNamed(EVENT_NAMES.SEARCH_FAILED),
-        countNamed(EVENT_NAMES.SMTP_FAILURE).then(async (n) => n + (await countNamed(EVENT_NAMES.EMAIL_FAILED))),
+        countNamed(EVENT_NAMES.SMTP_FAILURE),
         countNamed(EVENT_NAMES.BROWSER_CRASH),
         countNamed(EVENT_NAMES.WEBHOOK_FAILURE),
         countNamed(EVENT_NAMES.API_ERROR).then(async (n) => n + (await countNamed(EVENT_NAMES.EXCEPTION))),
+        countNamed(EVENT_NAMES.LICENSE_ACTIVATION_FAILED),
       ]);
+
+    const { data: completedDurations } = await supabase
+      .from("analytics_events")
+      .select("duration_ms")
+      .eq("event_name", EVENT_NAMES.SEARCH_COMPLETED)
+      .gte("occurred_at", since1h)
+      .not("duration_ms", "is", null)
+      .limit(500);
+    const durationVals = (completedDurations || [])
+      .map((r) => r.duration_ms)
+      .filter((d): d is number => typeof d === "number");
+    const avgSearchDurationMs1h =
+      durationVals.length > 0
+        ? Math.round(durationVals.reduce((a, b) => a + b, 0) / durationVals.length)
+        : null;
+
+    const workerHealthy = queue.mode === "bullmq" ? redisConnected : true;
 
     const snapshot = {
       captured_at: new Date().toISOString(),
@@ -291,6 +368,9 @@ router.get("/infrastructure", requireAdminAuth, async (_req: Request, res: Respo
       browser_crashes_1h: browserCrashes1h,
       webhook_failures_1h: webhookFailures1h,
       api_errors_1h: apiErrors1h,
+      activation_failures_1h: activationFailures1h,
+      avg_search_duration_ms_1h: avgSearchDurationMs1h,
+      worker_healthy: workerHealthy,
       api_latency: getApiLatencySnapshot(),
     };
 
@@ -311,6 +391,9 @@ router.get("/infrastructure", requireAdminAuth, async (_req: Request, res: Respo
         browser_crashes_1h: browserCrashes1h,
         webhook_failures_1h: webhookFailures1h,
         api_errors_1h: apiErrors1h,
+        activation_failures_1h: activationFailures1h,
+        avg_search_duration_ms_1h: avgSearchDurationMs1h,
+        worker_healthy: workerHealthy,
         api_latency_p99_ms: snapshot.api_latency.p99Ms,
         api_latency_samples: snapshot.api_latency.sampleCount,
       },
@@ -329,6 +412,9 @@ router.get("/infrastructure", requireAdminAuth, async (_req: Request, res: Respo
       checkoutStarted1h,
       checkoutAbandoned1h,
       redisConnected,
+      activationFailures1h,
+      avgSearchDurationMs1h,
+      workerHealthy,
     });
 
     res.json({ snapshot, catalogue: ALERT_CATALOGUE });
@@ -512,5 +598,7 @@ router.get("/events.csv", requireAdminAuth, async (req: Request, res: Response) 
     res.status(500).json({ error: "Failed to export CSV" });
   }
 });
+
+registerObservabilityPolishRoutes(router);
 
 export default router;

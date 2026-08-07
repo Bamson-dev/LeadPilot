@@ -1,8 +1,6 @@
 import { supabase } from "../database/client";
 import { logger } from "../utils/logger";
 import { getEnvironment } from "./privacy";
-import { trackEvent } from "./track";
-import { EVENT_NAMES } from "./event-taxonomy";
 
 export type AlertSeverity = "info" | "warning" | "critical";
 
@@ -129,23 +127,36 @@ export async function openOrRefreshAlert(input: {
       });
     }
 
-    trackEvent({
-      eventName: EVENT_NAMES.API_ERROR,
-      eventCategory: "technical",
-      source: "server",
-      properties: {
-        alertKey: input.alertKey,
-        severity: input.severity,
-        metricName: input.metricName,
-        metricValue: input.metricValue,
-      },
-      idempotencyKey: `alert:${input.alertKey}:${now.slice(0, 13)}`,
-    });
+    // Do not emit api_error here — that inflated api_error_spike and caused alert spam.
   } catch (err) {
     logger.warn("[observability] alert write failed", {
       error: err instanceof Error ? err.message : "unknown",
       alertKey: input.alertKey,
     });
+  }
+}
+
+export async function updateAlertStatus(input: {
+  alertId: string;
+  status: "acknowledged" | "resolved" | "open";
+}): Promise<boolean> {
+  try {
+    const now = new Date().toISOString();
+    const patch: Record<string, unknown> = {
+      status: input.status,
+      last_seen_at: now,
+    };
+    if (input.status === "resolved") patch.resolved_at = now;
+    if (input.status === "open") patch.resolved_at = null;
+
+    const { error } = await supabase
+      .from("analytics_alerts")
+      .update(patch)
+      .eq("id", input.alertId);
+
+    return !error;
+  } catch {
+    return false;
   }
 }
 
@@ -159,6 +170,9 @@ export async function evaluateAlertsFromCounts(input: {
   checkoutStarted1h: number;
   checkoutAbandoned1h: number;
   redisConnected: boolean;
+  activationFailures1h?: number;
+  avgSearchDurationMs1h?: number | null;
+  workerHealthy?: boolean;
 }): Promise<void> {
   if (input.searchFailures1h >= 10) {
     await openOrRefreshAlert({
@@ -169,6 +183,7 @@ export async function evaluateAlertsFromCounts(input: {
       metricName: "search_failures_1h",
       metricValue: input.searchFailures1h,
       thresholdValue: 10,
+      context: { service: "search" },
     });
   }
 
@@ -181,6 +196,7 @@ export async function evaluateAlertsFromCounts(input: {
       metricName: "smtp_failures_1h",
       metricValue: input.smtpFailures1h,
       thresholdValue: 5,
+      context: { service: "smtp" },
     });
   }
 
@@ -193,6 +209,7 @@ export async function evaluateAlertsFromCounts(input: {
       metricName: "redis_connected",
       metricValue: 0,
       thresholdValue: 1,
+      context: { service: "redis" },
     });
   }
 
@@ -205,6 +222,7 @@ export async function evaluateAlertsFromCounts(input: {
       metricName: "queue_waiting",
       metricValue: input.queueWaiting,
       thresholdValue: 25,
+      context: { service: "queue" },
     });
   }
 
@@ -217,6 +235,7 @@ export async function evaluateAlertsFromCounts(input: {
       metricName: "browser_crashes_1h",
       metricValue: input.browserCrashes1h,
       thresholdValue: 3,
+      context: { service: "browser" },
     });
   }
 
@@ -229,6 +248,7 @@ export async function evaluateAlertsFromCounts(input: {
       metricName: "webhook_failures_1h",
       metricValue: input.webhookFailures1h,
       thresholdValue: 1,
+      context: { service: "webhooks" },
     });
   }
 
@@ -241,6 +261,7 @@ export async function evaluateAlertsFromCounts(input: {
       metricName: "api_errors_1h",
       metricValue: input.apiErrors1h,
       thresholdValue: 20,
+      context: { service: "api" },
     });
   }
 
@@ -256,6 +277,49 @@ export async function evaluateAlertsFromCounts(input: {
       metricName: "checkout_abandon_rate_1h",
       metricValue: input.checkoutAbandoned1h / input.checkoutStarted1h,
       thresholdValue: 0.7,
+      context: { service: "checkout" },
+    });
+  }
+
+  if ((input.activationFailures1h ?? 0) >= 5) {
+    await openOrRefreshAlert({
+      alertKey: "activation_failure",
+      severity: "warning",
+      title: "Activation failures",
+      message: `${input.activationFailures1h} activation failures in the last hour`,
+      metricName: "activation_failures_1h",
+      metricValue: input.activationFailures1h,
+      thresholdValue: 5,
+      context: { service: "licensing" },
+    });
+  }
+
+  if (
+    typeof input.avgSearchDurationMs1h === "number" &&
+    input.avgSearchDurationMs1h >= 180_000
+  ) {
+    await openOrRefreshAlert({
+      alertKey: "search_duration_spike",
+      severity: "warning",
+      title: "Search duration spike",
+      message: `Average search duration ${Math.round(input.avgSearchDurationMs1h / 1000)}s in the last hour`,
+      metricName: "avg_search_duration_ms_1h",
+      metricValue: input.avgSearchDurationMs1h,
+      thresholdValue: 180_000,
+      context: { service: "search" },
+    });
+  }
+
+  if (input.workerHealthy === false) {
+    await openOrRefreshAlert({
+      alertKey: "worker_offline",
+      severity: "critical",
+      title: "Worker offline",
+      message: "Search worker appears offline or queue mode degraded without active workers",
+      metricName: "worker_healthy",
+      metricValue: 0,
+      thresholdValue: 1,
+      context: { service: "worker" },
     });
   }
 }

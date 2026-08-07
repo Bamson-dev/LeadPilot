@@ -9,10 +9,25 @@ import { getApiUrl } from "@/utils/env";
 const SESSION_KEY = "lt_analytics_session";
 const ANON_KEY = "lt_analytics_anon";
 const LANDING_KEY = "lt_analytics_landing";
+const ATTRIBUTION_KEY = "lt_analytics_attribution";
+const VISIT_COUNT_KEY = "lt_analytics_visit_count";
+const CHECKOUT_STARTED_KEY = "lt_checkout_started_at";
 const QUEUE_FLUSH_MS = 800;
 const MAX_BATCH = 20;
 
 type Props = Record<string, unknown>;
+
+interface Attribution {
+  utmSource: string | null;
+  utmMedium: string | null;
+  utmCampaign: string | null;
+  utmContent: string | null;
+  utmTerm: string | null;
+  fbclid: string | null;
+  gclid: string | null;
+  referrer: string | null;
+  landingPage: string | null;
+}
 
 interface TrackPayload {
   eventName: string;
@@ -28,6 +43,10 @@ interface TrackPayload {
   utmSource?: string | null;
   utmMedium?: string | null;
   utmCampaign?: string | null;
+  utmContent?: string | null;
+  utmTerm?: string | null;
+  fbclid?: string | null;
+  gclid?: string | null;
   landingPage?: string | null;
   device?: string | null;
   browser?: string | null;
@@ -82,25 +101,67 @@ function getAnonymousId(): string {
   return id;
 }
 
-function getLandingPage(): string {
-  let landing = storageGet(LANDING_KEY);
-  if (!landing && typeof window !== "undefined") {
-    landing = `${window.location.pathname}${window.location.search}`;
-    storageSet(LANDING_KEY, landing);
-  }
-  return landing || "/";
-}
-
-function parseUtm(): { source: string | null; medium: string | null; campaign: string | null } {
+function parseAttributionFromUrl(): Attribution {
   if (typeof window === "undefined") {
-    return { source: null, medium: null, campaign: null };
+    return {
+      utmSource: null,
+      utmMedium: null,
+      utmCampaign: null,
+      utmContent: null,
+      utmTerm: null,
+      fbclid: null,
+      gclid: null,
+      referrer: null,
+      landingPage: null,
+    };
   }
   const params = new URLSearchParams(window.location.search);
   return {
-    source: params.get("utm_source"),
-    medium: params.get("utm_medium"),
-    campaign: params.get("utm_campaign"),
+    utmSource: params.get("utm_source"),
+    utmMedium: params.get("utm_medium"),
+    utmCampaign: params.get("utm_campaign"),
+    utmContent: params.get("utm_content"),
+    utmTerm: params.get("utm_term"),
+    fbclid: params.get("fbclid"),
+    gclid: params.get("gclid"),
+    referrer: document.referrer || null,
+    landingPage: `${window.location.pathname}${window.location.search}`,
   };
+}
+
+/** First-touch attribution persisted for Landing → Revenue continuity. */
+export function getPersistedAttribution(): Attribution {
+  try {
+    const raw = storageGet(ATTRIBUTION_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Attribution;
+      if (parsed && typeof parsed === "object") return parsed;
+    }
+  } catch {
+    /* ignore */
+  }
+
+  const fresh = parseAttributionFromUrl();
+  let landing = storageGet(LANDING_KEY);
+  if (!landing) {
+    landing = fresh.landingPage || "/";
+    storageSet(LANDING_KEY, landing);
+  }
+  fresh.landingPage = landing;
+
+  const hasTouch =
+    Boolean(fresh.utmSource) ||
+    Boolean(fresh.utmMedium) ||
+    Boolean(fresh.utmCampaign) ||
+    Boolean(fresh.fbclid) ||
+    Boolean(fresh.gclid) ||
+    Boolean(fresh.referrer);
+
+  if (hasTouch || !storageGet(ATTRIBUTION_KEY)) {
+    storageSet(ATTRIBUTION_KEY, JSON.stringify(fresh));
+  }
+
+  return fresh;
 }
 
 function detectDevice(): string {
@@ -196,7 +257,7 @@ export function track(
       }
     }
 
-    const utm = parseUtm();
+    const attr = getPersistedAttribution();
     queue.push({
       eventName,
       occurredAt: new Date().toISOString(),
@@ -207,17 +268,25 @@ export function track(
       correlationId: options?.correlationId ?? null,
       searchId: options?.searchId ?? null,
       pagePath: `${window.location.pathname}${window.location.search}`,
-      referrer: document.referrer || null,
-      utmSource: utm.source,
-      utmMedium: utm.medium,
-      utmCampaign: utm.campaign,
-      landingPage: getLandingPage(),
+      referrer: attr.referrer || document.referrer || null,
+      utmSource: attr.utmSource,
+      utmMedium: attr.utmMedium,
+      utmCampaign: attr.utmCampaign,
+      utmContent: attr.utmContent,
+      utmTerm: attr.utmTerm,
+      fbclid: attr.fbclid,
+      gclid: attr.gclid,
+      landingPage: attr.landingPage,
       device: detectDevice(),
       browser: detectBrowser(),
       os: detectOs(),
       durationMs: options?.durationMs ?? null,
       idempotencyKey: key ?? null,
-      properties: options?.properties ?? {},
+      properties: {
+        ...(options?.properties ?? {}),
+        campaign: attr.utmCampaign,
+        adCreative: attr.utmContent,
+      },
     });
 
     if (queue.length >= MAX_BATCH) {
@@ -231,10 +300,56 @@ export function track(
 }
 
 export function trackPageView(path?: string): void {
+  const pathname =
+    path || (typeof window !== "undefined" ? window.location.pathname : "/");
+
   track("page_view", {
-    properties: { path: path || (typeof window !== "undefined" ? window.location.pathname : null) },
-    idempotencyKey: `page_view:${typeof window !== "undefined" ? window.location.pathname : path}:${Math.floor(Date.now() / 5000)}`,
+    properties: { path: pathname },
+    idempotencyKey: `page_view:${pathname}:${Math.floor(Date.now() / 5000)}`,
   });
+
+  try {
+    const visits = Number(storageGet(VISIT_COUNT_KEY) || "0") + 1;
+    storageSet(VISIT_COUNT_KEY, String(visits));
+    if (visits === 2) {
+      track("second_visit", {
+        idempotencyKey: `second_visit:${getAnonymousId()}`,
+      });
+    }
+    if (visits >= 3) {
+      track("returning_customer", {
+        idempotencyKey: `returning_customer:${getAnonymousId()}`,
+      });
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+export function markCheckoutStarted(): void {
+  storageSet(CHECKOUT_STARTED_KEY, String(Date.now()));
+}
+
+export function markCheckoutPaid(): void {
+  try {
+    localStorage.removeItem(CHECKOUT_STARTED_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function maybeTrackCheckoutAbandoned(): void {
+  const startedAt = storageGet(CHECKOUT_STARTED_KEY);
+  if (!startedAt) return;
+  track("checkout_abandoned", {
+    durationMs: Date.now() - Number(startedAt),
+    idempotencyKey: `checkout_abandoned:${getSessionId()}`,
+  });
+  try {
+    localStorage.removeItem(CHECKOUT_STARTED_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 /** Flush pending events (e.g. on pagehide). */
@@ -247,7 +362,10 @@ export function flushAnalytics(): void {
 }
 
 if (typeof window !== "undefined") {
-  window.addEventListener("pagehide", () => flushAnalytics());
+  window.addEventListener("pagehide", () => {
+    maybeTrackCheckoutAbandoned();
+    flushAnalytics();
+  });
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") flushAnalytics();
   });

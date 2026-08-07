@@ -27,6 +27,7 @@ const ALLOWED_CLIENT_EVENTS = new Set([
   "mailbox_disconnected",
   "first_outreach",
   "second_visit",
+  "returning_customer",
   "search_started",
   "search_completed",
   "search_failed",
@@ -35,6 +36,7 @@ const ALLOWED_CLIENT_EVENTS = new Set([
   "business_opened",
   "business_details_viewed",
   "email_sent",
+  "email_opened",
   "template_used",
   "referral_click",
   "page_view",
@@ -47,6 +49,7 @@ const ALLOWED_CLIENT_EVENTS = new Set([
   "modal_closed",
   "drawer_opened",
   "drawer_closed",
+  "scroll_depth",
 ]);
 
 /**
@@ -89,6 +92,10 @@ router.post("/events", (req: Request, res: Response) => {
         utmSource: typeof raw.utmSource === "string" ? raw.utmSource : null,
         utmMedium: typeof raw.utmMedium === "string" ? raw.utmMedium : null,
         utmCampaign: typeof raw.utmCampaign === "string" ? raw.utmCampaign : null,
+        utmContent: typeof raw.utmContent === "string" ? raw.utmContent : null,
+        utmTerm: typeof raw.utmTerm === "string" ? raw.utmTerm : null,
+        fbclid: typeof raw.fbclid === "string" ? raw.fbclid : null,
+        gclid: typeof raw.gclid === "string" ? raw.gclid : null,
         landingPage: typeof raw.landingPage === "string" ? raw.landingPage : null,
         country: typeof raw.country === "string" ? raw.country : null,
         device: typeof raw.device === "string" ? raw.device : null,

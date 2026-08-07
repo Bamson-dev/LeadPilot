@@ -42,6 +42,7 @@ export const EVENT_NAMES = {
   MAILBOX_DISCONNECTED: "mailbox_disconnected",
   FIRST_OUTREACH: "first_outreach",
   SECOND_VISIT: "second_visit",
+  RETURNING_CUSTOMER: "returning_customer",
 
   // Product / Discovery
   SEARCH_STARTED: "search_started",
@@ -57,6 +58,7 @@ export const EVENT_NAMES = {
   EMAIL_FAILED: "email_failed",
   EMAIL_OPENED: "email_opened",
   EMAIL_CLICKED: "email_clicked",
+  EMAIL_QUEUED: "email_queued",
   REPLY_RECEIVED: "reply_received",
   TEMPLATE_USED: "template_used",
 
@@ -66,9 +68,14 @@ export const EVENT_NAMES = {
   REFERRAL_CONVERSION: "referral_conversion",
   WITHDRAWAL_REQUESTED: "withdrawal_requested",
 
-  // Billing
+  // Billing / License health
   CHECKOUT_ABANDONED: "checkout_abandoned",
   SUBSCRIPTION_RENEWAL: "subscription_renewal",
+  LICENSE_ACTIVATION_FAILED: "license_activation_failed",
+  LICENSE_INVALID: "license_invalid",
+  LICENSE_DEVICE_DENIED: "license_device_denied",
+  LICENSE_EXPIRED: "license_expired",
+  DUPLICATE_ACTIVATION: "duplicate_activation",
 
   // Behaviour
   PAGE_VIEW: "page_view",
@@ -117,6 +124,8 @@ export const FUNNEL_STEPS = [
   EVENT_NAMES.CSV_EXPORT,
   EVENT_NAMES.MAILBOX_CONNECTED,
   EVENT_NAMES.FIRST_OUTREACH,
+  EVENT_NAMES.SECOND_VISIT,
+  EVENT_NAMES.RETURNING_CUSTOMER,
 ] as const;
 
 export function categoryForEvent(name: string): EventCategory {
@@ -135,7 +144,9 @@ export function categoryForEvent(name: string): EventCategory {
     name.includes("payment") ||
     name.includes("checkout") ||
     name.includes("license") ||
-    name.includes("subscription")
+    name.includes("subscription") ||
+    name.includes("activation") ||
+    name.includes("duplicate_activation")
   ) {
     return "billing";
   }
@@ -146,7 +157,10 @@ export function categoryForEvent(name: string): EventCategory {
     name.includes("modal") ||
     name.includes("drawer") ||
     name.includes("form_") ||
-    name.includes("validation")
+    name.includes("validation") ||
+    name.includes("scroll") ||
+    name === "returning_customer" ||
+    name === "second_visit"
   ) {
     return "behaviour";
   }

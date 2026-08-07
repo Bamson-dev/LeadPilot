@@ -83,13 +83,24 @@ assert(workspace.includes("Alerts"), "alerts tab missing");
 assert(read("frontend/app/(marketing)/page.tsx").includes("landing_viewed"), "landing track missing");
 assert(read("frontend/app/freetrial/page.tsx").includes("paywall_viewed"), "paywall track missing");
 assert(read("frontend/app/checkout/page.tsx").includes("checkout_started"), "checkout track missing");
-assert(read("frontend/app/activate/page.tsx").includes("license_activated"), "activate track missing");
-assert(read("frontend/hooks/useSearch.ts").includes("search_started") === false, "client must not duplicate search_started");
+assert(read("frontend/app/activate/page.tsx").includes("dashboard_entered"), "activate dashboard track missing");
+assert(read("backend/src/api/auth-router.ts").includes("LICENSE_ACTIVATED"), "server license_activated missing");
 assert(read("frontend/features/export/csv-export.ts").includes("csv_export"), "csv export track missing");
 assert(read("backend/src/routes/mailboxes.ts").includes("MAILBOX_DISCONNECTED"), "mailbox disconnect track missing");
 assert(exists("frontend/components/analytics/analytics-behaviour-tracker.tsx"), "behaviour tracker missing");
 assert(exists("backend/src/middleware/observability-latency.ts"), "latency middleware missing");
 assert(read("backend/src/server.ts").includes("observabilityLatency"), "latency middleware not mounted");
+assert(exists("backend/src/observability/admin-observability-polish.ts"), "polish routes missing");
+assert(exists("supabase/migrations/040_analytics_attribution_polish.sql"), "migration 040 missing");
+assert(read("backend/src/utils/search-job-lifecycle.ts").includes("explicitOk"), "search success classifier missing");
+assert(read("backend/src/observability/alerts.ts").includes("updateAlertStatus"), "alert ack/resolve missing");
+assert(!read("backend/src/observability/alerts.ts").includes("EVENT_NAMES.API_ERROR"), "alert must not emit api_error");
+assert(read("frontend/lib/analytics.ts").includes("fbclid"), "attribution fbclid missing");
+assert(read("frontend/lib/analytics.ts").includes("checkout_abandoned") || read("frontend/lib/analytics.ts").includes("maybeTrackCheckoutAbandoned"), "checkout abandon missing");
+assert(read("frontend/components/admin/workspaces/dashboard-workspace.tsx").includes("Executive dashboard"), "executive dashboard missing");
+assert(read("frontend/components/admin/workspaces/analytics-workspace.tsx").includes("timeline"), "timeline tab missing");
+assert(read("backend/src/routes/outreach-tracking.ts").includes("EMAIL_OPENED"), "email_opened track missing");
+assert(read("backend/src/api/auth-router.ts").includes("LICENSE_ACTIVATION_FAILED"), "activation failure track missing");
 
 // Server hooks (best-effort presence)
 const hookedFiles = [

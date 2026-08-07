@@ -55,14 +55,36 @@ export function logSearchLifecycle(
   }
 
   if (stage === "job_processing_end") {
-    const success = extra?.success === true || extra?.status === "completed";
+    const leadCount =
+      typeof extra?.leadCount === "number"
+        ? extra.leadCount
+        : typeof extra?.leadsCollected === "number"
+          ? extra.leadsCollected
+          : null;
+    const explicitFail =
+      extra?.success === false ||
+      extra?.status === "failed" ||
+      Boolean(extra?.error) ||
+      Boolean(extra?.errorMessage);
+    const explicitOk =
+      extra?.success === true ||
+      extra?.status === "completed" ||
+      extra?.emailScrapingComplete === true ||
+      (typeof leadCount === "number" && leadCount > 0 && !explicitFail);
+    const success = explicitOk && !explicitFail;
+
     trackEvent({
       eventName: success ? EVENT_NAMES.SEARCH_COMPLETED : EVENT_NAMES.SEARCH_FAILED,
       eventCategory: "search",
       source: "worker",
       searchId,
       durationMs: typeof extra?.elapsedMs === "number" ? extra.elapsedMs : null,
-      properties: { stage, ...extra },
+      properties: {
+        stage,
+        leadCount,
+        success,
+        ...extra,
+      },
       idempotencyKey: `search:${searchId}:result:${success ? "ok" : "fail"}`,
     });
   }

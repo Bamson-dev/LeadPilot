@@ -131,9 +131,13 @@ class InlineSearchQueue {
         jobStartedAt,
       });
 
+      const leadCount = await countSearchLeads(job.data.searchId).catch(() => 0);
       logSearchLifecycle("job_processing_end", job.data.searchId, {
         queue: "inline",
         elapsedMs: Date.now() - jobStartedAt,
+        success: true,
+        status: "completed",
+        leadCount,
       });
       job.resolve();
     } catch (err) {

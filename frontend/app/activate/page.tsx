@@ -50,10 +50,6 @@ export default function ActivatePage() {
       const normalizedKey = key.trim();
       await activateLicense(normalizedEmail, normalizedKey);
       setStoredLicense(normalizedEmail, normalizedKey);
-      track("license_activated", {
-        userEmail: normalizedEmail,
-        idempotencyKey: `license_activated:${normalizedEmail}`,
-      });
       track("dashboard_entered", {
         userEmail: normalizedEmail,
         idempotencyKey: `dashboard_entered:${normalizedEmail}:${Math.floor(Date.now() / 60_000)}`,

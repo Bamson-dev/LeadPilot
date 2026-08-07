@@ -25,6 +25,10 @@ export interface AnalyticsEventInput {
   utmSource?: string | null;
   utmMedium?: string | null;
   utmCampaign?: string | null;
+  utmContent?: string | null;
+  utmTerm?: string | null;
+  fbclid?: string | null;
+  gclid?: string | null;
   landingPage?: string | null;
   country?: string | null;
   device?: string | null;
@@ -53,6 +57,10 @@ type AnalyticsEventRow = {
   utm_source: string | null;
   utm_medium: string | null;
   utm_campaign: string | null;
+  utm_content: string | null;
+  utm_term: string | null;
+  fbclid: string | null;
+  gclid: string | null;
   landing_page: string | null;
   country: string | null;
   device: string | null;
@@ -92,6 +100,10 @@ function toRow(input: AnalyticsEventInput): AnalyticsEventRow {
     utm_source: input.utmSource || null,
     utm_medium: input.utmMedium || null,
     utm_campaign: input.utmCampaign || null,
+    utm_content: input.utmContent || null,
+    utm_term: input.utmTerm || null,
+    fbclid: input.fbclid || null,
+    gclid: input.gclid || null,
     landing_page: input.landingPage || null,
     country: input.country || null,
     device: input.device || null,

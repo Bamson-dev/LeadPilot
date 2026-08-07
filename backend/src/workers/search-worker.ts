@@ -142,9 +142,13 @@ async function processSearchJob(job: Job<SearchQueueJobData>): Promise<void> {
       isTrial: trial,
       jobStartedAt,
     });
+    const leadCount = await countSearchLeads(searchId).catch(() => 0);
     logSearchLifecycle("job_processing_end", searchId, {
       queue: "bullmq",
       elapsedMs: Date.now() - jobStartedAt,
+      success: true,
+      status: "completed",
+      leadCount,
     });
   } catch (err) {
     const leadsCollected = await countSearchLeads(searchId);

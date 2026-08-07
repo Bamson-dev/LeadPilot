@@ -658,3 +658,163 @@ export function getObservabilityEventsCsvUrl(from?: string, to?: string): string
   return observabilityUrl("/events.csv", { from, to });
 }
 
+export async function getObservabilityExecutive() {
+  const res = await fetch(observabilityUrl("/executive"), {
+    headers: getAdminHeaders(),
+    cache: "no-store",
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to load executive overview");
+  return res.json() as Promise<{
+    executive: {
+      todaysRevenueEvents: number;
+      todaysSearches: number;
+      trialUsers: number;
+      payingUsers: number;
+      activatedUsers: number;
+      conversionRate: number | null;
+      openAlerts: number;
+      errors: number;
+      smtpHealth: { sent: number; failed: number };
+    };
+  }>;
+}
+
+export async function getObservabilityCohorts() {
+  const res = await fetch(observabilityUrl("/cohorts"), {
+    headers: getAdminHeaders(),
+    cache: "no-store",
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to load cohorts");
+  return res.json() as Promise<{
+    cohorts: Record<string, Record<string, number>>;
+    retentionProxy: Record<string, number | null>;
+  }>;
+}
+
+export async function getObservabilityTimeline(params: {
+  email?: string;
+  emailHash?: string;
+  licenseId?: string;
+  sessionId?: string;
+}) {
+  const res = await fetch(
+    observabilityUrl("/timeline", {
+      email: params.email,
+      emailHash: params.emailHash,
+      licenseId: params.licenseId,
+      sessionId: params.sessionId,
+    }),
+    { headers: getAdminHeaders(), cache: "no-store" }
+  );
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to load timeline");
+  return res.json() as Promise<{ events: Array<Record<string, unknown>>; total: number }>;
+}
+
+export async function getObservabilityAttribution(from?: string, to?: string) {
+  const res = await fetch(observabilityUrl("/attribution", { from, to }), {
+    headers: getAdminHeaders(),
+    cache: "no-store",
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to load attribution");
+  return res.json() as Promise<{
+    attributed: Array<{ source: string; medium: string; campaign: string; purchases: number }>;
+    purchases: number;
+  }>;
+}
+
+export async function getObservabilitySearchQuality(from?: string, to?: string) {
+  const res = await fetch(observabilityUrl("/search-quality", { from, to }), {
+    headers: getAdminHeaders(),
+    cache: "no-store",
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to load search quality");
+  return res.json() as Promise<{
+    summary: Record<string, number | null>;
+    failedReplayMetadata: Array<Record<string, unknown>>;
+  }>;
+}
+
+export async function getObservabilityLicenseHealth(from?: string, to?: string) {
+  const res = await fetch(observabilityUrl("/license-health", { from, to }), {
+    headers: getAdminHeaders(),
+    cache: "no-store",
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to load license health");
+  return res.json() as Promise<{ counts: Record<string, number> }>;
+}
+
+export async function getObservabilityOutreachHealth(from?: string, to?: string) {
+  const res = await fetch(observabilityUrl("/outreach-health", { from, to }), {
+    headers: getAdminHeaders(),
+    cache: "no-store",
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to load outreach health");
+  return res.json() as Promise<{
+    counts: Record<string, number>;
+    rates: { failureRate: number | null; openRate: number | null };
+  }>;
+}
+
+export async function patchObservabilityAlert(
+  id: string,
+  status: "acknowledged" | "resolved" | "open"
+) {
+  const res = await fetch(observabilityUrl(`/alerts/${id}`), {
+    method: "PATCH",
+    headers: { ...getAdminHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to update alert");
+  return res.json() as Promise<{ success: boolean }>;
+}
+
+export async function getObservabilityFunnelsFiltered(params?: {
+  from?: string;
+  to?: string;
+  country?: string;
+  device?: string;
+  browser?: string;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  referrer?: string;
+}) {
+  const res = await fetch(
+    observabilityUrl("/funnels", {
+      from: params?.from,
+      to: params?.to,
+      country: params?.country,
+      device: params?.device,
+      browser: params?.browser,
+      utmSource: params?.utmSource,
+      utmMedium: params?.utmMedium,
+      utmCampaign: params?.utmCampaign,
+      referrer: params?.referrer,
+    }),
+    { headers: getAdminHeaders(), cache: "no-store" }
+  );
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to load funnels");
+  return res.json() as Promise<{
+    from: string;
+    to: string;
+    steps: Array<{
+      step: string;
+      count: number;
+      conversionFromPrev: number;
+      dropOffFromPrev?: number;
+      avgDurationMs?: number | null;
+      medianDurationMs?: number | null;
+    }>;
+  }>;
+}
+
+

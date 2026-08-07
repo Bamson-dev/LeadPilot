@@ -67,17 +67,10 @@ router.post("/initialize", async (req: Request, res: Response) => {
 
     const normalizedEmail = email.toLowerCase().trim();
     trackEvent({
-      eventName: EVENT_NAMES.CHECKOUT_STARTED,
-      source: "server",
-      userEmail: normalizedEmail,
-      properties: { reference, gateway: "paystack", hasRefCode: Boolean(refCode?.trim()) },
-      idempotencyKey: `checkout_started:${reference}`,
-    });
-    trackEvent({
       eventName: EVENT_NAMES.PAYMENT_INITIATED,
       source: "server",
       userEmail: normalizedEmail,
-      properties: { reference, gateway: "paystack" },
+      properties: { reference, gateway: "paystack", hasRefCode: Boolean(refCode?.trim()) },
       idempotencyKey: `payment_initiated:${reference}`,
     });
 

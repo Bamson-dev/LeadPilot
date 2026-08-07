@@ -66,8 +66,8 @@ export function AnalyticsBehaviourTracker() {
         const pct = Math.min(100, Math.round((window.scrollY / scrollable) * 100));
         if (pct > maxScrollPct + 24) {
           maxScrollPct = pct;
-          track("page_view", {
-            properties: { scrollDepth: maxScrollPct, kind: "scroll_depth" },
+          track("scroll_depth", {
+            properties: { scrollDepth: maxScrollPct },
             idempotencyKey: `scroll:${window.location.pathname}:${maxScrollPct}`,
           });
         }

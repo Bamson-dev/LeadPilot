@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Panel, PanelContent } from "@/components/ui/panel";
 import { cn } from "@/utils/utils";
-import { track } from "@/lib/analytics";
+import { track, markCheckoutStarted, markCheckoutPaid } from "@/lib/analytics";
 
 const FLW_PUBLIC_KEY = process.env.NEXT_PUBLIC_FLUTTERWAVE_PUBLIC_KEY ?? "";
 
@@ -66,8 +66,9 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     track("checkout_started", {
-      idempotencyKey: `checkout_started:${Math.floor(Date.now() / 60_000)}`,
+      idempotencyKey: `checkout_started:page`,
     });
+    markCheckoutStarted();
   }, []);
 
   function getRefCode(): string | null {
@@ -132,11 +133,7 @@ export default function CheckoutPage() {
 
       if (!res.ok) throw new Error("Failed to initialize payment");
       const data = (await res.json()) as { authorizationUrl?: string; authorization_url?: string };
-      track("payment_initiated", {
-        userEmail: email,
-        properties: { provider: "paystack" },
-        idempotencyKey: `payment_initiated:paystack:${email}:${Math.floor(Date.now() / 30_000)}`,
-      });
+      markCheckoutPaid();
       window.location.href = data.authorizationUrl || data.authorization_url || "";
     } catch {
       setError("Something went wrong. Please try again.");
@@ -159,6 +156,12 @@ export default function CheckoutPage() {
     setLoading(true);
 
     const txRef = flwTxRef;
+    markCheckoutPaid();
+    track("payment_initiated", {
+      userEmail: email,
+      properties: { provider: "flutterwave" },
+      idempotencyKey: `payment_initiated:flutterwave:${txRef}`,
+    });
 
     handleFlutterwave({
       callback: (response) => {

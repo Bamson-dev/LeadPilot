@@ -443,6 +443,18 @@ export default function FreeTrialPage() {
       setMessage("");
 
       const stats = await fetchSearchStats(searchId, trialEmail);
+      track("trial_search_completed", {
+        userEmail: trialEmail,
+        searchId,
+        properties: { searchNumber, totalFound: stats.totalFound },
+        idempotencyKey: `trial_search_completed:${searchId}`,
+      });
+      track("results_displayed", {
+        userEmail: trialEmail,
+        searchId,
+        properties: { searchNumber, totalFound: stats.totalFound, context: "trial" },
+        idempotencyKey: `results_displayed:${searchId}`,
+      });
       if (stats.totalFound > 0) {
         setActiveSearchTotalFound(stats.totalFound);
       }
@@ -541,6 +553,12 @@ export default function FreeTrialPage() {
     },
     [startSearchCompletionPoll]
   );
+
+  useEffect(() => {
+    track("freetrial_viewed", {
+      idempotencyKey: `freetrial_viewed:page`,
+    });
+  }, []);
 
   useEffect(() => {
     const savedEmail = getTrialEmail();
@@ -739,10 +757,6 @@ export default function FreeTrialPage() {
       track("trial_started", {
         userEmail: email,
         idempotencyKey: `trial_started:${email}`,
-      });
-      track("freetrial_viewed", {
-        userEmail: email,
-        idempotencyKey: `freetrial_viewed:${email}`,
       });
     } catch (err) {
       setGateError(err instanceof Error ? err.message : "Signup failed. Please try again.");

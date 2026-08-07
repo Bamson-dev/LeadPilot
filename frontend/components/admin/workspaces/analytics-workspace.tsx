@@ -30,6 +30,13 @@ import {
   getObservabilityAlerts,
   getObservabilityKpis,
   getObservabilityEventsCsvUrl,
+  getObservabilityCohorts,
+  getObservabilityTimeline,
+  getObservabilityAttribution,
+  getObservabilitySearchQuality,
+  getObservabilityLicenseHealth,
+  getObservabilityOutreachHealth,
+  patchObservabilityAlert,
   getAdminToken,
   type AdminOverview,
   type TrialStats,
@@ -39,28 +46,38 @@ type AnalyticsTab =
   | "overview"
   | "funnels"
   | "users"
+  | "timeline"
+  | "cohorts"
   | "searches"
   | "revenue"
+  | "attribution"
   | "infrastructure"
   | "errors"
   | "workers"
   | "queues"
   | "smtp"
   | "search-health"
+  | "license-health"
+  | "outreach-health"
   | "alerts";
 
 const TABS: { id: AnalyticsTab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "funnels", label: "Funnels" },
   { id: "users", label: "Users" },
+  { id: "timeline", label: "Timeline" },
+  { id: "cohorts", label: "Cohorts" },
   { id: "searches", label: "Searches" },
   { id: "revenue", label: "Revenue" },
+  { id: "attribution", label: "Attribution" },
   { id: "infrastructure", label: "Infrastructure" },
   { id: "errors", label: "Errors" },
   { id: "workers", label: "Workers" },
   { id: "queues", label: "Queues" },
   { id: "smtp", label: "SMTP" },
   { id: "search-health", label: "Search Health" },
+  { id: "license-health", label: "License Health" },
+  { id: "outreach-health", label: "Outreach" },
   { id: "alerts", label: "Alerts" },
 ];
 
@@ -89,7 +106,14 @@ export function AnalyticsWorkspace() {
     note?: string;
   } | null>(null);
   const [funnelSteps, setFunnelSteps] = useState<
-    Array<{ step: string; count: number; conversionFromPrev: number }>
+    Array<{
+      step: string;
+      count: number;
+      conversionFromPrev: number;
+      dropOffFromPrev?: number;
+      avgDurationMs?: number | null;
+      medianDurationMs?: number | null;
+    }>
   >([]);
   const [events, setEvents] = useState<Array<Record<string, unknown>>>([]);
   const [eventsTotal, setEventsTotal] = useState(0);
@@ -106,6 +130,15 @@ export function AnalyticsWorkspace() {
   >([]);
   const [kpis, setKpis] = useState<Record<string, unknown> | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [timelineEmail, setTimelineEmail] = useState("");
+  const [timelineEvents, setTimelineEvents] = useState<Array<Record<string, unknown>>>([]);
+  const [cohorts, setCohorts] = useState<Record<string, unknown> | null>(null);
+  const [attribution, setAttribution] = useState<
+    Array<{ source: string; medium: string; campaign: string; purchases: number }>
+  >([]);
+  const [searchQuality, setSearchQuality] = useState<Record<string, unknown> | null>(null);
+  const [licenseHealth, setLicenseHealth] = useState<Record<string, number>>({});
+  const [outreachHealth, setOutreachHealth] = useState<Record<string, unknown> | null>(null);
 
   const isDemoMode = isAdminDemoMode();
 
@@ -173,6 +206,26 @@ export function AnalyticsWorkspace() {
         const data = await getObservabilityAlerts("all");
         setAlerts(data.alerts || []);
         setAlertCatalogue(data.catalogue || []);
+      }
+      if (tab === "cohorts") {
+        const data = await getObservabilityCohorts();
+        setCohorts(data as unknown as Record<string, unknown>);
+      }
+      if (tab === "attribution") {
+        const data = await getObservabilityAttribution(range.from, range.to);
+        setAttribution(data.attributed || []);
+      }
+      if (tab === "search-health") {
+        const data = await getObservabilitySearchQuality(range.from, range.to);
+        setSearchQuality(data as unknown as Record<string, unknown>);
+      }
+      if (tab === "license-health") {
+        const data = await getObservabilityLicenseHealth(range.from, range.to);
+        setLicenseHealth(data.counts || {});
+      }
+      if (tab === "outreach-health" || tab === "smtp") {
+        const data = await getObservabilityOutreachHealth(range.from, range.to);
+        setOutreachHealth(data as unknown as Record<string, unknown>);
       }
     } catch (err) {
       handleSessionError(err);
@@ -375,7 +428,10 @@ export function AnalyticsWorkspace() {
                     <tr className={adminTableHeadRowClass}>
                       <th className="px-3 py-2">Step</th>
                       <th className="px-3 py-2">Count</th>
-                      <th className="px-3 py-2">Conv. from prev</th>
+                      <th className="px-3 py-2">Conv. %</th>
+                      <th className="px-3 py-2">Drop-off %</th>
+                      <th className="px-3 py-2">Avg ms</th>
+                      <th className="px-3 py-2">Median ms</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -386,11 +442,148 @@ export function AnalyticsWorkspace() {
                         <td className="px-3 py-2 text-[var(--lt-accent-soft)]">
                           {step.conversionFromPrev}%
                         </td>
+                        <td className="px-3 py-2 text-[var(--lt-text-muted)]">
+                          {step.dropOffFromPrev ?? 0}%
+                        </td>
+                        <td className="px-3 py-2 text-[var(--lt-text-muted)]">
+                          {step.avgDurationMs ?? "—"}
+                        </td>
+                        <td className="px-3 py-2 text-[var(--lt-text-muted)]">
+                          {step.medianDurationMs ?? "—"}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               )}
+            </div>
+          )}
+
+          {tab === "timeline" && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                <Input
+                  value={timelineEmail}
+                  onChange={(e) => setTimelineEmail(e.target.value)}
+                  placeholder="Customer email for timeline"
+                  className="max-w-sm"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    void (async () => {
+                      try {
+                        const data = await getObservabilityTimeline({ email: timelineEmail });
+                        setTimelineEvents(data.events || []);
+                      } catch (err) {
+                        handleSessionError(err);
+                      }
+                    })();
+                  }}
+                >
+                  Load timeline
+                </Button>
+              </div>
+              <EventsTable
+                events={timelineEvents}
+                total={timelineEvents.length}
+                emptyTitle="Enter an email to load the customer journey"
+              />
+            </div>
+          )}
+
+          {tab === "cohorts" && (
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              {cohorts ? (
+                Object.entries(
+                  (cohorts.cohorts as Record<string, Record<string, number>>) || {}
+                ).flatMap(([name, windowCounts]) =>
+                  Object.entries(windowCounts || {}).map(([window, value]) => (
+                    <Panel key={`${name}-${window}`}>
+                      <PanelContent className="p-4">
+                        <p className="text-xs text-[var(--lt-text-subtle)]">
+                          {name} · {window}
+                        </p>
+                        <p className="mt-1 text-2xl font-bold text-[var(--lt-text)]">{value}</p>
+                      </PanelContent>
+                    </Panel>
+                  ))
+                )
+              ) : (
+                <EmptyState title="No cohort data" description="Cohorts appear after tracked users exist." />
+              )}
+            </div>
+          )}
+
+          {tab === "attribution" && (
+            <div className="overflow-hidden rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface)]">
+              {attribution.length === 0 ? (
+                <EmptyState
+                  title="No attributed purchases"
+                  description="Purchases with UTM/click IDs appear here."
+                />
+              ) : (
+                <table className={adminTableClass}>
+                  <thead>
+                    <tr className={adminTableHeadRowClass}>
+                      <th className="px-3 py-2">Source</th>
+                      <th className="px-3 py-2">Medium</th>
+                      <th className="px-3 py-2">Campaign</th>
+                      <th className="px-3 py-2">Purchases</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {attribution.map((row) => (
+                      <tr
+                        key={`${row.source}-${row.medium}-${row.campaign}`}
+                        className={adminTableRowClass}
+                      >
+                        <td className="px-3 py-2">{row.source}</td>
+                        <td className="px-3 py-2">{row.medium}</td>
+                        <td className="px-3 py-2">{row.campaign}</td>
+                        <td className="px-3 py-2">{row.purchases}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+
+          {tab === "license-health" && (
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              {Object.keys(licenseHealth).length === 0 ? (
+                <EmptyState title="No license health events" description="Activation outcomes appear here." />
+              ) : (
+                Object.entries(licenseHealth).map(([key, value]) => (
+                  <Panel key={key}>
+                    <PanelContent className="p-4">
+                      <p className="text-xs text-[var(--lt-text-subtle)]">{key}</p>
+                      <p className="mt-1 text-2xl font-bold text-[var(--lt-text)]">{value}</p>
+                    </PanelContent>
+                  </Panel>
+                ))
+              )}
+            </div>
+          )}
+
+          {tab === "outreach-health" && (
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              {outreachHealth?.counts
+                ? Object.entries(outreachHealth.counts as Record<string, number>).map(
+                    ([key, value]) => (
+                      <Panel key={key}>
+                        <PanelContent className="p-4">
+                          <p className="text-xs text-[var(--lt-text-subtle)]">{key}</p>
+                          <p className="mt-1 text-2xl font-bold text-[var(--lt-text)]">{value}</p>
+                        </PanelContent>
+                      </Panel>
+                    )
+                  )
+                : (
+                  <EmptyState title="No outreach metrics" description="Sent/open/fail events appear here." />
+                )}
             </div>
           )}
 
@@ -447,6 +640,22 @@ export function AnalyticsWorkspace() {
                   ))}
                 </div>
               )}
+              {tab === "search-health" && searchQuality?.summary ? (
+                <div className="mb-4 grid gap-3 md:grid-cols-3">
+                  {Object.entries(searchQuality.summary as Record<string, number | null>).map(
+                    ([key, value]) => (
+                      <Panel key={key}>
+                        <PanelContent className="p-4">
+                          <p className="text-xs text-[var(--lt-text-subtle)]">{key}</p>
+                          <p className="mt-1 text-2xl font-bold text-[var(--lt-text)]">
+                            {value ?? "—"}
+                          </p>
+                        </PanelContent>
+                      </Panel>
+                    )
+                  )}
+                </div>
+              ) : null}
               <EventsTable events={events} total={eventsTotal} emptyTitle="No events in range" />
             </>
           )}
@@ -494,6 +703,7 @@ export function AnalyticsWorkspace() {
                         <th className="px-3 py-2">Message</th>
                         <th className="px-3 py-2">Status</th>
                         <th className="px-3 py-2">Last seen</th>
+                        <th className="px-3 py-2">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -520,6 +730,40 @@ export function AnalyticsWorkspace() {
                           </td>
                           <td className="px-3 py-2 text-[var(--lt-text-subtle)]">
                             {String(alert.last_seen_at || "")}
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="flex flex-wrap gap-1">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-[11px]"
+                                onClick={() => {
+                                  void (async () => {
+                                    await patchObservabilityAlert(String(alert.id), "acknowledged");
+                                    const data = await getObservabilityAlerts("all");
+                                    setAlerts(data.alerts || []);
+                                  })().catch(handleSessionError);
+                                }}
+                              >
+                                Ack
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-[11px]"
+                                onClick={() => {
+                                  void (async () => {
+                                    await patchObservabilityAlert(String(alert.id), "resolved");
+                                    const data = await getObservabilityAlerts("all");
+                                    setAlerts(data.alerts || []);
+                                  })().catch(handleSessionError);
+                                }}
+                              >
+                                Resolve
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       ))}
