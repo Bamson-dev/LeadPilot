@@ -15,7 +15,7 @@ export function AnnouncementBar() {
         backgroundColor: "#1a1030",
       }}
     >
-      Only 6 of 20 lifetime slots left at $25. After that it becomes $100 a year.
+      Only pay once for lifetime access. Try two free searches before you decide.
     </div>
   );
 }

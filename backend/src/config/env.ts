@@ -31,11 +31,44 @@ const envSchema = z
           path: ["FRONTEND_URL"],
         });
       }
+      // Staging Coolify also uses NODE_ENV=production with FRONTEND_URL=staging.leadthur.com.
+      // Do not reject that — it would leave /health up and all API routes unregistered.
+      // Open test-email is gated separately (NODE_ENV !== "production" && ENABLE_TEST_EMAIL).
       if (data.SUPABASE_SERVICE_KEY.includes("anon")) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: "SUPABASE_SERVICE_KEY must be the service_role key, not anon",
           path: ["SUPABASE_SERVICE_KEY"],
+        });
+      }
+      if (process.env.MOCK_OUTREACH_SEND === "1") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "MOCK_OUTREACH_SEND=1 is forbidden in production (would fake successful sends)",
+          path: ["MOCK_OUTREACH_SEND"],
+        });
+      }
+      if (process.env.MOCK_MAILBOX_SMTP === "1") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "MOCK_MAILBOX_SMTP=1 is forbidden in production (would skip Gmail credential verify)",
+          path: ["MOCK_MAILBOX_SMTP"],
+        });
+      }
+      if (process.env.ENABLE_TEST_EMAIL === "true") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "ENABLE_TEST_EMAIL=true is forbidden in production",
+          path: ["ENABLE_TEST_EMAIL"],
+        });
+      }
+      if (process.env.DEMO_MODE === "1" || process.env.DEMO_MODE === "true") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "DEMO_MODE is forbidden in production",
+          path: ["DEMO_MODE"],
         });
       }
     }

@@ -35,20 +35,20 @@ export function AdminQueueStatusBar({ enabled }: { enabled: boolean }) {
 
   return (
     <div
-      className="mb-6 flex flex-wrap items-center gap-4 rounded-xl border border-white/10 bg-[#111118] px-4 py-3 text-sm"
-      style={{ fontFamily: "Inter, sans-serif" }}
+      id="admin-queue-metrics"
+      className="mb-6 flex flex-wrap items-center gap-4 rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface)] px-4 py-3 text-sm"
     >
-      <span className="text-[#A1A1B5] font-medium">Search queue</span>
-      <span className="text-[#F0EEFF]">
-        Active: <strong className="text-emerald-400">{metrics.active}</strong>
+      <span className="font-medium text-[var(--lt-text-muted)]">Search queue</span>
+      <span className="text-[var(--lt-text)]">
+        Active: <strong className="text-[var(--lt-success)]">{metrics.active}</strong>
       </span>
-      <span className="text-[#F0EEFF]">
-        Waiting: <strong className="text-amber-300">{metrics.waiting}</strong>
+      <span className="text-[var(--lt-text)]">
+        Waiting: <strong className="text-[var(--lt-warning)]">{metrics.waiting}</strong>
       </span>
-      <span className="text-[#F0EEFF]">
-        Failed (24h): <strong className="text-red-400">{metrics.failedLast24h}</strong>
+      <span className="text-[var(--lt-text)]">
+        Failed (24h): <strong className="text-[var(--lt-danger)]">{metrics.failedLast24h}</strong>
       </span>
-      <span className="text-xs text-[#6B6B80]">({metrics.mode})</span>
+      <span className="text-xs text-[var(--lt-text-subtle)]">({metrics.mode})</span>
     </div>
   );
 }

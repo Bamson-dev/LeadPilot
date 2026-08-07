@@ -28,12 +28,12 @@ export function LiveCounter({ count, isSearching }: LiveCounterProps) {
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0 }}
-          className="text-lg font-semibold text-white"
+          className="text-lg font-semibold text-[var(--lt-text)]"
         >
-          <span className="bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text text-transparent tabular-nums">
+          <span className="bg-gradient-to-r from-[var(--lt-cyan)] to-[var(--lt-accent-soft)] bg-clip-text text-transparent tabular-nums">
             <AnimatedNumber value={count} />
           </span>{" "}
-          <span className="text-zinc-400">
+          <span className="text-[var(--lt-text-muted)]">
             prospect{count !== 1 ? "s" : ""} discovered
             {isSearching ? (
               <motion.span

@@ -21,6 +21,8 @@ import {
 import { createCommissionForReferral } from "./license-service";
 import { sendAccessEmail, sendPaymentConfirmationEmail } from "./email";
 import { markTrialSignupConverted } from "../database/free-trial-repository";
+import { trackEvent } from "../observability/track";
+import { EVENT_NAMES } from "../observability/event-taxonomy";
 import { logger } from "../utils/logger";
 
 export type PaymentGateway = "paystack" | "flutterwave";
@@ -186,6 +188,20 @@ export async function fulfillPayment(params: {
     emailSent,
     commissionCreated,
     commissionSkippedReason,
+  });
+
+  trackEvent({
+    eventName: EVENT_NAMES.PAYMENT_COMPLETED,
+    source: "webhook",
+    userEmail: email,
+    licenseId: license.id,
+    properties: {
+      reference,
+      gateway: params.gateway,
+      emailSent,
+      commissionCreated,
+    },
+    idempotencyKey: `payment_completed:${reference}`,
   });
 
   return {
@@ -411,6 +427,18 @@ export async function handleOutreachSubscriptionLifecycle(params: {
       userId,
       event: params.event,
     });
+    if (params.event === "invoice.payment_failed") {
+      trackEvent({
+        eventName: EVENT_NAMES.PAYMENT_FAILED,
+        source: "webhook",
+        properties: {
+          userId,
+          event: params.event,
+          reason: "outreach_invoice_payment_failed",
+        },
+        idempotencyKey: `payment_failed:outreach:${userId}:${params.event}:${subscriptionCode ?? "none"}`,
+      });
+    }
   }
 }
 

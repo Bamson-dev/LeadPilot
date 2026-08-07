@@ -2,6 +2,7 @@
 
 import type { RatingFilterValue } from "@/lib/rating-filter";
 import { RATING_FILTER_OPTIONS } from "@/lib/rating-filter";
+import { cn } from "@/utils/utils";
 
 interface RatingFilterProps {
   value: RatingFilterValue;
@@ -22,25 +23,19 @@ export function RatingFilter({
 
   return (
     <div
-      className={isMobile ? "flex flex-col gap-2 w-full" : "flex flex-wrap items-center gap-2"}
+      className={cn(
+        isMobile ? "flex w-full flex-col gap-2" : "flex flex-wrap items-center gap-2"
+      )}
     >
       <select
         value={value}
         onChange={(e) => onChange(e.target.value as RatingFilterValue)}
-        style={{
-          background: value !== "all" ? "rgba(124,58,237,0.15)" : "#111118",
-          border: `1px solid ${value !== "all" ? "rgba(124,58,237,0.4)" : "rgba(255,255,255,0.08)"}`,
-          color: value !== "all" ? "#A855F7" : "#F0EFFF",
-          borderRadius: 8,
-          padding: "7px 12px",
-          fontSize: 12,
-          cursor: "pointer",
-          fontFamily: "Inter, sans-serif",
-          outline: "none",
-          appearance: "none",
-          WebkitAppearance: "none",
-          fontWeight: value !== "all" ? 600 : 400,
-        }}
+        className={cn(
+          "cursor-pointer appearance-none rounded-md border px-2.5 py-1.5 text-xs outline-none",
+          isActive
+            ? "border-[var(--lt-cyan)]/40 bg-[var(--lt-cyan-soft)] font-semibold text-[var(--lt-cyan)]"
+            : "border-[var(--lt-border)] bg-[var(--lt-surface-2)] text-[var(--lt-text)]"
+        )}
       >
         {RATING_FILTER_OPTIONS.map((option) => (
           <option key={option.value} value={option.value}>
@@ -50,7 +45,7 @@ export function RatingFilter({
       </select>
 
       {isActive && (
-        <span style={{ color: "#6B6B80", fontSize: 11 }}>
+        <span className="text-[11px] text-[var(--lt-text-subtle)]">
           Showing {filteredCount.toLocaleString()} of {totalCount.toLocaleString()} results
         </span>
       )}

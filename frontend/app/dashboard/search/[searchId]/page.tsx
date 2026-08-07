@@ -1,20 +1,39 @@
 "use client";
 
-import { Suspense } from "react";
-import { Navbar } from "@/components/navbar";
-import { Footer } from "@/components/footer";
+import { Suspense, useEffect, useState } from "react";
+import { AppShell } from "@/components/shell";
 import SearchResultPage from "./search-result-client";
+import { getLicenseUsage } from "@/services/api";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Page() {
+  const [credits, setCredits] = useState<number | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    setEmail(localStorage.getItem("leadthur_email"));
+    void getLicenseUsage().then((usage) => {
+      if (usage) setCredits(usage.search_credits);
+    });
+  }, []);
+
   return (
-    <main className="min-h-screen bg-[#09090B]">
-      <Navbar />
-      <div className="mx-auto max-w-6xl px-4 pt-20 pb-12 sm:px-6 sm:pt-24 sm:pb-16">
-        <Suspense fallback={<p className="text-zinc-400">Loading…</p>}>
-          <SearchResultPage />
-        </Suspense>
-      </div>
-      <Footer />
-    </main>
+    <AppShell
+      credits={credits}
+      userEmail={email}
+      activeNav="discovery"
+      contentClassName="px-4 pt-4 sm:px-6"
+    >
+      <Suspense
+        fallback={
+          <div className="rounded-lg border border-[var(--lt-border)] bg-[var(--lt-surface)] p-8">
+            <Skeleton className="mb-4 h-6 w-48" />
+            <Skeleton className="h-40 w-full" />
+          </div>
+        }
+      >
+        <SearchResultPage />
+      </Suspense>
+    </AppShell>
   );
 }

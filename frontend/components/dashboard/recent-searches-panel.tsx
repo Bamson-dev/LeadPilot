@@ -52,7 +52,7 @@ export function RecentSearchesPanel({
   }
 
   return (
-    <div className="glass rounded-2xl px-4 sm:px-6 pt-4 pb-2">
+    <div className="rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface)] px-4 sm:px-6 pt-4 pb-2">
       <div
         role="button"
         tabIndex={0}
@@ -60,27 +60,15 @@ export function RecentSearchesPanel({
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") toggleExpanded();
         }}
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          cursor: "pointer",
-          padding: "12px 0",
-          borderBottom: expanded ? "1px solid rgba(255,255,255,0.07)" : "none",
-        }}
+        className={`flex cursor-pointer items-center justify-between py-3 ${
+          expanded ? "border-b border-[var(--lt-border)]" : ""
+        }`}
       >
         <div>
-          <div
-            style={{
-              color: "#F4F4FF",
-              fontWeight: 700,
-              fontSize: 15,
-              fontFamily: "Bricolage Grotesque, sans-serif",
-            }}
-          >
+          <div className="text-[15px] font-bold text-[var(--lt-text)]">
             Recent Searches
           </div>
-          <div style={{ color: "#6B6B80", fontSize: 12 }}>
+          <div className="text-xs text-[var(--lt-text-muted)]">
             {loading
               ? "Loading..."
               : history.length > 0
@@ -89,12 +77,9 @@ export function RecentSearchesPanel({
           </div>
         </div>
         <span
-          style={{
-            color: "#6B6B80",
-            fontSize: 18,
-            transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
-            transition: "transform 0.2s",
-          }}
+          className={`text-lg text-[var(--lt-text-muted)] transition-transform duration-200 ${
+            expanded ? "rotate-180" : "rotate-0"
+          }`}
         >
           ⌄
         </span>
@@ -103,11 +88,11 @@ export function RecentSearchesPanel({
       {expanded && (
         <div className="mt-4 pb-4">
           {loading ? (
-            <p style={{ color: "#6B6B80", fontSize: 13, margin: 0 }}>
+            <p className="m-0 text-[13px] text-[var(--lt-text-muted)]">
               Loading search history...
             </p>
           ) : history.length === 0 ? (
-            <p style={{ color: "#6B6B80", fontSize: 13, margin: 0 }}>
+            <p className="m-0 text-[13px] text-[var(--lt-text-muted)]">
               Your searches will appear here automatically.
             </p>
           ) : (
@@ -124,28 +109,13 @@ export function RecentSearchesPanel({
                   return (
                     <div
                       key={item.id}
-                      style={{
-                        background: "#16161E",
-                        borderRadius: 10,
-                        padding: "12px 14px",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: 12,
-                        border: "1px solid rgba(255,255,255,0.06)",
-                      }}
+                      className="flex items-center justify-between gap-3 rounded-[10px] border border-[var(--lt-border)] bg-[var(--lt-surface-2)] px-3.5 py-3"
                     >
                       <div className="min-w-0">
-                        <div
-                          style={{
-                            color: "#F4F4FF",
-                            fontSize: 13,
-                            fontWeight: 600,
-                          }}
-                        >
+                        <div className="text-[13px] font-semibold text-[var(--lt-text)]">
                           {item.business_type} in {item.city}
                         </div>
-                        <div style={{ color: "#6B6B80", fontSize: 11, marginTop: 3 }}>
+                        <div className="mt-0.5 text-[11px] text-[var(--lt-text-muted)]">
                           {item.results_count.toLocaleString()} potential clients ·{" "}
                           {formatRelativeSearchTime(item.created_at)}
                         </div>
@@ -153,18 +123,7 @@ export function RecentSearchesPanel({
                       <button
                         type="button"
                         onClick={() => onSearchAgain(item.business_type, location)}
-                        style={{
-                          background: "rgba(124,58,237,0.15)",
-                          border: "1px solid rgba(124,58,237,0.25)",
-                          color: "#A855F7",
-                          padding: "6px 12px",
-                          borderRadius: 6,
-                          fontSize: 11,
-                          fontWeight: 700,
-                          cursor: "pointer",
-                          flexShrink: 0,
-                          fontFamily: "Inter, sans-serif",
-                        }}
+                        className="shrink-0 cursor-pointer rounded-md border border-[var(--lt-accent)]/25 bg-[var(--lt-accent)]/15 px-3 py-1.5 text-[11px] font-bold text-[var(--lt-accent-soft)]"
                       >
                         Search Again
                       </button>

@@ -23,7 +23,10 @@ const historySections = readFileSync(
   join(root, "components/dashboard/dashboard-history-sections.tsx"),
   "utf8"
 );
-const plansPage = readFileSync(join(root, "app/dashboard/plans/page.tsx"), "utf8");
+const billingPage = readFileSync(
+  join(root, "components/billing/billing-page-workspace.tsx"),
+  "utf8"
+);
 
 const checks = [];
 function check(label, ok, detail = "") {
@@ -71,9 +74,10 @@ check(
   (searchDashboard.match(/setHistoryRefreshKey\(\(prev\) => prev \+ 1\)/g) ?? []).length === 1
 );
 check(
-  "subscription change is blocked when another active tier exists",
-  plansPage.includes("Plan switching is blocked in this release") &&
-    plansPage.includes("Manage current plan first")
+  "subscription checkout is not blocked when another active tier exists",
+  !billingPage.includes("Plan switching is blocked in this release") &&
+    !billingPage.includes("Manage current plan first") &&
+    billingPage.includes("Switch to")
 );
 
 const failed = checks.filter((c) => !c.ok);

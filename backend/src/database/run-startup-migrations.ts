@@ -17,6 +17,40 @@ create index if not exists free_trial_ip_usage_searches_used_idx
 alter table free_trial_ip_usage enable row level security;
 `;
 
+const RLS_DENY_PUBLIC_SENSITIVE_SQL = `
+do $$
+declare
+  t text;
+  tables text[] := array[
+    'connected_mailboxes',
+    'outreach_accounts',
+    'outreach_credit_transactions',
+    'sent_emails',
+    'email_templates',
+    'email_suppression',
+    'outreach_followup_batches',
+    'outreach_followup_steps',
+    'outreach_paystack_plans',
+    'blog_posts',
+    'search_history',
+    'user_searches',
+    'lead_statuses',
+    'domain_email_cache',
+    'ai_message_log',
+    'topup_purchases',
+    'site_settings'
+  ];
+begin
+  foreach t in array tables
+  loop
+    if to_regclass('public.' || t) is not null then
+      execute format('alter table public.%I enable row level security', t);
+      execute format('revoke all on table public.%I from anon, authenticated', t);
+    end if;
+  end loop;
+end $$;
+`;
+
 const TRIAL_EMAIL_SEQUENCE_V2_SQL = `
 alter table public.free_trial_signups
   add column if not exists sequence_version integer not null default 1;
@@ -99,6 +133,9 @@ export async function runStartupMigrations(): Promise<void> {
     } else {
       logger.info("[migrations] free_trial_ip_usage already present", { ref });
     }
+
+    await client.query(RLS_DENY_PUBLIC_SENSITIVE_SQL);
+    logger.info("[migrations] Ensured RLS deny-by-default on sensitive public tables", { ref });
 
     const v2Column = await client.query(
       "select column_name from information_schema.columns where table_schema = 'public' and table_name = 'free_trial_signups' and column_name = 'sequence_version'"

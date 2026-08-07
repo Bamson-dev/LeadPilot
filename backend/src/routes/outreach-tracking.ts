@@ -6,6 +6,8 @@ import {
   suppressRecipientForUser,
 } from "../database/outreach-repository";
 import { logger } from "../utils/logger";
+import { trackEvent } from "../observability/track";
+import { EVENT_NAMES } from "../observability/event-taxonomy";
 
 export const outreachTrackingRouter = Router();
 
@@ -20,6 +22,12 @@ outreachTrackingRouter.get("/open/:token", async (req: Request, res: Response) =
   try {
     if (token) {
       await recordOutreachEmailOpen(token);
+      trackEvent({
+        eventName: EVENT_NAMES.EMAIL_OPENED,
+        source: "server",
+        properties: { tokenPrefix: token.slice(0, 8) },
+        idempotencyKey: `email_opened:${token}`,
+      });
     }
   } catch (err) {
     logger.error("Outreach email open tracking failed", {

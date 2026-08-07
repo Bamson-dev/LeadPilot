@@ -2,6 +2,7 @@ import type { BusinessLead } from "@leadthur/shared";
 import { getAllEmailsForDisplay, hasAnyEmail } from "@/utils/get-display-email";
 import type { Lead } from "@/types/lead";
 import { businessLeadToLead } from "@/types/lead";
+import { track } from "@/lib/analytics";
 
 function leadEmailSource(lead: Lead | BusinessLead): string {
   const asLead: Lead =
@@ -105,6 +106,12 @@ export function exportToCSV(leads: (Lead | BusinessLead)[], filename: string): v
   link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
+
+  track("csv_export", {
+    properties: { rowCount: leads.length, filename },
+    searchId: leads[0] && "searchId" in leads[0] ? String(leads[0].searchId) : null,
+    idempotencyKey: `csv_export:${filename}:${leads.length}:${Math.floor(Date.now() / 10_000)}`,
+  });
 }
 
 /** @deprecated Use exportToCSV */

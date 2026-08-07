@@ -10,6 +10,8 @@ import {
   verifyFlutterwaveByTxRef,
 } from "../services/flutterwave-client";
 import { getPaystack, paystackAsync, verifyTransaction } from "../services/paystack-client";
+import { trackEvent } from "../observability/track";
+import { EVENT_NAMES } from "../observability/event-taxonomy";
 import { logger } from "../utils/logger";
 
 const router = Router();
@@ -62,6 +64,15 @@ router.post("/initialize", async (req: Request, res: Response) => {
           cb
         )
     );
+
+    const normalizedEmail = email.toLowerCase().trim();
+    trackEvent({
+      eventName: EVENT_NAMES.PAYMENT_INITIATED,
+      source: "server",
+      userEmail: normalizedEmail,
+      properties: { reference, gateway: "paystack", hasRefCode: Boolean(refCode?.trim()) },
+      idempotencyKey: `payment_initiated:${reference}`,
+    });
 
     res.json({
       authorizationUrl: response.data.authorization_url,
@@ -157,6 +168,18 @@ router.post("/verify", async (req: Request, res: Response) => {
     const tx = await verifyTransaction(ref);
 
     if (tx.status !== "success") {
+      trackEvent({
+        eventName: EVENT_NAMES.PAYMENT_FAILED,
+        source: "server",
+        userEmail: tx.customer?.email ?? null,
+        properties: {
+          reference: ref,
+          gateway: "paystack",
+          status: tx.status,
+          reason: "not_completed",
+        },
+        idempotencyKey: `payment_failed:${ref}:${tx.status}`,
+      });
       res.status(400).json({
         error: "Payment not completed yet. Wait a moment and refresh this page.",
       });
@@ -188,6 +211,14 @@ router.post("/verify", async (req: Request, res: Response) => {
   } catch (err) {
     logger.error("Checkout verify failed", {
       error: err instanceof Error ? err.message : "unknown",
+    });
+    trackEvent({
+      eventName: EVENT_NAMES.PAYMENT_FAILED,
+      source: "server",
+      properties: {
+        reason: "verify_exception",
+        message: err instanceof Error ? err.message : "unknown",
+      },
     });
     res.status(500).json({
       error:

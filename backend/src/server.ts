@@ -14,6 +14,11 @@ import { topupRouter } from "./api/topup-router";
 import healthRouter from "./api/health-router";
 import publicRouter from "./api/public-router";
 import demoRouter from "./api/demo-router";
+import publicEventsRouter from "./observability/public-events-router";
+import adminObservabilityRouter from "./observability/admin-observability-router";
+import { trackEvent } from "./observability/track";
+import { EVENT_NAMES } from "./observability/event-taxonomy";
+import { newCorrelationId } from "./observability/privacy";
 import searchHistoryRouter from "./routes/searchHistory";
 import leadStatusRouter from "./routes/leadStatus";
 import whatsappTemplatesRouter from "./routes/whatsappTemplates";
@@ -27,6 +32,7 @@ import { balanceRouter } from "./routes/balance";
 import { emailTemplatesRouter } from "./routes/email-templates";
 import { sendsRouter } from "./routes/sends";
 import { rateLimit } from "./middleware/rate-limit";
+import { observabilityLatency } from "./middleware/observability-latency";
 import { getBrowserPool } from "./scraper/browser/browser-pool";
 import { logger } from "./utils/logger";
 import { getDeepseekKeyFingerprint, isDeepseekConfigured } from "./utils/deepseek-config";
@@ -97,18 +103,22 @@ function registerRoutes(): void {
     next();
   });
 
+  app.use(observabilityLatency);
+
   app.use("/webhooks", webhookRouter);
   app.use("/unsubscribe", unsubscribeRouter);
   // Admin blog posts may include base64 cover images and rich HTML — allow larger payloads.
   app.use("/admin", express.json({ limit: "15mb" }));
   app.use(express.json({ limit: "1mb" }));
-  app.use("/auth", authRouter);
+  app.use("/auth", rateLimit, authRouter);
   app.use("/trial", trialRouter);
   app.use("/admin", adminRouter);
   app.use("/affiliate", affiliateRouter);
   app.use("/checkout", checkoutRouter);
   app.use("/topup", topupRouter);
   app.use("/public", publicRouter);
+  app.use("/public", publicEventsRouter);
+  app.use("/admin/observability", adminObservabilityRouter);
 
   if (process.env.DEMO_MODE === "true") {
     app.use("/demo", demoRouter);
@@ -133,6 +143,21 @@ function registerRoutes(): void {
   app.use(
     (err: Error & { type?: string; status?: number }, _req: Request, res: Response, _next: NextFunction) => {
       logger.error("Unhandled error", { message: err.message, stack: err.stack, type: err.type });
+
+      trackEvent({
+        eventName: EVENT_NAMES.EXCEPTION,
+        eventCategory: "error",
+        source: "server",
+        correlationId: newCorrelationId(),
+        properties: {
+          message: err.message,
+          type: err.type || null,
+          // stack truncated & sanitized at track layer length limit
+          stack: err.stack ? err.stack.split("\n").slice(0, 8).join("\n") : null,
+          severity: "error",
+          environment: process.env.NODE_ENV || "development",
+        },
+      });
 
       if (!res.headersSent) {
         if (err.type === "entity.too.large") {

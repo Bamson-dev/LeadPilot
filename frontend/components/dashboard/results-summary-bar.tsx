@@ -13,13 +13,17 @@ export function ResultsSummaryBar({ leads }: ResultsSummaryBarProps) {
   if (stats.total === 0) return null;
 
   return (
-    <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 px-4 py-3 text-sm text-zinc-300">
-      <span className="font-semibold text-white">{stats.total.toLocaleString()}</span> potential
-      clients found,{" "}
-      <span className="text-emerald-400">{stats.withPhone.toLocaleString()}</span> have phone
-      numbers,{" "}
-      <span className="text-emerald-400">{stats.withEmail.toLocaleString()}</span> have emails,{" "}
-      <span className="text-emerald-400">{stats.withWebsite.toLocaleString()}</span> have websites
+    <div className="rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface)] px-4 py-3 text-sm text-[var(--lt-text-muted)]">
+      <span className="font-semibold text-[var(--lt-text)]">
+        {stats.total.toLocaleString()}
+      </span>{" "}
+      potential clients found,{" "}
+      <span className="text-[var(--lt-success)]">{stats.withPhone.toLocaleString()}</span> have
+      phone numbers,{" "}
+      <span className="text-[var(--lt-success)]">{stats.withEmail.toLocaleString()}</span> have
+      emails,{" "}
+      <span className="text-[var(--lt-success)]">{stats.withWebsite.toLocaleString()}</span> have
+      websites
     </div>
   );
 }

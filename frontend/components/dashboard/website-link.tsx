@@ -23,15 +23,17 @@ export function WebsiteLink({
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className={className}
-      style={{
-        color: "#A855F7",
-        textDecoration: "none",
-        fontSize: 12,
-      }}
+      className={[
+        "text-xs text-[var(--lt-accent-soft)] no-underline hover:underline",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
       {truncated}
-      <span style={{ marginLeft: 3, fontSize: 10 }}>↗</span>
+      <span className="ml-0.5 text-[10px]" aria-hidden>
+        ↗
+      </span>
     </a>
   );
 }

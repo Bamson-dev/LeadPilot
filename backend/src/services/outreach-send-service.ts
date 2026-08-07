@@ -13,6 +13,7 @@ import {
   getEmailTemplateById,
   getMailboxWithSecret,
   getSentEmailById,
+  getSentEmailsSummary,
   getFollowupStep,
   incrementMailboxSendCount,
   isRecipientSuppressed,
@@ -37,6 +38,8 @@ import type { OutreachSendMode } from "../queue/outreach-send-queue-types";
 import { getVerifiedEmailsForBusinessId } from "../database/search-repository";
 import { logger } from "../utils/logger";
 import { OutreachSmtpSendError } from "../utils/outreach-smtp-error";
+import { trackEvent } from "../observability/track";
+import { EVENT_NAMES } from "../observability/event-taxonomy";
 import { recordHardBounceForRecipient } from "./outreach-bounce-service";
 import {
   mailboxBounceThresholdReached,
@@ -499,6 +502,34 @@ export async function processOutreachSendJob(data: {
     });
     markMailboxSendComplete(mailbox.id, releaseSpacing);
 
+    trackEvent({
+      eventName: EVENT_NAMES.EMAIL_SENT,
+      source: "worker",
+      jobId: sentEmail.id,
+      properties: {
+        userId: data.userId,
+        mailboxId: mailbox.id,
+        sendMode: data.sendMode,
+        creditBucket,
+      },
+      idempotencyKey: `email_sent:${sentEmail.id}`,
+    });
+
+    try {
+      const summary = await getSentEmailsSummary(data.userId);
+      if (summary.total_sent === 1) {
+        trackEvent({
+          eventName: EVENT_NAMES.FIRST_OUTREACH,
+          source: "worker",
+          jobId: sentEmail.id,
+          properties: { userId: data.userId },
+          idempotencyKey: `first_outreach:${data.userId}`,
+        });
+      }
+    } catch {
+      // never block send path on analytics
+    }
+
     return { action: "sent", sentEmailId: sentEmail.id, mailboxId: mailbox.id, creditBucket };
   } catch (err) {
     if (err instanceof OutreachSmtpSendError && err.kind === "hard_bounce") {
@@ -518,6 +549,18 @@ export async function processOutreachSendJob(data: {
       }
       await handleMailboxHardBounce(mailbox.id);
       markMailboxSendComplete(mailbox.id, releaseSpacing);
+      trackEvent({
+        eventName: EVENT_NAMES.EMAIL_FAILED,
+        source: "worker",
+        jobId: sentEmail.id,
+        properties: {
+          userId: data.userId,
+          kind: err.kind,
+          smtpCode: err.smtpCode,
+          reason: "hard_bounce",
+        },
+        idempotencyKey: `email_failed:${sentEmail.id}`,
+      });
       return { action: "bounced", sentEmailId: sentEmail.id, mailboxId: mailbox.id, error: err.message };
     }
 
@@ -529,6 +572,18 @@ export async function processOutreachSendJob(data: {
     });
     await markSentEmailFailed(sentEmail.id, message);
     markMailboxSendComplete(mailbox.id, releaseSpacing);
+    trackEvent({
+      eventName: EVENT_NAMES.EMAIL_FAILED,
+      source: "worker",
+      jobId: sentEmail.id,
+      properties: {
+        userId: data.userId,
+        kind: err instanceof OutreachSmtpSendError ? err.kind : "unknown",
+        smtpCode: err instanceof OutreachSmtpSendError ? err.smtpCode : null,
+        reason: "send_failed",
+      },
+      idempotencyKey: `email_failed:${sentEmail.id}`,
+    });
     return { action: "failed", sentEmailId: sentEmail.id, error: message };
   }
 }

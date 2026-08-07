@@ -1,5 +1,9 @@
 "use client";
 
+import { Search } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
+
 interface WelcomeStateProps {
   onExampleSearch: (query: string, location: string) => void;
 }
@@ -15,79 +19,37 @@ const EXAMPLES = [
 
 export function WelcomeState({ onExampleSearch }: WelcomeStateProps) {
   return (
-    <div
-      className="mt-4 text-center"
-      style={{
-        background: "#0F0F14",
-        border: "1px solid rgba(255,255,255,0.07)",
-        borderRadius: 16,
-        padding: "48px 32px",
-      }}
-    >
-      <div style={{ fontSize: 40, marginBottom: 16 }}>🔍</div>
-      <h3
-        style={{
-          color: "#F4F4FF",
-          fontSize: 20,
-          fontWeight: 700,
-          margin: "0 0 8px",
-          fontFamily: "Bricolage Grotesque, sans-serif",
-        }}
-      >
+    <div className="rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface)] px-6 py-12 text-center sm:px-8">
+      <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--lt-cyan-soft)] text-[var(--lt-cyan)]">
+        <Search className="h-5 w-5" />
+      </div>
+      <h3 className="text-xl font-semibold text-[var(--lt-text)]">
         Find businesses to pitch. Today.
       </h3>
-      <p
-        style={{
-          color: "#6B6B80",
-          fontSize: 14,
-          margin: "0 0 28px",
-          lineHeight: 1.6,
-        }}
-      >
+      <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-[var(--lt-text-muted)]">
         Type any business type and any city in the world. Your leads will stream in within
         seconds.
       </p>
-      <p
-        style={{
-          color: "#A1A1AA",
-          fontSize: 12,
-          margin: "0 0 14px",
-          fontWeight: 600,
-          letterSpacing: "0.08em",
-          textTransform: "uppercase",
-        }}
-      >
+      <p className="mt-6 text-[11px] font-semibold uppercase tracking-wider text-[var(--lt-text-subtle)]">
         Try one of these
       </p>
-      <div className="flex flex-wrap gap-2.5 justify-center">
-        {EXAMPLES.map((example, i) => (
-          <button
-            key={i}
+      <div className="mt-3 flex flex-wrap justify-center gap-2">
+        {EXAMPLES.map((example) => (
+          <Button
+            key={`${example.query}-${example.location}`}
             type="button"
+            variant="outline"
+            size="sm"
             onClick={() => onExampleSearch(example.query, example.location)}
-            className="transition-all duration-150 cursor-pointer"
-            style={{
-              background: "transparent",
-              border: "1px solid rgba(124,58,237,0.3)",
-              color: "#A855F7",
-              padding: "10px 18px",
-              borderRadius: 100,
-              fontSize: 13,
-              fontWeight: 500,
-              fontFamily: "Figtree, sans-serif",
-            }}
-            onMouseOver={(e) => {
-              e.currentTarget.style.background = "rgba(124,58,237,0.1)";
-              e.currentTarget.style.borderColor = "#7C3AED";
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.background = "transparent";
-              e.currentTarget.style.borderColor = "rgba(124,58,237,0.3)";
-            }}
           >
-            {example.query} in {example.location}
-          </button>
+            {example.query} · {example.location}
+          </Button>
         ))}
+      </div>
+      <div className="mt-4 flex flex-wrap justify-center gap-2">
+        <Chip>Business type + location</Chip>
+        <Chip>Export CSV</Chip>
+        <Chip>Outreach</Chip>
       </div>
     </div>
   );

@@ -50,6 +50,9 @@ import {
   releaseTrialIpSearch,
 } from "../database/free-trial-ip-repository";
 import { clientIp, isRateLimitAllowlisted } from "../middleware/rate-limit";
+import { trackEvent } from "../observability/track";
+import { EVENT_NAMES } from "../observability/event-taxonomy";
+import { trackSearchOrdinals } from "../observability/search-ordinals";
 
 export const searchRouter = Router();
 
@@ -583,6 +586,28 @@ export async function handleFreeTrialSearch(
     });
     const queuePosition = await resolveQueuePosition(searchJob.id);
 
+    trackEvent({
+      eventName: EVENT_NAMES.TRIAL_SEARCH_STARTED,
+      source: "server",
+      userEmail: email,
+      searchId: searchJob.id,
+      properties: { queuePosition, isTrial: true },
+      idempotencyKey: `trial_search_started:${searchJob.id}`,
+    });
+    trackEvent({
+      eventName: EVENT_NAMES.SEARCH_STARTED,
+      source: "server",
+      userEmail: email,
+      searchId: searchJob.id,
+      properties: { queuePosition, isTrial: true },
+      idempotencyKey: `search_started:${searchJob.id}`,
+    });
+    trackSearchOrdinals({
+      userEmail: email,
+      searchId: searchJob.id,
+      isTrial: true,
+    });
+
     res.status(201).json({
       searchId: searchJob.id,
       status: queuePosition > 0 ? "queued" : "running",
@@ -732,6 +757,22 @@ searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => 
       isTrial: false,
     });
     const queuePosition = await resolveQueuePosition(searchJob.id);
+
+    trackEvent({
+      eventName: EVENT_NAMES.SEARCH_STARTED,
+      source: "server",
+      userEmail: licenseEmail,
+      searchId: searchJob.id,
+      licenseId: req.licenseId && req.licenseId !== "unknown" ? req.licenseId : null,
+      properties: { queuePosition, isTrial: false },
+      idempotencyKey: `search_started:${searchJob.id}`,
+    });
+    trackSearchOrdinals({
+      userEmail: licenseEmail,
+      licenseId: req.licenseId && req.licenseId !== "unknown" ? req.licenseId : null,
+      searchId: searchJob.id,
+      isTrial: false,
+    });
 
     res.status(201).json({
       searchId: searchJob.id,

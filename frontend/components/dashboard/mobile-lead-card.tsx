@@ -3,8 +3,29 @@
 import { CopyButton } from "@/components/dashboard/copy-button";
 import { LeadStatusSelect } from "@/components/dashboard/lead-status-select";
 import { WebsiteLink } from "@/components/dashboard/website-link";
+import { Checkbox } from "@/components/ui/checkbox";
+import { StatusBadge, type StatusBadgeStatus } from "@/components/ui/status-badge";
+import { cn } from "@/utils/utils";
 import { getAllEmailsForDisplay } from "@/utils/get-display-email";
 import type { Lead } from "@/types/lead";
+
+function getStatusBadgeProps(
+  status: string
+): { status: StatusBadgeStatus; label: string } {
+  const normalized = status === "none" ? "new" : status;
+  switch (normalized) {
+    case "contacted":
+      return { status: "processing", label: "Contacted" };
+    case "interested":
+      return { status: "replied", label: "Interested" };
+    case "closed":
+      return { status: "enriched", label: "Closed" };
+    case "not_interested":
+      return { status: "paused", label: "Not interested" };
+    default:
+      return { status: "paused", label: "New" };
+  }
+}
 
 interface MobileLeadCardProps {
   lead: Lead;
@@ -17,6 +38,8 @@ interface MobileLeadCardProps {
   selected?: boolean;
   canSelect?: boolean;
   onToggleSelect?: () => void;
+  onOpen?: () => void;
+  active?: boolean;
 }
 
 export function MobileLeadCard({
@@ -30,79 +53,64 @@ export function MobileLeadCard({
   selected = false,
   canSelect = true,
   onToggleSelect,
+  onOpen,
+  active = false,
 }: MobileLeadCardProps) {
   const emails = getAllEmailsForDisplay(lead);
   const isPredicted = lead.email_source === "predicted";
+  const badgeProps = getStatusBadgeProps(status);
 
-  return (
-    <div
-      style={{
-        background: "#0F0F14",
-        border: "1px solid rgba(255,255,255,0.07)",
-        borderRadius: 12,
-        padding: 16,
-      }}
-    >
-      <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 10 }}>
+  const cardClassName = cn(
+    "rounded-xl border p-4 transition-colors",
+    selected
+      ? "border-[var(--lt-cyan)]/40 bg-[var(--lt-cyan-soft)]"
+      : "border-[var(--lt-border)] bg-[var(--lt-surface)]",
+    active && "shadow-[inset_2px_0_0_var(--lt-cyan)]",
+    onOpen && "cursor-pointer hover:bg-[var(--lt-surface-3)]"
+  );
+
+  const inner = (
+    <>
+      <div className="mb-2.5 flex items-start gap-2.5">
         {selectable && (
-          <div className="flex flex-col items-center gap-1 shrink-0">
-            <button
-              type="button"
-              onClick={onToggleSelect}
+          <div
+            className="flex shrink-0 flex-col items-center gap-1"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Checkbox
+              checked={selected}
               disabled={!canSelect}
-              aria-pressed={selected}
+              onCheckedChange={onToggleSelect}
               aria-label={`Select ${lead.business_name} for email`}
-              className="flex h-6 w-6 items-center justify-center rounded-md border-2 disabled:cursor-not-allowed disabled:opacity-35"
-              style={{
-                borderColor: selected ? "#A855F7" : "rgba(168,85,247,0.45)",
-                background: selected ? "rgba(124,58,237,0.85)" : "rgba(22,22,30,0.95)",
-              }}
-            >
-              {selected ? (
-                <span className="text-[11px] font-bold text-white">✓</span>
-              ) : null}
-            </button>
-            <span className="text-[9px] font-semibold uppercase tracking-wide text-[#A855F7]">
+            />
+            <span className="text-[9px] font-semibold uppercase tracking-wide text-[var(--lt-cyan)]">
               Select
             </span>
           </div>
         )}
         <div className="min-w-0 flex-1">
-        <div
-          style={{
-            color: "#F4F4FF",
-            fontWeight: 700,
-            fontSize: 15,
-            fontFamily: "Bricolage Grotesque, sans-serif",
-            marginBottom: 2,
-          }}
-        >
-          {lead.business_name}
+          <div className="text-[15px] font-semibold text-[var(--lt-text)]">
+            {lead.business_name}
+          </div>
+          {lead.category && (
+            <div className="text-xs text-[var(--lt-text-subtle)]">
+              {lead.category}
+            </div>
+          )}
         </div>
-        {lead.category && (
-          <div style={{ color: "#6B6B80", fontSize: 12 }}>{lead.category}</div>
-        )}
-        </div>
+        <StatusBadge status={badgeProps.status} label={badgeProps.label} />
       </div>
 
       {lead.rating != null && (
-        <div
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 4,
-            background: "rgba(251,191,36,0.1)",
-            padding: "3px 8px",
-            borderRadius: 100,
-            marginBottom: 12,
-          }}
-        >
-          <span style={{ color: "#FBBF24", fontSize: 12 }}>★</span>
-          <span style={{ color: "#FBBF24", fontSize: 12, fontWeight: 600 }}>
+        <div className="mb-3 inline-flex items-center gap-1 rounded-full border border-[var(--lt-warning)]/30 bg-[var(--lt-warning)]/10 px-2 py-0.5">
+          <span className="text-xs text-[var(--lt-warning)]" aria-hidden>
+            ★
+          </span>
+          <span className="text-xs font-semibold text-[var(--lt-warning)]">
             {lead.rating}
           </span>
           {lead.reviews_count != null && (
-            <span style={{ color: "#6B6B80", fontSize: 11 }}>
+            <span className="text-[11px] text-[var(--lt-text-subtle)]">
               ({lead.reviews_count.toLocaleString()})
             </span>
           )}
@@ -110,16 +118,11 @@ export function MobileLeadCard({
       )}
 
       {lead.address && (
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            marginBottom: 8,
-            alignItems: "flex-start",
-          }}
-        >
-          <span style={{ color: "#6B6B80", fontSize: 12, flexShrink: 0 }}>📍</span>
-          <span style={{ color: "#A1A1AA", fontSize: 12, lineHeight: 1.4 }}>
+        <div className="mb-2 flex items-start gap-2">
+          <span className="shrink-0 text-xs text-[var(--lt-text-subtle)]">
+            📍
+          </span>
+          <span className="text-xs leading-relaxed text-[var(--lt-text-muted)]">
             {lead.address}
           </span>
         </div>
@@ -127,23 +130,13 @@ export function MobileLeadCard({
 
       {lead.phone && (
         <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            marginBottom: 8,
-          }}
+          className="mb-2 flex items-center gap-2"
+          onClick={(e) => e.stopPropagation()}
         >
-          <span style={{ color: "#6B6B80", fontSize: 12 }}>📞</span>
+          <span className="text-xs text-[var(--lt-text-subtle)]">📞</span>
           <a
             href={`tel:${lead.phone}`}
-            style={{
-              color: "#F4F4FF",
-              fontSize: 13,
-              fontWeight: 600,
-              textDecoration: "none",
-              flex: 1,
-            }}
+            className="flex-1 text-[13px] font-semibold text-[var(--lt-text)] no-underline"
           >
             {lead.phone}
           </a>
@@ -159,39 +152,22 @@ export function MobileLeadCard({
       )}
 
       {emails.length > 0 && (
-        <div style={{ marginBottom: 8 }}>
+        <div className="mb-2" onClick={(e) => e.stopPropagation()}>
           {emails.map((email, ei) => (
             <div
               key={`${lead.id}-email-${ei}`}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                marginBottom: 4,
-              }}
+              className="mb-1 flex items-center gap-2"
             >
-              <span style={{ color: "#6B6B80", fontSize: 12 }}>✉️</span>
+              <span className="text-xs text-[var(--lt-text-subtle)]">✉️</span>
               {isPredicted && (
                 <div
                   aria-hidden
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: "50%",
-                    background: "#3B82F6",
-                    flexShrink: 0,
-                  }}
+                  className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--lt-cyan)]"
                 />
               )}
               <a
                 href={`mailto:${email}`}
-                style={{
-                  color: "#F4F4FF",
-                  fontSize: 12,
-                  textDecoration: "none",
-                  flex: 1,
-                  wordBreak: "break-all",
-                }}
+                className="flex-1 break-all text-xs text-[var(--lt-text)] no-underline"
               >
                 {email}
               </a>
@@ -209,14 +185,20 @@ export function MobileLeadCard({
       )}
 
       {lead.website && (
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <span style={{ color: "#6B6B80", fontSize: 12 }}>🌐</span>
+        <div
+          className="flex items-center gap-2"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <span className="text-xs text-[var(--lt-text-subtle)]">🌐</span>
           <WebsiteLink website={lead.website} maxLength={30} />
         </div>
       )}
 
       {onStatusChange && (
-        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+        <div
+          className="mt-2.5 flex flex-col gap-2"
+          onClick={(e) => e.stopPropagation()}
+        >
           <LeadStatusSelect
             leadId={lead.id}
             status={status}
@@ -227,24 +209,23 @@ export function MobileLeadCard({
             <button
               type="button"
               onClick={() => onUseTemplate(lead)}
-              style={{
-                width: "100%",
-                background: "rgba(37,211,102,0.1)",
-                border: "1px solid rgba(37,211,102,0.25)",
-                color: "#25D366",
-                borderRadius: 8,
-                padding: "10px 12px",
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: "pointer",
-                fontFamily: "Inter, sans-serif",
-              }}
+              className="w-full cursor-pointer rounded-lg border border-[var(--lt-success)]/30 bg-[var(--lt-success)]/10 px-3 py-2.5 text-xs font-bold text-[var(--lt-success)]"
             >
               WhatsApp template
             </button>
           )}
         </div>
       )}
-    </div>
+    </>
   );
+
+  if (onOpen) {
+    return (
+      <button type="button" className={cn(cardClassName, "w-full text-left")} onClick={onOpen}>
+        {inner}
+      </button>
+    );
+  }
+
+  return <div className={cardClassName}>{inner}</div>;
 }

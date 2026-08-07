@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AdminChipButton } from "@/components/admin/admin-ui";
 import { TrialSignupsPanel } from "./trial-signups-panel";
 import { TrialEmailPerformancePanel } from "./trial-email-performance-panel";
 
@@ -13,29 +14,19 @@ export function TrialInsightsTabs({
 
   return (
     <section className="mt-8">
-      <div className="mb-3 inline-flex rounded-lg border border-white/10 bg-[#111118] p-1">
-        <button
-          type="button"
+      <div className="mb-3 inline-flex rounded-lg border border-[var(--lt-border)] bg-[var(--lt-surface-2)] p-1">
+        <AdminChipButton
+          active={activeTab === "signups"}
           onClick={() => setActiveTab("signups")}
-          className="rounded-md px-3 py-1.5 text-xs font-semibold transition"
-          style={{
-            background: activeTab === "signups" ? "#7C3AED" : "transparent",
-            color: activeTab === "signups" ? "#ffffff" : "#C0C0D8",
-          }}
         >
           Free Trial Signups
-        </button>
-        <button
-          type="button"
+        </AdminChipButton>
+        <AdminChipButton
+          active={activeTab === "email-performance"}
           onClick={() => setActiveTab("email-performance")}
-          className="rounded-md px-3 py-1.5 text-xs font-semibold transition"
-          style={{
-            background: activeTab === "email-performance" ? "#7C3AED" : "transparent",
-            color: activeTab === "email-performance" ? "#ffffff" : "#C0C0D8",
-          }}
         >
           Email Performance
-        </button>
+        </AdminChipButton>
       </div>
 
       {activeTab === "signups" ? (

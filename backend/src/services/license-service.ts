@@ -9,6 +9,9 @@ import {
   SALE_PRICE_USD,
 } from "../constants/pricing";
 import { sendCommissionNotification } from "./email";
+import { trackEvent } from "../observability/track";
+import { EVENT_NAMES } from "../observability/event-taxonomy";
+import { hashEmail } from "../observability/privacy";
 import { logger } from "../utils/logger";
 
 export function generateRefCode(): string {
@@ -53,6 +56,16 @@ export async function ensureRefCodeForEmail(email: string): Promise<string | nul
     .eq("id", license.id);
 
   if (updateError) throw new Error(updateError.message);
+
+  trackEvent({
+    eventName: EVENT_NAMES.REFERRAL_SIGNUP,
+    source: "server",
+    userEmail: normalized,
+    licenseId: String(license.id),
+    properties: { refCode },
+    idempotencyKey: `referral_signup:${license.id}`,
+  });
+
   return refCode;
 }
 
@@ -148,6 +161,17 @@ export async function createCommissionForReferral(params: {
   });
 
   const referrerEmail = referrer.email as string;
+
+  trackEvent({
+    eventName: EVENT_NAMES.REFERRAL_CONVERSION,
+    source: "server",
+    userEmail: referrerEmail,
+    properties: {
+      hasReferred: true,
+      refCode: params.refCode,
+    },
+    idempotencyKey: `referral_conversion:${hashEmail(referredEmail) ?? referredEmail}`,
+  });
 
   await supabase
     .from("license_keys")

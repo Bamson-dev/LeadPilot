@@ -2,8 +2,19 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { motion, AnimatePresence } from "framer-motion";
-import { ArrowDown, ArrowUp, ArrowUpDown, Check, Loader2, Mail } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Copy,
+  ExternalLink,
+  Globe,
+  Loader2,
+  Mail,
+  MapPin,
+  MoreHorizontal,
+  Phone,
+} from "lucide-react";
 import { ContactDots } from "@/components/dashboard/contact-dots";
 import { CopyButton } from "@/components/dashboard/copy-button";
 import { EmailCell } from "@/components/dashboard/email-cell";
@@ -14,10 +25,25 @@ import { LeadStatusSelect } from "@/components/dashboard/lead-status-select";
 import { PipelineSummary } from "@/components/dashboard/pipeline-summary";
 import { RatingFilter } from "@/components/dashboard/rating-filter";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  StatusBadge,
+  type StatusBadgeStatus,
+} from "@/components/ui/status-badge";
 import type { RatingFilterValue } from "@/lib/rating-filter";
 import { getLeadSelectionId } from "@/lib/lead-selection";
 import type { Lead } from "@/types/lead";
-import { hasAnyEmail } from "@/utils/get-display-email";
+import { cn } from "@/utils/utils";
+import {
+  getAllEmailsForDisplay,
+  hasAnyEmail,
+} from "@/utils/get-display-email";
 
 type SortKey = keyof Pick<
   Lead,
@@ -25,8 +51,26 @@ type SortKey = keyof Pick<
 >;
 type SortDir = "asc" | "desc";
 
-const STICKY_SELECT_CLASS =
-  "sticky left-0 z-20 bg-[#0F0F14] shadow-[4px_0_12px_rgba(0,0,0,0.35)]";
+const FILTER_SELECT_CLASS =
+  "rounded-md border border-[var(--lt-border)] bg-[var(--lt-surface-2)] px-2.5 py-1.5 text-xs text-[var(--lt-text)] cursor-pointer outline-none appearance-none";
+
+function getStatusBadgeProps(
+  status: string
+): { status: StatusBadgeStatus; label: string } {
+  const normalized = status === "none" ? "new" : status;
+  switch (normalized) {
+    case "contacted":
+      return { status: "processing", label: "Contacted" };
+    case "interested":
+      return { status: "replied", label: "Interested" };
+    case "closed":
+      return { status: "enriched", label: "Closed" };
+    case "not_interested":
+      return { status: "paused", label: "Not interested" };
+    default:
+      return { status: "paused", label: "New" };
+  }
+}
 
 interface ResultsTableProps {
   leads: Lead[];
@@ -53,37 +97,18 @@ interface ResultsTableProps {
   onSendSelected?: () => void;
   hasMailbox?: boolean;
   onNoMailboxClick?: () => void;
+  activeLeadId?: string | null;
+  onLeadClick?: (lead: Lead) => void;
 }
 
-function SelectToggle({
-  checked,
-  disabled,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  disabled?: boolean;
-  onChange: () => void;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        if (!disabled) onChange();
-      }}
-      disabled={disabled}
-      aria-label={label}
-      aria-pressed={checked}
-      className="flex h-6 w-6 items-center justify-center rounded-md border-2 transition-colors disabled:cursor-not-allowed disabled:opacity-35"
-      style={{
-        borderColor: checked ? "#A855F7" : "rgba(168,85,247,0.45)",
-        background: checked ? "rgba(124,58,237,0.85)" : "rgba(22,22,30,0.95)",
-      }}
-    >
-      {checked ? <Check className="h-3.5 w-3.5 text-white" strokeWidth={3} /> : null}
-    </button>
+function stickySelectCellClass(isSelected: boolean, isActive: boolean) {
+  return cn(
+    "sticky left-0 z-20 shadow-[4px_0_12px_rgba(0,0,0,0.15)] transition-colors",
+    isSelected
+      ? "bg-[var(--lt-cyan-soft)] group-hover:bg-[var(--lt-cyan-soft)]"
+      : isActive
+        ? "bg-[var(--lt-surface)] group-hover:bg-[var(--lt-surface-3)]"
+        : "bg-[var(--lt-surface)] group-hover:bg-[var(--lt-surface-3)]"
   );
 }
 
@@ -109,6 +134,8 @@ export function ResultsTable({
   onSendSelected,
   hasMailbox = true,
   onNoMailboxClick,
+  activeLeadId = null,
+  onLeadClick,
 }: ResultsTableProps) {
   const { copiedId, copyToClipboard } = useCopyToClipboard();
   const [sortKey, setSortKey] = useState<SortKey>("business_name");
@@ -116,7 +143,6 @@ export function ResultsTable({
   const [hasWebsite, setHasWebsite] = useState<boolean | null>(null);
   const parentRef = useRef<HTMLDivElement>(null);
 
-  /** Selection column shows whenever parent passes selectedLeadIds (email outreach mode). */
   const showEmailSelection = selectedLeadIds !== undefined;
 
   const filtered = useMemo(() => {
@@ -151,7 +177,7 @@ export function ResultsTable({
   const rowVirtualizer = useVirtualizer({
     count: sorted.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 52,
+    estimateSize: () => 48,
     overscan: 8,
     enabled: useVirtual,
   });
@@ -194,7 +220,8 @@ export function ResultsTable({
   const emailableSelectedCount = useMemo(() => {
     if (!selectedLeadIds) return 0;
     return sorted.filter(
-      (lead) => selectedLeadIds.has(getLeadSelectionId(lead)) && hasAnyEmail(lead)
+      (lead) =>
+        selectedLeadIds.has(getLeadSelectionId(lead)) && hasAnyEmail(lead)
     ).length;
   }, [sorted, selectedLeadIds]);
 
@@ -207,40 +234,70 @@ export function ResultsTable({
     onSendSelected?.();
   }
 
-  const sendToolbar = showEmailSelection && onSendSelected && (
-    <div
-      className="w-full rounded-xl border px-4 py-3 sm:flex-1 sm:min-w-[280px]"
-      style={{
-        borderColor: "rgba(124,58,237,0.35)",
-        background: "rgba(124,58,237,0.08)",
-      }}
+  const statusFilterSelect = (
+    <select
+      value={statusFilter}
+      onChange={(e) => onStatusFilterChange(e.target.value)}
+      className={FILTER_SELECT_CLASS}
     >
+      <option value="all">All statuses</option>
+      <option value="new">New</option>
+      <option value="contacted">Contacted</option>
+      <option value="interested">Interested</option>
+      <option value="closed">Closed</option>
+      <option value="not_interested">Not interested</option>
+    </select>
+  );
+
+  const websiteFilterSelect = (
+    <select
+      value={hasWebsite === null ? "all" : hasWebsite ? "yes" : "no"}
+      onChange={(e) =>
+        setHasWebsite(e.target.value === "all" ? null : e.target.value === "yes")
+      }
+      className={FILTER_SELECT_CLASS}
+    >
+      <option value="all">All websites</option>
+      <option value="yes">Has website</option>
+      <option value="no">No website</option>
+    </select>
+  );
+
+  const sendToolbar = showEmailSelection && onSendSelected && (
+    <div className="w-full rounded-xl border border-[var(--lt-cyan)]/30 bg-[var(--lt-cyan-soft)]/40 px-4 py-3 sm:flex-1 sm:min-w-[280px]">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <p className="flex items-center gap-2 text-sm font-semibold text-[#F4F4FF]">
-            <Mail className="h-4 w-4 text-[#A855F7]" />
+          <p className="flex items-center gap-2 text-sm font-semibold text-[var(--lt-text)]">
+            <Mail className="h-4 w-4 text-[var(--lt-cyan)]" />
             Send outreach email
           </p>
-          <p className="mt-1 text-xs text-[#A1A1B5] leading-relaxed">
+          <p className="mt-1 text-xs leading-relaxed text-[var(--lt-text-muted)]">
             {emailableSelectedCount === 0 ? (
               <>
-                <strong className="text-[#F4F4FF]">Step 1:</strong> Tick the purple{" "}
-                <strong className="text-[#F4F4FF]">Select</strong> boxes on the left (
-                {selectableIds.length} leads have email).{" "}
-                <strong className="text-[#F4F4FF]">Step 2:</strong> Click Send email.
+                <strong className="text-[var(--lt-text)]">Step 1:</strong> Tick
+                the{" "}
+                <strong className="text-[var(--lt-text)]">Select</strong> boxes
+                on the left ({selectableIds.length} leads have email).{" "}
+                <strong className="text-[var(--lt-text)]">Step 2:</strong> Click
+                Send email.
               </>
             ) : (
               <>
-                {emailableSelectedCount} lead{emailableSelectedCount === 1 ? "" : "s"} selected
-                — click Send email to compose your message.
+                {emailableSelectedCount} lead
+                {emailableSelectedCount === 1 ? "" : "s"} selected — click Send
+                email to compose your message.
               </>
             )}
           </p>
           {!hasMailbox && (
-            <p className="mt-2 text-xs text-[#A855F7]">
+            <p className="mt-2 text-xs text-[var(--lt-cyan)]">
               Connect Gmail in Email outreach above first.{" "}
               {onNoMailboxClick && (
-                <button type="button" onClick={onNoMailboxClick} className="underline text-[#F4F4FF]">
+                <button
+                  type="button"
+                  onClick={onNoMailboxClick}
+                  className="text-[var(--lt-text)] underline"
+                >
                   Go to mailboxes
                 </button>
               )}
@@ -249,13 +306,38 @@ export function ResultsTable({
         </div>
         <Button
           type="button"
-          variant={emailableSelectedCount > 0 ? "glow" : "outline"}
+          variant={emailableSelectedCount > 0 ? "default" : "outline"}
           disabled={emailableSelectedCount === 0}
           onClick={handleSendClick}
-          className="shrink-0 w-full sm:w-auto"
+          className="w-full shrink-0 sm:w-auto"
         >
           Send email ({emailableSelectedCount})
         </Button>
+      </div>
+    </div>
+  );
+
+  const filterBar = (
+    <div className="sticky top-0 z-40 bg-[var(--lt-surface)]/95 backdrop-blur border-b border-[var(--lt-border)]">
+      <PipelineSummary
+        leads={pipelineLeads}
+        leadStatuses={leadStatuses}
+        statusFilter={statusFilter}
+        onFilterChange={onStatusFilterChange}
+      />
+      <div className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:flex-wrap lg:items-stretch lg:gap-3">
+        {sendToolbar}
+        {onRatingFilterChange && (
+          <RatingFilter
+            value={ratingFilter}
+            onChange={onRatingFilterChange}
+            filteredCount={ratingMatchCount ?? sorted.length}
+            totalCount={totalLeadCount ?? leads.length}
+            isMobile={isMobile}
+          />
+        )}
+        {websiteFilterSelect}
+        {statusFilterSelect}
       </div>
     </div>
   );
@@ -267,68 +349,15 @@ export function ResultsTable({
   if (isMobile) {
     return (
       <div className="space-y-3">
-        <PipelineSummary
-          leads={pipelineLeads}
-          leadStatuses={leadStatuses}
-          statusFilter={statusFilter}
-          onFilterChange={onStatusFilterChange}
-        />
-        {sendToolbar}
-        <div className="flex flex-wrap gap-2 px-1">
-          {onRatingFilterChange && (
-            <RatingFilter
-              value={ratingFilter}
-              onChange={onRatingFilterChange}
-              filteredCount={ratingMatchCount ?? sorted.length}
-              totalCount={totalLeadCount ?? leads.length}
-              isMobile
-            />
-          )}
-          <select
-            value={hasWebsite === null ? "all" : hasWebsite ? "yes" : "no"}
-            onChange={(e) =>
-              setHasWebsite(e.target.value === "all" ? null : e.target.value === "yes")
-            }
-            className="rounded-md border border-white/10 bg-[#16161E] px-2 py-1 text-xs text-[#F4F4FF]"
-          >
-            <option value="all">All websites</option>
-            <option value="yes">Has website</option>
-            <option value="no">No website</option>
-          </select>
-          <select
-            value={statusFilter}
-            onChange={(e) => onStatusFilterChange(e.target.value)}
-            style={{
-              background: "#111118",
-              border: "1px solid rgba(255,255,255,0.08)",
-              color: "#F0EFFF",
-              borderRadius: 8,
-              padding: "7px 12px",
-              fontSize: 12,
-              cursor: "pointer",
-              fontFamily: "Inter, sans-serif",
-              outline: "none",
-              appearance: "none",
-              WebkitAppearance: "none",
-            }}
-          >
-            <option value="all">All statuses</option>
-            <option value="new">New</option>
-            <option value="contacted">Contacted</option>
-            <option value="interested">Interested</option>
-            <option value="closed">Closed</option>
-            <option value="not_interested">Not interested</option>
-          </select>
-        </div>
-
+        {filterBar}
         {isLoading && leads.length === 0 ? (
           <div className="space-y-3">
             {Array.from({ length: 3 }).map((_, i) => (
               <div
                 key={i}
-                className="rounded-xl border border-white/[0.07] bg-[#0F0F14] p-4"
+                className="rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface)] p-4"
               >
-                <div className="skeleton h-4 w-2/3 rounded mb-2" />
+                <div className="skeleton mb-2 h-4 w-2/3 rounded" />
                 <div className="skeleton h-3 w-1/2 rounded" />
               </div>
             ))}
@@ -349,90 +378,132 @@ export function ResultsTable({
                 onToggleSelect={
                   onToggleLeadSelect
                     ? () => {
-                        if (hasAnyEmail(lead)) onToggleLeadSelect(getLeadSelectionId(lead));
+                        if (hasAnyEmail(lead))
+                          onToggleLeadSelect(getLeadSelectionId(lead));
                       }
                     : undefined
                 }
                 onUseTemplate={onUseTemplate}
+                onOpen={onLeadClick ? () => onLeadClick(lead) : undefined}
+                active={activeLeadId === lead.id}
               />
             ))}
           </div>
         )}
-
-        <p className="text-xs text-[#6B6B80] px-1">{sorted.length} leads shown</p>
+        <p className="px-1 text-xs text-[var(--lt-text-subtle)]">
+          {sorted.length} leads shown
+        </p>
       </div>
     );
   }
+
+  const renderSkeletonRow = (i: number) => (
+    <tr key={`skeleton-${i}`} className="h-12 border-b border-[var(--lt-border)]">
+      {showEmailSelection && (
+        <td className="px-3 py-2">
+          <div className="skeleton mx-auto h-4 w-4 rounded-sm" />
+        </td>
+      )}
+      <td className="px-3 py-2">
+        <div className="skeleton h-3.5 w-32 rounded" />
+      </td>
+      <td className="px-3 py-2">
+        <div className="skeleton h-3.5 w-24 rounded" />
+      </td>
+      <td className="px-3 py-2">
+        <div className="skeleton h-3.5 w-20 rounded" />
+      </td>
+      <td className="px-3 py-2">
+        <div className="skeleton h-3.5 w-28 rounded" />
+      </td>
+      <td className="px-3 py-2">
+        <div className="skeleton h-3.5 w-16 rounded" />
+      </td>
+      <td className="px-3 py-2">
+        <div className="skeleton h-3.5 w-10 rounded" />
+      </td>
+      <td className="px-3 py-2">
+        <div className="skeleton h-3.5 w-20 rounded" />
+      </td>
+      <td className="px-3 py-2">
+        <div className="skeleton h-3.5 w-8 rounded" />
+      </td>
+    </tr>
+  );
 
   const renderRow = (lead: Lead) => {
     const selectionId = getLeadSelectionId(lead);
     const canSelect = hasAnyEmail(lead);
     const isSelected = selectedLeadIds?.has(selectionId) ?? false;
+    const isActive = activeLeadId === lead.id;
+    const leadStatus = leadStatuses[lead.id] || "new";
+    const badgeProps = getStatusBadgeProps(leadStatus);
+    const emails = getAllEmailsForDisplay(lead);
+    const firstEmail = emails[0];
+    const hasMoreMenu =
+      Boolean(onUseTemplate) ||
+      Boolean(onMarkReplied && hasAnyEmail(lead));
+    const hasHoverActions =
+      Boolean(firstEmail) ||
+      Boolean(lead.phone) ||
+      Boolean(lead.website) ||
+      Boolean(lead.google_maps_url);
 
     return (
-      <motion.tr
+      <tr
         key={lead.id}
-        initial={{ opacity: 0, backgroundColor: "rgba(124,58,237,0.12)" }}
-        animate={{ opacity: 1, backgroundColor: "transparent" }}
-        transition={{ duration: 0.35 }}
-        className="border-b border-white/[0.04] transition-all duration-200"
-        style={{ borderColor: "rgba(255,255,255,0.07)" }}
-        onMouseOver={(e) => {
-          e.currentTarget.style.background = "rgba(124,58,237,0.04)";
-        }}
-        onMouseOut={(e) => {
-          e.currentTarget.style.background = "transparent";
-        }}
+        className={cn(
+          "group h-12 cursor-pointer border-b border-[var(--lt-border)] text-[13px] transition-colors",
+          "hover:bg-[var(--lt-surface-3)]",
+          isSelected && "bg-[var(--lt-cyan-soft)] hover:bg-[var(--lt-cyan-soft)]",
+          isActive && "shadow-[inset_2px_0_0_var(--lt-cyan)]"
+        )}
+        onClick={() => onLeadClick?.(lead)}
       >
         {showEmailSelection && (
-          <td className={`px-3 py-3 align-middle w-[56px] min-w-[56px] ${STICKY_SELECT_CLASS}`}>
-            <SelectToggle
-              checked={isSelected}
-              disabled={!canSelect}
-              onChange={() => onToggleLeadSelect?.(selectionId)}
-              label={
-                canSelect
-                  ? `Select ${lead.business_name} for email`
-                  : `${lead.business_name} has no email`
-              }
-            />
+          <td
+            className={cn(
+              "w-[52px] min-w-[52px] px-3 py-2 align-middle",
+              stickySelectCellClass(isSelected, isActive)
+            )}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex flex-col items-center gap-1">
+              <Checkbox
+                checked={isSelected}
+                disabled={!canSelect}
+                onCheckedChange={() => onToggleLeadSelect?.(selectionId)}
+                aria-label={
+                  canSelect
+                    ? `Select ${lead.business_name} for email`
+                    : `${lead.business_name} has no email`
+                }
+              />
+            </div>
           </td>
         )}
-        <td className="px-4 py-3 align-top" style={{ padding: "12px 8px" }}>
-          <div
-            style={{
-              color: "#F4F4FF",
-              fontWeight: 700,
-              fontSize: 13,
-              fontFamily: "Bricolage Grotesque, sans-serif",
-              lineHeight: 1.3,
-            }}
-          >
+        <td className="px-3 py-2 align-middle">
+          <div className="text-sm font-semibold text-[var(--lt-text)]">
             {lead.business_name}
           </div>
           {lead.category && (
-            <div style={{ color: "#6B6B80", fontSize: 11, marginTop: 2 }}>
+            <div className="mt-0.5 text-[11px] text-[var(--lt-text-subtle)]">
               {lead.category}
             </div>
           )}
-          <div className="mt-1.5">
+          <div className="mt-1">
             <ContactDots lead={lead} />
           </div>
         </td>
-        <td className="px-4 py-3 text-[#6B6B80] max-w-[180px] truncate align-top">
+        <td className="max-w-[180px] truncate px-3 py-2 align-middle text-[var(--lt-text-muted)]">
           {lead.address ?? "—"}
         </td>
-        <td className="px-4 py-3 align-top">
+        <td className="px-3 py-2 align-middle" onClick={(e) => e.stopPropagation()}>
           {lead.phone ? (
-            <div className="group flex items-center gap-1">
+            <div className="group/phone flex items-center gap-1">
               <a
                 href={`tel:${lead.phone}`}
-                style={{
-                  color: "#F4F4FF",
-                  textDecoration: "none",
-                  fontSize: 12,
-                }}
-                className="hover:underline"
+                className="text-[var(--lt-text)] hover:underline"
               >
                 {lead.phone}
               </a>
@@ -444,149 +515,211 @@ export function ResultsTable({
               />
             </div>
           ) : (
-            "—"
+            <span className="text-[var(--lt-text-subtle)]">—</span>
           )}
         </td>
-        <td className="px-4 py-3 min-w-[200px] align-top">
+        <td
+          className="min-w-[180px] px-3 py-2 align-middle"
+          onClick={(e) => e.stopPropagation()}
+        >
           <EmailCell lead={lead} copiedId={copiedId} onCopy={copyToClipboard} />
         </td>
-        <td className="px-4 py-3 align-top">
-          {lead.website ? <WebsiteLink website={lead.website} /> : "—"}
+        <td className="px-3 py-2 align-middle" onClick={(e) => e.stopPropagation()}>
+          {lead.website ? (
+            <WebsiteLink website={lead.website} />
+          ) : (
+            <span className="text-[var(--lt-text-subtle)]">—</span>
+          )}
         </td>
-        <td className="px-4 py-3 text-amber-400 align-top">
-          {lead.rating != null ? `★ ${lead.rating}` : "—"}
+        <td className="px-3 py-2 align-middle">
+          {lead.rating != null ? (
+            <span className="inline-flex items-center gap-1 text-[var(--lt-warning)]">
+              <span aria-hidden>★</span>
+              <span>{lead.rating}</span>
+            </span>
+          ) : (
+            <span className="text-[var(--lt-text-subtle)]">—</span>
+          )}
         </td>
-        <td className="px-4 py-3 align-top min-w-[140px]">
-          <div className="flex flex-col gap-2">
+        <td
+          className="min-w-[160px] px-3 py-2 align-middle"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex flex-col gap-1.5">
+            <StatusBadge status={badgeProps.status} label={badgeProps.label} />
             <LeadStatusSelect
               leadId={lead.id}
-              status={leadStatuses[lead.id] || "new"}
+              status={leadStatus}
               onChange={onLeadStatusChange}
             />
-            {onUseTemplate && (
-              <button
-                type="button"
-                onClick={() => onUseTemplate(lead)}
-                title="Open WhatsApp message template for this lead"
-                style={{
-                  background: "rgba(37,211,102,0.1)",
-                  border: "1px solid rgba(37,211,102,0.25)",
-                  color: "#25D366",
-                  borderRadius: 6,
-                  padding: "5px 8px",
-                  fontSize: 10,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  fontFamily: "Inter, sans-serif",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                WhatsApp
-              </button>
-            )}
-            {onMarkReplied && hasAnyEmail(lead) && (
-              <button
-                type="button"
-                onClick={() => onMarkReplied(lead)}
-                title="Mark this lead as replied and stop pending follow ups"
-                style={{
-                  background: "rgba(16,185,129,0.1)",
-                  border: "1px solid rgba(16,185,129,0.25)",
-                  color: "#10B981",
-                  borderRadius: 6,
-                  padding: "5px 8px",
-                  fontSize: 10,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  fontFamily: "Inter, sans-serif",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Mark replied
-              </button>
-            )}
+            <div className="flex items-center gap-0.5">
+              <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+              {firstEmail && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  title="Copy email"
+                  onClick={() => copyToClipboard(firstEmail, `qa-email-${lead.id}`)}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+              )}
+              {lead.phone && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  title="Copy phone"
+                  onClick={() =>
+                    copyToClipboard(lead.phone!, `qa-phone-${lead.id}`)
+                  }
+                >
+                  <Phone className="h-3.5 w-3.5" />
+                </Button>
+              )}
+              {lead.website && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  title="Open website"
+                  asChild
+                >
+                  <a
+                    href={lead.website}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Globe className="h-3.5 w-3.5" />
+                  </a>
+                </Button>
+              )}
+              {lead.google_maps_url && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  title="Open in Google Maps"
+                  asChild
+                >
+                  <a
+                    href={lead.google_maps_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <MapPin className="h-3.5 w-3.5" />
+                  </a>
+                </Button>
+              )}
+              </div>
+              {(hasMoreMenu || hasHoverActions) && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      title="More actions"
+                    >
+                      <MoreHorizontal className="h-3.5 w-3.5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {firstEmail && (
+                      <DropdownMenuItem
+                        onClick={() =>
+                          copyToClipboard(firstEmail, `menu-email-${lead.id}`)
+                        }
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                        Copy email
+                      </DropdownMenuItem>
+                    )}
+                    {lead.phone && (
+                      <DropdownMenuItem
+                        onClick={() =>
+                          copyToClipboard(lead.phone!, `menu-phone-${lead.id}`)
+                        }
+                      >
+                        <Phone className="h-3.5 w-3.5" />
+                        Copy phone
+                      </DropdownMenuItem>
+                    )}
+                    {lead.website && (
+                      <DropdownMenuItem asChild>
+                        <a
+                          href={lead.website}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                          Open website
+                        </a>
+                      </DropdownMenuItem>
+                    )}
+                    {lead.google_maps_url && (
+                      <DropdownMenuItem asChild>
+                        <a
+                          href={lead.google_maps_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <MapPin className="h-3.5 w-3.5" />
+                          Open in Maps
+                        </a>
+                      </DropdownMenuItem>
+                    )}
+                    {onUseTemplate && (
+                      <DropdownMenuItem onClick={() => onUseTemplate(lead)}>
+                        WhatsApp template
+                      </DropdownMenuItem>
+                    )}
+                    {onMarkReplied && hasAnyEmail(lead) && (
+                      <DropdownMenuItem onClick={() => onMarkReplied(lead)}>
+                        Mark replied
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
           </div>
         </td>
-        <td className="px-4 py-3 text-[#6B6B80] align-top">
+        <td className="px-3 py-2 align-middle text-[var(--lt-text-muted)]">
           {lead.reviews_count ?? "—"}
         </td>
-      </motion.tr>
+      </tr>
     );
   };
 
-  const colCount = showEmailSelection ? 9 : 8;
-
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0F0F14]">
-      <PipelineSummary
-        leads={pipelineLeads}
-        leadStatuses={leadStatuses}
-        statusFilter={statusFilter}
-        onFilterChange={onStatusFilterChange}
-      />
-      <div className="flex flex-col gap-3 border-b border-white/[0.08] px-4 py-3 lg:flex-row lg:flex-wrap lg:items-stretch lg:gap-3">
-        {sendToolbar}
-        {onRatingFilterChange && (
-          <RatingFilter
-            value={ratingFilter}
-            onChange={onRatingFilterChange}
-            filteredCount={ratingMatchCount ?? sorted.length}
-            totalCount={totalLeadCount ?? leads.length}
-          />
-        )}
-        <select
-          value={hasWebsite === null ? "all" : hasWebsite ? "yes" : "no"}
-          onChange={(e) =>
-            setHasWebsite(e.target.value === "all" ? null : e.target.value === "yes")
-          }
-          className="rounded-md border border-white/10 bg-[#16161E] px-2 py-1 text-xs text-[#F4F4FF]"
-        >
-          <option value="all">All websites</option>
-          <option value="yes">Has website</option>
-          <option value="no">No website</option>
-        </select>
-        <select
-          value={statusFilter}
-          onChange={(e) => onStatusFilterChange(e.target.value)}
-          style={{
-            background: "#111118",
-            border: "1px solid rgba(255,255,255,0.08)",
-            color: "#F0EFFF",
-            borderRadius: 8,
-            padding: "7px 12px",
-            fontSize: 12,
-            cursor: "pointer",
-            fontFamily: "Inter, sans-serif",
-            outline: "none",
-            appearance: "none",
-            WebkitAppearance: "none",
-          }}
-        >
-          <option value="all">All statuses</option>
-          <option value="new">New</option>
-          <option value="contacted">Contacted</option>
-          <option value="interested">Interested</option>
-          <option value="closed">Closed</option>
-          <option value="not_interested">Not interested</option>
-        </select>
-      </div>
+    <div className="overflow-hidden rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface)]">
+      {filterBar}
 
       <div ref={parentRef} className="max-h-[600px] overflow-auto">
         <table className="w-full min-w-[900px] text-sm">
-          <thead className="sticky top-0 z-30 bg-[#0F0F14]/95 backdrop-blur">
-            <tr className="border-b border-white/[0.08]">
+          <thead className="sticky top-0 z-30 bg-[var(--lt-surface)]/95 backdrop-blur">
+            <tr className="border-b border-[var(--lt-border)]">
               {showEmailSelection && (
                 <th
-                  className={`px-3 py-3 text-center w-[56px] min-w-[56px] ${STICKY_SELECT_CLASS}`}
+                  className={cn(
+                    "sticky left-0 z-20 w-[52px] min-w-[52px] bg-[var(--lt-surface)] px-3 py-2.5 text-center shadow-[4px_0_12px_rgba(0,0,0,0.15)]"
+                  )}
                 >
-                  <div className="flex flex-col items-center gap-1.5">
-                    <SelectToggle
+                  <div className="flex flex-col items-center gap-1">
+                    <Checkbox
                       checked={allSelectableSelected}
                       disabled={selectableIds.length === 0}
-                      onChange={toggleSelectAll}
-                      label="Select all leads with email"
+                      onCheckedChange={toggleSelectAll}
+                      aria-label="Select all leads with email"
                     />
-                    <span className="text-[9px] font-semibold uppercase tracking-wide text-[#A855F7]">
+                    <span className="text-[9px] font-semibold uppercase tracking-wide text-[var(--lt-cyan)]">
                       Select
                     </span>
                   </div>
@@ -595,24 +728,24 @@ export function ResultsTable({
               {(
                 [
                   ["business_name", "Business"],
-                  ["address", "Address"],
+                  ["address", "Location"],
                   ["phone", "Phone"],
                   ["email", "Email"],
                   ["website", "Website"],
                   ["rating", "Rating"],
-                  ["status", "Status"],
+                  ["status", "Status / Actions"],
                   ["reviews_count", "Reviews"],
                 ] as const
               ).map(([key, label]) => (
                 <th
                   key={key}
-                  className="px-4 py-3 text-left text-xs uppercase text-[#6B6B80]"
+                  className="px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-[var(--lt-text-subtle)]"
                 >
                   {["business_name", "rating", "reviews_count"].includes(key) ? (
                     <button
                       type="button"
                       onClick={() => toggleSort(key as SortKey)}
-                      className="inline-flex items-center gap-1 hover:text-[#F4F4FF]"
+                      className="inline-flex items-center gap-1 hover:text-[var(--lt-text)]"
                     >
                       {label}
                       {sortKey === key ? (
@@ -630,7 +763,7 @@ export function ResultsTable({
                       {label}
                       {emailScrapingInProgress && (
                         <span title="Finding email addresses">
-                          <Loader2 className="h-3 w-3 animate-spin text-violet-400" />
+                          <Loader2 className="h-3 w-3 animate-spin text-[var(--lt-cyan)]" />
                         </span>
                       )}
                     </span>
@@ -643,27 +776,17 @@ export function ResultsTable({
           </thead>
           <tbody>
             {isLoading && leads.length === 0
-              ? Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i}>
-                    <td colSpan={colCount} className="px-4 py-3">
-                      <div className="skeleton h-4 rounded" />
-                    </td>
-                  </tr>
-                ))
+              ? Array.from({ length: 5 }).map((_, i) => renderSkeletonRow(i))
               : useVirtual
                 ? rowVirtualizer.getVirtualItems().map((virtualRow) => {
                     const lead = sorted[virtualRow.index];
                     return renderRow(lead);
                   })
-                : (
-                  <AnimatePresence initial={false}>
-                    {sorted.map((lead) => renderRow(lead))}
-                  </AnimatePresence>
-                )}
+                : sorted.map((lead) => renderRow(lead))}
           </tbody>
         </table>
       </div>
-      <div className="border-t border-white/[0.08] px-4 py-2 text-xs text-[#6B6B80]">
+      <div className="border-t border-[var(--lt-border)] px-4 py-2 text-xs text-[var(--lt-text-subtle)]">
         {sorted.length} leads shown
       </div>
     </div>

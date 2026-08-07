@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import type { OutreachBalance, OutreachMailbox } from "@/types/outreach";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface OutreachTopBarProps {
   balance: OutreachBalance | null;
@@ -20,10 +22,10 @@ export function OutreachTopBar({
   if (loading && !balance) {
     return (
       <div
-        className="rounded-lg border border-white/[0.08] bg-[#0F0F14]/90 px-3 py-2"
+        className="rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface)] px-4 py-3"
         aria-label="Outreach status"
       >
-        <p className="text-xs text-[#6B6B80]">Loading outreach balance…</p>
+        <Skeleton className="h-4 w-40" />
       </div>
     );
   }
@@ -37,36 +39,40 @@ export function OutreachTopBar({
 
   return (
     <div
-      className="rounded-lg border border-white/[0.08] bg-[#0F0F14]/90 px-3 py-2.5 sm:py-2"
+      className="rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface)] px-4 py-3"
       aria-label="Outreach status"
     >
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-[#F4F4FF] leading-tight">
+          <p className="text-sm font-semibold text-[var(--lt-text)]">
             {sendBalance.toLocaleString()}{" "}
-            <span className="text-xs font-normal text-[#6B6B80]">sends left</span>
+            <span className="text-xs font-normal text-[var(--lt-text-muted)]">
+              sends left
+            </span>
           </p>
-          <p className="mt-0.5 text-[11px] text-[#6B6B80] leading-snug">
+          <p className="mt-0.5 text-[11px] text-[var(--lt-text-subtle)]">
             Free trial {free} · Monthly {monthly} · Purchased {purchased}
           </p>
         </div>
-        <div className="min-w-0 text-[11px] text-[#6B6B80] sm:text-right leading-snug">
+        <div className="min-w-0 text-[11px] text-[var(--lt-text-muted)] sm:text-right">
           {primary ? (
-            <p className="truncate text-[#A1A1B5]">
-              <span className="text-[#F4F4FF]">{primary.email_address}</span>
+            <p className="truncate">
+              <span className="text-[var(--lt-text)]">{primary.email_address}</span>
               {" · "}
               {primary.daily_send_count}/{primary.daily_cap} today
             </p>
           ) : (
-            <p className="text-[#A1A1B5]">No mailbox connected</p>
+            <div className="flex items-center justify-end gap-2">
+              <StatusBadge status="paused" label="No mailbox" />
+            </div>
           )}
-          <p>
+          <p className="mt-0.5">
             Mailboxes {mailboxCount}/{maxMailboxes}
           </p>
           <p className="mt-1">
             <Link
               href="/dashboard/plans"
-              className="text-[#A855F7] hover:text-[#C084FC] underline underline-offset-2"
+              className="text-[var(--lt-accent-soft)] hover:text-[var(--lt-text)] underline underline-offset-2"
             >
               Buy outreach sends
             </Link>

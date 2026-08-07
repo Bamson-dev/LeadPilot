@@ -307,23 +307,23 @@ export function OutreachSendPanel({
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "tween", duration: 0.28, ease: "easeOut" }}
-            className="fixed top-0 right-0 z-[201] flex h-full flex-col border-l border-white/[0.1] bg-[#0F0F14] shadow-2xl w-full sm:max-w-md lg:w-[28rem]"
+            className="fixed top-0 right-0 z-[201] flex h-full w-full flex-col border-l border-[var(--lt-border)] bg-[var(--lt-surface)] shadow-2xl sm:max-w-md lg:w-[28rem]"
           >
-            <div className="flex items-start justify-between gap-3 border-b border-white/[0.08] px-5 py-4">
+            <div className="flex items-start justify-between gap-3 border-b border-[var(--lt-border)] px-5 py-4">
               <div className="min-w-0">
-                <h2 className="text-lg font-bold text-[#F4F4FF]">Compose email</h2>
-                <p className="mt-1 text-sm text-[#6B6B80]">
+                <h2 className="text-lg font-bold text-[var(--lt-text)]">Compose email</h2>
+                <p className="mt-1 text-sm text-[var(--lt-text-muted)]">
                   {sendCount} verified email{sendCount === 1 ? "" : "s"} to send
                   {skippedNoVerifiedPreview > 0
                     ? ` · ${skippedNoVerifiedPreview} skipped (no verified email)`
                     : ""}
                 </p>
-                <p className="mt-1 truncate text-xs text-[#A855F7]">From: {mailboxLabel}</p>
+                <p className="mt-1 truncate text-xs text-[var(--lt-accent-soft)]">From: {mailboxLabel}</p>
               </div>
               <button
                 type="button"
                 onClick={onClose}
-                className="shrink-0 text-[#6B6B80] hover:text-[#F4F4FF]"
+                className="shrink-0 text-[var(--lt-text-muted)] hover:text-[var(--lt-text)]"
                 aria-label="Close compose panel"
               >
                 <X className="h-5 w-5" />
@@ -333,7 +333,7 @@ export function OutreachSendPanel({
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
               {activeMailboxes.length > 1 && (
                 <div>
-                  <label className="mb-1.5 block text-xs font-medium text-[#6B6B80]">
+                  <label className="mb-1.5 block text-xs font-medium text-[var(--lt-text-muted)]">
                     Sending mailbox
                   </label>
                   <select
@@ -348,7 +348,7 @@ export function OutreachSendPanel({
                       }
                     }}
                     disabled={composeDisabled}
-                    className="w-full rounded-md border border-white/10 bg-[#16161E] px-3 py-2 text-sm text-[#F4F4FF]"
+                    className="w-full rounded-md border border-[var(--lt-border)] bg-[var(--lt-surface-2)] px-3 py-2 text-sm text-[var(--lt-text)]"
                   >
                     <option value="auto">Auto spread across mailboxes</option>
                     {activeMailboxes.map((mb) => (
@@ -360,17 +360,17 @@ export function OutreachSendPanel({
                 </div>
               )}
 
-              <div className="rounded-xl border border-[#A855F7]/25 bg-[#16161E] p-4 space-y-3">
+              <div className="space-y-3 rounded-xl border border-[var(--lt-accent)]/25 bg-[var(--lt-surface-2)] p-4">
                 <div className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-[#A855F7]" />
-                  <p className="text-sm font-semibold text-[#F4F4FF]">AI email writer</p>
+                  <Sparkles className="h-4 w-4 text-[var(--lt-accent)]" />
+                  <p className="text-sm font-semibold text-[var(--lt-text)]">AI email writer</p>
                 </div>
-                <p className="text-xs text-[#6B6B80]">
+                <p className="text-xs text-[var(--lt-text-muted)]">
                   Describe your offer and we&apos;ll draft a personalized cold email. You can edit
                   before sending.
                 </p>
                 <div>
-                  <label className="mb-1.5 block text-xs font-medium text-[#6B6B80]">
+                  <label className="mb-1.5 block text-xs font-medium text-[var(--lt-text-muted)]">
                     Your service
                   </label>
                   <textarea
@@ -379,11 +379,11 @@ export function OutreachSendPanel({
                     rows={3}
                     disabled={composeDisabled}
                     placeholder="e.g. I build fast mobile-friendly websites for local restaurants"
-                    className="w-full rounded-md border border-white/10 bg-[#0F0F14] px-3 py-2 text-sm text-[#F4F4FF] resize-y"
+                    className="w-full resize-y rounded-md border border-[var(--lt-border)] bg-[var(--lt-surface)] px-3 py-2 text-sm text-[var(--lt-text)]"
                   />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-xs font-medium text-[#6B6B80]">
+                  <label className="mb-1.5 block text-xs font-medium text-[var(--lt-text-muted)]">
                     Target business type
                   </label>
                   <Input
@@ -394,14 +394,14 @@ export function OutreachSendPanel({
                   />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-xs font-medium text-[#6B6B80]">
+                  <label className="mb-1.5 block text-xs font-medium text-[var(--lt-text-muted)]">
                     Tone (optional)
                   </label>
                   <select
                     value={tone}
                     onChange={(e) => setTone(e.target.value as OutreachEmailTone | "")}
                     disabled={composeDisabled}
-                    className="w-full rounded-md border border-white/10 bg-[#0F0F14] px-3 py-2 text-sm text-[#F4F4FF]"
+                    className="w-full rounded-md border border-[var(--lt-border)] bg-[var(--lt-surface)] px-3 py-2 text-sm text-[var(--lt-text)]"
                   >
                     {TONE_OPTIONS.map((opt) => (
                       <option key={opt.label} value={opt.value}>
@@ -413,7 +413,7 @@ export function OutreachSendPanel({
                 <Button
                   type="button"
                   variant="outline"
-                  className="w-full border-[#A855F7]/40 text-[#E9D5FF] hover:bg-[#A855F7]/10"
+                  className="w-full border-[var(--lt-accent)]/40 text-[var(--lt-accent-soft)] hover:bg-[var(--lt-accent)]/10"
                   disabled={composeDisabled}
                   onClick={() => void handleGenerate()}
                 >
@@ -433,14 +433,14 @@ export function OutreachSendPanel({
               </div>
 
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-[#6B6B80]">
+                <label className="mb-1.5 block text-xs font-medium text-[var(--lt-text-muted)]">
                   Quick template
                 </label>
                 <select
                   value={templateId}
                   onChange={(e) => applyTemplate(e.target.value)}
                   disabled={composeDisabled}
-                  className="w-full rounded-md border border-white/10 bg-[#16161E] px-3 py-2 text-sm text-[#F4F4FF]"
+                  className="w-full rounded-md border border-[var(--lt-border)] bg-[var(--lt-surface-2)] px-3 py-2 text-sm text-[var(--lt-text)]"
                 >
                   <option value="">Choose a template</option>
                   {templates.map((tpl) => (
@@ -452,11 +452,11 @@ export function OutreachSendPanel({
               </div>
 
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-[#6B6B80]">
+                <label className="mb-1.5 block text-xs font-medium text-[var(--lt-text-muted)]">
                   Follow up sequence
                 </label>
-                <div className="rounded-xl border border-white/[0.08] bg-[#16161E] p-3 space-y-3">
-                  <label className="flex items-center justify-between text-sm text-[#F4F4FF]">
+                <div className="space-y-3 rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface-2)] p-3">
+                  <label className="flex items-center justify-between text-sm text-[var(--lt-text)]">
                     <span>Enable follow ups for this batch</span>
                     <input
                       type="checkbox"
@@ -468,13 +468,13 @@ export function OutreachSendPanel({
                       disabled={composeDisabled}
                     />
                   </label>
-                  <p className="text-xs text-[#6B6B80]">
+                  <p className="text-xs text-[var(--lt-text-muted)]">
                     Toggle is off by default. Each follow up is a real send and spends one credit per lead.
                   </p>
                   {followupsEnabled && (
                     <div className="space-y-3">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <label className="text-xs text-[#A1A1B5]">
+                        <label className="text-xs text-[var(--lt-text-muted)]">
                           Number of follow ups (0-3)
                           <input
                             type="number"
@@ -486,13 +486,13 @@ export function OutreachSendPanel({
                               setFollowupCount(next);
                               setFollowupError(null);
                             }}
-                            className="mt-1 w-full rounded-md border border-white/10 bg-[#0F0F14] px-2 py-1 text-sm text-[#F4F4FF]"
+                            className="mt-1 w-full rounded-md border border-[var(--lt-border)] bg-[var(--lt-surface)] px-2 py-1 text-sm text-[var(--lt-text)]"
                           />
                         </label>
                       </div>
-                      <p className="text-xs text-[#A1A1B5]">
+                      <p className="text-xs text-[var(--lt-text-muted)]">
                         Potential credit spend: up to{" "}
-                        <strong className="text-[#F4F4FF]">{totalPotentialCredits}</strong> (for {sendCount} lead
+                        <strong className="text-[var(--lt-text)]">{totalPotentialCredits}</strong> (for {sendCount} lead
                         {sendCount === 1 ? "" : "s"} across {1 + followupCount} total touches).
                       </p>
                       {showNewAccountWarning && (
@@ -504,9 +504,9 @@ export function OutreachSendPanel({
                       {Array.from({ length: followupCount }).map((_, idx) => {
                         const step = followupSteps[idx]!;
                         return (
-                          <div key={idx} className="rounded-lg border border-white/10 bg-[#0F0F14] p-3 space-y-2">
-                            <p className="text-xs font-semibold text-[#F4F4FF]">Follow up {idx + 1}</p>
-                            <label className="text-xs text-[#A1A1B5] block">
+                          <div key={idx} className="space-y-2 rounded-lg border border-[var(--lt-border)] bg-[var(--lt-surface)] p-3">
+                            <p className="text-xs font-semibold text-[var(--lt-text)]">Follow up {idx + 1}</p>
+                            <label className="block text-xs text-[var(--lt-text-muted)]">
                               Gap (days, minimum 2)
                               <input
                                 type="number"
@@ -526,10 +526,10 @@ export function OutreachSendPanel({
                                     setFollowupError(null);
                                   }
                                 }}
-                                className="mt-1 w-full rounded-md border border-white/10 bg-[#16161E] px-2 py-1 text-sm text-[#F4F4FF]"
+                                className="mt-1 w-full rounded-md border border-[var(--lt-border)] bg-[var(--lt-surface-2)] px-2 py-1 text-sm text-[var(--lt-text)]"
                               />
                             </label>
-                            <label className="text-xs text-[#A1A1B5] block">
+                            <label className="block text-xs text-[var(--lt-text-muted)]">
                               Subject
                               <input
                                 type="text"
@@ -541,10 +541,10 @@ export function OutreachSendPanel({
                                     )
                                   )
                                 }
-                                className="mt-1 w-full rounded-md border border-white/10 bg-[#16161E] px-2 py-1 text-sm text-[#F4F4FF]"
+                                className="mt-1 w-full rounded-md border border-[var(--lt-border)] bg-[var(--lt-surface-2)] px-2 py-1 text-sm text-[var(--lt-text)]"
                               />
                             </label>
-                            <label className="text-xs text-[#A1A1B5] block">
+                            <label className="block text-xs text-[var(--lt-text-muted)]">
                               Body
                               <textarea
                                 value={step.body}
@@ -556,7 +556,7 @@ export function OutreachSendPanel({
                                   )
                                 }
                                 rows={3}
-                                className="mt-1 w-full rounded-md border border-white/10 bg-[#16161E] px-2 py-1 text-sm text-[#F4F4FF]"
+                                className="mt-1 w-full rounded-md border border-[var(--lt-border)] bg-[var(--lt-surface-2)] px-2 py-1 text-sm text-[var(--lt-text)]"
                               />
                             </label>
                           </div>
@@ -569,7 +569,7 @@ export function OutreachSendPanel({
               </div>
 
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-[#6B6B80]">
+                <label className="mb-1.5 block text-xs font-medium text-[var(--lt-text-muted)]">
                   Subject
                 </label>
                 <Input
@@ -581,12 +581,12 @@ export function OutreachSendPanel({
               </div>
 
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-[#6B6B80]">
+                <label className="mb-1.5 block text-xs font-medium text-[var(--lt-text-muted)]">
                   Body
                 </label>
-                <p className="mb-2 text-xs text-[#6B6B80] leading-relaxed">
+                <p className="mb-2 text-xs leading-relaxed text-[var(--lt-text-muted)]">
                   Use{" "}
-                  <code className="rounded bg-[#16161E] px-1.5 py-0.5 text-[#F4F4FF]">
+                  <code className="rounded bg-[var(--lt-surface-2)] px-1.5 py-0.5 text-[var(--lt-text)]">
                     [Business Name]
                   </code>{" "}
                   — it fills with each lead&apos;s business name when sent.
@@ -596,38 +596,31 @@ export function OutreachSendPanel({
                   onChange={(e) => setBody(e.target.value)}
                   rows={14}
                   disabled={composeDisabled}
-                  className="min-h-[280px] w-full rounded-md border border-white/10 bg-[#16161E] px-3 py-2 text-sm text-[#F4F4FF] resize-y"
+                  className="min-h-[280px] w-full resize-y rounded-md border border-[var(--lt-border)] bg-[var(--lt-surface-2)] px-3 py-2 text-sm text-[var(--lt-text)]"
                 />
               </div>
 
               {firstPreview && (
-                <div className="rounded-xl border border-white/[0.08] bg-[#16161E] p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[#6B6B80]">
+                <div className="rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface-2)] p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--lt-text-muted)]">
                     Preview (first recipient)
                   </p>
-                  <p className="mt-2 text-xs text-[#A855F7] font-medium">
+                  <p className="mt-2 text-xs font-medium text-[var(--lt-accent-soft)]">
                     {firstPreview.business_name}
                   </p>
-                  <p className="mt-2 text-sm font-semibold text-[#F4F4FF]">
+                  <p className="mt-2 text-sm font-semibold text-[var(--lt-text)]">
                     {firstPreview.subject || "—"}
                   </p>
-                  <p className="mt-2 text-xs text-[#A1A1B5] whitespace-pre-wrap">
+                  <p className="mt-2 whitespace-pre-wrap text-xs text-[var(--lt-text-muted)]">
                     {firstPreview.body}
                   </p>
                 </div>
               )}
 
               {blockedZeroBalance && (
-                <div
-                  className="rounded-lg px-4 py-3 text-sm"
-                  style={{
-                    background: "rgba(248,113,113,0.08)",
-                    border: "1px solid rgba(248,113,113,0.25)",
-                    color: "#FCA5A5",
-                  }}
-                >
+                <div className="rounded-lg border border-[var(--lt-danger)]/30 bg-[var(--lt-danger-soft)] px-4 py-3 text-sm text-[var(--lt-danger)]">
                   Your free sends and credits are used up.{" "}
-                  <Link href="/dashboard/plans" className="underline text-[#F4F4FF]">
+                  <Link href="/dashboard/plans" className="underline text-[var(--lt-text)]">
                     View plans
                   </Link>{" "}
                   to add more sends.
@@ -637,15 +630,8 @@ export function OutreachSendPanel({
               {error && <p className="text-sm text-red-300">{error}</p>}
 
               {result && (
-                <div
-                  className="rounded-lg px-4 py-3 text-sm"
-                  style={{
-                    background: "rgba(16,185,129,0.1)",
-                    border: "1px solid rgba(16,185,129,0.25)",
-                    color: "#A7F3D0",
-                  }}
-                >
-                  <p className="font-semibold text-[#F4F4FF]">Send summary</p>
+                <div className="rounded-lg border border-[var(--lt-success)]/30 bg-[var(--lt-success-soft)] px-4 py-3 text-sm text-[var(--lt-success)]">
+                  <p className="font-semibold text-[var(--lt-text)]">Send summary</p>
                   <p className="mt-2">
                     <strong>{result.queued}</strong> queued ·{" "}
                     <strong>{result.skipped_suppression}</strong> skipped (suppressed) ·{" "}
@@ -655,10 +641,10 @@ export function OutreachSendPanel({
               )}
             </div>
 
-            <div className="border-t border-white/[0.08] px-5 py-4">
+            <div className="border-t border-[var(--lt-border)] px-5 py-4">
               <Button
                 type="button"
-                variant="glow"
+                variant="default"
                 className="w-full"
                 disabled={
                   sending ||

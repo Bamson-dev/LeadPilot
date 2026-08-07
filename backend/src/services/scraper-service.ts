@@ -420,6 +420,9 @@ export async function recoverSearchJobEmailScraping(
   if (job?.emailScrapingComplete) {
     logSearchLifecycle("job_processing_end", searchId, {
       reason: "email_scraping_already_complete",
+      success: true,
+      status: "completed",
+      emailScrapingComplete: true,
     });
     return;
   }

@@ -115,8 +115,8 @@ async function main() {
     join(__dirname, "../components/dashboard/outreach-sends-report.tsx"),
     "utf8"
   );
-  const shellSrc = readFileSync(
-    join(__dirname, "../components/dashboard/results-outreach-shell.tsx"),
+  const workspaceSrc = readFileSync(
+    join(__dirname, "../components/dashboard/outreach-workspace.tsx"),
     "utf8"
   );
   const apiSrc = readFileSync(join(__dirname, "../services/outreach-api.ts"), "utf8");
@@ -136,10 +136,10 @@ async function main() {
     else fail(`Report UI includes ${needle}`);
   }
 
-  if (shellSrc.includes("sendsRefreshKey") && shellSrc.includes("OutreachSendsReport")) {
-    pass("Results shell refreshes report after send");
+  if (workspaceSrc.includes("sendsRefreshKey") && workspaceSrc.includes("OutreachSendsReport")) {
+    pass("Outreach workspace refreshes report after send");
   } else {
-    fail("Results shell refresh wiring");
+    fail("Outreach workspace refresh wiring");
   }
 
   if (apiSrc.includes("fetchSendsReport") && apiSrc.includes("OutreachSendsReport")) {

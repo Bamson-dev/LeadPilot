@@ -5,11 +5,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BusinessLead } from "@leadthur/shared";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Chip } from "@/components/ui/chip";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { LiveCounter } from "@/components/dashboard/live-counter";
 import { AffiliateSection } from "@/components/dashboard/affiliate-section";
 import { DashboardHistorySections } from "@/components/dashboard/dashboard-history-sections";
 import { ResultsActionsBar } from "@/components/dashboard/results-actions-bar";
 import { OutreachWorkspace, requestMailboxesTab } from "@/components/dashboard/outreach-workspace";
+import { DiscoveryWorkspaceHeader } from "@/components/discovery/discovery-workspace-header";
+import { DiscoveryBulkBar } from "@/components/discovery/discovery-bulk-bar";
+import { DiscoveryResultsLayout } from "@/components/discovery/discovery-results-layout";
+import { toast } from "@/components/ui/toast";
 import { useOutreach } from "@/hooks/useOutreach";
 import { WelcomeState } from "@/components/dashboard/welcome-state";
 import { SearchQueueCard } from "@/components/dashboard/search-queue-card";
@@ -64,6 +70,8 @@ export function SearchDashboard() {
   const [showCreditDeduction, setShowCreditDeduction] = useState(false);
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(() => new Set());
   const [sendPanelOpen, setSendPanelOpen] = useState(false);
+  const [tableFilter, setTableFilter] = useState("");
+  const [activeLeadId, setActiveLeadId] = useState<string | null>(null);
   const outreach = useOutreach();
   const searchAgainVariationRef = useRef(0);
 
@@ -264,6 +272,25 @@ export function SearchDashboard() {
     [ratingFilteredTableLeads, statusFilter, leadStatuses]
   );
 
+  const visibleTableLeads = useMemo(() => {
+    const q = tableFilter.trim().toLowerCase();
+    if (!q) return statusFilteredTableLeads;
+    return statusFilteredTableLeads.filter((lead) => {
+      const haystack = [
+        lead.business_name,
+        lead.category,
+        lead.address,
+        lead.phone,
+        lead.email,
+        ...(lead.verified_emails || []),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [statusFilteredTableLeads, tableFilter]);
+
   const selectedLeads = useMemo(
     () =>
       statusFilteredTableLeads.filter((lead) =>
@@ -271,6 +298,35 @@ export function SearchDashboard() {
       ),
     [statusFilteredTableLeads, selectedLeadIds]
   );
+
+  const activeLead = useMemo(
+    () => visibleTableLeads.find((lead) => lead.id === activeLeadId) ?? null,
+    [visibleTableLeads, activeLeadId]
+  );
+
+  function handleLeadClick(lead: Lead) {
+    setActiveLeadId((prev) => (prev === lead.id ? null : lead.id));
+  }
+
+  function handleSaveLead(lead: Lead) {
+    setLeadStatus(lead.id, "interested");
+    toast.success("Lead saved");
+  }
+
+  function handleAddToOutreach(lead: Lead) {
+    const id = getLeadSelectionId(lead);
+    setSelectedLeadIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+    setSendPanelOpen(true);
+  }
+
+  function handleGenerateOutreach(lead: Lead) {
+    handleAddToOutreach(lead);
+    toast.message("Compose outreach for the selected business");
+  }
 
   const toggleLeadSelect = useCallback((leadId: string) => {
     setSelectedLeadIds((prev) => {
@@ -408,108 +464,70 @@ export function SearchDashboard() {
           </span>
         </div>
       )}
-      <div className="glass rounded-2xl p-4 sm:p-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-[#F4F4FF]">
-          Discover Prospects
-        </h1>
-        <p className="mt-1 text-sm text-[#6B6B80]">
-          Type a niche. Pick a city. Get contacts in seconds. Use the search box in the
-          outreach workspace below to run or refine a search.
-        </p>
-
-        {totalDiscovered > 0 && (
-          <div
-            className="flex items-center gap-1.5 mt-2"
-            style={{ marginTop: 6 }}
-          >
-            <span
-              className="inline-block rounded-full status-pulse-dot"
-              style={{
-                width: 6,
-                height: 6,
-                background: "#10B981",
-              }}
-            />
-            <span style={{ color: "#6B6B80", fontSize: 12 }}>
-              <strong style={{ color: "#F4F4FF" }}>
-                {totalDiscovered.toLocaleString()}
-              </strong>{" "}
-              businesses discovered and counting
-            </span>
-          </div>
-        )}
+      <div className="space-y-4 rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface)] p-4 sm:p-6">
+        <DiscoveryWorkspaceHeader
+          title={
+            query && loc
+              ? `${query} in ${loc}`
+              : "Discovery Workspace"
+          }
+          subtitle={
+            displayCount > 0
+              ? `${displayCount.toLocaleString()} businesses found${
+                  fullyComplete ? "" : " · searching…"
+                }`
+              : totalDiscovered > 0
+                ? `${totalDiscovered.toLocaleString()} businesses discovered and counting`
+                : "Search by business type and location. Results appear below."
+          }
+          filterQuery={tableFilter}
+          onFilterQueryChange={setTableFilter}
+          onExportClick={exportCount > 0 ? handleDownload : undefined}
+          exportDisabled={exportCount === 0}
+        />
 
         {activity.length > 0 && status === "idle" && !isSearching && (
-          <div
-            className="flex flex-wrap gap-2 mt-3 mb-1"
-            style={{ marginTop: 12, marginBottom: 4 }}
-          >
-            <span
-              className="text-[11px] self-center whitespace-nowrap"
-              style={{ color: "#6B6B80" }}
-            >
-              Recent:
-            </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] text-[var(--lt-text-subtle)]">Recent</span>
             {activity.slice(0, isMobile ? 3 : 5).map((a, i) => (
-              <div
-                key={`${a.query}-${a.location}-${i}`}
-                style={{
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.06)",
-                  borderRadius: 100,
-                  padding: "4px 10px",
-                  fontSize: 11,
-                  color: "#A1A1AA",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                <span style={{ color: "#F4F4FF" }}>{a.total_found}</span> {a.query}{" "}
-                in {a.location}
-              </div>
+              <Chip key={`${a.query}-${a.location}-${i}`}>
+                <span className="text-[var(--lt-cyan)]">{a.total_found}</span>
+                <span className="text-[var(--lt-text-muted)]">
+                  {a.query} in {a.location}
+                </span>
+              </Chip>
             ))}
           </div>
         )}
 
+        <DiscoveryBulkBar
+          selectedCount={selectedLeadIds.size}
+          onClear={() => setSelectedLeadIds(new Set())}
+          onExport={exportCount > 0 ? handleDownload : undefined}
+          onOutreach={openSendPanel}
+        />
+
         {showSuccess && fullyComplete && !stoppedEarly && (
-          <div
-            className="success-banner-fade mt-4"
-            style={{
-              background: "rgba(16,185,129,0.1)",
-              border: "1px solid rgba(16,185,129,0.2)",
-              borderRadius: 10,
-              padding: "12px 16px",
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-            }}
-          >
-            <span style={{ fontSize: 20 }}>✓</span>
-            <div>
-              <div style={{ color: "#10B981", fontWeight: 700, fontSize: 14 }}>
-                Search complete
-              </div>
-              <div style={{ color: "#6B6B80", fontSize: 12 }}>
-                We found {displayCount.toLocaleString()} potential clients for you. Your leads are
-                ready to export.
-              </div>
-            </div>
-          </div>
+          <Alert variant="success">
+            <AlertTitle>Search complete</AlertTitle>
+            <AlertDescription>
+              We found {displayCount.toLocaleString()} potential clients for you. Your leads are
+              ready to export.
+            </AlertDescription>
+          </Alert>
         )}
 
         {fullyComplete && stoppedEarly && !error && (
-          <div
-            role="status"
-            className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3"
-          >
-            <p className="text-sm text-amber-200">
+          <Alert variant="warning">
+            <AlertDescription>
               {phaseMessage ||
                 `Search stopped early with ${displayCount.toLocaleString()} leads. Email lookup didn't finish — try searching again for a complete run.`}
-            </p>
-          </div>
+            </AlertDescription>
+          </Alert>
         )}
 
         {fullyComplete && !error && !savedBanner && !showSuccess && !stoppedEarly && (
-          <p className="mt-4 text-sm text-[#A1A1B5]">
+          <p className="text-sm text-[var(--lt-text-muted)]">
             {displayCount === 0
               ? "No potential clients found in this area. Try a nearby city."
               : `We found ${displayCount.toLocaleString()} potential clients for you.`}
@@ -517,35 +535,32 @@ export function SearchDashboard() {
         )}
 
         {!fullyComplete && isSearching && !error && (
-          <div className="mt-4 rounded-lg border border-violet-500/25 bg-violet-500/10 px-4 py-3">
-            <p className="text-sm text-[#E4E4F0]">
+          <Alert>
+            <AlertTitle>
               {displayCount > 0
                 ? `Finding potential clients… ${displayCount.toLocaleString()} found so far.`
                 : "Finding potential clients…"}
-            </p>
-            <p className="mt-1.5 text-sm text-[#A1A1B5]">
+            </AlertTitle>
+            <AlertDescription>
               You can leave this page anytime. We&apos;ll email you when your results are ready,
               and you can return to your dashboard to check progress.
-            </p>
-          </div>
+            </AlertDescription>
+          </Alert>
         )}
 
         {error && (
-          <div
-            role="alert"
-            className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3"
-          >
-            <p className="text-sm text-red-300">{error}</p>
+          <Alert variant="danger">
+            <AlertTitle>{error}</AlertTitle>
             {showLimitMessage && (
-              <p className="mt-2 text-sm text-[#A1A1B5]">
+              <AlertDescription>
                 You have reached your search limit. Top up from the options below to continue
                 searching.
-              </p>
+              </AlertDescription>
             )}
             <Button variant="outline" size="sm" className="mt-3" onClick={handleClearResults}>
               Try Again
             </Button>
-          </div>
+          </Alert>
         )}
       </div>
 
@@ -571,16 +586,16 @@ export function SearchDashboard() {
             <div className="space-y-4">
               {isQueuedWaiting && <SearchQueueCard queuePosition={queuePosition} />}
               {savedBanner && (
-                <div className="rounded-lg border border-violet-500/30 bg-violet-500/10 px-4 py-3 text-sm text-[#A1A1B5]">
+                <div className="rounded-lg border border-[var(--lt-accent)]/30 bg-[var(--lt-accent)]/10 px-4 py-3 text-sm text-[var(--lt-text-muted)]">
                   {savedBanner}
                 </div>
               )}
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <LiveCounter count={displayCount} isSearching={isSearching} />
                 {(isSearching || phaseMessage) && !isQueuedWaiting && (
-                  <span className="flex items-center gap-2 text-sm text-[#A1A1B5] sm:max-w-[65%]">
+                  <span className="flex items-center gap-2 text-sm text-[var(--lt-text-muted)] sm:max-w-[65%]">
                     {isSearching && !isQueuedWaiting && (
-                      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#A855F7]" />
+                      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--lt-accent)]" />
                     )}
                     {phaseMessage}
                   </span>
@@ -623,38 +638,52 @@ export function SearchDashboard() {
         }
         resultsContent={
           (isSearching || tableLeads.length > 0 || savedBanner) ? (
-            <ResultsTable
-              leads={statusFilteredTableLeads}
-              isLoading={isSearching && tableLeads.length === 0}
-              isMobile={isMobile}
-              hideEmptyPlaceholder={showWelcome}
-              ratingFilter={ratingFilter}
-              onRatingFilterChange={setRatingFilter}
-              totalLeadCount={tableLeads.length}
-              ratingMatchCount={ratingFilteredTableLeads.length}
-              summaryLeads={ratingFilteredTableLeads}
-              leadStatuses={leadStatuses}
-              statusFilter={statusFilter}
-              onStatusFilterChange={setStatusFilter}
-              onLeadStatusChange={setLeadStatus}
-              onUseTemplate={setTemplateLead}
-              emailScrapingInProgress={!emailScrapingComplete && tableLeads.length > 0}
-              selectedLeadIds={selectedLeadIds}
-              onToggleLeadSelect={toggleLeadSelect}
-              onSendSelected={openSendPanel}
-              hasMailbox={outreach.hasMailbox}
-              onNoMailboxClick={scrollToMailboxes}
-              onMarkReplied={(lead) => {
-                const recipient = (lead.verified_emails?.[0] || lead.email || "").trim();
-                if (!recipient) return;
-                void markRecipientReplied(recipient).then(() => {
-                  setLeadStatus(lead.id, "interested");
-                });
-              }}
-            />
+            <DiscoveryResultsLayout
+              activeLead={activeLead}
+              leadStatus={activeLead ? leadStatuses[activeLead.id] || "new" : undefined}
+              onCloseDetails={() => setActiveLeadId(null)}
+              onSaveLead={handleSaveLead}
+              onAddToOutreach={handleAddToOutreach}
+              onGenerateOutreach={handleGenerateOutreach}
+            >
+              <ResultsTable
+                leads={visibleTableLeads}
+                isLoading={isSearching && tableLeads.length === 0}
+                isMobile={isMobile}
+                hideEmptyPlaceholder={showWelcome}
+                ratingFilter={ratingFilter}
+                onRatingFilterChange={setRatingFilter}
+                totalLeadCount={tableLeads.length}
+                ratingMatchCount={ratingFilteredTableLeads.length}
+                summaryLeads={ratingFilteredTableLeads}
+                leadStatuses={leadStatuses}
+                statusFilter={statusFilter}
+                onStatusFilterChange={setStatusFilter}
+                onLeadStatusChange={setLeadStatus}
+                onUseTemplate={setTemplateLead}
+                emailScrapingInProgress={!emailScrapingComplete && tableLeads.length > 0}
+                selectedLeadIds={selectedLeadIds}
+                onToggleLeadSelect={toggleLeadSelect}
+                onSendSelected={openSendPanel}
+                hasMailbox={outreach.hasMailbox}
+                onNoMailboxClick={scrollToMailboxes}
+                activeLeadId={activeLeadId}
+                onLeadClick={handleLeadClick}
+                onMarkReplied={(lead) => {
+                  const recipient = (lead.verified_emails?.[0] || lead.email || "").trim();
+                  if (!recipient) return;
+                  void markRecipientReplied(recipient).then(() => {
+                    setLeadStatus(lead.id, "interested");
+                  });
+                }}
+              />
+            </DiscoveryResultsLayout>
           ) : (
-            <div className="rounded-xl border border-white/[0.08] bg-[#0F0F14]/40 px-4 py-8 text-center text-sm text-[#6B6B80]">
-              Run a search above to discover leads, then select rows and send outreach from here.
+            <div className="rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface)] px-4 py-10 text-center">
+              <p className="text-sm font-medium text-[var(--lt-text)]">No results yet</p>
+              <p className="mt-1 text-sm text-[var(--lt-text-muted)]">
+                Run a search above to discover businesses, then select rows for outreach.
+              </p>
             </div>
           )
         }
@@ -667,116 +696,42 @@ export function SearchDashboard() {
       />
 
       {loadingSuggestions && fullyComplete && (
-        <div
-          style={{
-            background: "#0F0F14",
-            border: "1px solid rgba(255,255,255,0.07)",
-            borderRadius: 14,
-            padding: 16,
-            marginTop: 16,
-            color: "#6B6B80",
-            fontSize: 13,
-          }}
-        >
+        <div className="rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface)] p-4 text-sm text-[var(--lt-text-muted)]">
           Generating smart suggestions for your search...
         </div>
       )}
 
       {suggestions.length > 0 && fullyComplete && (
-        <div
-          style={{
-            background: "#0F0F14",
-            border: "1px solid rgba(124,58,237,0.2)",
-            borderRadius: 14,
-            padding: isMobile ? 16 : 24,
-            marginTop: 16,
-          }}
-        >
-          <div style={{ marginBottom: 14 }}>
-            <p
-              style={{
-                color: "#F4F4FF",
-                fontWeight: 700,
-                fontSize: 15,
-                margin: "0 0 6px",
-                fontFamily: "Bricolage Grotesque, sans-serif",
-              }}
-            >
-              Want more results?
-            </p>
-            <p
-              style={{
-                color: "#6B6B80",
-                fontSize: 13,
-                margin: "0 0 4px",
-                lineHeight: 1.6,
-              }}
-            >
-              {suggestionsMessage ||
-                `Click an area below to find more potential clients and add them to your list.`}
-            </p>
-            <p
-              style={{
-                color: "#A855F7",
-                fontSize: 12,
-                margin: 0,
-                fontWeight: 500,
-              }}
-            >
-              Each area search adds new potential clients without clearing your current results.
-            </p>
-          </div>
-
+        <div className="rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface)] p-4 sm:p-6">
+          <p className="text-base font-semibold text-[var(--lt-text)]">Want more results?</p>
+          <p className="mt-1 text-sm text-[var(--lt-text-muted)]">
+            {suggestionsMessage ||
+              "Click an area below to find more potential clients and add them to your list."}
+          </p>
+          <p className="mt-1 text-xs font-medium text-[var(--lt-cyan)]">
+            Each area search adds new potential clients without clearing your current results.
+          </p>
           <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: isMobile
-                ? "1fr 1fr"
-                : "repeat(auto-fill, minmax(200px, 1fr))",
-              gap: 8,
-              marginBottom: 12,
-            }}
+            className={`mt-4 grid gap-2 ${
+              isMobile ? "grid-cols-2" : "grid-cols-[repeat(auto-fill,minmax(200px,1fr))]"
+            }`}
           >
             {suggestions.map((s, i) => (
-              <button
+              <Button
                 key={`${s.location}-${i}`}
                 type="button"
+                variant="outline"
+                size="sm"
                 onClick={() => handleSuggestionClick(s)}
                 disabled={isSearching}
-                style={{
-                  background: "transparent",
-                  border: "1px solid rgba(124,58,237,0.3)",
-                  color: "#A855F7",
-                  padding: "8px 16px",
-                  borderRadius: 8,
-                  fontSize: 13,
-                  cursor: isSearching ? "not-allowed" : "pointer",
-                  fontWeight: 500,
-                  transition: "all 0.15s",
-                  fontFamily: "Figtree, sans-serif",
-                  opacity: isSearching ? 0.5 : 1,
-                  textAlign: "center",
-                }}
-                onMouseOver={(e) => {
-                  if (isSearching) return;
-                  e.currentTarget.style.background = "rgba(124,58,237,0.12)";
-                  e.currentTarget.style.borderColor = "#7C3AED";
-                  e.currentTarget.style.color = "#F4F4FF";
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.background = "transparent";
-                  e.currentTarget.style.borderColor = "rgba(124,58,237,0.3)";
-                  e.currentTarget.style.color = "#A855F7";
-                }}
+                className="justify-center"
               >
                 {s.label}
-              </button>
+              </Button>
             ))}
           </div>
-
-          <p style={{ color: "#6B6B80", fontSize: 11, margin: 0 }}>
-            Powered by LeadThur — suggestions are generated for your specific search and
-            location
+          <p className="mt-3 text-[11px] text-[var(--lt-text-subtle)]">
+            Suggestions are generated for your specific search and location.
           </p>
         </div>
       )}

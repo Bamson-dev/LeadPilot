@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { AnnouncementBar } from "@/components/marketing/homepage/AnnouncementBar";
 import { DemoVideoSection } from "@/components/marketing/homepage/DemoVideoSection";
 import { DifferenceSection } from "@/components/marketing/homepage/DifferenceSection";
@@ -8,6 +9,7 @@ import { FAQSection } from "@/components/marketing/homepage/FAQSection";
 import { FeatureGridSection } from "@/components/marketing/homepage/FeatureGridSection";
 import { FinalCTASection } from "@/components/marketing/homepage/FinalCTASection";
 import { Footer } from "@/components/marketing/homepage/Footer";
+import { EnterpriseSolutionsSection } from "@/components/public/enterprise-solutions-section";
 import { FreeTrialInviteSection } from "@/components/marketing/homepage/FreeTrialInviteSection";
 import { GuaranteeSection } from "@/components/marketing/homepage/GuaranteeSection";
 import { Hero } from "@/components/marketing/homepage/Hero";
@@ -20,17 +22,15 @@ import { StatsBar } from "@/components/marketing/homepage/StatsBar";
 import { TrustpilotSection } from "@/components/marketing/homepage/TrustpilotSection";
 import { UserTestimonialsSection } from "@/components/marketing/homepage/UserTestimonialsSection";
 import { WhoIsForSection } from "@/components/marketing/homepage/WhoIsForSection";
-import { C } from "@/components/marketing/homepage/theme";
+import { track } from "@/lib/analytics";
 
 export default function MarketingHomePage() {
+  useEffect(() => {
+    track("landing_viewed", { idempotencyKey: `landing_viewed:${Math.floor(Date.now() / 60_000)}` });
+  }, []);
+
   return (
-    <div
-      style={{
-        backgroundColor: C.bg,
-        color: C.text,
-        minHeight: "100vh",
-      }}
-    >
+    <div className="min-h-screen bg-[var(--lt-bg)] text-[var(--lt-text)]">
       <AnnouncementBar />
       <Nav />
       <Hero />
@@ -49,6 +49,7 @@ export default function MarketingHomePage() {
       <WhoIsForSection />
       <FAQSection />
       <FinalCTASection />
+      <EnterpriseSolutionsSection />
       <Footer />
     </div>
   );

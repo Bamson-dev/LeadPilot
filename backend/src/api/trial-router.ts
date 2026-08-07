@@ -9,6 +9,8 @@ import {
 import { isValidEmail } from "../scraper/parsers/email-validation";
 import { sendTrialEmail } from "../services/email";
 import { CURRENT_TRIAL_SEQUENCE_VERSION } from "../services/trial-email-content";
+import { trackEvent } from "../observability/track";
+import { EVENT_NAMES } from "../observability/event-taxonomy";
 import { logger } from "../utils/logger";
 
 export const trialRouter = Router();
@@ -35,6 +37,13 @@ trialRouter.post("/signup", async (req: Request, res: Response) => {
 
     const existing = await getTrialSignupByEmail(email);
     if (existing) {
+      trackEvent({
+        eventName: EVENT_NAMES.TRIAL_EMAIL_SUBMITTED,
+        source: "server",
+        userEmail: email,
+        properties: { existing: true },
+        idempotencyKey: `trial_email_submitted:${email}:existing`,
+      });
       res.json({ success: true, existing: true });
       return;
     }
@@ -47,6 +56,20 @@ trialRouter.post("/signup", async (req: Request, res: Response) => {
     } catch (error) {
       logger.error("Trial welcome email failed", { email, error });
     }
+
+    trackEvent({
+      eventName: EVENT_NAMES.TRIAL_EMAIL_SUBMITTED,
+      source: "server",
+      userEmail: email,
+      properties: { existing: false },
+      idempotencyKey: `trial_email_submitted:${email}`,
+    });
+    trackEvent({
+      eventName: EVENT_NAMES.TRIAL_STARTED,
+      source: "server",
+      userEmail: email,
+      idempotencyKey: `trial_started:${email}`,
+    });
 
     res.json({ success: true, existing: false });
   } catch (err) {

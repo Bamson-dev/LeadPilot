@@ -4,11 +4,21 @@ import { useEffect, useMemo, useState } from "react";
 import { useFlutterwave, closePaymentModal } from "flutterwave-react-v3";
 import { detectCountry } from "@/lib/geolocation";
 import { SALE_PRICE_USD } from "@/constants/pricing";
+import { TRIAL_EMAIL_KEY } from "@/constants/trial";
 import { getApiUrl } from "@/utils/env";
+import {
+  CheckoutTierOnePanel,
+  CheckoutTierTwoPanel,
+} from "@/components/public/checkout-value-list";
+import { PublicFunnelShell } from "@/components/public/public-funnel-shell";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Panel, PanelContent } from "@/components/ui/panel";
+import { cn } from "@/utils/utils";
+import { track, markCheckoutStarted, markCheckoutPaid } from "@/lib/analytics";
 
 const FLW_PUBLIC_KEY = process.env.NEXT_PUBLIC_FLUTTERWAVE_PUBLIC_KEY ?? "";
-const FONT =
-  '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
 
 const TIER_ONE = [
   { item: "1,000+ potential clients per search forever", price: "$60" },
@@ -44,6 +54,21 @@ export default function CheckoutPage() {
       setCountry(code);
       setDetecting(false);
     });
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const savedEmail = localStorage.getItem(TRIAL_EMAIL_KEY)?.trim();
+    if (savedEmail && savedEmail.includes("@")) {
+      setEmail(savedEmail);
+    }
+  }, []);
+
+  useEffect(() => {
+    track("checkout_started", {
+      idempotencyKey: `checkout_started:page`,
+    });
+    markCheckoutStarted();
   }, []);
 
   function getRefCode(): string | null {
@@ -108,6 +133,7 @@ export default function CheckoutPage() {
 
       if (!res.ok) throw new Error("Failed to initialize payment");
       const data = (await res.json()) as { authorizationUrl?: string; authorization_url?: string };
+      markCheckoutPaid();
       window.location.href = data.authorizationUrl || data.authorization_url || "";
     } catch {
       setError("Something went wrong. Please try again.");
@@ -130,6 +156,12 @@ export default function CheckoutPage() {
     setLoading(true);
 
     const txRef = flwTxRef;
+    markCheckoutPaid();
+    track("payment_initiated", {
+      userEmail: email,
+      properties: { provider: "flutterwave" },
+      idempotencyKey: `payment_initiated:flutterwave:${txRef}`,
+    });
 
     handleFlutterwave({
       callback: (response) => {
@@ -162,265 +194,85 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div
-      style={{
-        background: "#050508",
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 20,
-        fontFamily: FONT,
-      }}
+    <PublicFunnelShell
+      showFooter={false}
+      mainClassName="flex min-h-[calc(100vh-4rem)] max-w-lg items-center justify-center py-10 md:py-12"
     >
-      <div
-        style={{
-          background: "#111118",
-          border: `1px solid ${isNigeriaGateway ? "rgba(16,185,129,0.25)" : "rgba(124,58,237,0.25)"}`,
-          borderRadius: 20,
-          padding: 0,
-          maxWidth: 480,
-          width: "100%",
-          boxShadow: `0 0 80px ${isNigeriaGateway ? "rgba(16,185,129,0.08)" : "rgba(124,58,237,0.08)"}`,
-          overflow: "hidden",
-        }}
+      <Panel
+        className={cn(
+          "w-full overflow-hidden shadow-xl",
+          isNigeriaGateway
+            ? "border-[var(--lt-success)]/25 shadow-[var(--lt-success)]/10"
+            : "border-[var(--lt-accent)]/25 shadow-[var(--lt-accent)]/10"
+        )}
       >
-        <div
-          style={{
-            padding: "16px 24px",
-            borderBottom: "1px solid rgba(255,255,255,0.06)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            background: "rgba(255,255,255,0.02)",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div
-              style={{
-                width: 32,
-                height: 32,
-                background: "#7C3AED",
-                borderRadius: 8,
-                display: "grid",
-                placeItems: "center",
-                fontSize: 11,
-                fontWeight: 900,
-                color: "white",
-              }}
-            >
-              LT
-            </div>
-            <span style={{ fontSize: 16, fontWeight: 800, color: "#F2F1FF" }}>
-              Lead<span style={{ color: "#A78BFA" }}>Thur</span>
-            </span>
-          </div>
-        </div>
-
-        <div style={{ padding: "28px 24px" }}>
-          <h1
-            style={{
-              fontSize: 22,
-              fontWeight: 900,
-              color: "#F2F1FF",
-              letterSpacing: -0.5,
-              marginBottom: 6,
-            }}
-          >
-            Pay once. Find clients forever.
-          </h1>
-
-          <div
-            style={{
-              background: "rgba(124,58,237,0.05)",
-              border: "1px solid rgba(124,58,237,0.12)",
-              borderRadius: 12,
-              padding: "14px 16px",
-              marginBottom: 16,
-            }}
-          >
-            <p style={{ margin: "0 0 12px", fontSize: 13, fontWeight: 800, color: "#F2F1FF" }}>
-              What you are getting
-            </p>
-            {TIER_ONE.map((row, i, arr) => (
-              <div
-                key={row.item}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  padding: "7px 0",
-                  fontSize: 13,
-                  color: "#C0C0D8",
-                  borderBottom:
-                    i < arr.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
-                  flexWrap: "wrap",
-                }}
-              >
-                <span>{row.item}</span>
-                <span style={{ textDecoration: "line-through", color: "#7878A0" }}>{row.price}</span>
-              </div>
-            ))}
+        <PanelContent className="space-y-5 p-6 md:p-7">
+          <div>
+            <h1 className="m-0 text-xl font-black tracking-tight text-[var(--lt-text)] md:text-2xl">
+              Pay once. Find clients forever.
+            </h1>
           </div>
 
-          <div
-            style={{
-              background: "rgba(16,185,129,0.05)",
-              border: "1px solid rgba(16,185,129,0.15)",
-              borderRadius: 12,
-              padding: "14px 16px",
-              marginBottom: 20,
-            }}
-          >
-            <p style={{ margin: "0 0 12px", fontSize: 13, fontWeight: 800, color: "#10B981" }}>
-              Included when you claim a slot today
-            </p>
-            {TIER_TWO.map((item, i, arr) => (
-              <div
-                key={item}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  padding: "7px 0",
-                  fontSize: 13,
-                  color: "#C0C0D8",
-                  borderBottom:
-                    i < arr.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
-                }}
-              >
-                <span>{item}</span>
-                <span style={{ color: "#10B981", fontWeight: 800, flexShrink: 0 }}>FREE</span>
-              </div>
-            ))}
-          </div>
+          <CheckoutTierOnePanel items={TIER_ONE} />
+          <CheckoutTierTwoPanel items={TIER_TWO} />
 
-          <div style={{ textAlign: "center", marginBottom: 20 }}>
-            <p
-              style={{
-                margin: "0 0 6px",
-                fontSize: 14,
-                color: "#7878A0",
-                textDecoration: "line-through",
-              }}
-            >
-              $300
-            </p>
-            <p
-              style={{
-                margin: "0 0 10px",
-                fontSize: 14,
-                color: "#7878A0",
-                textDecoration: "line-through",
-              }}
-            >
+          <div className="text-center">
+            <p className="m-0 mb-1 text-sm text-[var(--lt-text-subtle)] line-through">$300</p>
+            <p className="m-0 mb-2 text-sm text-[var(--lt-text-subtle)] line-through">
               $100 per year
             </p>
-            <span
-              style={{
-                fontSize: 36,
-                fontWeight: 900,
-                color: "#F2F1FF",
-                letterSpacing: -1,
-              }}
-            >
+            <p className="m-0 text-4xl font-black text-[var(--lt-text)]">
               {detecting ? "…" : `$${SALE_PRICE_USD}`}
-            </span>
-            <p style={{ margin: "8px 0 0", fontSize: 13, color: "#7878A0", fontWeight: 600 }}>
+            </p>
+            <p className="mt-2 text-sm font-semibold text-[var(--lt-text-muted)]">
               Once. Never again.
             </p>
           </div>
 
-          <label
-            style={{
-              display: "block",
-              fontSize: 11,
-              fontWeight: 700,
-              color: "#8888A8",
-              textTransform: "uppercase",
-              letterSpacing: "0.08em",
-              marginBottom: 8,
-            }}
-          >
-            Your email address
-          </label>
+          <div>
+            <label className="mb-2 block text-[11px] font-bold uppercase tracking-wider text-[var(--lt-text-subtle)]">
+              Your email address
+            </label>
+            <Input
+              type="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handlePay()}
+              className="min-h-12"
+            />
+          </div>
 
-          <input
-            type="email"
-            placeholder="you@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handlePay()}
-            style={{
-              width: "100%",
-              minHeight: 48,
-              padding: "13px 16px",
-              background: "#0A0A10",
-              border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: 10,
-              fontSize: 14,
-              color: "#F2F1FF",
-              fontFamily: FONT,
-              outline: "none",
-              marginBottom: error ? 8 : 16,
-              boxSizing: "border-box",
-            }}
-          />
+          {error ? (
+            <Alert variant="danger">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          ) : null}
 
-          {error && (
-            <p style={{ fontSize: 12, color: "#EF4444", marginBottom: 12 }}>{error}</p>
-          )}
-
-          <button
+          <Button
             type="button"
+            size="lg"
+            className={cn(
+              "h-12 w-full text-base font-extrabold",
+              isNigeriaGateway && "bg-[var(--lt-success)] hover:bg-[var(--lt-success)]/90"
+            )}
             onClick={handlePay}
             disabled={loading || detecting}
-            style={{
-              width: "100%",
-              minHeight: 48,
-              background: detecting
-                ? "#1A1A24"
-                : isNigeriaGateway
-                  ? "#10B981"
-                  : "#7C3AED",
-              color: "white",
-              border: "none",
-              borderRadius: 12,
-              padding: "16px",
-              fontSize: 15,
-              fontWeight: 800,
-              cursor: loading || detecting ? "not-allowed" : "pointer",
-              fontFamily: FONT,
-              boxShadow: detecting
-                ? "none"
-                : isNigeriaGateway
-                  ? "0 0 40px rgba(16,185,129,0.3)"
-                  : "0 0 40px rgba(124,58,237,0.35)",
-              marginBottom: 14,
-              opacity: loading ? 0.7 : 1,
-            }}
           >
             {detecting
               ? "Loading..."
               : loading
                 ? "Opening payment..."
                 : `Claim My Lifetime Access - $${SALE_PRICE_USD}`}
-          </button>
+          </Button>
 
-          <p
-            style={{
-              fontSize: 11,
-              color: "#444460",
-              textAlign: "center",
-              lineHeight: 1.6,
-            }}
-          >
+          <p className="m-0 text-center text-[11px] leading-relaxed text-[var(--lt-text-subtle)]">
             {isNigeriaGateway
               ? "Secured by Paystack · Instant access after payment"
               : "Secured by Flutterwave · Instant access after payment"}
           </p>
-        </div>
-      </div>
-    </div>
+        </PanelContent>
+      </Panel>
+    </PublicFunnelShell>
   );
 }

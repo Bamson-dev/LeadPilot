@@ -1,3 +1,6 @@
+import { trackEvent } from "../observability/track";
+import { EVENT_NAMES } from "../observability/event-taxonomy";
+
 export type OutreachSmtpFailureKind = "hard_bounce" | "soft_failure";
 
 export class OutreachSmtpSendError extends Error {
@@ -39,27 +42,46 @@ function readSmtpResponse(err: unknown): string | null {
   return null;
 }
 
+function trackSmtpFailure(classified: OutreachSmtpSendError): void {
+  trackEvent({
+    eventName: EVENT_NAMES.SMTP_FAILURE,
+    source: "worker",
+    properties: {
+      kind: classified.kind,
+      smtpCode: classified.smtpCode,
+      // Truncated response only — never credentials
+      smtpResponse: classified.smtpResponse
+        ? classified.smtpResponse.slice(0, 200)
+        : null,
+    },
+  });
+}
+
 /** Classify SMTP failures by response code: 5xx = hard bounce, 4xx = soft, timeouts = soft. */
 export function classifySmtpSendError(err: unknown): OutreachSmtpSendError {
   const smtpCode = readSmtpCode(err);
   const smtpResponse = readSmtpResponse(err);
 
   if (smtpCode != null && smtpCode >= 500 && smtpCode <= 599) {
-    return new OutreachSmtpSendError({
+    const classified = new OutreachSmtpSendError({
       kind: "hard_bounce",
       message: smtpResponse ?? `SMTP permanent failure (${smtpCode})`,
       smtpCode,
       smtpResponse,
     });
+    trackSmtpFailure(classified);
+    return classified;
   }
 
   if (smtpCode != null && smtpCode >= 400 && smtpCode <= 499) {
-    return new OutreachSmtpSendError({
+    const classified = new OutreachSmtpSendError({
       kind: "soft_failure",
       message: smtpResponse ?? `SMTP temporary failure (${smtpCode})`,
       smtpCode,
       smtpResponse,
     });
+    trackSmtpFailure(classified);
+    return classified;
   }
 
   const code =
@@ -77,10 +99,12 @@ export function classifySmtpSendError(err: unknown): OutreachSmtpSendError {
     code === "ECONNRESET" ||
     /timeout/i.test(message);
 
-  return new OutreachSmtpSendError({
+  const classified = new OutreachSmtpSendError({
     kind: "soft_failure",
     message: isTimeout ? `Connection timeout: ${message}` : message,
     smtpCode,
     smtpResponse,
   });
+  trackSmtpFailure(classified);
+  return classified;
 }

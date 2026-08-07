@@ -1833,10 +1833,10 @@ adminRouter.get("/email-performance", requireAdminAuth, async (_req: Request, re
   }
 });
 
-// Staging/local only — auto-enabled when FRONTEND_URL is staging, or set ENABLE_TEST_EMAIL=true
+// Staging/local only. Never available when NODE_ENV=production (also blocked by env schema).
 const testEmailEnabled =
-  process.env.ENABLE_TEST_EMAIL === "true" ||
-  process.env.FRONTEND_URL?.includes("staging.leadthur.com") === true;
+  process.env.NODE_ENV !== "production" &&
+  process.env.ENABLE_TEST_EMAIL === "true";
 
 adminRouter.post("/test-email-design", requireAdminAuth, async (req: Request, res: Response) => {
   try {
@@ -1891,7 +1891,7 @@ adminRouter.post("/test-email-design", requireAdminAuth, async (req: Request, re
 });
 
 if (testEmailEnabled) {
-  adminRouter.post("/test-email", async (req: Request, res: Response) => {
+  adminRouter.post("/test-email", requireAdminAuth, async (req: Request, res: Response) => {
     try {
       const to =
         typeof req.body?.to === "string" && req.body.to.trim()

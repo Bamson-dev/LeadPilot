@@ -1,10 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { getApiUrl } from "@/utils/env";
 import { fetchOutreachBalance } from "@/services/outreach-api";
+import { PublicSuccessCard } from "@/components/public/public-success-card";
+import { PublicFunnelShell } from "@/components/public/public-funnel-shell";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/utils/utils";
 
 type CheckoutKind = "legacy" | "outreach";
 
@@ -198,144 +201,37 @@ function CheckoutSuccessContent() {
   }, [reference, gateway, isOutreachReference]);
 
   return (
-    <div
-      style={{
-        background: "#050508",
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 20,
-        fontFamily: "Inter, sans-serif",
-      }}
-    >
-      <div
-        style={{
-          background: "#111118",
-          border: "1px solid rgba(16,185,129,0.3)",
-          borderRadius: 20,
-          padding: "40px 32px",
-          maxWidth: 440,
-          width: "100%",
-          textAlign: "center",
-          boxShadow: "0 0 80px rgba(16,185,129,0.1)",
-        }}
-      >
-        <div
-          style={{
-            width: 64,
-            height: 64,
-            background: "rgba(16,185,129,0.1)",
-            borderRadius: "50%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            margin: "0 auto 24px",
-            fontSize: 28,
-            color: "#10B981",
-          }}
-        >
-          ✓
-        </div>
-
-        <h1
-          style={{
-            fontSize: 26,
-            fontWeight: 900,
-            color: "#F2F1FF",
-            letterSpacing: -0.5,
-            marginBottom: 10,
-          }}
-        >
-          {checkoutKind === "outreach" ? "Outreach payment received." : "Payment successful."}
-        </h1>
-
-        <p
-          style={{
-            fontSize: 15,
-            color: status === "error" ? "#EF4444" : status === "warn" ? "#FCD34D" : "#8888A8",
-            lineHeight: 1.7,
-            marginBottom: 28,
-          }}
-        >
-          {statusText}
-        </p>
-
-        {checkoutKind === "outreach" && outreachDetail && (
-          <p style={{ fontSize: 12, color: "#A1A1B5", marginBottom: 16, lineHeight: 1.6 }}>
-            {outreachDetail}
+    <PublicSuccessCard
+      title={checkoutKind === "outreach" ? "Outreach payment received." : "Payment successful."}
+      description={statusText}
+      descriptionClassName={cn(
+        status === "error" && "text-[var(--lt-danger)]",
+        status === "warn" && "text-[var(--lt-warning)]"
+      )}
+      detail={
+        <>
+          {checkoutKind === "outreach" && outreachDetail ? <p className="m-0">{outreachDetail}</p> : null}
+          <p className="m-0">
+            {checkoutKind === "outreach"
+              ? "This purchase adds email outreach sends only. Search credits are separate and unchanged."
+              : isFlutterwave
+                ? "Flutterwave sends a payment receipt. LeadThur sends a separate email with your license key from "
+                : "Paystack sends a payment receipt. LeadThur sends a separate email with your license key from "}
+            {checkoutKind === "legacy" ? (
+              <strong className="text-[var(--lt-accent-soft)]">access@leadthur.com</strong>
+            ) : null}
+            {checkoutKind === "legacy" ? "." : ""}
           </p>
-        )}
-
-        <p style={{ fontSize: 12, color: "#7878A0", marginBottom: 20, lineHeight: 1.6 }}>
-          {checkoutKind === "outreach"
-            ? "This purchase adds email outreach sends only. Search credits are separate and unchanged."
-            : isFlutterwave
-              ? "Flutterwave sends a payment receipt. LeadThur sends a separate email with your license key from "
-              : "Paystack sends a payment receipt. LeadThur sends a separate email with your license key from "}
-          {checkoutKind === "legacy" && (
-            <strong style={{ color: "#A78BFA" }}>access@leadthur.com</strong>
-          )}
-          {checkoutKind === "legacy" ? "." : ""}
-        </p>
-
-        {reference && (
-          <p style={{ fontSize: 13, color: "#7878A0", marginBottom: 28 }}>
-            Reference: {reference}
-          </p>
-        )}
-
-        {checkoutKind === "legacy" ? (
-          <Link
-            href="/activate"
-            style={{
-              display: "block",
-              background: "#7C3AED",
-              color: "white",
-              fontWeight: 800,
-              fontSize: 15,
-              padding: "16px",
-              borderRadius: 12,
-              textDecoration: "none",
-              marginBottom: 12,
-              boxShadow: "0 0 40px rgba(124,58,237,0.3)",
-            }}
-          >
-            Activate My Account →
-          </Link>
-        ) : (
-          <Link
-            href="/dashboard/plans"
-            style={{
-              display: "block",
-              background: "#7C3AED",
-              color: "white",
-              fontWeight: 800,
-              fontSize: 15,
-              padding: "16px",
-              borderRadius: 12,
-              textDecoration: "none",
-              marginBottom: 12,
-              boxShadow: "0 0 40px rgba(124,58,237,0.3)",
-            }}
-          >
-            Back to Outreach Billing →
-          </Link>
-        )}
-
-        <Link
-          href={checkoutKind === "outreach" ? "/dashboard" : "/"}
-          style={{
-            display: "block",
-            fontSize: 13,
-            color: "#7878A0",
-            textDecoration: "none",
-          }}
-        >
-          {checkoutKind === "outreach" ? "Back to dashboard" : "Back to leadthur.com"}
-        </Link>
-      </div>
-    </div>
+        </>
+      }
+      reference={reference}
+      primaryHref={checkoutKind === "outreach" ? "/dashboard/plans" : "/activate"}
+      primaryLabel={
+        checkoutKind === "outreach" ? "Back to Outreach Billing →" : "Activate My Account →"
+      }
+      secondaryHref={checkoutKind === "outreach" ? "/dashboard" : "/"}
+      secondaryLabel={checkoutKind === "outreach" ? "Back to dashboard" : "Back to leadthur.com"}
+    />
   );
 }
 
@@ -343,19 +239,16 @@ export default function CheckoutSuccessPage() {
   return (
     <Suspense
       fallback={
-        <div
-          style={{
-            background: "#050508",
-            minHeight: "100vh",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "#8888A8",
-            fontFamily: "Inter, sans-serif",
-          }}
+        <PublicFunnelShell
+          showFooter={false}
+          mainClassName="flex min-h-[calc(100vh-4rem)] max-w-md items-center justify-center py-10"
         >
-          Loading…
-        </div>
+          <div className="flex w-full flex-col items-center gap-3">
+            <Skeleton className="h-16 w-16 rounded-full" />
+            <Skeleton className="h-5 w-48" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+        </PublicFunnelShell>
       }
     >
       <CheckoutSuccessContent />

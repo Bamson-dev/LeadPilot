@@ -1,32 +1,38 @@
+import Link from "next/link";
+import { CheckCircle2 } from "lucide-react";
+import { PublicFunnelShell } from "@/components/public/public-funnel-shell";
+import { Button } from "@/components/ui/button";
+import { Panel, PanelContent } from "@/components/ui/panel";
+
 export default function PaymentSuccessPage() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-[#09090B] px-6 text-center">
-      <div className="mb-8 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#7C3AED]/20">
-        <span className="text-2xl font-bold text-[#A855F7]">LP</span>
-      </div>
+    <PublicFunnelShell
+      showFooter={false}
+      mainClassName="flex min-h-[calc(100vh-4rem)] max-w-md items-center justify-center py-10 md:py-12"
+    >
+      <Panel className="w-full border-[var(--lt-success)]/30">
+        <PanelContent className="space-y-6 p-8 text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[var(--lt-success)]/10">
+            <CheckCircle2 className="h-8 w-8 text-[var(--lt-success)]" aria-hidden />
+          </div>
 
-      <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500/15">
-        <svg
-          className="h-10 w-10 text-emerald-400"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2.5}
-          aria-hidden
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-        </svg>
-      </div>
+          <div className="space-y-3">
+            <h1 className="text-3xl font-bold text-[var(--lt-text)] sm:text-4xl">Payment Received</h1>
+            <p className="m-0 text-base text-[var(--lt-text-muted)]">
+              Check your email for your activation link. It will arrive within 60 seconds.
+            </p>
+            <p className="m-0 text-sm text-[var(--lt-text-subtle)]">
+              If you paid by bank transfer, send your proof to WhatsApp{" "}
+              <span className="text-[var(--lt-accent-soft)]">09067285890</span> and you will receive
+              access within minutes.
+            </p>
+          </div>
 
-      <h1 className="text-3xl font-bold text-[#F4F4FF] sm:text-4xl">Payment Received</h1>
-      <p className="mt-4 max-w-md text-base text-[#A1A1B5]">
-        Check your email for your activation link. It will arrive within 60 seconds.
-      </p>
-      <p className="mt-6 max-w-md text-sm text-[#6B6B80]">
-        If you paid by bank transfer, send your proof to WhatsApp{" "}
-        <span className="text-[#C4B5FD]">09067285890</span> and you will receive access
-        within minutes.
-      </p>
-    </main>
+          <Button size="lg" className="h-12 w-full font-extrabold" asChild>
+            <Link href="/activate">Activate My Account →</Link>
+          </Button>
+        </PanelContent>
+      </Panel>
+    </PublicFunnelShell>
   );
 }

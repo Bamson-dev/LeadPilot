@@ -55,8 +55,87 @@ export function parseTopUpTierIdFromFlwRef(reference: string): string | null {
   return rest.slice(0, lastUnderscore);
 }
 
+/** Resolve tier id from Paystack/Flutterwave reference when metadata is missing. */
+export function parseTopUpTierIdFromReference(reference: string): string | null {
+  const flw = parseTopUpTierIdFromFlwRef(reference);
+  if (flw) return flw;
+  if (!reference.startsWith("topup_")) return null;
+  // topup_<tierId>_<timestamp> e.g. topup_topup_300_1712345678
+  const withoutPrefix = reference.slice("topup_".length);
+  for (const tier of TOPUP_TIERS) {
+    if (withoutPrefix.startsWith(`${tier.id}_`)) return tier.id;
+  }
+  return null;
+}
+
 export function isTopUpPaymentReference(reference: string): boolean {
   return reference.startsWith("topup_");
+}
+
+/**
+ * Credits and paid amount are derived only from the server-side tier catalog.
+ * Client/webhook `metadata.credits` is never trusted.
+ */
+export function resolveVerifiedTopUpTier(params: {
+  reference: string;
+  amount: number;
+  channel?: string;
+  metadata: Record<string, unknown>;
+}):
+  | {
+      ok: true;
+      tier: (typeof TOPUP_TIERS)[number];
+      licenseId: string;
+      email: string;
+      credits: number;
+      amountNgn: number;
+    }
+  | { ok: false; reason: string } {
+  const metadata = params.metadata;
+  const licenseId = String(metadata.licenseId ?? "").trim();
+  const email = String(metadata.email ?? "").toLowerCase().trim();
+  const tierId =
+    String(metadata.tierId ?? "").trim() ||
+    parseTopUpTierIdFromReference(params.reference) ||
+    "";
+  const tier = tierId ? getTopUpTier(tierId) : undefined;
+
+  if (!tier) {
+    return { ok: false, reason: "Unknown or missing top-up tier" };
+  }
+  if (!licenseId || !email.includes("@")) {
+    return { ok: false, reason: "Missing licenseId or email" };
+  }
+
+  const channel = (params.channel ?? "paystack").toLowerCase();
+  const amount = Number(params.amount ?? 0);
+
+  if (channel === "flutterwave") {
+    // Flutterwave charge.completed amounts are major units (USD).
+    if (amount + 0.001 < tier.amountUsd) {
+      return {
+        ok: false,
+        reason: `Flutterwave amount too low: paid ${amount} USD, expected >= ${tier.amountUsd}`,
+      };
+    }
+  } else {
+    // Paystack amounts are kobo.
+    if (amount < tier.amountKobo) {
+      return {
+        ok: false,
+        reason: `Paystack amount too low: paid ${amount} kobo, expected >= ${tier.amountKobo}`,
+      };
+    }
+  }
+
+  return {
+    ok: true,
+    tier,
+    licenseId,
+    email,
+    credits: tier.credits,
+    amountNgn: tier.amountNgn,
+  };
 }
 
 export async function fulfillTopUpPayment(params: {
@@ -70,20 +149,20 @@ export async function fulfillTopUpPayment(params: {
     return { processed: false, duplicate: false };
   }
 
-  const licenseId = String(metadata.licenseId ?? "");
-  const credits = Number(metadata.credits ?? 0);
-  const email = String(metadata.email ?? "").toLowerCase().trim();
-  const tierId = String(metadata.tierId ?? "");
-  const tier = tierId ? getTopUpTier(tierId) : undefined;
-  const amountNgn =
-    Number(metadata.amountNgn ?? 0) ||
-    tier?.amountNgn ||
-    Math.round((params.amount ?? 0) / 100);
-
-  if (!licenseId || !credits || !email) {
-    logger.error("Top up webhook missing metadata", { metadata, reference: params.reference });
+  const verified = resolveVerifiedTopUpTier(params);
+  if (!verified.ok) {
+    logger.error("Top up payment rejected — credit/amount verification failed", {
+      reason: verified.reason,
+      reference: params.reference,
+      amount: params.amount,
+      channel: params.channel,
+      metadataTierId: metadata.tierId,
+      metadataCredits: metadata.credits,
+    });
     return { processed: false, duplicate: false };
   }
+
+  const { licenseId, email, credits, amountNgn } = verified;
 
   const { data: existing } = await supabase
     .from("topup_purchases")
@@ -138,7 +217,12 @@ export async function fulfillTopUpPayment(params: {
     })
   );
 
-  logger.info("Top up credits added successfully", { email, credits, licenseId });
+  logger.info("Top up credits added successfully", {
+    email,
+    credits,
+    licenseId,
+    tierId: verified.tier.id,
+  });
   return { processed: true, duplicate: false };
 }
 

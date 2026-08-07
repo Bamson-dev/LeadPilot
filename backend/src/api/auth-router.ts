@@ -9,6 +9,8 @@ import { ensureRefCodeForEmail } from "../services/license-service";
 import { getLicenseUsage } from "../services/topup-service";
 import { sendWelcomeEmail } from "../services/email";
 import { supabase } from "../database/client";
+import { trackEvent } from "../observability/track";
+import { EVENT_NAMES } from "../observability/event-taxonomy";
 import { logger } from "../utils/logger";
 
 export const authRouter = Router();
@@ -22,6 +24,12 @@ authRouter.post("/activate", async (req: Request, res: Response) => {
     };
 
     if (!email?.trim() || !key?.trim()) {
+      trackEvent({
+        eventName: EVENT_NAMES.LICENSE_ACTIVATION_FAILED,
+        source: "server",
+        properties: { reason: "missing_fields" },
+        idempotencyKey: `license_activation_failed:missing:${Date.now()}`,
+      });
       res.status(400).json({ error: "Email and license key are required" });
       return;
     }
@@ -32,14 +40,38 @@ authRouter.post("/activate", async (req: Request, res: Response) => {
     const license = await getLicenseKeyByKey(normalizedKey);
 
     if (!license) {
+      trackEvent({
+        eventName: EVENT_NAMES.LICENSE_INVALID,
+        source: "server",
+        userEmail: normalizedEmail,
+        properties: { reason: "invalid_key" },
+        idempotencyKey: `license_invalid:${normalizedEmail}:${normalizedKey.slice(0, 8)}`,
+      });
+      trackEvent({
+        eventName: EVENT_NAMES.LICENSE_ACTIVATION_FAILED,
+        source: "server",
+        userEmail: normalizedEmail,
+        properties: { reason: "invalid_key" },
+        idempotencyKey: `license_activation_failed:invalid:${normalizedEmail}:${normalizedKey.slice(0, 8)}`,
+      });
       res.status(401).json({ error: "Invalid license key" });
       return;
     }
 
     if (license.email !== normalizedEmail) {
+      trackEvent({
+        eventName: EVENT_NAMES.LICENSE_ACTIVATION_FAILED,
+        source: "server",
+        userEmail: normalizedEmail,
+        licenseId: license.id,
+        properties: { reason: "email_mismatch" },
+        idempotencyKey: `license_activation_failed:mismatch:${license.id}:${normalizedEmail}`,
+      });
       res.status(401).json({ error: "License key does not match this email" });
       return;
     }
+
+    const wasAlreadyActivated = Boolean(license.activated);
 
     if (!license.activated) {
       await activateLicense(license.id);
@@ -55,6 +87,22 @@ authRouter.post("/activate", async (req: Request, res: Response) => {
         isActivation: true,
       });
       if (!deviceResult.allowed) {
+        trackEvent({
+          eventName: EVENT_NAMES.LICENSE_DEVICE_DENIED,
+          source: "server",
+          userEmail: normalizedEmail,
+          licenseId: license.id,
+          properties: { reason: deviceResult.reason ?? "denied" },
+          idempotencyKey: `license_device_denied:${license.id}:${Date.now()}`,
+        });
+        trackEvent({
+          eventName: EVENT_NAMES.LICENSE_ACTIVATION_FAILED,
+          source: "server",
+          userEmail: normalizedEmail,
+          licenseId: license.id,
+          properties: { reason: "device_denied" },
+          idempotencyKey: `license_activation_failed:device:${license.id}:${Date.now()}`,
+        });
         res.status(403).json({
           error: deviceResult.reason ?? "Device registration denied",
           code: deviceResult.reason?.includes("Maximum devices")
@@ -67,6 +115,25 @@ authRouter.post("/activate", async (req: Request, res: Response) => {
 
     await ensureRefCodeForEmail(normalizedEmail);
 
+    if (wasAlreadyActivated) {
+      trackEvent({
+        eventName: EVENT_NAMES.DUPLICATE_ACTIVATION,
+        source: "server",
+        userEmail: normalizedEmail,
+        licenseId: license.id,
+        idempotencyKey: `duplicate_activation:${license.id}:${Math.floor(Date.now() / 60_000)}`,
+      });
+    }
+
+    trackEvent({
+      eventName: EVENT_NAMES.LICENSE_ACTIVATED,
+      source: "server",
+      userEmail: normalizedEmail,
+      licenseId: license.id,
+      properties: { alreadyActivated: wasAlreadyActivated },
+      idempotencyKey: `license_activated:${license.id}`,
+    });
+
     res.json({
       success: true,
       email: license.email,
@@ -75,6 +142,11 @@ authRouter.post("/activate", async (req: Request, res: Response) => {
   } catch (err) {
     logger.error("License activation failed", {
       error: err instanceof Error ? err.message : "unknown",
+    });
+    trackEvent({
+      eventName: EVENT_NAMES.LICENSE_ACTIVATION_FAILED,
+      source: "server",
+      properties: { reason: "exception" },
     });
     res.status(500).json({ error: "Activation failed" });
   }

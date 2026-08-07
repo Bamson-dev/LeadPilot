@@ -47,6 +47,21 @@ export function Hero() {
           Rated 5 stars on Trustpilot
         </p>
 
+        <p
+          style={{
+            margin: "0 0 16px",
+            fontSize: "clamp(15px, 2.5vw, 18px)",
+            fontWeight: 600,
+            lineHeight: 1.5,
+            color: C.purpleLight,
+            maxWidth: 560,
+            marginLeft: "auto",
+            marginRight: "auto",
+          }}
+        >
+          Find verified business contacts in any city in about 60 seconds.
+        </p>
+
         <h1
           style={{
             fontSize: "clamp(32px, 5.5vw, 56px)",

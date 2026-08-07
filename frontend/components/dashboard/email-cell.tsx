@@ -39,40 +39,28 @@ function EmailRow({
         : "Predicted from domain";
 
   return (
-    <div
-      className="group flex items-center gap-1.5"
-      style={{ marginBottom: 4 }}
-    >
+    <div className="group mb-1 flex items-center gap-1.5">
       <div
         aria-hidden
         title={confidenceLabel}
-        style={{
-          width: 6,
-          height: 6,
-          borderRadius: "50%",
-          background: isVerified ? "#22C55E" : "#6B7280",
-          flexShrink: 0,
-        }}
+        className={[
+          "h-1.5 w-1.5 shrink-0 rounded-full",
+          isVerified ? "bg-[var(--lt-success)]" : "bg-[var(--lt-text-subtle)]",
+        ].join(" ")}
       />
       <a
         href={`mailto:${addr}`}
         title={confidenceLabel}
-        style={{
-          color: isVerified ? "#F4F4FF" : "#A1A1B5",
-          textDecoration: "none",
-          fontSize: 12,
-        }}
-        className="hover:underline min-w-0 flex-1 truncate"
+        className={[
+          "min-w-0 flex-1 truncate text-xs no-underline hover:underline",
+          isVerified ? "text-[var(--lt-text)]" : "text-[var(--lt-text-muted)]",
+        ].join(" ")}
       >
         {addr}
       </a>
       {!isVerified && (
         <span
-          className="shrink-0 rounded px-1 py-0.5 text-[10px] tracking-wide"
-          style={{
-            color: "#9CA3AF",
-            background: "rgba(255,255,255,0.06)",
-          }}
+          className="shrink-0 rounded bg-[var(--lt-surface-3)] px-1 py-0.5 text-[10px] tracking-wide text-[var(--lt-text-subtle)]"
           title={confidenceLabel}
         >
           {confidence != null && confidence > 0
@@ -99,8 +87,8 @@ function PlatformFallback({
 }) {
   return (
     <div className="leading-snug">
-      <p className="text-[11px] text-zinc-400 m-0">{primary}</p>
-      <p className="text-[10px] text-zinc-500 m-0 mt-0.5">{secondary}</p>
+      <p className="m-0 text-[11px] text-[var(--lt-text-muted)]">{primary}</p>
+      <p className="m-0 mt-0.5 text-[10px] text-[var(--lt-text-subtle)]">{secondary}</p>
     </div>
   );
 }
@@ -134,7 +122,7 @@ export function EmailCell({ lead, copiedId: copiedIdProp, onCopy: onCopyProp }: 
           href={fallback.href}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-[11px] text-[#25D366] hover:underline leading-snug inline-block"
+          className="inline-block text-[11px] leading-snug text-[var(--lt-success)] hover:underline"
           title="Open WhatsApp chat with this business"
         >
           {fallback.label}
@@ -146,7 +134,7 @@ export function EmailCell({ lead, copiedId: copiedIdProp, onCopy: onCopyProp }: 
         <PlatformFallback primary={fallback.primary} secondary={fallback.secondary} />
       );
     }
-    return <span className="text-zinc-500">—</span>;
+    return <span className="text-[var(--lt-text-subtle)]">—</span>;
   }
 
   return (

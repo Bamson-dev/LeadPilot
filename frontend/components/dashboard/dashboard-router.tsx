@@ -61,7 +61,7 @@ export function DashboardRouter({ skipAccessCheck = false }: { skipAccessCheck?:
 
   if (!ready) {
     return (
-      <div className="glass rounded-2xl p-8 text-center text-zinc-400">
+      <div className="rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface)] p-8 text-center text-[var(--lt-text-muted)]">
         Loading…
       </div>
     );

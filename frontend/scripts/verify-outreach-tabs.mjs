@@ -79,7 +79,9 @@ if (workspace.includes("OutreachSendsReport") && !dashboard.includes("<OutreachS
   fail("Sends report tab wiring");
 }
 
-if (!read("components/dashboard/results-outreach-shell.tsx").includes("<OutreachSendsReport")) {
+if (!existsSync(join(ROOT, "components/dashboard/results-outreach-shell.tsx"))) {
+  pass("Legacy results-outreach-shell removed (superseded by OutreachWorkspace)");
+} else if (!read("components/dashboard/results-outreach-shell.tsx").includes("<OutreachSendsReport")) {
   pass("Legacy results-outreach-shell no longer embeds sends report");
 } else {
   fail("Legacy shell still embeds sends report");
