@@ -78,18 +78,22 @@ export const V3_TRIAL_EMAIL_SUBJECTS: Record<number, string> = {
 export const TRIAL_POST_SEARCH_EMAIL_SUBJECT =
   "You Searched. You Haven't Sent Anything Yet.";
 
-const CHECKOUT = emailButton(
-  "Get Lifetime Access for $25",
-  "https://paystack.shop/pay/Leadthur"
-);
 const SIG = emailSignature();
+
+function checkoutCta(): string {
+  return emailButton(
+    "Get Lifetime Access for $25",
+    "https://paystack.shop/pay/Leadthur",
+    "lifetime_checkout"
+  );
+}
 
 function paras(lines: string[]): string {
   return lines.map((line) => emailParagraph(line)).join("");
 }
 
 function bodyWithLink(lines: string[], linkLabel: string, href: string): string {
-  return `${paras(lines)}${emailButton(linkLabel, href)}${CHECKOUT}${SIG}`;
+  return `${paras(lines)}${emailButton(linkLabel, href)}${checkoutCta()}${SIG}`;
 }
 
 /**
@@ -464,5 +468,5 @@ ${paras([
   "You have not sent a single email to any of them.",
   "Here is what nobody tells you about a list like this. It does not stay yours forever. Somebody else, doing the same work you do, in the same city, is going to run a search that overlaps with yours this week. If they email those businesses before you do, the businesses will remember them, not you.",
   "You already did the hard part. You searched. You got the list. The only thing left is opening the dashboard and hitting send. Please go do it before the list goes cold.",
-])}${emailButton("Go To My Dashboard", "https://leadthur.com/dashboard")}${CHECKOUT}${SIG}`.trim();
+])}${emailButton("Go To My Dashboard", "https://leadthur.com/dashboard", "post_search_dashboard")}${checkoutCta()}${SIG}`.trim();
 }

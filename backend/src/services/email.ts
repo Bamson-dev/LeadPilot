@@ -2,7 +2,17 @@ import { Resend } from "resend";
 import { COMMISSION_NGN, COMMISSION_USD, MIN_PAYOUT_NGN } from "../constants/pricing";
 import { displayCityFromLocation } from "../scraper/googleMaps/grid-search";
 import { logger } from "../utils/logger";
+import { EVENT_NAMES } from "../observability/event-taxonomy";
+import { trackEvent } from "../observability/track";
 import { sendViaZeptoMail, type EmailSendResult } from "./zeptomail";
+import {
+  NURTURE_CAMPAIGN_V3,
+  NURTURE_UTM_MEDIUM,
+  NURTURE_UTM_SOURCE,
+  nurtureContentId,
+  nurtureEventProperties,
+  withNurtureEmailContext,
+} from "./email-nurture-attribution";
 import {
   buildEmailHtml,
   emailButton,
@@ -27,18 +37,20 @@ function getResendClient(): Resend | null {
 
 const FROM = process.env.EMAIL_FROM || "access@leadthur.com";
 
+type ResendSendResult = EmailSendResult & { messageId?: string | null };
+
 async function sendViaResend(params: {
   to: string;
   subject: string;
   html: string;
-}): Promise<EmailSendResult> {
+}): Promise<ResendSendResult> {
   const resend = getResendClient();
   if (!resend) {
     return { success: false, error: "Resend is not configured" };
   }
 
   try {
-    const { error } = await resend.emails.send({
+    const { data, error } = await resend.emails.send({
       from: FROM,
       to: params.to,
       subject: params.subject,
@@ -54,7 +66,12 @@ async function sendViaResend(params: {
       return { success: false, error: error.message };
     }
 
-    return { success: true };
+    const messageId =
+      data && typeof data === "object" && "id" in data && typeof (data as { id?: unknown }).id === "string"
+        ? (data as { id: string }).id
+        : null;
+
+    return { success: true, messageId };
   } catch (err) {
     const error = err instanceof Error ? err.message : "unknown error";
     logger.error("Resend send failed", {
@@ -74,6 +91,8 @@ async function sendNurtureEmail(params: {
   to: string;
   subject: string;
   html: string;
+  sequenceVersion: number;
+  sequenceStep: number;
 }): Promise<boolean> {
   const result = await sendViaResend(params);
   if (!result.success) {
@@ -84,6 +103,26 @@ async function sendNurtureEmail(params: {
     });
     return false;
   }
+
+  trackEvent({
+    eventName: EVENT_NAMES.EMAIL_SENT,
+    source: "server",
+    userEmail: params.to,
+    utmSource: NURTURE_UTM_SOURCE,
+    utmMedium: NURTURE_UTM_MEDIUM,
+    utmCampaign: NURTURE_CAMPAIGN_V3,
+    utmContent: nurtureContentId(params.sequenceVersion, params.sequenceStep),
+    properties: nurtureEventProperties({
+      sequenceVersion: params.sequenceVersion,
+      sequenceStep: params.sequenceStep,
+      providerMessageId: result.messageId ?? null,
+    }),
+    idempotencyKey:
+      params.sequenceStep === 0
+        ? `nurture_broadcast:v${params.sequenceVersion}:${params.to.toLowerCase().trim()}:${Date.now()}`
+        : `nurture_sent:v${params.sequenceVersion}:step${params.sequenceStep}:${params.to.toLowerCase().trim()}`,
+  });
+
   return true;
 }
 
@@ -148,6 +187,8 @@ async function deliverNurture(params: {
   to: string;
   subject: string;
   html: string;
+  sequenceVersion: number;
+  sequenceStep: number;
 }): Promise<void> {
   try {
     await sendNurtureEmail(params);
@@ -571,13 +612,21 @@ export async function sendTrialEmail(
     getTrialEmailSubject,
   } = await import("./trial-email-content");
   const subject = getTrialEmailSubject(sequenceVersion, step);
-  const body = getTrialEmailBody(sequenceVersion, step);
+  const body = withNurtureEmailContext({ sequenceVersion, sequenceStep: step }, () =>
+    getTrialEmailBody(sequenceVersion, step)
+  );
   if (!subject || !body) {
     throw new Error(`Invalid trial email step: ${step} (version ${sequenceVersion})`);
   }
 
   const html = wrapTrial(body, email, step);
-  await deliverNurture({ to: email, subject, html });
+  await deliverNurture({
+    to: email,
+    subject,
+    html,
+    sequenceVersion,
+    sequenceStep: step,
+  });
 }
 
 export async function sendTrialPostSearchEmail(
@@ -585,14 +634,26 @@ export async function sendTrialPostSearchEmail(
   query: string,
   location: string
 ): Promise<void> {
-  const { getTrialPostSearchEmailBody, TRIAL_POST_SEARCH_EMAIL_SUBJECT, TRIAL_POST_SEARCH_TRACKING_STEP } =
-    await import("./trial-email-content");
-  const body = getTrialPostSearchEmailBody(query, location);
+  const {
+    getTrialPostSearchEmailBody,
+    TRIAL_POST_SEARCH_EMAIL_SUBJECT,
+    TRIAL_POST_SEARCH_TRACKING_STEP,
+    CURRENT_TRIAL_SEQUENCE_VERSION,
+  } = await import("./trial-email-content");
+  const body = withNurtureEmailContext(
+    {
+      sequenceVersion: CURRENT_TRIAL_SEQUENCE_VERSION,
+      sequenceStep: TRIAL_POST_SEARCH_TRACKING_STEP,
+    },
+    () => getTrialPostSearchEmailBody(query, location)
+  );
   const html = wrapTrial(body, email, TRIAL_POST_SEARCH_TRACKING_STEP);
   await deliverNurture({
     to: email,
     subject: TRIAL_POST_SEARCH_EMAIL_SUBJECT,
     html,
+    sequenceVersion: CURRENT_TRIAL_SEQUENCE_VERSION,
+    sequenceStep: TRIAL_POST_SEARCH_TRACKING_STEP,
   });
 }
 
@@ -610,12 +671,20 @@ export async function sendTrialBroadcastEmail(
   subject: string,
   body: string
 ): Promise<void> {
+  const { CURRENT_TRIAL_SEQUENCE_VERSION } = await import("./trial-email-content");
   const html = buildEmailHtml({
     body: formatBroadcastBody(body),
     recipientEmail: email,
     trialFooterNote: "You are receiving this because you signed up for a LeadThur free trial.",
   });
-  await deliverNurture({ to: email, subject, html });
+  // Broadcasts are nurture channel but not a sequence step — use step 0 marker.
+  await deliverNurture({
+    to: email,
+    subject,
+    html,
+    sequenceVersion: CURRENT_TRIAL_SEQUENCE_VERSION,
+    sequenceStep: 0,
+  });
 }
 
 /** Staging/admin helper for previewing redesigned emails. */
@@ -626,11 +695,19 @@ export async function sendTrialEmailPreview(
 ): Promise<boolean> {
   const { getTrialEmailBody, getTrialEmailSubject } = await import("./trial-email-content");
   const subject = getTrialEmailSubject(sequenceVersion, step);
-  const body = getTrialEmailBody(sequenceVersion, step);
+  const body = withNurtureEmailContext({ sequenceVersion, sequenceStep: step }, () =>
+    getTrialEmailBody(sequenceVersion, step)
+  );
   if (!subject || !body) {
     throw new Error(`Invalid trial email step: ${step} (version ${sequenceVersion})`);
   }
-  return sendNurtureEmail({ to: email, subject, html: wrapTrial(body, email, step) });
+  return sendNurtureEmail({
+    to: email,
+    subject,
+    html: wrapTrial(body, email, step),
+    sequenceVersion,
+    sequenceStep: step,
+  });
 }
 
 /** Staging/admin helper for previewing the results-ready email. */

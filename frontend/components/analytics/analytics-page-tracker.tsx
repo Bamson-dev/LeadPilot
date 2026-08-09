@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { trackPageView, flushAnalytics } from "@/lib/analytics";
+import { trackPageView, flushAnalytics, captureNurtureEmailClick } from "@/lib/analytics";
 
 /**
  * Passive page-view tracker for App Router.
@@ -13,6 +13,7 @@ export function AnalyticsPageTracker() {
 
   useEffect(() => {
     if (!pathname) return;
+    captureNurtureEmailClick();
     trackPageView(pathname);
   }, [pathname]);
 

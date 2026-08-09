@@ -1,4 +1,9 @@
 import { config } from "../config/env";
+import {
+  appendNurtureAttribution,
+  ctaIdFromLabel,
+  getActiveNurtureContext,
+} from "./email-nurture-attribution";
 
 const FONT_STACK =
   "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
@@ -159,8 +164,17 @@ export function buildEmailHtml(options: EmailTemplateOptions): string {
 }
 
 /** Bulletproof CTA button — purple brand, Gmail/Outlook/Apple Mail safe. */
-export function emailButton(label: string, href: string): string {
-  const safeHref = escapeHtml(href);
+export function emailButton(label: string, href: string, ctaId?: string): string {
+  const nurture = getActiveNurtureContext();
+  const taggedHref =
+    nurture != null
+      ? appendNurtureAttribution(href, {
+          sequenceVersion: nurture.sequenceVersion,
+          sequenceStep: nurture.sequenceStep,
+          ctaId: ctaId || ctaIdFromLabel(label),
+        })
+      : href;
+  const safeHref = escapeHtml(taggedHref);
   const safeLabel = escapeHtml(label);
   return `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:24px 0;">
   <tr>

@@ -2,9 +2,11 @@ import { Router, type Request, type Response } from "express";
 import { requireAdminAuth } from "../middleware/admin-auth";
 import { supabase } from "../database/client";
 import { logger } from "../utils/logger";
+import { NURTURE_EMAIL_CHANNEL } from "../services/email-nurture-attribution";
 import { FUNNEL_STEPS, EVENT_NAMES } from "./event-taxonomy";
 import { hashEmail } from "./privacy";
 import { updateAlertStatus } from "./alerts";
+import { buildEmailRevenueReport } from "./email-revenue-report";
 
 /**
  * Phase 2.1 admin query extensions — timeline, cohorts, attribution, search quality.
@@ -454,12 +456,23 @@ export function registerObservabilityPolishRoutes(router: Router): void {
       const counts: Record<string, number> = {};
       await Promise.all(
         names.map(async (name) => {
-          const { count } = await supabase
+          // Exclude Trial Nurture analytics from customer outreach health.
+          let query = supabase
             .from("analytics_events")
             .select("id", { count: "exact", head: true })
             .eq("event_name", name)
             .gte("occurred_at", from)
             .lte("occurred_at", to);
+          if (
+            name === EVENT_NAMES.EMAIL_SENT ||
+            name === EVENT_NAMES.EMAIL_OPENED ||
+            name === EVENT_NAMES.EMAIL_CLICKED
+          ) {
+            query = query.or(
+              `properties->>email_channel.is.null,properties->>email_channel.neq.${NURTURE_EMAIL_CHANNEL}`
+            );
+          }
+          const { count } = await query;
           counts[name] = count ?? 0;
         })
       );
@@ -474,12 +487,44 @@ export function registerObservabilityPolishRoutes(router: Router): void {
           failureRate: sent + failed > 0 ? Math.round((failed / (sent + failed)) * 1000) / 10 : null,
           openRate: sent > 0 ? Math.round((opened / sent) * 1000) / 10 : null,
         },
+        note: "Nurture email_channel=trial_nurture excluded from outreach email_sent/open/click counts.",
       });
     } catch (err) {
       logger.error("[observability] outreach-health failed", {
         error: err instanceof Error ? err.message : "unknown",
       });
       res.status(500).json({ counts: {} });
+    }
+  });
+
+  router.get("/email-revenue", requireAdminAuth, async (req: Request, res: Response) => {
+    try {
+      const from =
+        typeof req.query.from === "string"
+          ? req.query.from
+          : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const to = typeof req.query.to === "string" ? req.query.to : new Date().toISOString();
+      const sequenceVersion =
+        typeof req.query.sequenceVersion === "string" && req.query.sequenceVersion
+          ? Number(req.query.sequenceVersion)
+          : undefined;
+      const sequenceStep =
+        typeof req.query.sequenceStep === "string" && req.query.sequenceStep
+          ? Number(req.query.sequenceStep)
+          : undefined;
+
+      const report = await buildEmailRevenueReport({
+        from,
+        to,
+        sequenceVersion: Number.isFinite(sequenceVersion) ? sequenceVersion : undefined,
+        sequenceStep: Number.isFinite(sequenceStep) ? sequenceStep : undefined,
+      });
+      res.json(report);
+    } catch (err) {
+      logger.error("[observability] email-revenue failed", {
+        error: err instanceof Error ? err.message : "unknown",
+      });
+      res.status(500).json({ rows: [], error: "Failed to load email revenue" });
     }
   });
 }

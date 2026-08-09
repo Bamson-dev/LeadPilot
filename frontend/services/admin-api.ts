@@ -762,6 +762,66 @@ export async function getObservabilityOutreachHealth(from?: string, to?: string)
   }>;
 }
 
+export async function getObservabilityEmailRevenue(params?: {
+  from?: string;
+  to?: string;
+  sequenceVersion?: number;
+  sequenceStep?: number;
+}) {
+  const res = await fetch(
+    observabilityUrl("/email-revenue", {
+      from: params?.from,
+      to: params?.to,
+      sequenceVersion: params?.sequenceVersion,
+      sequenceStep: params?.sequenceStep,
+    }),
+    { headers: getAdminHeaders(), cache: "no-store" }
+  );
+  await handleAdminResponse(res);
+  if (!res.ok) throw new Error("Failed to load email revenue");
+  return res.json() as Promise<{
+    from: string;
+    to: string;
+    attributionModel: string;
+    attributionWindowDays: number;
+    metricsAvailableFrom: string;
+    rows: Array<{
+      email: string;
+      sequenceVersion: number;
+      sequenceStep: number;
+      sends: number;
+      uniqueOpens: number;
+      totalOpens: number;
+      clicks: number;
+      uniqueClickers: number;
+      searches: number;
+      checkouts: number;
+      purchases: number;
+      activations: number;
+      outreach: number;
+      revenueUsd: number;
+      openRate: number | null;
+      clickRate: number | null;
+      clickToSearchRate: number | null;
+      clickToCheckoutRate: number | null;
+      clickToPurchaseRate: number | null;
+      revenuePerEmail: number | null;
+      revenuePerRecipient: number | null;
+    }>;
+    totals: {
+      sends: number;
+      uniqueOpens: number;
+      clicks: number;
+      searches: number;
+      checkouts: number;
+      purchases: number;
+      revenueUsd: number;
+      openRate: number | null;
+      clickRate: number | null;
+    };
+  }>;
+}
+
 export async function patchObservabilityAlert(
   id: string,
   status: "acknowledged" | "resolved" | "open"
