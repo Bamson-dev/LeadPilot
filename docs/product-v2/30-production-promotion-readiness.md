@@ -108,20 +108,47 @@ Do **not** merge until production backend is healthy enough to receive the promo
 |-------|--------|
 | `GET https://backend.leadthur.com/health` | **503** body `no available server` |
 | Response headers | Cloudflare (`server: cloudflare`, `cf-ray`) |
-| Staging backend | **Healthy** `ca166ca` |
+| Staging backend | **Healthy** (tip/docs SHA may drift; Phase 2.2 live) |
 
-### Diagnosis (best available without Coolify UI)
+### Infrastructure findings (2026-08-09 recovery pass)
+
+| Check | Result |
+|-------|--------|
+| Coolify panel | **UP** — `http://167.86.106.198:8000/login` and `http://207.180.248.233:8000/login` redirect to Coolify login |
+| Host port `3000` (app listen port) | **CLOSED** on both VPS IPs — no backend process/container published there |
+| Origin HTTP `:80` + `Host: backend.leadthur.com` | **404** `404 page not found` (proxy up; **no route / no healthy upstream** for this hostname) |
+| SSH to VPS | **BLOCKED** — `Permission denied (publickey,password)`; agent has **no identities** |
+| Coolify dashboard inspect/redeploy | **BLOCKED** — login required; registration disabled |
+| Coolify API / deploy webhook from agent | **NOT AVAILABLE** — no `COOLIFY_*` secrets in agent environment; no `gh` for GitHub Actions secrets |
+
+### Root cause (verified as far as possible without Coolify login)
+
+**Cloudflare 503 = no healthy origin upstream for `backend.leadthur.com`.**
+
+Coolify itself is running. The production backend **application/container is not serving** (not listening on 3000; Traefik/proxy has no healthy backend route). Exact container crash reason requires Coolify Deployments/Logs after login.
 
 | Hypothesis | Assessment |
 |------------|------------|
-| A. Auto-deploy disabled | Possible — no staging/prod webhook callable from this agent |
-| F. Build/deploy failure / crashed container | **Likely** — CF 503 “no available server” = origin down/unreachable |
-| Wrong port / proxy | Possible; consistent with dead origin |
-| Application health-only mode | Unlikely — that still returns `/health` 200 |
+| Container stopped / crash / failed deploy | **Most likely** |
+| Proxy domain not attached to running service | **Consistent** with `:80` Host 404 |
+| Wrong port mapping | Possible secondary |
+| Missing env causing boot failure | Possible — needs logs |
+| Database/Redis boot failure | Possible — needs logs |
+| Coolify panel down | **Ruled out** (login page serves) |
 
-**This environment has:** no Coolify MCP, no `COOLIFY_*` env, no `gh` CLI for webhook secrets.
+### Required operator action (minimum fix)
 
-**Required operator action:** Coolify → production backend → check Running status, logs, redeploy `main`/`v2.0.0` or tip after merge, confirm port `3000`, Base Directory `/`, Dockerfile `backend/Dockerfile`.
+1. Open Coolify: `http://167.86.106.198:8000` (or `http://207.180.248.233:8000`) and log in.
+2. Open the **production** LeadThur **backend** application (domain `backend.leadthur.com`).
+3. Check **Deployments** + **Logs** for the failure.
+4. Confirm settings: Base Directory `/`, Dockerfile `backend/Dockerfile`, Port `3000`, Health `/health`, branch `main` (or `v2.0.0` / `bc10b0b` for rollback restore).
+5. Confirm env has **no** `MOCK_*` / `DEMO_MODE` / `ENABLE_TEST_EMAIL`.
+6. **Redeploy** (or Restart if container stopped cleanly).
+7. Verify repeatedly: `curl -sS https://backend.leadthur.com/health` → HTTP 200 + `gitCommitSha`.
+
+**Do not merge staging → main until this health gate passes.**
+
+Agent cannot complete redeploy without Coolify credentials or an SSH deploy key / `COOLIFY_DEPLOY_WEBHOOK_URL`.
 
 ---
 
