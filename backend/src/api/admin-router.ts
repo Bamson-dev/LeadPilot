@@ -612,38 +612,64 @@ adminRouter.post("/broadcast-message", requireAdminAuth, async (req: Request, re
       ),
     ];
 
-    let sent = 0;
-    let failed = 0;
+    const recipientCount = uniqueEmails.length;
+    const subjectText = subject.trim();
+    const bodyHtml = htmlBody;
 
-    for (const userEmail of uniqueEmails) {
-      try {
-        const personalizedBody = personalizeMessageContent(htmlBody, userEmail);
-        const personalizedSubject = personalizeMessageContent(subject.trim(), userEmail);
-        const fullHtml = buildRichDirectEmailHtml(personalizedBody);
-
-        await sendDirectEmailHtml({
-          to: userEmail,
-          subject: personalizedSubject,
-          html: fullHtml,
-        });
-        sent++;
-        await new Promise((resolve) => setTimeout(resolve, 150));
-      } catch {
-        failed++;
-      }
-    }
-
-    logger.info("Broadcast message sent", { sent, failed, total: uniqueEmails.length });
-
+    // Respond immediately — sequential sends for hundreds of users exceed
+    // Cloudflare/proxy timeouts and leave the admin UI stuck on "Sending...".
+    // Same pattern as POST /admin/broadcast (trial).
     res.json({
       success: true,
-      message: `Sent to ${sent} users.${failed > 0 ? ` ${failed} failed.` : ""}`,
+      message: `Broadcast queued for ${recipientCount} active users. Emails are sending in the background.`,
+      count: recipientCount,
+    });
+
+    setImmediate(() => {
+      void (async () => {
+        let sent = 0;
+        let failed = 0;
+        const batchSize = 50;
+        for (let i = 0; i < uniqueEmails.length; i += batchSize) {
+          const batch = uniqueEmails.slice(i, i + batchSize);
+          for (const userEmail of batch) {
+            try {
+              const personalizedBody = personalizeMessageContent(bodyHtml, userEmail);
+              const personalizedSubject = personalizeMessageContent(subjectText, userEmail);
+              const fullHtml = buildRichDirectEmailHtml(personalizedBody);
+
+              await sendDirectEmailHtml({
+                to: userEmail,
+                subject: personalizedSubject,
+                html: fullHtml,
+              });
+              sent++;
+            } catch (err) {
+              failed++;
+              logger.error("Failed to send direct broadcast email", {
+                email: userEmail,
+                error: err instanceof Error ? err.message : "unknown",
+              });
+            }
+          }
+          if (i + batchSize < uniqueEmails.length) {
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+          }
+        }
+        logger.info("Broadcast message complete", {
+          sent,
+          failed,
+          total: recipientCount,
+        });
+      })();
     });
   } catch (err) {
     logger.error("Failed to send broadcast message", {
       error: err instanceof Error ? err.message : "unknown",
     });
-    res.status(500).json({ error: "Failed to send broadcast" });
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Failed to send broadcast" });
+    }
   }
 });
 

@@ -236,6 +236,10 @@ export function DirectMessaging({ onSessionExpired }: DirectMessagingProps) {
                 return;
               }
 
+              const controller = new AbortController();
+              const timeoutMs = msgMode === "broadcast" ? 60_000 : 45_000;
+              const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+
               try {
                 const endpoint = msgMode === "single" ? "send-message" : "broadcast-message";
 
@@ -247,6 +251,7 @@ export function DirectMessaging({ onSessionExpired }: DirectMessagingProps) {
                     subject: msgSubject,
                     htmlBody: msgHtmlBody,
                   }),
+                  signal: controller.signal,
                 });
 
                 if (res.status === 401) {
@@ -258,13 +263,15 @@ export function DirectMessaging({ onSessionExpired }: DirectMessagingProps) {
                   success?: boolean;
                   error?: string;
                   message?: string;
+                  count?: number;
                 };
 
                 if (data.success) {
                   setMsgResult(
                     msgMode === "single"
                       ? `Email sent successfully to ${msgRecipient}.`
-                      : data.message || "Broadcast sent to all active users."
+                      : data.message ||
+                          `Broadcast queued${typeof data.count === "number" ? ` for ${data.count} users` : ""}. Emails are sending in the background.`
                   );
                   setMsgHtmlBody("");
                   setMsgSubject("");
@@ -272,9 +279,16 @@ export function DirectMessaging({ onSessionExpired }: DirectMessagingProps) {
                 } else {
                   setMsgResult(data.error || "Failed to send.");
                 }
-              } catch {
-                setMsgResult("Failed to send. Check your connection.");
+              } catch (err) {
+                if (err instanceof DOMException && err.name === "AbortError") {
+                  setMsgResult(
+                    "Request timed out. If this was a broadcast, check backend logs — large sends can continue in the background after the API responds."
+                  );
+                } else {
+                  setMsgResult("Failed to send. Check your connection.");
+                }
               } finally {
+                window.clearTimeout(timeoutId);
                 setMsgSending(false);
               }
             })();
