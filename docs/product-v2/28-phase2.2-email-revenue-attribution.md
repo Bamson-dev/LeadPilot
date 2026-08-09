@@ -157,13 +157,24 @@ Focused static checks cover UTM merge, sent/open/click wiring, taxonomy allowlis
 
 ## Staging deployment
 
-1. Push focused commit to `origin/staging`.
+1. Push focused commit to `origin/staging` — **done:** `05ac7fd` (`feat(v2): add email to revenue attribution`).
 2. Confirm Coolify backend redeploys to the new SHA (manual redeploy if webhook lag — prior Phase 2.1 stuck on `79b7392`).
 3. Gates:
-   - `GET /health` → expected `gitCommitSha`
+   - `GET /health` → expected `gitCommitSha` starting `05ac7fd`
    - `POST /public/events` → **202**
    - `GET /admin/observability/*` → **401** unauthenticated (not 404)
 4. Controlled journey on safe test accounts only (no mass mail, no real prospect outreach).
+
+### Live probe (2026-08-09 post-push)
+
+| Check | Expected | Observed |
+|-------|----------|----------|
+| `origin/staging` | `05ac7fd` | **PASS** |
+| Live `gitCommitSha` | `05ac7fd…` | **FAIL** — still `79b7392…` |
+| `POST /public/events` | 202 | **FAIL** — 404 |
+| `/admin/observability/*` | 401 | **FAIL** — 404 (old binary) |
+
+**Action required:** Manual Coolify redeploy of staging backend to `05ac7fd` (or current `staging` tip). Attribution smoke tests blocked until SHA matches.
 
 ---
 
@@ -202,8 +213,10 @@ Focused static checks cover UTM merge, sent/open/click wiring, taxonomy allowlis
 
 ## Final GO / NO-GO
 
-**Code GO** when TypeScript, production build, and static verify scripts pass, and commit is on `origin/staging`.
+| Gate | Status |
+|------|--------|
+| Code (TS, build, static verify) | **GO** — commit `05ac7fd` on `origin/staging` |
+| Staging live observability | **NO-GO** — Coolify still serving `79b7392`; `/public/events` 404 |
+| Live attribution journey | **BLOCKED** until redeploy |
 
-**Staging GO** only when live SHA matches and `/public/events` returns 202.
-
-Until Coolify serves the tip SHA, overall release remains **NO-GO for live attribution validation** even if git is green.
+**Overall: NO-GO for live Phase 2.2 validation** until staging backend SHA = `05ac7fd` (or later tip) and gates pass.
