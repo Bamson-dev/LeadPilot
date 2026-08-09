@@ -345,8 +345,8 @@ origin/staging (verify)
 ### Why
 
 1. **P0 ops:** Production backend is down (503).
-2. **P0 data:** Production missing Phase 2/2.1 analytics tables/migrations.
-3. **Release hygiene:** Staging/main divergence unresolved; Phase 2.2 not on `main`.
+2. ~~**P0 data:** Production missing Phase 2/2.1 analytics tables/migrations.~~ → **FIXED 2026-08-09** (`analytics_observability` + `analytics_attribution_polish` applied on production Supabase).
+3. ~~**Release hygiene:** Staging/main divergence unresolved.~~ → **Clarified:** `main` tree == merge-base `9ba61c3`; staging adds Phase 2.2 only; merge `staging`→`main` is clean (not executed until backend healthy). See `docs/product-v2/30-production-promotion-readiness.md`.
 4. **Journey gap:** Payment completed → activation → revenue attribution remains **NOT VERIFIED**.
 
 ### What already works (staging)
@@ -360,10 +360,12 @@ origin/staging (verify)
 ### Required before PRODUCTION GO
 
 1. Restore production backend health; verify `/health` SHA.  
-2. Apply production migrations `039` + `040` (analytics).  
-3. Reconcile `staging` ↔ `main` (include Phase 2.2 + preserve needed main nurture/search fixes).  
+2. ~~Apply production migrations `039` + `040` (analytics).~~ **DONE**  
+3. Reconcile `staging` ↔ `main` via documented safe merge after backend recovery.  
 4. Complete one safe payment → activation journey and confirm Email Revenue association.  
 5. Verify Coolify production env: no `MOCK_*` / `DEMO_MODE` / `ENABLE_TEST_EMAIL`; Resend vars present (names only).  
 6. Confirm frontend production SHA and rollback rehearsal notes.
 
 Until then: **do not merge for production promotion on the basis of this gate.**
+
+**Follow-up report:** `docs/product-v2/30-production-promotion-readiness.md`
