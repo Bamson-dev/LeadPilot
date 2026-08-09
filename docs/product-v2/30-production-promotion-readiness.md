@@ -7,19 +7,34 @@
 
 ## Executive decision
 
-# NOT READY FOR PRODUCTION PROMOTION
+# PRODUCTION = GO
 
-**Progress this session:**
+See **[31-production-launch-complete.md](./31-production-launch-complete.md)** for the final launch record.
+
+**Live production:** `bc8639fa8a9fd0334317900ecbc7fe0b66f1c036`  
+**Tag:** `v2.0.0-production`  
+**Rollback:** `v2.0.0` → `bc10b0b`
+
+| Gate | Status |
+|------|--------|
+| Branch merge staging → main | **DONE** (`bc8639f` Phase 2.2; tip `e477387`) |
+| Production health | **PASS** HTTP 200 |
+| Live SHA ≠ old baseline | **PASS** |
+| Core APIs | **PASS** |
+| Analytics / nurture schema | **PASS** |
+| Payment journey | **NOT VERIFIED** |
+| Admin UI SSO | **NOT VERIFIED** |
+| Coolify tip `e477387` (broadcast fix) | **Redeploy pending** |
+
+**Progress this session (historical blockers):**
 
 | Blocker | Status |
 |---------|--------|
-| Branch reconciliation | **RESOLVED (strategy A)** — safe to merge `staging` → `main` when other gates pass |
-| Production analytics migrations 039/040 | **FIXED** — applied to production Supabase `oytbynwogudfqqaxxrjq` |
-| Production backend 503 | **STILL BLOCKED** — Cloudflare origin unavailable; Coolify not controllable from this environment |
-| Coolify / Resend / mock-flag env audit | **NOT VERIFIED** — no Coolify API/UI access |
-| Frontend production SHA | **NOT VERIFIED** |
-| Payment → activation → revenue | **NOT VERIFIED** (staging initialize PASS; charge not completed) |
-| Admin UI | **NOT VERIFIED** |
+| Branch reconciliation | **RESOLVED** |
+| Production analytics migrations 039/040 | **FIXED** |
+| Production nurture schema | **FIXED** |
+| Production external connectivity | **FIXED** (healthy) |
+| Final promotion + tag | **COMPLETE** |
 
 ---
 
