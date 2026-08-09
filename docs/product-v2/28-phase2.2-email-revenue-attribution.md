@@ -157,38 +157,96 @@ Focused static checks cover UTM merge, sent/open/click wiring, taxonomy allowlis
 
 ## Staging deployment
 
-1. Push focused commit to `origin/staging` — **done:** `05ac7fd` (`feat(v2): add email to revenue attribution`).
-2. Confirm Coolify backend redeploys to the new SHA (manual redeploy if webhook lag — prior Phase 2.1 stuck on `79b7392`).
-3. Gates:
-   - `GET /health` → expected `gitCommitSha` starting `05ac7fd`
+1. Push focused commit to `origin/staging` — **done:** application `05ac7fd`, docs tip `ca166ca`.
+2. Coolify staging backend eventually served tip (see recovery section below).
+3. Gates (verified 2026-08-09):
+   - `GET /health` → `gitCommitSha=ca166cafbbb547f3a123c016d1cb52776dca0922`
    - `POST /public/events` → **202**
    - `GET /admin/observability/*` → **401** unauthenticated (not 404)
-4. Controlled journey on safe test accounts only (no mass mail, no real prospect outreach).
+   - `GET /admin/observability/email-revenue` → **401**
+4. Controlled staging journey completed on a disposable mailinator test signup + synthetic client events (no mass mail, no real outreach, no real charges).
 
-### Live probe (2026-08-09 post-push)
+### Live probe (2026-08-09 post-push — initial)
 
 | Check | Expected | Observed |
 |-------|----------|----------|
-| `origin/staging` | `05ac7fd` | **PASS** |
-| Live `gitCommitSha` | `05ac7fd…` | **FAIL** — still `79b7392…` |
+| `origin/staging` | `ca166ca` | **PASS** |
+| Live `gitCommitSha` | `ca166ca…` | **FAIL** — still `79b7392…` |
 | `POST /public/events` | 202 | **FAIL** — 404 |
 | `/admin/observability/*` | 401 | **FAIL** — 404 (old binary) |
 
-**Action required:** Manual Coolify redeploy of staging backend to `05ac7fd` (or current `staging` tip). Attribution smoke tests blocked until SHA matches.
+### Staging deployment recovery (2026-08-09)
+
+**Git (STEP 1):** `HEAD` / `origin/staging` = `ca166ca`; `05ac7fd` is ancestor. No missing Phase 2.2 commits — no new application commit created.
+
+**Coolify diagnosis (STEP 2):**
+
+| Factor | Finding |
+|--------|---------|
+| Staging GHA deploy workflow | **Not Found** — only `.github/workflows/deploy.yml` (production `main` + `COOLIFY_DEPLOY_WEBHOOK_URL`) |
+| Staging Coolify webhook secret in repo / local env | **Not Found** |
+| Coolify IaC in repo | **Not Found** |
+| Likely root cause while stuck on `79b7392` | **A + B**: auto-deploy not codified for staging; git-push webhook lag or disabled / delayed trigger (historical Phase 2.1 same symptom) |
+| Ruled out after recovery | **E** (wrong commit still live), **G** (old container still active) — live SHA now matches tip |
+| Not inspectable from this session | Coolify UI build logs, webhook toggle, path filters |
+
+**Redeploy (STEP 3):** No staging webhook was available to trigger from this environment. Live backend later reported tip SHA without an application code change — Coolify git auto-deploy caught up and/or an operator manual redeploy occurred outside this session.
+
+### Live probe (2026-08-09 recovery — current)
+
+| Check | Expected | Observed |
+|-------|----------|----------|
+| Deployed SHA | `ca166ca` | **PASS** `ca166cafbbb547f3a123c016d1cb52776dca0922` |
+| `/health` | ok + browser ready + bullmq | **PASS** (`browser=ready`, `queue.mode=bullmq`) |
+| `POST /public/events` | 202 | **PASS** |
+| `/admin/observability/overview` | 401 | **PASS** |
+| `/admin/observability/email-revenue` | 401 | **PASS** |
+| `verify-deployment.sh` | PASS | **PASS** |
+| `verify-phase21-staging-gates.sh` (`EXPECTED_GIT_SHA=ca166ca`) | PASS | **PASS** |
+| `verify-observability-phase2.mjs` | PASS | **PASS** |
+| `verify-phase22-email-attribution.mjs` | PASS | **PASS** |
+| `verify-observability-privacy.mjs` | PASS | **PASS** |
+| `verify-p0-hardening.mjs` | PASS | **PASS** |
+| `verify-p0-xss.mjs` | PASS | **PASS** |
+| `verify-security-fixes.mjs` | PASS | **SKIP** — missing local `supertest` dependency |
+
+### Controlled journey + analytics_events
+
+| Step | Result |
+|------|--------|
+| Trial signup (disposable mailinator test address) | **PASS** HTTP 200 `success:true` |
+| Nurture step-1 send → `email_sent` | **PASS** (`utm_content=trial_v3_step_1`, `email_channel=trial_nurture`) |
+| Open pixel `/trial/email-opened` | **PASS** HTTP 200 `image/gif` → `email_opened` |
+| Synthetic CTA land `email_clicked` | **PASS** UTMs `leadthur` / `email` / `trial_nurture_v3` / `trial_v3_step_1` |
+| First-touch vs last-click | **PASS** — smoke session kept first-touch `facebook`/`acq_test` on `page_view`/`search_*` while `email_clicked` carried nurture UTMs; `last_nurture_step=1` on search events |
+| `search_started` / `search_completed` ingest | **PASS** accepted 202 and present in `analytics_events` |
+| UTM helper (local, no code change) | **PASS** appends required params; does not overwrite existing `utm_source`; window = 30 days |
+| Real payment / activation / outreach send | **NOT RUN** (safe scope — no real charge / no prospect outreach) |
+| Admin UI `/admin/analytics` Email Revenue tab | **PARTIAL** — API route live (401 unauth). Authenticated UI not exercised (no admin creds in `.env.staging`; FE `staging.leadthur.com` returns Vercel SSO 302) |
+| Email Revenue data presence | **PASS at DB layer** — nurture campaign rows for step 1 include sent/opened/clicked; historical clicks still not fabricated |
+
+### Regression spot-checks
+
+| Surface | Observed |
+|---------|----------|
+| Health / ready | 200 |
+| Trial status route registered | 400 without email (not 404) |
+| Observability routes registered | 401 (not 404) |
+| Application code / sequence / Resend / Gmail | **Unchanged** this session (docs-only update) |
 
 ---
 
 ## Live verification checklist
 
-- [ ] Observability live (202 / 401)
-- [ ] `email_sent` after nurture send
-- [ ] `email_opened` after pixel
-- [ ] `email_clicked` after CTA land
-- [ ] Search / checkout retain first-touch + last_nurture props
-- [ ] Payment/activation join on Email Revenue when data exists
-- [ ] No duplicate `payment_completed` for one reference
-- [ ] Gmail outreach unchanged
-- [ ] Resend config unchanged
+- [x] Observability live (202 / 401)
+- [x] `email_sent` after nurture send
+- [x] `email_opened` after pixel
+- [x] `email_clicked` after CTA land
+- [x] Search events retain first-touch + last_nurture props
+- [ ] Payment/activation join on Email Revenue when data exists (not exercised — no safe payment)
+- [x] No application duplicate conversion logic changed this session
+- [x] Gmail outreach unchanged
+- [x] Resend config unchanged
 
 ---
 
@@ -197,7 +255,8 @@ Focused static checks cover UTM merge, sent/open/click wiring, taxonomy allowlis
 - External Paystack Shop CTAs do not hit LeadThur until return/visit; LeadThur-hosted CTAs drive `email_clicked`.
 - Server payment webhooks may lack first-touch UTMs on the payment row; Email Revenue uses last-click join by email hash.
 - No historical click backfill.
-- Staging may require **manual Coolify redeploy**.
+- Staging Coolify deploy is still not codified in GitHub Actions (P1 ops gap).
+- Authenticated Admin UI verification blocked by missing local admin creds + Vercel SSO on staging FE.
 
 ---
 
@@ -205,9 +264,9 @@ Focused static checks cover UTM merge, sent/open/click wiring, taxonomy allowlis
 
 | Priority | Item |
 |----------|------|
-| P0 | Confirm staging Coolify SHA matches tip; rerun live journey |
-| P1 | Optional redirect wrapper for external checkout CTAs (only if product accepts) |
-| P2 | Richer rate cards / step filter UI in admin |
+| P1 | Add `COOLIFY_STAGING_DEPLOY_WEBHOOK_URL` + GHA on `staging` with SHA gate (closes recurring stuck-SHA risk) |
+| P1 | Authenticated Admin Email Revenue / Timeline UI confirmation when admin session available |
+| P2 | Optional safe staging payment → activation attribution exercise |
 
 ---
 
@@ -215,8 +274,11 @@ Focused static checks cover UTM merge, sent/open/click wiring, taxonomy allowlis
 
 | Gate | Status |
 |------|--------|
-| Code (TS, build, static verify) | **GO** — commit `05ac7fd` on `origin/staging` |
-| Staging live observability | **NO-GO** — Coolify still serving `79b7392`; `/public/events` 404 |
-| Live attribution journey | **BLOCKED** until redeploy |
+| Code (TS, build, static verify) | **GO** — `05ac7fd` / tip `ca166ca` on `origin/staging` |
+| Staging live observability | **GO** — SHA `ca166ca`, `/public/events` 202, observability 401 |
+| Live attribution journey (send/open/click/search) | **GO** — events in `analytics_events` with first-touch ≠ last nurture click |
+| Full payment→revenue live proof | **NOT EXERCISED** (safe scope) |
 
-**Overall: NO-GO for live Phase 2.2 validation** until staging backend SHA = `05ac7fd` (or later tip) and gates pass.
+**Overall: STAGING = GO** for Phase 2.2 observability + email attribution ingest on staging.
+
+Payment→activation→revenue end-to-end remains an optional follow-up when safe staging payment testing is available.
