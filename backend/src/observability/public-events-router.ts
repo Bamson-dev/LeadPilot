@@ -37,6 +37,7 @@ const ALLOWED_CLIENT_EVENTS = new Set([
   "business_details_viewed",
   "email_sent",
   "email_opened",
+  "email_clicked",
   "template_used",
   "referral_click",
   "page_view",

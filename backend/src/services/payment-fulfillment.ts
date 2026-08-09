@@ -198,6 +198,9 @@ export async function fulfillPayment(params: {
     properties: {
       reference,
       gateway: params.gateway,
+      amount: params.amount,
+      currency: params.currency,
+      amount_usd: params.gateway === "flutterwave" ? params.amount : undefined,
       emailSent,
       commissionCreated,
     },

@@ -9,8 +9,15 @@ import {
 import { isValidEmail } from "../scraper/parsers/email-validation";
 import { sendTrialEmail } from "../services/email";
 import { CURRENT_TRIAL_SEQUENCE_VERSION } from "../services/trial-email-content";
-import { trackEvent } from "../observability/track";
+import {
+  NURTURE_CAMPAIGN_V3,
+  NURTURE_UTM_MEDIUM,
+  NURTURE_UTM_SOURCE,
+  nurtureContentId,
+  nurtureEventProperties,
+} from "../services/email-nurture-attribution";
 import { EVENT_NAMES } from "../observability/event-taxonomy";
+import { trackEvent } from "../observability/track";
 import { logger } from "../utils/logger";
 
 export const trialRouter = Router();
@@ -145,6 +152,24 @@ trialRouter.get("/email-opened", async (req: Request, res: Response) => {
       step <= 100
     ) {
       await recordTrialEmailOpen(email, step);
+      const sequenceVersion = CURRENT_TRIAL_SEQUENCE_VERSION;
+      trackEvent({
+        eventName: EVENT_NAMES.EMAIL_OPENED,
+        source: "server",
+        userEmail: email,
+        utmSource: NURTURE_UTM_SOURCE,
+        utmMedium: NURTURE_UTM_MEDIUM,
+        utmCampaign: NURTURE_CAMPAIGN_V3,
+        utmContent: nurtureContentId(sequenceVersion, step),
+        properties: nurtureEventProperties({
+          sequenceVersion,
+          sequenceStep: step,
+        }),
+        // Hour bucket keeps raw-ish open volume while limiting pixel spam duplicates
+        idempotencyKey: `nurture_open:v${sequenceVersion}:step${step}:${email}:${new Date()
+          .toISOString()
+          .slice(0, 13)}`,
+      });
     }
   } catch (err) {
     logger.error("Trial email open tracking failed", {

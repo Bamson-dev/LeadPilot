@@ -36,6 +36,7 @@ import {
   getObservabilitySearchQuality,
   getObservabilityLicenseHealth,
   getObservabilityOutreachHealth,
+  getObservabilityEmailRevenue,
   patchObservabilityAlert,
   getAdminToken,
   type AdminOverview,
@@ -50,6 +51,7 @@ type AnalyticsTab =
   | "cohorts"
   | "searches"
   | "revenue"
+  | "email-revenue"
   | "attribution"
   | "infrastructure"
   | "errors"
@@ -69,6 +71,7 @@ const TABS: { id: AnalyticsTab; label: string }[] = [
   { id: "cohorts", label: "Cohorts" },
   { id: "searches", label: "Searches" },
   { id: "revenue", label: "Revenue" },
+  { id: "email-revenue", label: "Email Revenue" },
   { id: "attribution", label: "Attribution" },
   { id: "infrastructure", label: "Infrastructure" },
   { id: "errors", label: "Errors" },
@@ -139,6 +142,13 @@ export function AnalyticsWorkspace() {
   const [searchQuality, setSearchQuality] = useState<Record<string, unknown> | null>(null);
   const [licenseHealth, setLicenseHealth] = useState<Record<string, number>>({});
   const [outreachHealth, setOutreachHealth] = useState<Record<string, unknown> | null>(null);
+  const [emailRevenue, setEmailRevenue] = useState<{
+    metricsAvailableFrom?: string;
+    attributionModel?: string;
+    attributionWindowDays?: number;
+    rows: Array<Record<string, unknown>>;
+    totals?: Record<string, unknown>;
+  } | null>(null);
 
   const isDemoMode = isAdminDemoMode();
 
@@ -226,6 +236,13 @@ export function AnalyticsWorkspace() {
       if (tab === "outreach-health" || tab === "smtp") {
         const data = await getObservabilityOutreachHealth(range.from, range.to);
         setOutreachHealth(data as unknown as Record<string, unknown>);
+      }
+      if (tab === "email-revenue") {
+        const data = await getObservabilityEmailRevenue({
+          from: range.from,
+          to: range.to,
+        });
+        setEmailRevenue(data as unknown as typeof emailRevenue);
       }
     } catch (err) {
       handleSessionError(err);
@@ -547,6 +564,57 @@ export function AnalyticsWorkspace() {
                     ))}
                   </tbody>
                 </table>
+              )}
+            </div>
+          )}
+
+          {tab === "email-revenue" && (
+            <div className="space-y-3">
+              <p className="text-sm text-[var(--lt-text-subtle)]">
+                {emailRevenue?.metricsAvailableFrom ||
+                  "Email click attribution available from Phase 2.2 onward."}{" "}
+                Model: {emailRevenue?.attributionModel || "last_email_click"} · Window:{" "}
+                {emailRevenue?.attributionWindowDays ?? 30} days. First-touch UTM attribution remains
+                on the Attribution tab.
+              </p>
+              {!emailRevenue?.rows?.length ? (
+                <EmptyState
+                  title="No nurture email metrics yet"
+                  description="Sends, opens, and clicks appear after Phase 2.2 nurture tracking is live."
+                />
+              ) : (
+                <div className="overflow-x-auto rounded-xl border border-[var(--lt-border)] bg-[var(--lt-surface)]">
+                  <table className={adminTableClass}>
+                    <thead>
+                      <tr className={adminTableHeadRowClass}>
+                        <th className="px-3 py-2">Email</th>
+                        <th className="px-3 py-2 text-right">Sends</th>
+                        <th className="px-3 py-2 text-right">Unique Opens</th>
+                        <th className="px-3 py-2 text-right">Clicks</th>
+                        <th className="px-3 py-2 text-right">Searches</th>
+                        <th className="px-3 py-2 text-right">Checkouts</th>
+                        <th className="px-3 py-2 text-right">Purchases</th>
+                        <th className="px-3 py-2 text-right">Revenue</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {emailRevenue.rows.map((row) => (
+                        <tr key={String(row.email)} className={adminTableRowClass}>
+                          <td className="px-3 py-2">{String(row.email)}</td>
+                          <td className="px-3 py-2 text-right">{Number(row.sends)}</td>
+                          <td className="px-3 py-2 text-right">{Number(row.uniqueOpens)}</td>
+                          <td className="px-3 py-2 text-right">{Number(row.clicks)}</td>
+                          <td className="px-3 py-2 text-right">{Number(row.searches)}</td>
+                          <td className="px-3 py-2 text-right">{Number(row.checkouts)}</td>
+                          <td className="px-3 py-2 text-right">{Number(row.purchases)}</td>
+                          <td className="px-3 py-2 text-right">
+                            ${Number(row.revenueUsd || 0).toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           )}
