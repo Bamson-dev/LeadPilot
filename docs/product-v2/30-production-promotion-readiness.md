@@ -342,15 +342,13 @@ Migrations and branch strategy are unblocked. Production origin 503 and remainin
 
 ## 16. Nurture delivery fix (2026-08-10)
 
-**Status:** Code fix committed; **production redeploy pending**.
+**Status:** **NURTURE PRODUCTION FLOW = WORKING**
 
 | Item | Detail |
 |------|--------|
-| Live SHA | `d5d4099` |
-| Fix SHA | `414ed78` (`main`) — unsubscribe GET prefetch + welcome `next_sequence_email_at` |
-| Root cause | `GET /unsubscribe` paused all users after welcome; welcome never scheduled next send |
-| Paused trial rows | 762 / 762 (unchanged — no mass unpause) |
-| GHA deploy | Run `31364081285` failed — no `COOLIFY_DEPLOY_WEBHOOK_URL` / VPS secrets |
-| E2E disposable test | Pending deploy — see **[32-nurture-production-verification.md](./32-nurture-production-verification.md)** |
-
-**Operator P0:** Redeploy production backend to `414ed78`, then run single disposable nurture test per doc 32.
+| Live SHA | `b7b2f14` (includes fix `414ed78`) |
+| Fix | Unsubscribe GET confirm-only + welcome `next_sequence_email_at` |
+| Root cause | `GET /unsubscribe` prefetch paused all users; welcome never scheduled next send |
+| Disposable test | `prod.nurture.1786356818@mailinator.com` — signup → eligible → scheduler → Resend → `email_sent` steps 1–2 → advanced → next scheduled |
+| Legacy paused users | Left paused (no mass unpause) |
+| Full report | **[32-nurture-production-verification.md](./32-nurture-production-verification.md)** |
