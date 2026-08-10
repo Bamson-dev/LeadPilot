@@ -6,7 +6,7 @@ function CoverImage({ post, className }: { post: BlogPostListItem; className?: s
   if (post.cover_image) {
     return (
       <div className={`blog-card-cover ${className ?? ""}`}>
-        <img src={post.cover_image} alt="" />
+        <img src={post.cover_image} alt={`${post.title} — cover`} />
       </div>
     );
   }

@@ -134,7 +134,7 @@ export function BlogArticleView({
 
           {post.cover_image && (
             <div className="blog-article-cover">
-              <img src={post.cover_image} alt="" />
+              <img src={post.cover_image} alt={`${post.title} — featured image`} />
             </div>
           )}
 
