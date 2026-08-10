@@ -26,6 +26,14 @@ export const DEFAULT_CONTENT_SETTINGS: Omit<ContentAutomationSettings, "id" | "u
   launch_batch_remaining: 0,
 };
 
+/** @deprecated use settings columns; kept for type imports */
+export type SchedulerHeartbeat = {
+  lastRunAt: string | null;
+  lastResult: "SUCCESS" | "FAILED" | null;
+  lastError: string | null;
+  nextRunAt: string | null;
+};
+
 export function getTavilyApiKey(): string | null {
   return process.env.TAVILY_API_KEY?.trim() || null;
 }

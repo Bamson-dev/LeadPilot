@@ -23,6 +23,9 @@ export async function getContentSettings(): Promise<ContentAutomationSettings> {
     return {
       id: 1,
       ...DEFAULT_CONTENT_SETTINGS,
+      last_scheduler_run_at: null,
+      last_scheduler_result: null,
+      last_scheduler_error: null,
       updated_at: new Date().toISOString(),
     };
   }
@@ -49,6 +52,9 @@ export async function updateContentSettings(
     "daily_image_limit",
     "publish_slot_hours",
     "launch_batch_remaining",
+    "last_scheduler_run_at",
+    "last_scheduler_result",
+    "last_scheduler_error",
   ] as const;
 
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };

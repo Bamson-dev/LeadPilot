@@ -31,6 +31,8 @@ function nextSlotDate(slotHours: number[]): Date {
 export async function processContentAutomationTick(): Promise<void> {
   if (tickRunning) return;
   tickRunning = true;
+  let tickResult: "SUCCESS" | "FAILED" = "SUCCESS";
+  let tickError: string | null = null;
   try {
     logger.info("Content automation scheduler tick");
     const settings = await getContentSettings();
@@ -113,7 +115,6 @@ export async function processContentAutomationTick(): Promise<void> {
             status: generated.status,
             error: generated.error_message,
           });
-          // Keep remaining count; try another topic/job
           await discoverAndQueueTopics(3);
         }
         continue;
@@ -146,10 +147,23 @@ export async function processContentAutomationTick(): Promise<void> {
       launchRemaining: remainingLaunch,
     });
   } catch (err) {
+    tickResult = "FAILED";
+    tickError = err instanceof Error ? err.message : "unknown";
     logger.error("Content automation tick failed", {
-      error: err instanceof Error ? err.message : "unknown",
+      error: tickError,
     });
   } finally {
+    try {
+      const next = new Date(Date.now() + HOUR_MS).toISOString();
+      await updateContentSettings({
+        last_scheduler_run_at: new Date().toISOString(),
+        last_scheduler_result: tickResult,
+        last_scheduler_error: tickError,
+      } as never);
+      void next;
+    } catch {
+      /* ignore heartbeat write failures */
+    }
     tickRunning = false;
   }
 }
