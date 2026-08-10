@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   Radio,
   Settings,
+  Sparkles,
   Users,
   FlaskConical,
 } from "lucide-react";
@@ -24,6 +25,7 @@ export type AdminNavId =
   | "licenses"
   | "broadcast"
   | "blog"
+  | "content"
   | "scripts"
   | "analytics"
   | "settings";
@@ -43,6 +45,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { id: "licenses", label: "Licenses", href: "/admin/licenses", icon: Key },
   { id: "broadcast", label: "Broadcast", href: "/admin/broadcast", icon: Radio },
   { id: "blog", label: "Blog", href: "/admin/blog", icon: FileText },
+  { id: "content", label: "Content Automation", href: "/admin/content-automation", icon: Sparkles },
   { id: "scripts", label: "Global Scripts", href: "/admin/scripts", icon: Code2 },
   { id: "analytics", label: "Analytics", href: "/admin/analytics", icon: BarChart3 },
   { id: "settings", label: "Settings", href: "/admin/settings", icon: Settings },

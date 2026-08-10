@@ -42,6 +42,8 @@ import { runStartupMigrations } from "./database/run-startup-migrations";
 import { initOutreachSendQueue, shutdownOutreachSendQueue } from "./queue/outreach-send-queue";
 import { ensureOutreachPaystackPlans } from "./services/outreach-paystack-plans";
 import { startOutreachGraceScheduler } from "./services/outreach-grace-scheduler";
+import { contentAutomationRouter } from "./content-automation/admin-router";
+import { startContentAutomationScheduler } from "./content-automation/scheduler";
 
 export const app = express();
 
@@ -115,6 +117,7 @@ function registerRoutes(): void {
   app.use("/auth", rateLimit, authRouter);
   app.use("/trial", trialRouter);
   app.use("/admin", adminRouter);
+  app.use("/admin/content-automation", contentAutomationRouter);
   app.use("/affiliate", affiliateRouter);
   app.use("/checkout", checkoutRouter);
   app.use("/topup", topupRouter);
@@ -249,6 +252,7 @@ async function start(): Promise<void> {
     await initSearchQueue();
     await initOutreachSendQueue();
     startOutreachGraceScheduler();
+    startContentAutomationScheduler();
     if (config.PAYSTACK_SECRET_KEY) {
       void ensureOutreachPaystackPlans().catch((err) => {
         logger.error("Outreach Paystack plan setup failed", {
