@@ -337,3 +337,20 @@ Staging re-confirmed: `/public/events` 202; health `ca166ca`.
 **NOT READY FOR PRODUCTION PROMOTION**
 
 Migrations and branch strategy are unblocked. Production origin 503 and remaining verification gaps still block GO.
+
+---
+
+## 16. Nurture delivery fix (2026-08-10)
+
+**Status:** Code fix committed; **production redeploy pending**.
+
+| Item | Detail |
+|------|--------|
+| Live SHA | `d5d4099` |
+| Fix SHA | `414ed78` (`main`) — unsubscribe GET prefetch + welcome `next_sequence_email_at` |
+| Root cause | `GET /unsubscribe` paused all users after welcome; welcome never scheduled next send |
+| Paused trial rows | 762 / 762 (unchanged — no mass unpause) |
+| GHA deploy | Run `31364081285` failed — no `COOLIFY_DEPLOY_WEBHOOK_URL` / VPS secrets |
+| E2E disposable test | Pending deploy — see **[32-nurture-production-verification.md](./32-nurture-production-verification.md)** |
+
+**Operator P0:** Redeploy production backend to `414ed78`, then run single disposable nurture test per doc 32.
