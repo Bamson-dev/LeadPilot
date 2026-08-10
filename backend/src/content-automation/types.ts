@@ -126,6 +126,7 @@ export interface ContentMeta {
   coverImage?: string | null;
   imageAlt?: string | null;
   wordCount?: number;
+  seoScore?: number;
 }
 
 export interface QualityResult {

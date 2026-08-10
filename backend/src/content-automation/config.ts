@@ -24,6 +24,9 @@ export const DEFAULT_CONTENT_SETTINGS: Omit<ContentAutomationSettings, "id" | "u
   daily_image_limit: 8,
   publish_slot_hours: [8, 12, 16, 20],
   launch_batch_remaining: 0,
+  last_scheduler_run_at: null,
+  last_scheduler_result: null,
+  last_scheduler_error: null,
 };
 
 /** @deprecated use settings columns; kept for type imports */
