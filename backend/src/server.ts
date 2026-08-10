@@ -105,6 +105,8 @@ function registerRoutes(): void {
 
   app.use(observabilityLatency);
 
+  // Parse bodies before routers that accept POST (unsubscribe confirm form is urlencoded).
+  app.use(express.urlencoded({ extended: false }));
   app.use("/webhooks", webhookRouter);
   app.use("/unsubscribe", unsubscribeRouter);
   // Admin blog posts may include base64 cover images and rich HTML — allow larger payloads.
