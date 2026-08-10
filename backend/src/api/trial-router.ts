@@ -9,6 +9,7 @@ import {
 import { isValidEmail } from "../scraper/parsers/email-validation";
 import { sendTrialEmail } from "../services/email";
 import { CURRENT_TRIAL_SEQUENCE_VERSION } from "../services/trial-email-content";
+import { scheduleAfterStepSent } from "../services/trial-sequence-schedule";
 import {
   NURTURE_CAMPAIGN_V3,
   NURTURE_UTM_MEDIUM,
@@ -55,11 +56,18 @@ trialRouter.post("/signup", async (req: Request, res: Response) => {
       return;
     }
 
-    await createTrialSignup(email);
+    const signup = await createTrialSignup(email);
 
     try {
       await sendTrialEmail(email, 1, CURRENT_TRIAL_SEQUENCE_VERSION);
-      await updateTrialSequenceProgress(email, 1);
+      const sentAt = new Date();
+      const nextSendAt = scheduleAfterStepSent(
+        signup.signed_up_at,
+        CURRENT_TRIAL_SEQUENCE_VERSION,
+        1,
+        sentAt
+      );
+      await updateTrialSequenceProgress(email, 1, nextSendAt, sentAt);
     } catch (error) {
       logger.error("Trial welcome email failed", { email, error });
     }

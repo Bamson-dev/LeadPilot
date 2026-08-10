@@ -34,10 +34,14 @@ function isStepDue(user: FreeTrialSignup, step: number): boolean {
 
 export async function processTrialEmailSequence(): Promise<void> {
   const users = await listTrialSignupsDueForSequence();
+  let due = 0;
+  let sent = 0;
+  let failed = 0;
 
   for (const user of users) {
     const nextStep = nextStepForUser(user);
     if (!nextStep || !isStepDue(user, nextStep)) continue;
+    due += 1;
 
     try {
       await sendTrialEmail(user.email, nextStep, user.sequence_version ?? 1);
@@ -49,20 +53,27 @@ export async function processTrialEmailSequence(): Promise<void> {
         sentAt
       );
       await updateTrialSequenceProgress(user.email, nextStep, nextSendAt, sentAt);
+      sent += 1;
       logger.info("Trial sequence email sent", {
-        email: user.email,
         step: nextStep,
         sequenceVersion: user.sequence_version ?? 1,
       });
     } catch (error) {
+      failed += 1;
       logger.error("Trial sequence email failed", {
-        email: user.email,
         step: nextStep,
         sequenceVersion: user.sequence_version ?? 1,
         error: error instanceof Error ? error.message : String(error),
       });
     }
   }
+
+  logger.info("Trial sequence scheduler tick", {
+    eligibleUnpaused: users.length,
+    due,
+    sent,
+    failed,
+  });
 }
 
 export async function processTrialPostSearchEmails(): Promise<void> {

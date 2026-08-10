@@ -41,6 +41,8 @@ export async function createTrialSignup(email: string): Promise<FreeTrialSignup>
     .insert({
       email: normalized,
       sequence_version: CURRENT_TRIAL_SEQUENCE_VERSION,
+      sequence_paused: false,
+      sequence_step: 0,
     })
     .select("*")
     .single();
