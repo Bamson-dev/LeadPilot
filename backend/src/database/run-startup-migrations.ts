@@ -2,6 +2,7 @@ import pg from "pg";
 import { mapOldSequenceStepToV3 } from "../services/trial-email-content-v3";
 import { computeNextSequenceEmailAt } from "../services/trial-sequence-schedule";
 import { logger } from "../utils/logger";
+import { CONTENT_AUTOMATION_SQL } from "./content-automation-sql";
 
 const FREE_TRIAL_IP_USAGE_SQL = `
 create table if not exists free_trial_ip_usage (
@@ -32,6 +33,13 @@ declare
     'outreach_followup_steps',
     'outreach_paystack_plans',
     'blog_posts',
+    'content_automation_settings',
+    'content_topics',
+    'content_jobs',
+    'content_sources',
+    'content_generation_runs',
+    'content_quality_checks',
+    'content_performance',
     'search_history',
     'user_searches',
     'lead_statuses',
@@ -155,6 +163,16 @@ export async function runStartupMigrations(): Promise<void> {
       logger.info("[migrations] Applied next_sequence_email_at column", { ref });
     } else {
       logger.info("[migrations] next_sequence_email_at column already present", { ref });
+    }
+
+    const contentJobs = await client.query(
+      "select to_regclass('public.content_jobs') as table_exists"
+    );
+    if (!contentJobs.rows[0]?.table_exists) {
+      await client.query(CONTENT_AUTOMATION_SQL);
+      logger.info("[migrations] Applied content automation tables", { ref });
+    } else {
+      logger.info("[migrations] content automation tables already present", { ref });
     }
 
     // Migrate active v1/v2 nurture users onto the 30-email (v3) sequence proportionally.

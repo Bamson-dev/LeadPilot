@@ -11,7 +11,11 @@ export type DeepSeekFailureReason =
 
 export async function callDeepSeekChat(
   prompt: string,
-  options: { max_tokens?: number; temperature?: number } = {}
+  options: {
+    max_tokens?: number;
+    temperature?: number;
+    system?: string;
+  } = {}
 ): Promise<
   | { ok: true; content: string }
   | { ok: false; reason: DeepSeekFailureReason }
@@ -23,6 +27,12 @@ export async function callDeepSeekChat(
   }
 
   try {
+    const messages: Array<{ role: string; content: string }> = [];
+    if (options.system?.trim()) {
+      messages.push({ role: "system", content: options.system.trim() });
+    }
+    messages.push({ role: "user", content: prompt });
+
     const response = await fetch(DEEPSEEK_API_URL, {
       method: "POST",
       headers: {
@@ -31,7 +41,7 @@ export async function callDeepSeekChat(
       },
       body: JSON.stringify({
         model: "deepseek-chat",
-        messages: [{ role: "user", content: prompt }],
+        messages,
         max_tokens: options.max_tokens ?? 220,
         temperature: options.temperature ?? 0.85,
       }),
