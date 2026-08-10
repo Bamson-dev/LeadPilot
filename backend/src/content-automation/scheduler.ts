@@ -83,29 +83,44 @@ export async function processContentAutomationTick(): Promise<void> {
 
     // Launch batch: generate + publish immediately until remaining hits 0
     let remainingLaunch = launchRemaining;
-    while (remainingLaunch > 0) {
+    let launchAttempts = 0;
+    while (remainingLaunch > 0 && launchAttempts < remainingLaunch + 6) {
+      launchAttempts += 1;
       const nextQualified = (await listJobs("QUALIFIED", 1))[0];
       const nextReady = (await listJobs("READY", 1))[0];
       if (nextReady) {
-        await publishReadyJob(nextReady.id);
-      } else if (nextQualified) {
-        const generated = await runContentJob(nextQualified.id, { publish: true });
-        if (generated.status !== "PUBLISHED") {
-          logger.error("Launch batch item did not publish", {
-            status: generated.status,
-            error: generated.error_message,
+        try {
+          await publishReadyJob(nextReady.id);
+          remainingLaunch -= 1;
+          await updateContentSettings({ launch_batch_remaining: remainingLaunch });
+          logger.info("Launch batch published ready job", { remainingLaunch });
+        } catch (err) {
+          logger.error("Launch batch publish failed", {
+            error: err instanceof Error ? err.message : "unknown",
           });
           break;
         }
-      } else {
-        await discoverAndQueueTopics(4);
-        const created = (await listJobs("QUALIFIED", 1))[0];
-        if (!created) break;
         continue;
       }
-      remainingLaunch -= 1;
-      await updateContentSettings({ launch_batch_remaining: remainingLaunch });
-      logger.info("Launch batch progress", { remainingLaunch });
+      if (nextQualified) {
+        const generated = await runContentJob(nextQualified.id, { publish: true });
+        if (generated.status === "PUBLISHED") {
+          remainingLaunch -= 1;
+          await updateContentSettings({ launch_batch_remaining: remainingLaunch });
+          logger.info("Launch batch progress", { remainingLaunch });
+        } else {
+          logger.error("Launch batch item failed; continuing with next topic", {
+            status: generated.status,
+            error: generated.error_message,
+          });
+          // Keep remaining count; try another topic/job
+          await discoverAndQueueTopics(3);
+        }
+        continue;
+      }
+      await discoverAndQueueTopics(4);
+      const created = (await listJobs("QUALIFIED", 1))[0];
+      if (!created) break;
     }
 
     // Steady-state: advance one qualified job per tick when automation enabled
