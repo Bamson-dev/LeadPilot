@@ -191,7 +191,9 @@ export async function runContentJob(
         job = await updateJob(jobId, { status: "IMAGE_GENERATION" });
         const imgStarted = Date.now();
         const imagePrompt = `Professional editorial blog header image, no text overlays, clean modern style: ${brief.imageConcept}`;
-        const image = await generateArticleImage(imagePrompt);
+        const image = await generateArticleImage(imagePrompt, {
+          slugHint: brief.proposedTitle,
+        });
         await recordGenerationRun({
           job_id: jobId,
           stage: "image_generation",
@@ -201,7 +203,7 @@ export async function runContentJob(
           error_category: image.ok ? undefined : image.reason,
         });
         if (image.ok) {
-          coverImage = image.dataUrl;
+          coverImage = image.imageUrl;
           imageAlt = `${brief.proposedTitle} — editorial illustration`;
           imageStatus = "generated";
         } else {

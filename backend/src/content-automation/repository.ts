@@ -48,6 +48,7 @@ export async function updateContentSettings(
     "daily_research_limit",
     "daily_image_limit",
     "publish_slot_hours",
+    "launch_batch_remaining",
   ] as const;
 
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };

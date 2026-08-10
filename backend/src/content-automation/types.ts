@@ -35,6 +35,7 @@ export interface ContentAutomationSettings {
   daily_research_limit: number;
   daily_image_limit: number;
   publish_slot_hours: number[];
+  launch_batch_remaining: number;
   updated_at: string;
 }
 
