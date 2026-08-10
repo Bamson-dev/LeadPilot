@@ -1,0 +1,2749 @@
+Target: production
+Mode: DRY RUN (no updates)
+Supabase: https://oytbynwogudfqqaxxrjq.supabase.co
+
+=== SUMMARY ===
+{
+  "totalJobs": 3422,
+  "targets": 390,
+  "matched": 0,
+  "updated": 0,
+  "ambiguous": 0,
+  "unmatched": 390,
+  "skippedTrial": 1515,
+  "alreadySet": 1517
+}
+
+=== UNMATCHED ===
+[
+  {
+    "searchJobId": "53d334c2-3f48-4203-acef-22b3bf44ae36",
+    "business_type": "real estate",
+    "city": "california",
+    "created_at": "2026-05-23T19:42:55.648852+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "caf64544-5a46-49c7-ac09-9f89f4bdf077",
+    "business_type": "dentist",
+    "city": "beijing, china",
+    "created_at": "2026-05-23T18:07:52.356775+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "65340671-ab0e-40e7-9b0a-2ffe465bd111",
+    "business_type": "dentist",
+    "city": "beijing, china",
+    "created_at": "2026-05-23T18:08:48.833395+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "236fc775-b502-4bd6-a1f9-bf576a0bdad1",
+    "business_type": "builder",
+    "city": "forida",
+    "created_at": "2026-05-23T23:03:26.864591+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "2bcb3eaf-9c37-436d-ad2f-69c1c641c624",
+    "business_type": "real estate",
+    "city": "new york",
+    "created_at": "2026-05-23T21:24:38.456449+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "21ac561d-3b0c-4327-82d5-049e8f8a2ef7",
+    "business_type": "real estate",
+    "city": "new york",
+    "created_at": "2026-05-23T21:24:45.556989+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "ba36be94-5800-4f1b-8754-f7ed41b54321",
+    "business_type": "real estate",
+    "city": "abuja, lagos",
+    "created_at": "2026-05-24T11:21:38.947582+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "35d9c960-34eb-4be9-9781-4bef39ee57c5",
+    "business_type": "ngo",
+    "city": "abuja",
+    "created_at": "2026-05-24T09:53:52.58556+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "396b9ccd-afbf-4e20-bb4e-526968117a76",
+    "business_type": "director",
+    "city": "new south wales australia",
+    "created_at": "2026-05-25T15:55:11.591916+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "7932ad7f-ffe2-451a-844f-6ceb12ae2358",
+    "business_type": "ngo",
+    "city": "abuja, lagos",
+    "created_at": "2026-05-24T09:56:42.419835+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "e5c7d7f5-2b4d-4967-b15a-f76e8516fa4f",
+    "business_type": "oil and gas organisations",
+    "city": "abuja",
+    "created_at": "2026-05-24T09:48:23.243161+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "1f43c54d-6ffa-4026-a81a-f0f00f32914a",
+    "business_type": "roofing companies",
+    "city": "odessa",
+    "created_at": "2026-05-24T15:37:19.41344+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "2f56d984-a868-497a-923d-ad260f2968b6",
+    "business_type": "islamic banks",
+    "city": "nigerian",
+    "created_at": "2026-05-24T10:50:32.856296+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "ac3fe3da-d431-4302-8915-9db8b88be88e",
+    "business_type": "bank",
+    "city": "central business district abuja",
+    "created_at": "2026-05-24T11:32:33.719751+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "83a0a0bc-74d2-4396-b6c9-90fcea1b1c0c",
+    "business_type": "arm",
+    "city": "abuja",
+    "created_at": "2026-05-24T14:21:04.218175+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "058acaaf-f124-4ffb-a5de-2ab2e08bb4da",
+    "business_type": "builder",
+    "city": "nevada",
+    "created_at": "2026-05-24T18:14:32.570599+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "bf07081d-2da1-4c57-b746-b03d7969807b",
+    "business_type": "builder",
+    "city": "nevada",
+    "created_at": "2026-05-24T18:30:32.384623+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "11e465b6-38f7-4d89-b030-2c512540f7a9",
+    "business_type": "business association",
+    "city": "victoria australia",
+    "created_at": "2026-05-25T00:40:06.331639+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "8fe553b5-f728-47cc-ad51-20f649a930bf",
+    "business_type": "llc",
+    "city": "new york",
+    "created_at": "2026-05-24T22:37:34.543037+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "5838d6d4-de76-4562-92da-3ee26aa76473",
+    "business_type": "llc",
+    "city": "new york",
+    "created_at": "2026-05-24T22:37:38.660635+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "fa58419f-d0f5-426a-99ec-558ee9dc453f",
+    "business_type": "llc",
+    "city": "new york",
+    "created_at": "2026-05-24T22:37:52.596767+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "e76eea46-5db7-4460-80bc-9cb630fe3f2b",
+    "business_type": "finance, insurance and real estate",
+    "city": "western australia australia",
+    "created_at": "2026-05-25T02:38:26.938196+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "9cbad3d3-852c-4def-8aa5-6da6de02e09c",
+    "business_type": "finance, insurance and real estate",
+    "city": "queensland australia",
+    "created_at": "2026-05-25T02:47:47.511705+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "07f6d5e8-98de-4053-b844-14a4d423e8da",
+    "business_type": "finance, insurance and real estate",
+    "city": "new south wales australia",
+    "created_at": "2026-05-25T02:48:31.483992+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "8ecd7c5d-e760-4240-bb28-8fd7a6e8ea3d",
+    "business_type": "management consultant",
+    "city": "tasmania australia",
+    "created_at": "2026-05-25T02:48:56.129891+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "f975765c-790a-4b3e-80ff-4f2db69f7b4b",
+    "business_type": "management consultant",
+    "city": "south australia",
+    "created_at": "2026-05-25T02:49:14.473732+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "6cbadfcb-e09b-41ed-b1da-9376aad60c7a",
+    "business_type": "management consultant",
+    "city": "western australia",
+    "created_at": "2026-05-25T02:49:31.533004+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "dfcf5921-b16a-4d82-a43d-37d48bc646a8",
+    "business_type": "private school",
+    "city": "owerri",
+    "created_at": "2026-05-25T07:58:09.38084+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "db709094-6f10-4b15-8a36-cd638a5df5b5",
+    "business_type": "schools",
+    "city": "imo",
+    "created_at": "2026-05-25T08:13:09.389178+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "a3095ddd-5dda-4daa-9ce1-92a48a6b8faa",
+    "business_type": "hotels and lodges",
+    "city": "alagbaka, akure, nigeria",
+    "created_at": "2026-05-25T08:25:35.750034+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "c8712851-dc6c-4593-ac5b-93a9f77fac9b",
+    "business_type": "industrial consultant",
+    "city": "queensland australia",
+    "created_at": "2026-05-25T05:18:54.943808+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "dc834a40-1e8e-43b5-ae5e-b09696fa1ae3",
+    "business_type": "investment bank",
+    "city": "queensland australia",
+    "created_at": "2026-05-25T09:19:07.653664+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "f77bb5be-2cff-454f-b824-e987c9a67d2e",
+    "business_type": "industrial consultant",
+    "city": "new south wales australia",
+    "created_at": "2026-05-25T10:21:56.5953+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "cc02d110-38b6-4a62-9e68-a1427a62e497",
+    "business_type": "industrial consultant",
+    "city": "new south wales australia",
+    "created_at": "2026-05-25T10:22:10.079771+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "dca85c78-4f35-4e08-a20a-cbf0eaaa92a5",
+    "business_type": "investment bank",
+    "city": "tasmania australia",
+    "created_at": "2026-05-25T10:10:44.835953+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "feaa54a6-b6a2-40c4-bf09-5cfa83c679d1",
+    "business_type": "industrial consultant",
+    "city": "new south wales australia",
+    "created_at": "2026-05-25T10:22:28.430804+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "dfa5d142-c127-471a-bf0a-c5bee8e8a790",
+    "business_type": "investment bank",
+    "city": "tasmania australia",
+    "created_at": "2026-05-25T10:10:56.926525+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "0c187b5d-0fc1-498f-9fbb-933195391362",
+    "business_type": "industrial consultant",
+    "city": "western australia",
+    "created_at": "2026-05-25T10:23:45.513127+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "80361d40-b759-489d-a9da-14658952ba37",
+    "business_type": "investment bank",
+    "city": "tasmania australia",
+    "created_at": "2026-05-25T10:11:06.786921+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "b45107e6-a38c-4b23-9e1a-b25a0ab8c9a4",
+    "business_type": "industrial consultant",
+    "city": "south australia",
+    "created_at": "2026-05-25T10:26:22.687514+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "1afc9c27-06ae-435b-9e12-11961d661ea9",
+    "business_type": "industrial consultant",
+    "city": "tasmania australia",
+    "created_at": "2026-05-25T10:30:06.671944+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "7994f8ba-d717-40ec-8f07-3ce74c94a571",
+    "business_type": "investment bank",
+    "city": "new south wales australia",
+    "created_at": "2026-05-25T09:35:11.933962+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "1e5f5413-f050-4669-9fe4-dccaf97f1287",
+    "business_type": "investment bank",
+    "city": "tasmania australia",
+    "created_at": "2026-05-25T10:09:03.261499+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "35f2ad15-00f8-4ced-8931-61fb80ecf0eb",
+    "business_type": "industrial consultant",
+    "city": "new south wales australia",
+    "created_at": "2026-05-25T10:20:58.421084+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "a5003b4c-62d0-4f88-8e75-92418a1d6dc5",
+    "business_type": "real estate",
+    "city": "nigeria",
+    "created_at": "2026-05-29T20:15:53.753259+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "41b3cf40-0ad3-47df-8008-08947113ec9f",
+    "business_type": "gyms",
+    "city": "ibeju lekki",
+    "created_at": "2026-05-25T15:48:53.953705+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "449d9eb3-4d51-4783-9e1e-e4f4ff8cca06",
+    "business_type": "super market",
+    "city": "abuja",
+    "created_at": "2026-05-25T15:56:48.829455+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "a2b6eca3-e135-41bc-8aef-62cbc6107f64",
+    "business_type": "director",
+    "city": "tasmania australia",
+    "created_at": "2026-05-25T16:17:33.860533+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "9ec604b2-0e6d-4c54-913a-07d7c3ac68c9",
+    "business_type": "stylists",
+    "city": "united kingdom",
+    "created_at": "2026-05-25T17:40:18.946275+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "b628f955-ee1f-4b43-ba58-db28043688b8",
+    "business_type": "localization companies",
+    "city": "europe",
+    "created_at": "2026-05-25T17:45:29.524992+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "24c17612-c37e-4122-bf5c-c4c019cbdd2a",
+    "business_type": "industrial design company",
+    "city": "victoria australia",
+    "created_at": "2026-05-25T17:45:15.934473+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "0bad9d52-11fc-4bb5-8588-c1e50bb939f9",
+    "business_type": "localization companies",
+    "city": "europe",
+    "created_at": "2026-05-25T17:46:05.624425+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "74d6563c-0aec-457b-aa4d-bb8352692657",
+    "business_type": "hairstylists",
+    "city": "united kingdom",
+    "created_at": "2026-05-25T17:37:15.952777+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "45961f5b-e7cf-4655-b6f0-ae07c494df22",
+    "business_type": "hair stylists",
+    "city": "united kingdom",
+    "created_at": "2026-05-25T17:36:26.965455+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "a45b7cee-0e1f-443e-aaec-88a6f816b86a",
+    "business_type": "translation companies",
+    "city": "united kingdom",
+    "created_at": "2026-05-25T17:54:52.043406+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "dbbedd39-041f-45dc-bd30-d7c5b41edf88",
+    "business_type": "law and attorney",
+    "city": "california usa",
+    "created_at": "2026-05-25T21:29:15.802613+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "0da147d4-f843-48f5-a762-6509332ef6d0",
+    "business_type": "hvac",
+    "city": "utah",
+    "created_at": "2026-05-25T21:41:29.580673+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "9641fdb0-e597-458f-858f-eafba5347d90",
+    "business_type": "hvac",
+    "city": "ogden",
+    "created_at": "2026-05-25T21:41:47.694507+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "97b6ecb0-61c7-4a9b-9d96-41f526fee7e0",
+    "business_type": "hvac",
+    "city": "south jordan",
+    "created_at": "2026-05-25T21:42:00.319354+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "d4916f04-7f91-4681-be5a-80d807a51f3a",
+    "business_type": "hvac",
+    "city": "salt lake city utah",
+    "created_at": "2026-05-25T21:42:28.718002+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "f792b2b5-78d1-4a56-a75f-984713bea790",
+    "business_type": "contractor",
+    "city": "victoria island lagos",
+    "created_at": "2026-05-25T22:01:03.526697+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "483da48e-ced0-4d4a-8b83-23426b5d8601",
+    "business_type": "contractor",
+    "city": "nigeria",
+    "created_at": "2026-05-25T21:59:22.797035+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "5671cb76-c4dc-41cf-acc4-581e0973f750",
+    "business_type": "md",
+    "city": "nigeria",
+    "created_at": "2026-05-25T22:02:19.187861+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "ea400654-bcf1-4d8c-8ecb-07bd44ee28ac",
+    "business_type": "md",
+    "city": "maitama jabi",
+    "created_at": "2026-05-25T22:23:10.595373+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "bb0b1dab-5b0c-448b-a9a8-2f14be28a689",
+    "business_type": "law firm",
+    "city": "nigeria",
+    "created_at": "2026-05-25T23:50:42.284168+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "2dc7f22f-ca95-4654-96d0-7a7126f1730c",
+    "business_type": "fabricator fabrication",
+    "city": "china",
+    "created_at": "2026-05-26T10:40:38.336116+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "b15669e6-4e0b-4e2c-9d4c-dccab75d97ed",
+    "business_type": "cleaning services",
+    "city": "calinfornia united states",
+    "created_at": "2026-05-29T03:30:24.850841+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "1c7cac34-216d-4abf-ae94-edc7c01a6008",
+    "business_type": "contractor, engineer, manufacturing",
+    "city": "tasmania australia",
+    "created_at": "2026-05-26T13:32:17.617058+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "897ea93c-ead3-4be2-91b0-dd2579f4f089",
+    "business_type": "industrial design company",
+    "city": "victoria australia",
+    "created_at": "2026-05-26T11:47:20.191356+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "42913551-cce9-4561-a961-27caa50a6367",
+    "business_type": "oil & gas marginal field owner companies",
+    "city": "lagos, nigeria",
+    "created_at": "2026-05-27T07:19:25.545904+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "bea19e29-dacc-4f47-b160-d52a47b7a9a6",
+    "business_type": "oil & gas marginal field owner companies",
+    "city": "lagos, nigeria",
+    "created_at": "2026-05-27T07:19:38.090415+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "aa7dab07-2637-4ea7-9b37-f6f38a96d1f7",
+    "business_type": "gym",
+    "city": "port harcourt, obiakpor, nigeria",
+    "created_at": "2026-05-27T17:30:14.054638+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "34b546db-d533-457a-8d7f-f9fc789e105c",
+    "business_type": "hookup",
+    "city": "osogbo osun",
+    "created_at": "2026-05-27T21:27:17.46183+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "3acaa9cc-b131-448b-8856-b2205c34130d",
+    "business_type": "study abroad agencies",
+    "city": "lagos nigeria",
+    "created_at": "2026-05-28T14:08:34.556681+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "31386170-ed2a-4d8f-97b1-7af211f8b0d3",
+    "business_type": "nigerian diaspora in uk",
+    "city": "ward end birmingham",
+    "created_at": "2026-05-31T17:42:51.356051+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "6da128c2-e3fc-4b74-9717-bd6b3ea7cb35",
+    "business_type": "logistics",
+    "city": "lagos nigeria",
+    "created_at": "2026-05-28T16:27:29.623036+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "dc6feb11-ddcd-4c62-a667-26771081eef2",
+    "business_type": "agriculture",
+    "city": "lagos nigeria",
+    "created_at": "2026-05-28T17:07:27.470936+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "a0c307cd-a6ca-424a-b318-e7ae395d8588",
+    "business_type": "agriculture",
+    "city": "lagos nigeria",
+    "created_at": "2026-05-28T17:07:52.49046+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "5d453709-ab1e-4525-b856-d19141298fc0",
+    "business_type": "restaurants",
+    "city": "lagos nigeria",
+    "created_at": "2026-05-28T17:51:15.831672+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "7cc9b9f8-4133-4b92-a206-6b0107a40d5c",
+    "business_type": "primary schools",
+    "city": "enugu",
+    "created_at": "2026-05-28T19:35:46.645909+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "67935fa7-2348-427f-ba51-8c0152f6784b",
+    "business_type": "logistics",
+    "city": "nigerian",
+    "created_at": "2026-05-29T12:46:28.928068+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "bedbf86e-e8d4-4f97-a81c-454d0cd0cdb2",
+    "business_type": "dentists",
+    "city": "minnesota",
+    "created_at": "2026-05-29T08:23:14.502489+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "9bab208f-6c0e-4545-887f-1504f3d96bc1",
+    "business_type": "aviation",
+    "city": "portharcourt",
+    "created_at": "2026-05-29T14:23:02.436579+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "bb673ce7-b63b-4654-aa41-072c8fe30fbb",
+    "business_type": "event planners",
+    "city": "lagos",
+    "created_at": "2026-05-29T14:24:17.432864+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "85b3e94f-94fa-46b0-9b56-3d5dace69580",
+    "business_type": "restaurants",
+    "city": "lagos nigeria",
+    "created_at": "2026-05-29T06:00:50.63872+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "4ea3a198-dd15-4404-8ebd-5b356a068003",
+    "business_type": "dentists",
+    "city": "rochester minnesota",
+    "created_at": "2026-05-29T06:24:31.381261+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "06db171f-2182-40d0-8473-f63bd9635f53",
+    "business_type": "non governmental organisations",
+    "city": "anambra state nigeria in awka anambra",
+    "created_at": "2026-05-29T08:22:51.425641+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "89e906f1-21d7-44fb-913d-baf6d0ce8404",
+    "business_type": "drone companies",
+    "city": "denmark",
+    "created_at": "2026-05-29T08:23:33.39481+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "c875be60-b828-436f-ba8d-255aa100aeb9",
+    "business_type": "real estate",
+    "city": "lagos",
+    "created_at": "2026-05-29T19:59:40.261769+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "a560a9c9-bcf9-4777-ab58-7923f1ac7714",
+    "business_type": "dentist",
+    "city": "hong kong",
+    "created_at": "2026-05-29T14:23:50.445086+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "8c202da0-f8c8-4d62-92a2-3d422ee1dd1c",
+    "business_type": "tech startups",
+    "city": "san antonio pearl district",
+    "created_at": "2026-05-31T05:15:43.261535+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "29dee393-08a2-4047-a067-8c3d1f9521c0",
+    "business_type": "jet oil buyer",
+    "city": "belgium",
+    "created_at": "2026-05-30T21:16:12.585664+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "6c4a56e7-0c16-4c59-a281-bbd94a0f633e",
+    "business_type": "fhg office in ilorin",
+    "city": "ilorin nigeria",
+    "created_at": "2026-05-30T06:24:54.504204+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "09a14214-bb57-405b-941b-87116c9aeafd",
+    "business_type": "oil and gas company wihtour iso certification",
+    "city": "abuja",
+    "created_at": "2026-05-31T12:18:50.984693+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "ef4531fb-8019-48f7-b348-4bcc2f3a3a67",
+    "business_type": "nigerian diaspora in uk",
+    "city": "alum rock birmingham",
+    "created_at": "2026-05-31T17:22:48.085867+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "0e82e7f0-b0be-40c6-a647-a3009aeb1a14",
+    "business_type": "real estate",
+    "city": "abuja",
+    "created_at": "2026-05-30T20:51:18.288326+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "254f2354-f282-45e1-845e-cd62d40764e9",
+    "business_type": "farms",
+    "city": "mississauga canada",
+    "created_at": "2026-05-30T11:14:35.94848+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "700c580a-de4b-4b50-b1fd-a5d22fa2e859",
+    "business_type": "jet oil buyer",
+    "city": "belgium",
+    "created_at": "2026-05-30T21:25:49.107168+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "267c4034-fd0c-46fd-9b90-90132f864016",
+    "business_type": "nigerian diaspora in uk",
+    "city": "ward end birmingham",
+    "created_at": "2026-05-31T17:23:13.134212+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "e1d46ba2-6fe1-4218-8d6d-975d471366d4",
+    "business_type": "ford motor company",
+    "city": "new south wales, australia",
+    "created_at": "2026-05-31T17:30:40.38128+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "03def81b-ccd8-46d8-bcef-d8b1ecd4a91a",
+    "business_type": "nigerian diaspora in uk",
+    "city": "saltley birmingham",
+    "created_at": "2026-05-31T17:46:09.797589+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "92dfc415-ad33-4f13-94ed-89b7b8495954",
+    "business_type": "nigerian redeemed christian church of god diaspora",
+    "city": "harlem new york",
+    "created_at": "2026-06-01T19:30:04.152547+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "a4a49590-9e55-4e4b-94f2-8c9bb9e0b7a2",
+    "business_type": "jet oil buyer",
+    "city": "andorra",
+    "created_at": "2026-05-30T21:00:09.792331+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "d6e63d22-5b6b-4c0c-a340-00e2aa58fa9e",
+    "business_type": "real estate",
+    "city": "wuse 2 abuja",
+    "created_at": "2026-05-30T20:56:09.276442+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "4bf71983-d711-496b-a15a-a12f7b284df1",
+    "business_type": "real estate",
+    "city": "lagos",
+    "created_at": "2026-05-30T21:29:18.622588+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "9781d31c-60b2-40af-b17d-8e2fc20853c6",
+    "business_type": "ecommerce",
+    "city": "lagos",
+    "created_at": "2026-05-30T11:19:51.721965+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "af755853-5e2b-4198-80d6-e023f77039be",
+    "business_type": "ford motor company",
+    "city": "queensland, australia",
+    "created_at": "2026-05-31T17:43:00.645253+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "ee75dc56-5b91-4459-b27c-6289b94af9df",
+    "business_type": "real estate",
+    "city": "gwarinpa abuja",
+    "created_at": "2026-05-30T20:58:14.072741+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "8c20dc16-d8f4-49d8-bb58-ca90b196acbb",
+    "business_type": "fertility clinics",
+    "city": "california",
+    "created_at": "2026-05-31T05:05:39.782963+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "37720361-b346-475a-9f09-693ea869d757",
+    "business_type": "dentist",
+    "city": "garki, abuja",
+    "created_at": "2026-05-30T18:54:25.561973+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "8be3b526-ae9d-415a-8afb-4c2214bec688",
+    "business_type": "charity organotin",
+    "city": "adelaide (south australia)",
+    "created_at": "2026-05-30T11:21:02.38417+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "81b52287-58b3-481a-9aeb-ab71ff8f66d5",
+    "business_type": "ford motor company, violin memory, inc thermo fisher scientific inc",
+    "city": "queensland, australia",
+    "created_at": "2026-05-30T20:59:57.040589+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "e07a1b8a-d077-42d5-a1ad-ccc35a345d19",
+    "business_type": "real estate",
+    "city": "nigeria",
+    "created_at": "2026-05-29T20:15:42.315576+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "3f6fc58b-c4d1-4dab-bfa5-9de8e8a22dbf",
+    "business_type": "real estate",
+    "city": "nigeria",
+    "created_at": "2026-05-29T20:16:05.325229+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "001ccff3-44ff-4787-99e5-4d486aff8cbd",
+    "business_type": "b2b",
+    "city": "united states",
+    "created_at": "2026-05-30T16:56:42.171758+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "b607d70d-f334-4ed3-b930-ca79cb4291af",
+    "business_type": "jet oil buyer",
+    "city": "belgium",
+    "created_at": "2026-05-30T21:20:28.404136+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "cc1a3be9-f846-4f97-9f46-ad6a06907bf5",
+    "business_type": "primary and secondary schools",
+    "city": "lagos",
+    "created_at": "2026-05-29T23:56:54.103401+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "6374920f-1657-4e51-8112-20854a1e62bb",
+    "business_type": "fashion and beauty",
+    "city": "lagos",
+    "created_at": "2026-06-07T15:32:50.140624+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "bb385258-5f31-4a89-9609-a5633c1a62a2",
+    "business_type": "business start-ups",
+    "city": "london uk",
+    "created_at": "2026-06-01T02:23:41.486251+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "fc64e692-1bb0-4df9-ae78-566db525e66c",
+    "business_type": "ford motor company",
+    "city": "tasmania, australia",
+    "created_at": "2026-05-31T18:06:06.540528+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "6ac6483d-2389-49ff-8d06-0e9e56eaee6c",
+    "business_type": "gymns",
+    "city": "abuja",
+    "created_at": "2026-06-01T02:19:55.414102+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "9f72c653-5154-4d53-b671-8ca2f18bf62e",
+    "business_type": "startups",
+    "city": "us",
+    "created_at": "2026-05-31T21:49:36.832214+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "adf2660e-2e0e-4c68-8ba7-ab55319d4805",
+    "business_type": "business center",
+    "city": "rivers",
+    "created_at": "2026-06-01T18:31:49.364124+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "a8175f77-6483-4b3e-bda2-320f56333b3d",
+    "business_type": "farmers market",
+    "city": "abuja",
+    "created_at": "2026-06-01T07:03:34.295074+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "625733fc-6df6-4acb-947d-ccb5e8ababa7",
+    "business_type": "demtists",
+    "city": "abuja",
+    "created_at": "2026-06-01T07:03:47.537981+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "f96adca8-6d33-47b4-bca7-651222590d4f",
+    "business_type": "dentists",
+    "city": "manchester uk",
+    "created_at": "2026-06-01T07:04:08.556748+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "c67f6785-50de-4472-b6e8-4713d2d6adf9",
+    "business_type": "real estate buyers",
+    "city": "abuja",
+    "created_at": "2026-06-01T07:04:27.412945+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "012a026e-0d36-4254-b22b-4adab578dc5f",
+    "business_type": "government ministries",
+    "city": "abuja",
+    "created_at": "2026-06-01T07:27:24.052362+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "87057bc9-238e-4013-9e45-ed496b2ee9c5",
+    "business_type": "central bank",
+    "city": "abuja",
+    "created_at": "2026-06-01T09:40:10.966553+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "6c9f10b2-5629-45f6-b87d-dd3a9de81939",
+    "business_type": "nigerian diasporas",
+    "city": "greater manchester",
+    "created_at": "2026-06-01T09:14:53.609483+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "d2170911-df3f-48b9-9098-d99bad3ae1a5",
+    "business_type": "spas",
+    "city": "maryland usa",
+    "created_at": "2026-06-01T09:48:10.408685+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "c21d722e-955a-4b15-a33c-03a5780fe178",
+    "business_type": "nigerian diasporas",
+    "city": "manchester city centre",
+    "created_at": "2026-06-01T09:31:53.106704+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "73a38007-7b52-4865-8aca-9a8f3c0bc49b",
+    "business_type": "beauty spa",
+    "city": "lagos",
+    "created_at": "2026-06-01T09:42:09.701371+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "f0e9a549-c6a4-4912-bfb6-ad508ce105a2",
+    "business_type": "beauty spa",
+    "city": "lagos nigeria",
+    "created_at": "2026-06-01T10:31:45.099701+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "8f3f7406-1185-4d18-a33f-84c985754128",
+    "business_type": "spas",
+    "city": "baltimore inner harbor",
+    "created_at": "2026-06-01T10:32:34.293119+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "ade92480-9231-4cb7-9432-30b0b32a89f1",
+    "business_type": "nigerian diasporas",
+    "city": "wythenshawe manchester",
+    "created_at": "2026-06-01T12:00:06.919979+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "27d97f9a-8ef8-475a-83f7-0dd4071c0096",
+    "business_type": "nigerian diasporas",
+    "city": "baguley wythenshawe",
+    "created_at": "2026-06-01T12:06:51.031152+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "e8587c47-b62c-4b7a-882e-4c46ee79988e",
+    "business_type": "nigerian diasporas",
+    "city": "northern moor wythenshawe",
+    "created_at": "2026-06-01T12:23:39.671936+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "7d9bfb62-8b79-44ea-8cc7-c951a7c362d1",
+    "business_type": "hospitals",
+    "city": "lagos, nigeria",
+    "created_at": "2026-06-01T12:14:15.231619+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "ea7cb38d-6f09-4a5f-ba85-418df8dffb14",
+    "business_type": "nigerian diasporas",
+    "city": "south east & east of england",
+    "created_at": "2026-06-01T12:42:00.606537+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "268c5f4f-a3df-48dd-98c0-dd6ba471fe9a",
+    "business_type": "nigerian diasporas",
+    "city": "south east & east of england",
+    "created_at": "2026-06-01T12:29:02.89209+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "b5d6914a-3a48-46f8-81fd-524eb839d08b",
+    "business_type": "nigerian diasporas",
+    "city": "south east & east of england",
+    "created_at": "2026-06-01T12:31:42.790411+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "90989919-7734-40a2-b332-39d6e8c9eb3d",
+    "business_type": "nigerian diasporas",
+    "city": "meanwood leeds",
+    "created_at": "2026-06-01T13:04:36.743418+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "e63e345c-59ad-49bf-b877-f62d270e6545",
+    "business_type": "nigerian diasporas",
+    "city": "liverpool",
+    "created_at": "2026-06-01T13:08:09.262145+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "47720567-fc8f-4277-8a8c-e1df72e95b71",
+    "business_type": "nigerian diasporas",
+    "city": "liverpool",
+    "created_at": "2026-06-01T13:29:10.266209+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "2bf14bee-130e-492e-b20d-edeb480dd78a",
+    "business_type": "nigerian redeemed christian church of god diaspora",
+    "city": "central harlem new york",
+    "created_at": "2026-06-01T18:31:10.593993+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "4bc3934f-8286-49f6-99e4-7b85dd67102a",
+    "business_type": "air bnb owners",
+    "city": "canada",
+    "created_at": "2026-06-01T20:01:44.454749+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "c14c665e-da7f-42dc-9da4-8289f7a64316",
+    "business_type": "oil & gas companies",
+    "city": "rumuokwurushi layout port harcourt",
+    "created_at": "2026-06-01T13:57:59.447801+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "58f68e04-85ff-44c5-845a-06c60278f225",
+    "business_type": "nigerian diasporas",
+    "city": "kelvingrove glasgow",
+    "created_at": "2026-06-01T14:23:27.243295+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "2e5fd783-ae68-43f6-9d36-21a6470d00c1",
+    "business_type": "nigerian redeemed christian church of god diaspora",
+    "city": "usa",
+    "created_at": "2026-06-01T14:53:13.266657+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "7efe87ca-65b0-4a20-8a26-663ace843400",
+    "business_type": "nigerian redeemed christian church of god diaspora",
+    "city": "montrose houston",
+    "created_at": "2026-06-01T16:25:33.10173+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "45ded186-e370-4dd7-8f47-f54d1c985073",
+    "business_type": "investment",
+    "city": "nigeria",
+    "created_at": "2026-06-01T14:43:07.46237+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "695a0b8f-b0c2-4c9a-bbac-943f93dbf0e6",
+    "business_type": "investment",
+    "city": "victoria island lagos",
+    "created_at": "2026-06-01T14:55:08.594482+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "55ea6f3b-f1ef-4ba8-916f-79ef93bef012",
+    "business_type": "investment",
+    "city": "abuja",
+    "created_at": "2026-06-01T16:32:34.374982+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "6a3bbf44-53db-4c2e-8225-838a2ab3e42d",
+    "business_type": "oil & gas companies",
+    "city": "rumuokwurushi port harcourt",
+    "created_at": "2026-06-01T17:29:01.887259+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "ddb893b3-24ad-49d6-9460-bcb1d60eb4ed",
+    "business_type": "domain buyers",
+    "city": "london",
+    "created_at": "2026-06-02T05:36:36.289892+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "68f0a80b-e1e6-4dcd-8a82-2b25a0ae5067",
+    "business_type": "hospitals",
+    "city": "lagos, abuja",
+    "created_at": "2026-06-01T18:22:31.579763+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "8974df2e-1602-45e9-a770-7cc061e8c14a",
+    "business_type": "hotels",
+    "city": "accra ghana",
+    "created_at": "2026-06-01T20:58:44.556721+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "0741f815-de0f-4528-b8a7-411eada9882c",
+    "business_type": "dentists",
+    "city": "chicago usa",
+    "created_at": "2026-06-02T09:20:25.07435+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "72f5540c-d4dd-4cbd-9075-76347a0076c9",
+    "business_type": "airbnb hosts",
+    "city": "canada",
+    "created_at": "2026-06-03T05:00:54.298362+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "7e2b90ee-c517-4348-ab06-08f014a1f7b2",
+    "business_type": "skincare brands",
+    "city": "united states",
+    "created_at": "2026-06-03T06:33:34.999668+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "4bb4ae61-abdd-4da6-8d09-6df236617c22",
+    "business_type": "medical spa",
+    "city": "coconut grove miami",
+    "created_at": "2026-06-03T11:49:01.505467+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "bc9a0c05-b8e6-4500-8d50-a34ae42bcaaa",
+    "business_type": "dentists",
+    "city": "manchester uk",
+    "created_at": "2026-06-02T13:27:14.63075+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "227babfc-44e1-4cae-a19c-ce53491d1735",
+    "business_type": "real estate agents",
+    "city": "london uk",
+    "created_at": "2026-06-02T18:29:25.023264+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "cd8a91b1-aaba-4ff1-86e3-f6159ec9db93",
+    "business_type": "construction",
+    "city": "dallas texas",
+    "created_at": "2026-06-14T12:10:00.06097+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "fda3c0f7-e3af-4ed7-9943-dcaea6829ed4",
+    "business_type": "real estates companies",
+    "city": "lagos",
+    "created_at": "2026-06-03T15:56:30.944754+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "56af8011-07f1-4672-afbe-3d57bffe3512",
+    "business_type": "nigerian doctors",
+    "city": "houston medical center",
+    "created_at": "2026-06-03T16:13:28.522828+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "14d3283b-2172-4408-8250-e1d05cac1242",
+    "business_type": "nigerian doctors",
+    "city": "texas,usa",
+    "created_at": "2026-06-03T16:10:22.53524+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "afa1217c-efc0-4e6b-a06f-75858f699649",
+    "business_type": "manufacturing and industries co.,ltd",
+    "city": "guro-gu seoul",
+    "created_at": "2026-06-03T19:29:35.215308+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "7d20b86b-cc0f-4e73-898d-3d05f532a381",
+    "business_type": "manufacturing and industries co.,ltd",
+    "city": "sindorim-dong seoul",
+    "created_at": "2026-06-03T19:31:55.945359+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "5a14118e-b733-4706-a59a-cf56e52f14a7",
+    "business_type": "en590 10ppm",
+    "city": "kuwait",
+    "created_at": "2026-06-03T20:17:29.506509+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "8c31b5f3-49d7-415a-b3bf-07eabb097dcf",
+    "business_type": "nigerians in the diaspora organization",
+    "city": "beijing",
+    "created_at": "2026-06-04T14:01:29.515553+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "c9444bf4-d06d-4537-95c9-9df7314c18ce",
+    "business_type": "nigerians in the diaspora organization",
+    "city": "beijing",
+    "created_at": "2026-06-04T14:01:58.351842+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "5cfa2e55-b43a-4ab5-a18a-a20960406bc3",
+    "business_type": "construction company",
+    "city": "senegal",
+    "created_at": "2026-06-04T14:48:44.780033+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "c86aef8e-c844-4af0-9a57-9f2aa9cd01d4",
+    "business_type": "construction company",
+    "city": "senegal",
+    "created_at": "2026-06-04T14:48:58.023411+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "fcdefbb3-b3d0-4d1b-a1ea-1650698ad8ca",
+    "business_type": "manufacturing and industries co.,ltd",
+    "city": "gwaebeop-dong saha-gu",
+    "created_at": "2026-06-04T16:02:47.67085+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "175b18ab-1e54-46dc-9588-2caa1d44be96",
+    "business_type": "manufacturing and industries co.,ltd",
+    "city": "south korea, seo-gu",
+    "created_at": "2026-06-04T16:50:14.940643+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "319dc580-41a4-45fd-848f-1b8b0d2aefab",
+    "business_type": "manufacturing and industries co.,ltd",
+    "city": "south korea, seo-gu",
+    "created_at": "2026-06-04T18:28:03.35147+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "4db28da2-8f42-4dad-9af1-176f2bac306f",
+    "business_type": "manufacturing and industries co.,ltd",
+    "city": "goeun-dong saha-gu",
+    "created_at": "2026-06-04T00:57:46.746124+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "240d9f10-9ec5-4fcb-a0d5-d99e2d849636",
+    "business_type": "manufacturing and industries co.,ltd",
+    "city": "south korea, geumjeong-gu",
+    "created_at": "2026-06-03T21:59:04.861725+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "318d206b-7a92-4214-9705-016b762478a0",
+    "business_type": "european diaspora",
+    "city": "mitte berlin",
+    "created_at": "2026-06-04T10:14:40.629188+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "e38e81e9-6b18-4b58-ac60-85726ff6e3d6",
+    "business_type": "infrastructure company",
+    "city": "egypt",
+    "created_at": "2026-06-04T20:33:10.044427+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "66e04c0b-c72d-4990-b88d-83468be2a982",
+    "business_type": "nigerians in diaspora organization",
+    "city": "poland",
+    "created_at": "2026-06-05T11:14:16.925909+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "7c6cb397-6b8c-440f-af65-19701a3e88b2",
+    "business_type": "event centre",
+    "city": "osun",
+    "created_at": "2026-06-05T10:00:07.018802+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "085a5f84-9167-42d6-9ff1-87e4ae8f73d2",
+    "business_type": "vice president of logistics and freight  companies",
+    "city": "new york us",
+    "created_at": "2026-06-05T10:56:44.910812+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "fa28af3d-b747-4caa-a8c1-a156b2cd25f2",
+    "business_type": "nigerians in diaspora",
+    "city": "italy",
+    "created_at": "2026-06-05T11:17:59.836632+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "772cd360-dabc-4d46-a600-9d957676806a",
+    "business_type": "manufacturing and industries co.,ltd",
+    "city": "south korea, cheongyang-gun",
+    "created_at": "2026-06-05T10:36:54.175261+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "c938ebec-8507-4a47-8e7b-3bf8efe53e1d",
+    "business_type": "nigerians in diaspora organization",
+    "city": "mali",
+    "created_at": "2026-06-05T14:02:55.601862+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "1ebbaa7b-ff47-4bd8-8583-f6653a168d38",
+    "business_type": "construction",
+    "city": "houston texas",
+    "created_at": "2026-06-14T11:47:06.946478+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "83b58277-fb3b-4edb-9c12-1c2b0e2ca13f",
+    "business_type": "real estate & property developers",
+    "city": "senegal",
+    "created_at": "2026-06-05T16:53:33.985057+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "1be9e107-1e79-450b-9b8c-b66f8cf9a9cd",
+    "business_type": "real estate & property developers",
+    "city": "ghana",
+    "created_at": "2026-06-05T16:53:53.253297+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "3da8aafd-ac45-4d18-afbe-bac86f643793",
+    "business_type": "real estate & property developers",
+    "city": "morocco",
+    "created_at": "2026-06-05T16:54:05.406609+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "212b4467-1d74-43b1-a27b-d2eece7c02b2",
+    "business_type": "general business",
+    "city": "south korea, gangnam-gu, busan",
+    "created_at": "2026-06-05T15:03:25.414295+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "baf8e080-5aba-4f07-8e37-d28d30f21e0b",
+    "business_type": "real estate & property developers",
+    "city": "egypt",
+    "created_at": "2026-06-05T15:56:44.98613+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "70dcf843-b6ce-4bd7-91cb-b9a0f83fae1b",
+    "business_type": "saas companies ceo",
+    "city": "texas  us",
+    "created_at": "2026-06-05T15:56:22.701785+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "0d1142f4-42d2-4270-87ae-3071efaf55b5",
+    "business_type": "manufacturing and industries co.,ltd",
+    "city": "south korea, seosan-si",
+    "created_at": "2026-06-05T17:42:05.671912+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "c5713494-5178-4164-88f6-39607a31ea3e",
+    "business_type": "manufacturing & industrial companies",
+    "city": "egypt",
+    "created_at": "2026-06-05T17:20:24.447978+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "13346dfe-8330-4df1-bc5b-5cfb7fcbbf5c",
+    "business_type": "manufacturing & industrial companies",
+    "city": "south africa",
+    "created_at": "2026-06-05T17:46:08.425961+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "50fad351-c19a-4253-b1f2-4c38733fa4a4",
+    "business_type": "manufacturing & industrial companies",
+    "city": "south africa",
+    "created_at": "2026-06-05T17:45:36.528257+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "ff955a60-cc0f-4a47-8bf8-90bbec1dbddb",
+    "business_type": "manufacturing & industrial companies",
+    "city": "ghana",
+    "created_at": "2026-06-05T17:38:22.191639+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "2ac277f1-2483-4c61-acdd-e0d4d0fff8b6",
+    "business_type": "manufacturing & industrial companies",
+    "city": "morocco",
+    "created_at": "2026-06-05T17:30:44.807882+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "f3f068a6-e976-425c-8a71-5ce8e65630ba",
+    "business_type": "manufacturing & industrial companies",
+    "city": "tanzania",
+    "created_at": "2026-06-05T17:59:09.232552+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "6c1ab8c3-d3cd-4088-8195-0c775a60a28b",
+    "business_type": "real estate & property developers",
+    "city": "senegal",
+    "created_at": "2026-06-05T18:09:37.347399+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "0bf6b0f5-ac4f-4c36-aeda-c18144f33cec",
+    "business_type": "thrift collector",
+    "city": "durban, south africa",
+    "created_at": "2026-06-07T17:16:16.863857+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "12afed51-2d29-4b57-aa6c-0c516c18a455",
+    "business_type": "mfi",
+    "city": "durban, south africa",
+    "created_at": "2026-06-07T17:16:32.149138+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "01a2c4d8-15cd-4a6d-a053-68c6b4da998d",
+    "business_type": "cooperative",
+    "city": "port elizabeth, south africa",
+    "created_at": "2026-06-07T17:27:21.035062+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "0c9fc869-acd3-4cfe-8dbe-40ca057bcce4",
+    "business_type": "fashion and beauty",
+    "city": "lagos",
+    "created_at": "2026-06-07T15:32:57.897032+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "485cf7fb-2a79-4630-8938-b1b7d9982f34",
+    "business_type": "wealth management",
+    "city": "lagos, abuja, port harcourt, abia, delta, anambra",
+    "created_at": "2026-06-07T14:07:55.643001+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "d1da9391-8c48-427b-9164-81997f8a8cf8",
+    "business_type": "real estate",
+    "city": "abuja",
+    "created_at": "2026-06-07T16:15:20.46913+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "170701e8-2cf1-4643-9d6d-4038ec5208d5",
+    "business_type": "thrift collector, mfi",
+    "city": "abuja,nigeria",
+    "created_at": "2026-06-07T09:34:30.952604+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "a11d0bfc-6dbe-47f6-9da6-c9fbdc86d635",
+    "business_type": "real estate & property developers",
+    "city": "morocco",
+    "created_at": "2026-06-05T18:20:10.50362+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "3b49308f-705e-4356-a633-feb401dc7a7d",
+    "business_type": "real estate & property developers",
+    "city": "ghana",
+    "created_at": "2026-06-05T18:20:32.00378+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "e3e3edce-9aca-4f29-ae89-1ee0dc727973",
+    "business_type": "real estate & property developers",
+    "city": "guinea",
+    "created_at": "2026-06-05T18:20:50.438897+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "a9aedd15-e4db-4a2d-b0f0-82a5c9b60455",
+    "business_type": "thrift collector",
+    "city": "durban, south africa",
+    "created_at": "2026-06-07T17:16:07.791728+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "6cbc035b-9c67-4e2e-80c0-f5f0bfa0f532",
+    "business_type": "nigerians",
+    "city": "uk nigerians in london nigerians in manchester nigerians in houston nigerians in dallas nigerians in maryland nigerians in toronto nigerians in ontario nigerian professionals abroad nigerian homeowners abroad nigerian investors abroad nigerian diaspora property investors buy property in nigeria build house in nigeria in peckham london",
+    "created_at": "2026-06-06T19:03:29.406616+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "96f1ab0c-6769-4801-9ea8-d7dec2578eb0",
+    "business_type": "cooperative societies",
+    "city": "abuja",
+    "created_at": "2026-06-06T18:55:21.944274+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "c52ad855-34d7-41be-9af4-7e4adad3532e",
+    "business_type": "nigerian doctors",
+    "city": "uk",
+    "created_at": "2026-06-06T19:06:00.099734+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "c45741c6-d43d-41fe-bcdd-254b3ef1d47f",
+    "business_type": "accountancy firms",
+    "city": "united kingdom",
+    "created_at": "2026-06-07T09:35:15.355945+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "a01cacd9-6251-42e2-9769-9d9d6b2be036",
+    "business_type": "top companies for sponsorships",
+    "city": "abuja",
+    "created_at": "2026-06-07T16:16:07.975234+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "7af34964-34db-4278-819c-9c3467b56c72",
+    "business_type": "skincare brand, supplement brand,",
+    "city": "toronto",
+    "created_at": "2026-06-07T22:00:28.196665+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "84933bad-6b15-4df3-b428-6ad996354b2d",
+    "business_type": "nigerians restaurants, salons, law firms, hotels, gyms, real estate companies owners",
+    "city": "united kingdom",
+    "created_at": "2026-06-06T18:57:38.049003+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "f6ed4735-e0f3-4afe-b670-c8e51bc690b3",
+    "business_type": "shopify store owner",
+    "city": "united state",
+    "created_at": "2026-06-07T22:35:27.782364+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "7c5a1ed8-58fc-478e-b8d0-e745d4ed24cb",
+    "business_type": "shopify store owner",
+    "city": "switzerland",
+    "created_at": "2026-06-07T23:54:53.030253+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "7cc4c820-77c3-4632-a064-cc58c9c52eb6",
+    "business_type": "recruitment agencies",
+    "city": "united kingdom",
+    "created_at": "2026-06-07T09:34:49.99791+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "e09b4274-473f-48df-987f-0bf3cca565b9",
+    "business_type": "shopify store owner",
+    "city": "united state",
+    "created_at": "2026-06-07T22:38:13.135931+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "985b8fa4-9f64-4a45-9561-343cb70ed7e6",
+    "business_type": "shopify store owner",
+    "city": "united states",
+    "created_at": "2026-06-07T23:57:10.908045+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "38137842-b2d5-4b94-affc-67d2bbdee835",
+    "business_type": "nigerian doctors",
+    "city": "ireland",
+    "created_at": "2026-06-06T19:21:28.364838+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "dd3f5902-2764-467b-9dca-89406c601d2e",
+    "business_type": "cooperative",
+    "city": "tema, ghana",
+    "created_at": "2026-06-07T18:43:43.115429+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "1d50c85b-3fbe-47e8-9231-6e237d16ee05",
+    "business_type": "shopify store owner",
+    "city": "united state",
+    "created_at": "2026-06-07T22:32:42.06938+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "8735ecec-b239-4987-821c-fd5765d77082",
+    "business_type": "amazon authors",
+    "city": "united state",
+    "created_at": "2026-06-09T11:53:23.017963+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "9e724022-a32c-4a8e-b8cf-f532bb8f4539",
+    "business_type": "nigerian doctors",
+    "city": "ireland",
+    "created_at": "2026-06-06T19:25:29.063956+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "ca6ec50a-54fe-4bae-848b-fffb399f1643",
+    "business_type": "fashion and accessories",
+    "city": "lekki, lagos",
+    "created_at": "2026-06-07T17:47:17.654622+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "a8bc7c50-72e0-4809-936c-5ebcb82ad63b",
+    "business_type": "banques,banki",
+    "city": "dar es salaam, tanzania",
+    "created_at": "2026-06-07T20:58:54.36907+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "acd24f42-a166-4003-92f2-e632945098fa",
+    "business_type": "food manufacturers",
+    "city": "lagos, ogun state, oyo state",
+    "created_at": "2026-06-07T21:59:34.06737+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "853697d5-6765-4be0-8d55-8562de32bf27",
+    "business_type": "skin care brands",
+    "city": "abuja, nigeria",
+    "created_at": "2026-06-05T21:13:40.217278+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "ec395f92-d860-488a-bdca-ccce753c3bb0",
+    "business_type": "farm manager",
+    "city": "lagos",
+    "created_at": "2026-06-06T07:54:47.260212+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "f98c5fc0-c0cc-4d80-965a-26af1238d282",
+    "business_type": "work from home jobs",
+    "city": "lagos, nigeria",
+    "created_at": "2026-06-07T07:58:58.064991+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "5e92d04b-ba28-4e97-83d8-2d3d9bda8c46",
+    "business_type": "lounge and clubs",
+    "city": "lagos nigeria",
+    "created_at": "2026-06-06T13:58:23.673474+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "50b9b52c-790d-4c09-b5fb-0b3bed742946",
+    "business_type": "fashion and beauty",
+    "city": "lagos",
+    "created_at": "2026-06-07T15:31:31.775149+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "00a0c94e-5757-4483-a151-b7031572e0ec",
+    "business_type": "open to work",
+    "city": "united states",
+    "created_at": "2026-06-08T01:01:44.640627+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "04a3b0fa-aa6f-4612-88ff-dd3926e23135",
+    "business_type": "plumbing",
+    "city": "north las vegas",
+    "created_at": "2026-06-09T17:09:33.948859+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "b0ef849b-5d75-4cd2-9999-4417ea793282",
+    "business_type": "funds",
+    "city": "lagos, abuja, port harcourt, abia, delta, anambra",
+    "created_at": "2026-06-08T03:15:57.29235+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "bb56a4a3-86e1-41a8-ad9c-4bb1070711e3",
+    "business_type": "mutual funds",
+    "city": "lagos, abuja, port harcourt, abia, delta, anambra",
+    "created_at": "2026-06-08T03:21:08.732848+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "9c4fc3e7-dcd7-4483-b9f5-5e18268efdff",
+    "business_type": "restaurant",
+    "city": "ibadan",
+    "created_at": "2026-06-09T15:03:43.022552+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "3e1497ae-e56b-4e1f-95a7-cdb433dec5e8",
+    "business_type": "construction",
+    "city": "leeds uk",
+    "created_at": "2026-06-10T11:22:09.750242+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "eefb40f6-5417-42c8-b1c0-69f69aca4326",
+    "business_type": "clothing brands",
+    "city": "london uk",
+    "created_at": "2026-06-10T15:29:01.06406+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "1e4ed781-b4f9-41d8-90db-2ffb5ee2e07f",
+    "business_type": "restaurant",
+    "city": "ibadan",
+    "created_at": "2026-06-09T15:08:07.88474+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "35518f12-d6f8-4462-99d7-713aa024cf36",
+    "business_type": "restaurants",
+    "city": "ibadan",
+    "created_at": "2026-06-09T15:09:29.178266+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "fa6b4250-b48f-4fad-bcb4-735b6b5f81a0",
+    "business_type": "restaurants",
+    "city": "london uk",
+    "created_at": "2026-06-10T19:46:34.705393+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "7d93e39e-4cdd-4cd6-802b-796108f25a5a",
+    "business_type": "spa",
+    "city": "abuja",
+    "created_at": "2026-06-09T22:44:31.980874+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "59696914-8dbe-4819-a839-68db078c29e4",
+    "business_type": "constructions",
+    "city": "sydney australia",
+    "created_at": "2026-06-11T03:45:52.656407+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "ac078106-fbe2-4b95-90f2-434bea996ebb",
+    "business_type": "logistics company",
+    "city": "ogun state",
+    "created_at": "2026-06-11T08:34:18.445535+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "fe4774af-062a-4bd0-8138-4b2b7f1bba61",
+    "business_type": "primary school",
+    "city": "anambra",
+    "created_at": "2026-06-11T10:57:11.642877+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "0f6cac5b-c2c3-4a49-8434-6f4758566461",
+    "business_type": "cosmetic clinics",
+    "city": "london uk",
+    "created_at": "2026-06-08T06:42:50.809707+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "8efbf02f-156d-4932-bf5a-bd533d22e2b1",
+    "business_type": "shopify store owner",
+    "city": "united state",
+    "created_at": "2026-06-08T10:18:15.470747+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "f8c6e22e-7a0c-4f67-af5d-d482ed8c6228",
+    "business_type": "dental clinics",
+    "city": "london uk",
+    "created_at": "2026-06-08T06:42:38.505011+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "22c00516-a65d-4d60-88bb-38eb7919920a",
+    "business_type": "healthcare",
+    "city": "canada toronto",
+    "created_at": "2026-06-08T10:38:49.270934+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "f2820957-4a89-42de-b405-3e310b8eb5d8",
+    "business_type": "business owners",
+    "city": "united state",
+    "created_at": "2026-06-08T10:48:39.36636+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "ae59a9c7-0429-4369-8552-fff878d9337d",
+    "business_type": "construction",
+    "city": "minnesota",
+    "created_at": "2026-06-09T12:46:13.526961+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "c6ca85de-7b93-4c2c-9cf9-430ad7cbcab3",
+    "business_type": "infrastructure developers",
+    "city": "zimbabwe",
+    "created_at": "2026-06-12T12:11:17.404265+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "7efabb0a-2cf3-41a7-a668-e3d00ba1a882",
+    "business_type": "typing jobs",
+    "city": "united states",
+    "created_at": "2026-06-08T20:18:49.070132+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "cf1ca045-d9af-42cc-ae35-7ad64a5142da",
+    "business_type": "corporate communications directors",
+    "city": "lagos nigeria",
+    "created_at": "2026-06-08T16:43:43.04858+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "0e83a6d5-3596-40c5-af18-c4a074f29454",
+    "business_type": "corporate communications directors in a true **premium sponsorship database (100+ targets with current executives, emails, and contact details)** requires fresh verification because executive appointments and contact details change frequently. to ensure accuracy, i would normally research and validate each organization's latest leadership and corporate contacts.  for immediate use by tsm network ltd, below is a **sponsor target master database framework (120+ organizations)** organized by category and sponsorship suitability.  # tsm network ltd  ## master sponsorship target database (120+ targets)  ### tier 1 – telecoms & technology  | company            | sponsorship potential | best fit projects                       | | ------------------ | --------------------- | --------------------------------------- | | mtn nigeria        | very high             | orbit, lagos live, christmas wonderland | | airtel nigeria     | very high             | orbit, hospitality awards               | | globacom           | very high             | concerts & festivals                    | | 9mobile            | medium                | youth programs                          | | mainone            | medium                | tech events                             | | ihs towers         | medium                | investment forums                       | | huawei nigeria     | high                  | innovation events                       | | zte nigeria        | medium                | tech summits                            | | microsoft nigeria  | high                  | investment forums                       | | google west africa | high                  | creator economy                         | | meta nigeria       | high                  | lagos live                              | | tiktok africa      | high                  | creator festival                        | | samsung nigeria    | high                  | music festival                          | | hp nigeria         | medium                | entrepreneurship                        | | dell technologies  | medium                | business forums                         |  ---  ## tier 2 – banks & financial services  | company                  | sponsorship potential | best fit           | | ------------------------ | --------------------- | ------------------ | | access bank              | very high             | hospitality awards | | gtco                     | very high             | orbit              | | zenith bank              | very high             | awards             | | uba                      | very high             | pan-african events | | fidelity bank            | high                  | sme expo           | | first bank               | high                  | awards             | | stanbic ibtc             | high                  | investment forum   | | ecobank                  | high                  | pan-african events | | fcmb                     | high                  | business events    | | wema bank                | high                  | tech events        | | keystone bank            | medium                | awards             | | providus bank            | high                  | executive events   | | parallex bank            | medium                | sme expo           | | coronation merchant bank | high                  | investment forums  | | rand merchant bank       | high                  | investment events  |  ---  ## tier 3 – fintechs  | company                | | ---------------------- | | flutterwave            | | moniepoint             | | opay                   | | palmpay                | | interswitch            | | paystack               | | kuda                   | | paga                   | | remita                 | | carbon                 | | fairmoney              | | piggyvest              | | cowrywise              | | chipper cash           | | flutterwave foundation |  ---  ## tier 4 – fmcg  | company                   | | ------------------------- | | coca-cola nigeria         | | seven-up bottling company | | pepsi nigeria             | | nestlé nigeria            | | cadbury nigeria           | | unilever nigeria          | | pz cussons                | | promasidor                | | dano milk                 | | frieslandcampina wamco    | | golden penny              | | honeywell                 | | chi limited               | | rite foods                | | mamador                   |  ---  ## tier 5 – breweries & beverages  | company                 | | ----------------------- | | nigerian breweries      | | guinness nigeria        | | international breweries | | cway                    | | fearless energy         | | monster energy          | | red bull                | | aquafina                | | eva water               | | bigi                    |  ---  ## tier 6 – airlines & travel  | company                 | | ----------------------- | | air peace               | | ibom air                | | valuejet                | | united nigeria airlines | | overland airways        | | ethiopian airlines      | | emirates                | | qatar airways           | | turkish airlines        | | british airways         | | kenya airways           | | rwandair                | | lufthansa               |  ---  ## tier 7 – hospitality  | company                 | | ----------------------- | | lagos continental hotel | | lagos oriental hotel    | | eko hotels & suites     | | marriott lagos          | | radisson blu anchorage  | | four points by sheraton | | the wheatbaker          | | legend hotel lagos      | | continental hotel abuja | | transcorp hilton        |  ---  ## tier 8 – energy, oil & gas  | company          | | ---------------- | | dangote refinery | | nnpc ltd         | | seplat energy    | | oando            | | aiteo            | | totalenergies    | | shell nigeria    | | chevron nigeria  | | exxonmobil       | | sahara group     | | ardova           | | mrs oil          | | conoil           | | rainoil          |  ---  ## tier 9 – automotive  | company         | | --------------- | | toyota nigeria  | | coscharis group | | cfao motors     | | kia nigeria     | | hyundai nigeria | | mikano motors   | | nord motors     | | jetour nigeria  | | innoson motors  | | stallion motors |  ---  ## tier 10 – real estate & construction  | company         | | --------------- | | dangote cement  | | lafarge africa  | | bua cement      | | julius berger   | | ccecc           | | craneburg       | | pw nigeria      | | mixta africa    | | updc            | | landmark africa |  ---  ## tier 11 – development finance institutions  | organization                                  | | --------------------------------------------- | | africa finance corporation (afc)              | | nigeria sovereign investment authority (nsia) | | african development bank                      | | afreximbank                                   | | africa50                                      | | international finance corporation             | | british international investment              | | development bank of nigeria                   | | bank of industry                              | | ecowas bank for investment & development      |  ---  ## tier 12 – government & public sector  | organization                                         | | ---------------------------------------------------- | | lagos state government                               | | lagos state tourism board                            | | lagos state ministry of commerce                     | | lagos state ministry of tourism                      | | nigerian tourism development authority               | | nitda                                                | | nepc                                                 | | smedan                                               | | federal ministry of industry                         | | federal ministry of arts, culture & creative economy |  ---  ## tier 13 – media partners  | organization     | | ---------------- | | channels tv      | | arise news       | | tvc              | | silverbird       | | pulse nigeria    | | bellanaija       | | businessday      | | guardian nigeria | | thisday          | | thecable         | | techcabal        | | nairametrics     | | cnbc africa      | | forbes africa    |  # priority targets for tsm network (top 25)  1. mtn nigeria 2. access bank 3. gtco 4. uba 5. airtel nigeria 6. coca-cola 7. nigerian breweries 8. guinness nigeria 9. international breweries 10. flutterwave 11. moniepoint 12. air peace 13. emirates 14. ethiopian airlines 15. eko hotels 16. lagos continental 17. dangote group 18. afc 19. nsia 20. afreximbank 21. lagos state government 22. nitda 23. odu'a investment company 24. mastercard 25. visa  for sponsorship acquisition, these 25 organizations alone could realistically generate several hundred million naira annually for tsm network's portfolio if approached with properly structured sponsorship packages and executive-level relationship management.",
+    "city": "lagos nigeria",
+    "created_at": "2026-06-08T16:50:39.440585+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "0c0f96b7-0f9c-4e8b-af4f-626c2e177b5c",
+    "business_type": "lending, loan business brand managers in nigeria",
+    "city": "lagos nigeria",
+    "created_at": "2026-06-08T17:46:59.229843+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "625775c7-35a7-419a-a769-d4e31cf78755",
+    "business_type": "train ai",
+    "city": "united states",
+    "created_at": "2026-06-08T21:02:55.626768+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "20c35ee2-88bd-46a9-badc-4c440e6be656",
+    "business_type": "linguistic agencies/company",
+    "city": "california usa",
+    "created_at": "2026-06-09T08:04:19.394662+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "24ddc100-4125-4e53-a16c-5d5763424b91",
+    "business_type": "restaurants",
+    "city": "california",
+    "created_at": "2026-06-09T10:07:24.489524+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "6d545472-eb49-47de-a7ea-b972ef6e54d9",
+    "business_type": "roofing companies",
+    "city": "las vegas",
+    "created_at": "2026-06-16T19:00:11.342+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "ebde3350-2423-4151-bcbd-160345bda98f",
+    "business_type": "top 200 retail chains with over 3 locations and their location addresses",
+    "city": "all 36 states in nigeria",
+    "created_at": "2026-06-10T16:35:10.66395+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "a1760ecb-5edf-444b-bcdb-a9ddc0443abd",
+    "business_type": "construction companies in abeokuta",
+    "city": "abeokuta",
+    "created_at": "2026-06-10T05:36:03.982986+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "992b6917-d323-4ae3-8285-fdbeb8d6fe83",
+    "business_type": "schools",
+    "city": "ibadan",
+    "created_at": "2026-06-10T13:50:05.9631+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "4acc6dea-f8cf-4077-b444-179d00e30879",
+    "business_type": "saas tech companies",
+    "city": "dallas texas",
+    "created_at": "2026-06-10T15:40:28.475381+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "0ba26d63-8854-41cf-9468-18e50f5d4144",
+    "business_type": "travel agency",
+    "city": "abuja nigeria",
+    "created_at": "2026-06-11T09:03:19.282267+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "566f83e1-47b9-4371-a5e4-6ab820fbd4e1",
+    "business_type": "infrastructure developers",
+    "city": "zimbabwe",
+    "created_at": "2026-06-12T12:11:17.417086+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "62b474c2-7e12-43ce-841c-91fd21b4b539",
+    "business_type": "hvac",
+    "city": "sparks",
+    "created_at": "2026-06-11T11:07:24.07235+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "15b75b06-a969-4c53-a87b-e496a1281f96",
+    "business_type": "primary school",
+    "city": "anambra",
+    "created_at": "2026-06-11T11:00:09.927285+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "9cfb0f42-aa2f-4fbc-bf3e-ad79a11fb919",
+    "business_type": "event centres",
+    "city": "enugu",
+    "created_at": "2026-06-11T12:46:32.384856+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "5cf20596-6dec-468f-92e7-c89c5e4991a8",
+    "business_type": "roofing companies",
+    "city": "las vegas",
+    "created_at": "2026-06-16T19:02:16.724897+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "544b540c-4ac7-452e-9169-ec3c0dd18dff",
+    "business_type": "construction",
+    "city": "australia",
+    "created_at": "2026-06-12T02:20:16.964478+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "5125ad3b-c55d-40ad-9a19-610044cbef54",
+    "business_type": "plumbing",
+    "city": "carmel, indiana",
+    "created_at": "2026-06-12T02:29:54.366177+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "293a7216-80b4-44d5-9a40-52f8ebffae20",
+    "business_type": "secondary school",
+    "city": "accra, ghana",
+    "created_at": "2026-06-11T20:55:30.591252+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "377a5b58-247b-42eb-9700-15a8ddd37d96",
+    "business_type": "construction",
+    "city": "australia",
+    "created_at": "2026-06-12T07:04:58.328512+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "c9e5262c-7ddc-4644-8bd9-c3c653506451",
+    "business_type": "large commercial farms",
+    "city": "egypt",
+    "created_at": "2026-06-12T10:46:16.445685+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "3f1d3010-04e1-44e6-8b71-91c30d0e0ccf",
+    "business_type": "hotels",
+    "city": "imo state",
+    "created_at": "2026-06-12T10:42:14.732539+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "eea01a4b-352f-431e-b664-a83edea4e328",
+    "business_type": "large commercial farms",
+    "city": "zimbabwe",
+    "created_at": "2026-06-12T10:48:23.496682+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "681d56ac-ee02-42ac-8cf1-4106b0666416",
+    "business_type": "infrastructure developers",
+    "city": "tanzania",
+    "created_at": "2026-06-12T12:36:36.883409+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "05dbd86e-e370-4752-a636-4c77d38fffa1",
+    "business_type": "real estate offices in florida",
+    "city": "florida",
+    "created_at": "2026-06-12T12:36:52.273952+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "84e2b631-a66d-408e-901f-c8626f21fcd1",
+    "business_type": "manufacturing",
+    "city": "lagos",
+    "created_at": "2026-06-12T13:59:59.550291+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "c713283a-5451-4cd8-b874-03667560e9b3",
+    "business_type": "manufacturing",
+    "city": "lagos",
+    "created_at": "2026-06-12T14:01:20.775694+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "b4c19705-b743-4a51-9c4f-658a9e3930f5",
+    "business_type": "locksmith",
+    "city": "london uk",
+    "created_at": "2026-06-12T15:11:40.88732+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "48ab1392-a78a-49a7-bcfa-57c71b4755ac",
+    "business_type": "oil and gas depots",
+    "city": "lagos",
+    "created_at": "2026-06-12T17:45:26.472664+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "4b4e9143-7a36-4dd6-b104-e62100db5317",
+    "business_type": "shortlets",
+    "city": "lagos",
+    "created_at": "2026-06-12T19:05:21.859321+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "e738f345-c083-4b3e-9a39-2406b770c1cc",
+    "business_type": "gynecologists",
+    "city": "abuja",
+    "created_at": "2026-06-13T04:26:11.385696+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "34093ee3-8805-465f-9b25-c8d5bfcaf2cc",
+    "business_type": "roofing companies",
+    "city": "las vegas",
+    "created_at": "2026-06-16T19:01:18.950524+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "ba513315-be49-4fa2-8ba6-34341d7cce1c",
+    "business_type": "manufacturing",
+    "city": "lagos",
+    "created_at": "2026-06-13T11:49:07.703354+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "4d767a44-9973-4d20-8741-9b2f6bd8da5c",
+    "business_type": "operations manager",
+    "city": "united kingdom",
+    "created_at": "2026-06-13T12:31:57.920033+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "b4e93f0c-df4d-4b19-8b07-a9390b75a5cb",
+    "business_type": "production",
+    "city": "lagos",
+    "created_at": "2026-06-13T11:58:07.79646+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "5f2ebd6c-4d8b-4b45-8c6e-cae74a69d74c",
+    "business_type": "fashion store",
+    "city": "toronto canada",
+    "created_at": "2026-06-13T20:16:18.906271+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "631f69de-d749-4578-a27e-24c9736f29dc",
+    "business_type": "fashion",
+    "city": "florida usa",
+    "created_at": "2026-06-13T20:10:42.589868+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "d5b71a4d-9fd7-4e47-be42-09d763f617d9",
+    "business_type": "construction",
+    "city": "fairbanks alaska",
+    "created_at": "2026-06-14T08:30:55.870633+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "27f822e9-49c1-4ec0-8155-9b7ae7d3be0e",
+    "business_type": "manufacturing company",
+    "city": "ogun state",
+    "created_at": "2026-06-13T23:46:46.952126+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "2fc05648-7c7b-44bf-b412-df7b4f8abedf",
+    "business_type": "production company",
+    "city": "ogun state",
+    "created_at": "2026-06-13T23:46:16.087352+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "0ef359e5-6645-459b-9b43-22c24d5c6034",
+    "business_type": "secondary schools",
+    "city": "ajeromi-ifelodun",
+    "created_at": "2026-06-14T10:03:07.255961+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "0d3ee627-1a8d-4ee7-8afb-37454f3be896",
+    "business_type": "construction",
+    "city": "juneau alaska",
+    "created_at": "2026-06-14T09:35:49.084918+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "9f7cd678-3bed-4818-afae-97d7250369d3",
+    "business_type": "construction",
+    "city": "anchorage alaska",
+    "created_at": "2026-06-14T08:29:14.59435+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "5e995a3f-9308-41c3-89a3-8b1607ed9a02",
+    "business_type": "construction",
+    "city": "anchorage alaska",
+    "created_at": "2026-06-14T08:29:37.997671+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "0bf3f5a5-46c4-42ab-8de2-2e1ce536a729",
+    "business_type": "construction",
+    "city": "anchorage alaska",
+    "created_at": "2026-06-14T08:29:45.698123+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "3fdd105c-e4f8-404a-a6f3-3672ce6882fa",
+    "business_type": "construction",
+    "city": "anchorage alaska",
+    "created_at": "2026-06-14T08:29:59.346324+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "ab18728c-5d70-433c-be76-7aa0fcee16bf",
+    "business_type": "construction",
+    "city": "juneau alaska",
+    "created_at": "2026-06-14T09:36:04.371055+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "77725b3d-8590-4246-acba-707e6c1f3e00",
+    "business_type": "construction",
+    "city": "fairbanks alaska",
+    "created_at": "2026-06-14T08:30:21.951243+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "2f90ce1d-409c-4bc1-9dd2-3af538d4bbdc",
+    "business_type": "construction",
+    "city": "sitka alaska",
+    "created_at": "2026-06-14T09:47:15.224891+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "fac456ff-849b-419c-97f7-262a9987f426",
+    "business_type": "construction",
+    "city": "wasilla alaska",
+    "created_at": "2026-06-14T10:27:58.579637+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "076989f1-1949-4bf2-a881-94dfa611ffa5",
+    "business_type": "construction",
+    "city": "kenai alaska",
+    "created_at": "2026-06-14T11:02:06.810976+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "3dc5d315-ca46-404d-9e2c-f312f9eb67f3",
+    "business_type": "construction",
+    "city": "kodiak alaska",
+    "created_at": "2026-06-14T11:12:48.87311+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "a03d848b-8d53-4a59-9f7d-e7ab0e039215",
+    "business_type": "pastors",
+    "city": "abuja",
+    "created_at": "2026-06-14T11:13:59.223325+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "b9398faf-e625-42e6-92ff-2d966caaff08",
+    "business_type": "pastors",
+    "city": "wuse abuja",
+    "created_at": "2026-06-14T11:17:48.146795+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "d12acead-233a-434a-8d7a-46c508a6f542",
+    "business_type": "construction",
+    "city": "houston texas",
+    "created_at": "2026-06-14T11:16:27.774959+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "4b358856-4bc9-469e-84b7-6a5842bda1b6",
+    "business_type": "general overseers of churches in nasarawa",
+    "city": "nasarawa",
+    "created_at": "2026-06-14T11:29:15.0353+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "eb5279c5-278a-43bd-ad4a-fe21f61dda5d",
+    "business_type": "construction",
+    "city": "san antonio texas",
+    "created_at": "2026-06-14T11:54:55.90398+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "99608341-7c9b-425e-ac07-d8d0ececdf16",
+    "business_type": "construction",
+    "city": "fort worth texas",
+    "created_at": "2026-06-14T14:17:34.604575+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "00b09568-c23b-4f2e-ad1b-9373fe129a43",
+    "business_type": "construction",
+    "city": "el paso texas",
+    "created_at": "2026-06-14T14:18:05.417551+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "d3cacfa5-d82c-4fd0-8c2d-6fc59f7e9e13",
+    "business_type": "construction",
+    "city": "austin texas",
+    "created_at": "2026-06-14T12:20:28.551342+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "35ac9d1b-44e6-43e6-b03e-fa4c1c10b811",
+    "business_type": "construction",
+    "city": "el paso texas",
+    "created_at": "2026-06-14T14:39:36.031787+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "3349bde8-cca1-4512-ab41-ea1ca9e07812",
+    "business_type": "construction",
+    "city": "arlington texas",
+    "created_at": "2026-06-14T15:33:53.491705+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "b85b60b8-726b-49ca-8428-b14bd75db916",
+    "business_type": "construction",
+    "city": "corpus christi texas",
+    "created_at": "2026-06-14T15:47:23.46493+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "3de87022-f935-4ae3-8656-dab8b9c3260e",
+    "business_type": "construction",
+    "city": "corpus christi texas",
+    "created_at": "2026-06-14T15:47:56.139288+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "2dc0c905-c075-4e7b-b476-ca355dbe69b1",
+    "business_type": "nur pry and secondary schools",
+    "city": "festac town phase 1 lagos",
+    "created_at": "2026-06-14T15:52:11.322625+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "0365c424-79fc-4334-b80f-a013745e9271",
+    "business_type": "construction",
+    "city": "plano texas",
+    "created_at": "2026-06-14T15:52:49.57137+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "a3a56cea-d26e-46b5-9909-cf6bf037fc5c",
+    "business_type": "gym and fitness center",
+    "city": "ogun state",
+    "created_at": "2026-06-16T22:49:45.659909+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "ea260a46-36be-442e-aad1-df5d8b915cac",
+    "business_type": "training center",
+    "city": "ogun state",
+    "created_at": "2026-06-17T05:53:21.308876+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "da8527ac-dad4-4320-bd6a-cecb7fd5d3ec",
+    "business_type": "cleaning agency",
+    "city": "ogun state",
+    "created_at": "2026-06-17T06:03:56.16957+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "6923bb78-ed7a-43dc-80b1-7403b11afa57",
+    "business_type": "private nursery and primary schools",
+    "city": "ojo local government. lagos",
+    "created_at": "2026-06-17T08:47:21.178077+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "18dc515a-355f-4472-b33a-87980e81579a",
+    "business_type": "private nursery and primary schools",
+    "city": "ojo local government lagos",
+    "created_at": "2026-06-17T10:37:46.10506+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "6fd3ef28-6d3a-4704-9fe3-3a830a9aa1db",
+    "business_type": "private nursery and primary schools",
+    "city": "ojo local government lagos",
+    "created_at": "2026-06-17T12:04:20.19579+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "e7ab36df-9286-4827-b9a4-ffc92404cf67",
+    "business_type": "private nursery and primary schools",
+    "city": "ojo local government lagos",
+    "created_at": "2026-06-17T12:15:11.210795+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "a2c30651-3036-486b-9f56-e4195a3f8528",
+    "business_type": "private nursery and primary school",
+    "city": "ojo local government",
+    "created_at": "2026-06-17T12:33:53.300437+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "c04cdf2a-1d68-427b-a3e3-09fad0ab1a4b",
+    "business_type": "treading",
+    "city": "samcheok,cheonan,anseong,donghae",
+    "created_at": "2026-06-14T17:00:26.126201+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "647acbf7-56a9-49d3-940c-789b574f0de6",
+    "business_type": "healthcare",
+    "city": "moncton, new brunswick",
+    "created_at": "2026-06-14T20:50:13.925278+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "6cdb0773-4205-4417-90dd-2984108b74fe",
+    "business_type": "construction",
+    "city": "bellflower california",
+    "created_at": "2026-06-14T17:56:54.145875+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "380b5d85-cdb5-4e66-b185-bb4e95cdbd5b",
+    "business_type": "secondary schools",
+    "city": "epe",
+    "created_at": "2026-06-14T23:54:45.051397+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "f1eeb76e-3a3e-4ce6-8b71-6dfa715de38c",
+    "business_type": "translation company",
+    "city": "belgium",
+    "created_at": "2026-06-14T23:51:47.608936+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "852d79a8-1334-4e4f-8095-8d4ac4df2f08",
+    "business_type": "construction",
+    "city": "lord howe island australia",
+    "created_at": "2026-06-15T04:33:22.742771+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "9169d537-8cb1-49cb-897d-b018bf5a101e",
+    "business_type": "property manager",
+    "city": "london uk",
+    "created_at": "2026-06-15T09:08:28.796343+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "a4021c77-aff3-4626-bf59-fa812ba7fa75",
+    "business_type": "construction",
+    "city": "lyon france",
+    "created_at": "2026-06-15T08:59:12.583752+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "a8d67f06-2e1a-4685-b65f-e26ee0ea1b22",
+    "business_type": "event planning and management comapany",
+    "city": "abeokuta",
+    "created_at": "2026-06-15T09:04:05.269589+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "2321be75-a40c-4024-9f77-4c0a88f0c735",
+    "business_type": "home builder",
+    "city": "pittsburgh",
+    "created_at": "2026-06-15T07:19:53.333973+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "dd8e10b0-79da-44b5-82b2-cccce471a778",
+    "business_type": "construction",
+    "city": "london uk",
+    "created_at": "2026-06-15T10:25:17.935454+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "19daf228-ca75-418e-99e5-951e5aa0ce33",
+    "business_type": "translation company",
+    "city": "sweden",
+    "created_at": "2026-06-15T10:21:34.344244+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "c6d34a91-95df-455e-a50d-cc57ef7dab12",
+    "business_type": "translation company",
+    "city": "vatican city",
+    "created_at": "2026-06-15T10:19:31.001474+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "e6d7b6ab-2f57-4e0f-aea0-9357eb941c40",
+    "business_type": "translation company",
+    "city": "vatican city",
+    "created_at": "2026-06-15T10:18:32.146594+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "53dc54e8-0ded-4b11-b9b4-7ecc7fcf6fff",
+    "business_type": "auto mechanic",
+    "city": "auburn",
+    "created_at": "2026-06-15T13:46:09.881012+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "cf644488-510c-44cf-b191-ca7a081179d4",
+    "business_type": "auto mechanic",
+    "city": "auburn",
+    "created_at": "2026-06-15T13:48:01.152287+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "2d0d80a5-ba74-4872-a214-3257a46c08ef",
+    "business_type": "construction",
+    "city": "westminster uk",
+    "created_at": "2026-06-15T14:31:55.882812+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "21b4f02f-59f6-4044-88d3-5d3dc3f77b09",
+    "business_type": "agritec",
+    "city": "haidian district beijing",
+    "created_at": "2026-06-15T18:54:46.055787+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "4def53ff-e336-4eb9-a220-2b1cd5e4534b",
+    "business_type": "oil and gas",
+    "city": "ghana",
+    "created_at": "2026-06-15T15:17:03.58357+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "aa4ad801-8d77-4d60-b9f4-56d57fbb34a3",
+    "business_type": "clothing stores",
+    "city": "north tryon charlotte",
+    "created_at": "2026-06-15T15:32:51.156279+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "5743a294-823d-40f1-8c5e-868e123ffeab",
+    "business_type": "global outsourcing",
+    "city": "california, united state",
+    "created_at": "2026-06-15T17:39:15.028903+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "9428c802-3229-4da7-8139-fd1fe5c150d6",
+    "business_type": "manufacturing companies",
+    "city": "uae",
+    "created_at": "2026-06-15T17:35:15.165295+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "4dde977e-0b29-41f2-b720-44fa73d8ff7a",
+    "business_type": "agro allied",
+    "city": "newyork, united state",
+    "created_at": "2026-06-15T18:38:41.22159+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "67c7af0e-d875-49a2-a153-def1d64d2f1b",
+    "business_type": "agro allied",
+    "city": "united state",
+    "created_at": "2026-06-15T18:34:14.074269+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "00f1be99-faf6-449c-b3c1-be06389cbd28",
+    "business_type": "microfinance banks",
+    "city": "lagos nigeria",
+    "created_at": "2026-06-15T19:05:17.866475+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "9ca8fbd5-09a9-494c-b368-42fe397cf9c1",
+    "business_type": "fashion school and fashion design",
+    "city": "abeokuta",
+    "created_at": "2026-06-15T19:03:09.797936+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "34cd2d99-222c-41c1-8db5-42c6546e2ea3",
+    "business_type": "site:.co.kr manufactures of industrial tire",
+    "city": "south korea, seoul",
+    "created_at": "2026-06-15T23:35:43.510221+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "0f37b7b8-1287-41a4-a0ff-8dc32af0389d",
+    "business_type": "photography and video studio",
+    "city": "ogun state",
+    "created_at": "2026-06-16T16:29:38.417933+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "f0392a69-d083-41f8-8032-df4f8bcb5f58",
+    "business_type": "site:.co.kr",
+    "city": "south korea, seoul",
+    "created_at": "2026-06-15T23:38:08.703183+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "59220251-823c-4172-993a-ed84c5fbdc68",
+    "business_type": "digital advertising",
+    "city": "tel aviv",
+    "created_at": "2026-06-15T20:39:57.438719+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "1b281c74-6000-40fd-b1fe-29f7b5d5f64f",
+    "business_type": "\"@korea.com\" site:.co.kr \"manufactures of industrial tire\"",
+    "city": "south korea, seoul",
+    "created_at": "2026-06-15T23:31:21.797876+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "d815cdbe-745a-40fd-890d-be86f92f513f",
+    "business_type": "site:.co.kr \"manufactures of industrial tire\"",
+    "city": "south korea, seoul",
+    "created_at": "2026-06-15T23:33:32.144595+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "47cc1c39-4439-4386-aafd-37acbe3b490d",
+    "business_type": "law firm",
+    "city": "lagos",
+    "created_at": "2026-06-16T00:15:33.012154+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "97894ce1-9bf7-41c1-aabc-02f802c5272b",
+    "business_type": "partnerships",
+    "city": "newyork, united state",
+    "created_at": "2026-06-16T02:49:14.428331+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "42bc0a64-acb6-4a46-9287-35cd47b96866",
+    "business_type": "construction",
+    "city": "glasgow uk",
+    "created_at": "2026-06-16T08:07:09.886175+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "83dd6a6e-490f-471d-b784-9a1d73a08c2e",
+    "business_type": "microfinance banks",
+    "city": "lagos nigeria",
+    "created_at": "2026-06-16T08:32:04.733072+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "425acd90-c9ea-423d-9a02-6092ce28f986",
+    "business_type": "mortgage banks",
+    "city": "lagos nigeria",
+    "created_at": "2026-06-16T08:38:05.672393+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "4c12f18e-eabb-4d32-997a-aaf016e1b93c",
+    "business_type": "microfinance banks",
+    "city": "lagos nigeria",
+    "created_at": "2026-06-16T08:32:29.376115+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "5614e3ca-6c10-49fc-8f06-bbe89a479265",
+    "business_type": "photography and video studio",
+    "city": "ogun state",
+    "created_at": "2026-06-16T09:00:55.733298+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "bfcf3d45-27ad-4fd8-95bd-e7dab87c2b6d",
+    "business_type": "farm app",
+    "city": "haifa",
+    "created_at": "2026-06-16T14:19:18.822817+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "58d9e9fe-17aa-49ea-95b5-30194c7860e5",
+    "business_type": "electrical contractors",
+    "city": "henderson",
+    "created_at": "2026-06-16T11:51:16.258347+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "2b6deb2e-8a87-447a-bcef-05ab86183e70",
+    "business_type": "fabric store",
+    "city": "ogun state",
+    "created_at": "2026-06-16T10:35:36.069547+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "36b2acaf-d7df-43a9-8f33-9a4284d6b2ab",
+    "business_type": "arm",
+    "city": "abuja",
+    "created_at": "2026-06-16T10:32:20.004671+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "fdfedf19-58d7-4d7a-956f-53aa2de2aeb2",
+    "business_type": "hotel",
+    "city": "lagos, nigeria",
+    "created_at": "2026-06-16T11:52:43.36866+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "cdd437a1-777e-4437-9b55-08f39f33878f",
+    "business_type": "hospital",
+    "city": "oyo state, nigeria",
+    "created_at": "2026-06-16T11:37:34.834778+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "36c35fce-8215-46cf-9f08-cb891d7e3c23",
+    "business_type": "event planning and management company",
+    "city": "ogun state",
+    "created_at": "2026-06-16T13:23:30.61987+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "caf56e60-408c-4db3-b257-842e1b61db66",
+    "business_type": "private nursery and primary school",
+    "city": "ojo local government",
+    "created_at": "2026-06-17T12:26:08.354774+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "9bac09cb-ac69-49c6-833d-f10d84ee2e86",
+    "business_type": "private nursery and primary school",
+    "city": "ojo local government",
+    "created_at": "2026-06-17T12:52:25.430217+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "4f3d3dda-2bc4-46dc-a52c-a1815a8087b8",
+    "business_type": "133 skincare products online stores",
+    "city": "in new york city",
+    "created_at": "2026-06-17T13:41:01.38115+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "10fa5687-9cc2-481e-bde3-9702c123d2e4",
+    "business_type": "private nursery and primary school",
+    "city": "ojo local government lagos",
+    "created_at": "2026-06-17T13:58:49.948762+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "04b0e7e0-3d24-496f-ba9d-879d55325402",
+    "business_type": "private nursery and primary school",
+    "city": "ojo local government",
+    "created_at": "2026-06-17T14:03:45.197872+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "b0141ee0-768a-4376-b600-e7e350a17089",
+    "business_type": "finance & insurance",
+    "city": "new york united state",
+    "created_at": "2026-06-17T16:34:45.750884+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "b1142891-b892-4781-9e77-5e9b3fe2cc4e",
+    "business_type": "startup founders",
+    "city": "texas usa",
+    "created_at": "2026-06-17T16:50:55.261004+00:00",
+    "reason": "no matching user_searches or search_history row"
+  },
+  {
+    "searchJobId": "dc906920-1570-4cc9-a406-370385dab17c",
+    "business_type": "finance & insurance",
+    "city": "new york united state",
+    "created_at": "2026-06-17T16:45:53.268386+00:00",
+    "reason": "no matching user_searches or search_history row"
+  }
+]

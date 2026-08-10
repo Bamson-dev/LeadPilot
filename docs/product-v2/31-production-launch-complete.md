@@ -12,9 +12,9 @@
 | Old production baseline | `bc10b0ba73e56466607e0660141769d562324e80` (`v2.0.0`) |
 | Staging tip (at launch) | `edabdd3cfc2a2fcc1650ff479b0ff497224046c8` |
 | Phase 2.2 merge on main | `bc8639fa8a9fd0334317900ecbc7fe0b66f1c036` |
-| **Live production backend** | **`bc8639fa8a9fd0334317900ecbc7fe0b66f1c036`** |
-| `origin/main` tip | `e477387224adca16cdf64fbd0c2f275b0449080a` (broadcast hang fix sync; Coolify redeploy pending) |
-| Production tag | `v2.0.0-production` → `bc8639f…` |
+| **Live production backend** | **`d5d409980386f75f63e2091fbf032b43865c5497`** (post-redeploy; matches `origin/main`) |
+| `origin/main` tip | `d5d409980386f75f63e2091fbf032b43865c5497` |
+| Production tag | `v2.0.0-production` → `bc8639f…` (Phase 2.2 launch point; tip includes broadcast fix + launch docs) |
 | Rollback tag | `v2.0.0` → `bc10b0b` (**unchanged**) |
 
 ---
@@ -44,7 +44,7 @@ Contains: RC1, Free Trial, public journey, Admin RC1, Phase 2, Phase 2.1, Phase 
 | queue | **bullmq** |
 | memory | **safe** |
 | freeTrialIpCapReady | **true** |
-| Tip `e477387` deployed | **PENDING** — Redeploy Coolify to pick up broadcast hang fix |
+| Tip `e477387` / `d5d4099` deployed | **PASS** — live SHA = `origin/main` after Coolify redeploy |
 
 ---
 
@@ -141,9 +141,34 @@ No HTML 404 auth-bypass shells on protected APIs.
 
 ---
 
+## Controlled production exercise (2026-08-10)
+
+Disposable account: `prod.smoke.1786343166@mailinator.com`
+
+| Step | Result |
+|------|--------|
+| Trial signup | **PASS** (`success: true`, new) |
+| Welcome `email_sent` (analytics) | **PASS** (`trial_nurture_v3` / `trial_v3_step_1`) |
+| `email_opened` pixel | **PASS** |
+| Free trial search 1 (dentists / Austin) | **PASS** — 26 leads, `fullyComplete` |
+| Free trial search 2 (plumbers / Austin) | **PASS** — 19 leads, `fullyComplete` |
+| 3rd search paywall | **PASS** — HTTP **429** `TRIAL_LIMIT` |
+| Checkout initialize (Paystack) | **PASS** — live auth URL + `payment_initiated` event |
+| Payment charge → license → activation | **NOT COMPLETED** — production Paystack is **live** (not test); Cloudflare bot challenge blocks automated checkout. Requires a human card payment. |
+| Admin Email Revenue UI | **NOT VERIFIED** — no admin credentials in agent environment |
+| `email_clicked` attribution | **PARTIAL** — public event accepted (202); nurture click chain not fully proven end-to-end |
+
+**Paystack session (open to complete charge):** `https://checkout.paystack.com/4mskm4s7wa1j5o8`  
+**Reference:** `LP-1786343304640-4WA4OQ`
+
+After you complete payment (or provide admin login), reply and verification of activation / Email Revenue can finish.
+
+---
+
 ## Operator follow-ups (non-blocking)
 
-1. Coolify **Redeploy** production so live SHA becomes `e477387` (admin broadcast queue fix).  
+
+1. ~~Coolify Redeploy~~ **DONE** — live = `d5d4099` = `origin/main`.  
 2. Confirm Vercel production FE includes Phase 2.2 Email Revenue UI.  
 3. Optional: one controlled live payment → activation smoke when safe.
 
