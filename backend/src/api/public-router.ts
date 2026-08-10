@@ -52,7 +52,16 @@ router.get("/blog/posts", async (req: Request, res: Response) => {
     const { data, error } = await query;
     if (error) throw error;
 
-    res.json({ posts: data || [] });
+    // List payloads must stay small: omit huge base64 data-URI covers (full image still on detail).
+    const posts = (data || []).map((post) => {
+      const cover = typeof post.cover_image === "string" ? post.cover_image : null;
+      if (cover && cover.startsWith("data:")) {
+        return { ...post, cover_image: null };
+      }
+      return post;
+    });
+
+    res.json({ posts });
   } catch (err) {
     logger.error("Failed to fetch public blog posts", {
       error: err instanceof Error ? err.message : "unknown",

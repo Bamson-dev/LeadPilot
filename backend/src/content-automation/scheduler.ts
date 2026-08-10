@@ -2,6 +2,7 @@ import {
   countPublishedToday,
   getContentSettings,
   listJobs,
+  updateContentSettings,
   updateJob,
 } from "./repository";
 import { discoverAndQueueTopics, publishReadyJob, runContentJob } from "./pipeline";
@@ -33,13 +34,16 @@ export async function processContentAutomationTick(): Promise<void> {
   try {
     logger.info("Content automation scheduler tick");
     const settings = await getContentSettings();
-    if (!settings.automation_enabled) {
+    const launchRemaining = Number(settings.launch_batch_remaining || 0);
+    const active = settings.automation_enabled || launchRemaining > 0;
+    if (!active) {
       logger.info("Content automation paused");
       return;
     }
 
     const publishedToday = await countPublishedToday();
-    if (publishedToday >= settings.daily_article_target) {
+    const dailyCap = settings.daily_article_target;
+    if (publishedToday >= dailyCap && launchRemaining <= 0) {
       logger.info("Daily article target already met", { publishedToday });
       return;
     }
@@ -50,7 +54,7 @@ export async function processContentAutomationTick(): Promise<void> {
     for (const job of scheduled) {
       if (!job.scheduled_for) continue;
       if (new Date(job.scheduled_for).getTime() > now) continue;
-      if ((await countPublishedToday()) >= settings.daily_article_target) break;
+      if ((await countPublishedToday()) >= dailyCap && launchRemaining <= 0) break;
       try {
         await publishReadyJob(job.id);
       } catch (err) {
@@ -73,30 +77,58 @@ export async function processContentAutomationTick(): Promise<void> {
     // Ensure topic/job supply
     const ready = await listJobs("READY", 10);
     const qualifiedJobs = await listJobs("QUALIFIED", 10);
-    if (ready.length + qualifiedJobs.length < settings.daily_article_target) {
-      await discoverAndQueueTopics(settings.daily_article_target);
+    if (ready.length + qualifiedJobs.length < Math.max(dailyCap, launchRemaining)) {
+      await discoverAndQueueTopics(Math.max(dailyCap, launchRemaining, 4));
     }
 
-    // Advance one qualified job per tick
-    const nextQualified = (await listJobs("QUALIFIED", 1))[0];
-    if (nextQualified) {
-      const generated = await runContentJob(nextQualified.id, { publish: false });
-      if (generated.status === "READY" && settings.auto_publishing) {
-        const remaining = settings.daily_article_target - (await countPublishedToday());
-        if (remaining > 0) {
-          const slot = nextSlotDate(settings.publish_slot_hours);
-          // Spread: if slot is soon and capacity remains, schedule; else schedule next slot
-          await updateJob(generated.id, {
-            status: "SCHEDULED",
-            scheduled_for: slot.toISOString(),
+    // Launch batch: generate + publish immediately until remaining hits 0
+    let remainingLaunch = launchRemaining;
+    while (remainingLaunch > 0) {
+      const nextQualified = (await listJobs("QUALIFIED", 1))[0];
+      const nextReady = (await listJobs("READY", 1))[0];
+      if (nextReady) {
+        await publishReadyJob(nextReady.id);
+      } else if (nextQualified) {
+        const generated = await runContentJob(nextQualified.id, { publish: true });
+        if (generated.status !== "PUBLISHED") {
+          logger.error("Launch batch item did not publish", {
+            status: generated.status,
+            error: generated.error_message,
           });
+          break;
+        }
+      } else {
+        await discoverAndQueueTopics(4);
+        const created = (await listJobs("QUALIFIED", 1))[0];
+        if (!created) break;
+        continue;
+      }
+      remainingLaunch -= 1;
+      await updateContentSettings({ launch_batch_remaining: remainingLaunch });
+      logger.info("Launch batch progress", { remainingLaunch });
+    }
+
+    // Steady-state: advance one qualified job per tick when automation enabled
+    if (settings.automation_enabled && remainingLaunch <= 0) {
+      if ((await countPublishedToday()) < dailyCap) {
+        const nextQualified = (await listJobs("QUALIFIED", 1))[0];
+        if (nextQualified) {
+          const generated = await runContentJob(nextQualified.id, { publish: false });
+          if (generated.status === "READY" && settings.auto_publishing) {
+            const slot = nextSlotDate(settings.publish_slot_hours);
+            await updateJob(generated.id, {
+              status: "SCHEDULED",
+              scheduled_for: slot.toISOString(),
+            });
+          }
         }
       }
     }
 
     logger.info("Content automation scheduler completed", {
       publishedToday: await countPublishedToday(),
-      target: settings.daily_article_target,
+      target: dailyCap,
+      launchRemaining: remainingLaunch,
     });
   } catch (err) {
     logger.error("Content automation tick failed", {

@@ -21,7 +21,7 @@ export async function gatherResearchSources(
 
   for (const query of queries) {
     const tavily = await researchWithTavily(query, { maxResults });
-    if (tavily.ok) {
+    if (tavily.ok && tavily.sources.length > 0) {
       providersUsed.push("tavily");
       for (const s of tavily.sources) {
         if (seen.has(s.url)) continue;
@@ -29,8 +29,14 @@ export async function gatherResearchSources(
         sources.push(s);
       }
     } else {
-      errors.push(`tavily:${tavily.reason}`);
-      logger.warn("Tavily unavailable for query; trying Serper", { reason: tavily.reason });
+      errors.push(`tavily:${tavily.ok ? "empty" : tavily.reason}`);
+      logger.warn("Tavily unavailable/empty; trying Serper", {
+        reason: tavily.ok ? "empty" : tavily.reason,
+      });
+    }
+
+    // Serper fallback or supplement when coverage is thin
+    if (!tavily.ok || tavily.sources.length < Math.ceil(maxResults / 2)) {
       const serper = await researchWithSerper(query, { maxResults });
       if (serper.ok) {
         providersUsed.push("serper");

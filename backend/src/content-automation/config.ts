@@ -23,6 +23,7 @@ export const DEFAULT_CONTENT_SETTINGS: Omit<ContentAutomationSettings, "id" | "u
   daily_research_limit: 40,
   daily_image_limit: 8,
   publish_slot_hours: [8, 12, 16, 20],
+  launch_batch_remaining: 0,
 };
 
 export function getTavilyApiKey(): string | null {
