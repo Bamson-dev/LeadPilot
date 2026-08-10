@@ -35,8 +35,8 @@ export async function gatherResearchSources(
       });
     }
 
-    // Serper fallback or supplement when coverage is thin
-    if (!tavily.ok || tavily.sources.length < Math.ceil(maxResults / 2)) {
+    // Serper always as secondary validation/supplement for standard+ depth
+    if (depth !== "light" || !tavily.ok || tavily.sources.length < Math.ceil(maxResults / 2)) {
       const serper = await researchWithSerper(query, { maxResults });
       if (serper.ok) {
         providersUsed.push("serper");

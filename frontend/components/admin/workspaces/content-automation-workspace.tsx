@@ -15,8 +15,28 @@ type StatusPayload = {
     quality_threshold: number;
     automation_enabled: boolean;
     auto_publishing: boolean;
+    launch_batch_remaining?: number;
   };
-  today: { target: number; generated: number; published: number; failed: number };
+  today: {
+    target: number;
+    generated: number;
+    published: number;
+    failed: number;
+    remaining?: number;
+  };
+  scheduler?: {
+    status: string;
+    process: string;
+    frequency: string;
+    lastRun: string | null;
+    lastResult: string | null;
+    nextRun: string | null;
+    dailyTarget: number;
+    launchBatchRemaining: number;
+    serverSide: boolean;
+    requiresAdminOpen: boolean;
+    requiresBrowser: boolean;
+  };
   queue: {
     topicsWaiting: number;
     drafts: number;
@@ -24,6 +44,7 @@ type StatusPayload = {
     published: number;
     failed: number;
   };
+  seo?: { searchConsole: string; note: string };
   providers: Record<string, string>;
   recent: { jobs: Array<Record<string, unknown>>; failures: Array<Record<string, unknown>> };
 };
@@ -59,6 +80,10 @@ export function ContentAutomationWorkspace() {
     void refresh().catch((err) =>
       setError(err instanceof Error ? err.message : "Failed to load")
     );
+    const id = setInterval(() => {
+      void refresh().catch(() => undefined);
+    }, 30_000);
+    return () => clearInterval(id);
   }, [refresh]);
 
   async function run(label: string, fn: () => Promise<unknown>) {
@@ -81,7 +106,7 @@ export function ContentAutomationWorkspace() {
     <div className="space-y-6">
       <AdminWorkspaceHeader
         title="Content Automation"
-        description="Discover topics, generate editorial articles, and publish through the existing LeadThur blog."
+        description="Server-side scheduler publishes ~4 SEO-ready articles/day. Admin is for monitor/pause/resume only — work continues with Admin closed."
       />
 
       {error && (
@@ -98,18 +123,36 @@ export function ContentAutomationWorkspace() {
       <div className="grid gap-4 md:grid-cols-4">
         <Metric label="Automation" value={status?.automation || "—"} />
         <Metric
-          label="Today"
-          value={`${status?.today.published ?? 0}/${status?.today.target ?? 4} published`}
+          label="Today published"
+          value={`${status?.today.published ?? 0}/${status?.today.target ?? 4}`}
         />
-        <Metric label="Generated today" value={String(status?.today.generated ?? 0)} />
-        <Metric label="Failed" value={String(status?.today.failed ?? 0)} />
+        <Metric label="Remaining today" value={String(status?.today.remaining ?? "—")} />
+        <Metric label="Launch batch left" value={String(status?.scheduler?.launchBatchRemaining ?? status?.settings.launch_batch_remaining ?? 0)} />
       </div>
+
+      <section className="rounded border border-neutral-200 bg-white p-4">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+          Scheduler (server-side)
+        </h2>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-sm">
+          <Metric label="Status" value={status?.scheduler?.status || "—"} />
+          <Metric label="Last result" value={status?.scheduler?.lastResult || "—"} />
+          <Metric label="Last run" value={status?.scheduler?.lastRun ? new Date(status.scheduler.lastRun).toLocaleString() : "—"} />
+          <Metric label="Next run" value={status?.scheduler?.nextRun ? new Date(status.scheduler.nextRun).toLocaleString() : "—"} />
+        </div>
+        <p className="mt-3 text-xs text-neutral-500">
+          Process: {status?.scheduler?.process || "production backend"} · Frequency:{" "}
+          {status?.scheduler?.frequency || "hourly"} · Requires Admin open:{" "}
+          {status?.scheduler?.requiresAdminOpen ? "YES" : "NO"} · Requires browser:{" "}
+          {status?.scheduler?.requiresBrowser ? "YES" : "NO"}
+        </p>
+      </section>
 
       <div className="grid gap-4 md:grid-cols-4">
         <Metric label="Topics waiting" value={String(status?.queue.topicsWaiting ?? 0)} />
         <Metric label="Drafts" value={String(status?.queue.drafts ?? 0)} />
         <Metric label="Scheduled" value={String(status?.queue.scheduled ?? 0)} />
-        <Metric label="Published jobs" value={String(status?.queue.published ?? 0)} />
+        <Metric label="Failed" value={String(status?.queue.failed ?? 0)} />
       </div>
 
       <section className="rounded border border-neutral-200 bg-white p-4">
@@ -124,6 +167,19 @@ export function ContentAutomationWorkspace() {
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="rounded border border-neutral-200 bg-white p-4">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+          SEO monitoring
+        </h2>
+        <p className="text-sm text-neutral-700">
+          Search Console: <strong>{status?.seo?.searchConsole || "NOT CONNECTED"}</strong>
+        </p>
+        <p className="mt-1 text-xs text-neutral-500">{status?.seo?.note}</p>
+        <p className="mt-2 text-xs text-neutral-500">
+          Per-article editorial quality + SEO readiness scores are stored on each content job after generation.
+        </p>
       </section>
 
       <section className="flex flex-wrap gap-2">
@@ -168,43 +224,49 @@ export function ContentAutomationWorkspace() {
           Recent jobs
         </h2>
         <div className="space-y-2">
-          {(status?.recent.jobs || []).map((job) => (
-            <div
-              key={String(job.id)}
-              className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-100 py-2 text-sm last:border-0"
-            >
-              <div>
-                <div className="font-medium">{String(job.status)}</div>
-                <div className="text-neutral-500">
-                  score {String(job.quality_score ?? "—")} · {String(job.id).slice(0, 8)}
+          {(status?.recent.jobs || []).map((job) => {
+            const meta = (job.meta || {}) as Record<string, unknown>;
+            const notes = (job.quality_notes || {}) as Record<string, unknown>;
+            return (
+              <div
+                key={String(job.id)}
+                className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-100 py-2 text-sm last:border-0"
+              >
+                <div>
+                  <div className="font-medium">{String(job.status)}</div>
+                  <div className="text-neutral-500">
+                    quality {String(job.quality_score ?? "—")} · SEO{" "}
+                    {String(meta.seoScore ?? notes.seoScore ?? "—")} ·{" "}
+                    {String(job.id).slice(0, 8)}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {(job.status === "READY" || job.status === "SCHEDULED") && (
+                    <Action
+                      label="Publish Now"
+                      disabled={!!busy}
+                      onClick={() =>
+                        run("Publish", () =>
+                          api(`/jobs/${job.id}/publish`, { method: "POST", body: "{}" })
+                        )
+                      }
+                    />
+                  )}
+                  {(job.status === "FAILED" || job.status === "RETRYING") && (
+                    <Action
+                      label="Retry"
+                      disabled={!!busy}
+                      onClick={() =>
+                        run("Retry", () =>
+                          api(`/jobs/${job.id}/retry`, { method: "POST", body: "{}" })
+                        )
+                      }
+                    />
+                  )}
                 </div>
               </div>
-              <div className="flex gap-2">
-                {(job.status === "READY" || job.status === "SCHEDULED") && (
-                  <Action
-                    label="Publish Now"
-                    disabled={!!busy}
-                    onClick={() =>
-                      run("Publish", () =>
-                        api(`/jobs/${job.id}/publish`, { method: "POST", body: "{}" })
-                      )
-                    }
-                  />
-                )}
-                {(job.status === "FAILED" || job.status === "RETRYING") && (
-                  <Action
-                    label="Retry"
-                    disabled={!!busy}
-                    onClick={() =>
-                      run("Retry", () =>
-                        api(`/jobs/${job.id}/retry`, { method: "POST", body: "{}" })
-                      )
-                    }
-                  />
-                )}
-              </div>
-            </div>
-          ))}
+            );
+          })}
           {!status?.recent.jobs?.length && (
             <p className="text-sm text-neutral-500">No jobs yet.</p>
           )}

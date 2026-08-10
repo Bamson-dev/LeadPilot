@@ -4,6 +4,7 @@ import { buildContentBrief, buildMetadataFromBrief, generateArticleHtml, reviseA
 import { generateArticleImage } from "./providers/openai-image";
 import { pickLeadThurCapability } from "./product-facts";
 import { gatherResearchSources } from "./research";
+import { computeSeoReadiness } from "./seo-score";
 import {
   countImagesToday,
   countPublishedToday,
@@ -223,6 +224,15 @@ export async function runContentJob(
     const existingSlug = posts.find((p) => p.slug === slug);
     if (existingSlug) slug = `${slug}-${Date.now().toString(36).slice(-4)}`;
 
+    const seo = computeSeoReadiness({
+      html,
+      brief,
+      meta: { ...meta, slug },
+      hasImage: Boolean(coverImage),
+      imageAlt,
+      sourceCount: research.sources.length,
+    });
+
     const post = await createBlogPostDraft({
       title: meta.title,
       slug,
@@ -241,7 +251,13 @@ export async function runContentJob(
       blog_post_id: post.id,
       article_html: html,
       quality_score: quality.score,
-      quality_notes: { ...quality.breakdown, feedback: quality.feedback },
+      quality_notes: {
+        ...quality.breakdown,
+        feedback: quality.feedback,
+        seoScore: seo.score,
+        seoBreakdown: seo.breakdown,
+        seoNotes: seo.notes,
+      },
       leadthur_cta: capability.cta,
       image_status: imageStatus,
       image_alt: imageAlt,
@@ -252,6 +268,7 @@ export async function runContentJob(
         imageAlt,
         ogTitle: meta.metaTitle,
         ogDescription: meta.metaDescription,
+        seoScore: seo.score,
       },
     });
 

@@ -42,6 +42,31 @@ contentAutomationRouter.get("/status", async (_req: Request, res: Response) => {
         generated: counts.generatedToday,
         published: counts.publishedToday,
         failed: counts.failed,
+        remaining: Math.max(
+          0,
+          settings.daily_article_target - counts.publishedToday
+        ),
+      },
+      scheduler: {
+        status:
+          settings.automation_enabled || Number(settings.launch_batch_remaining || 0) > 0
+            ? "RUNNING"
+            : "PAUSED",
+        process: "production-backend:startContentAutomationScheduler",
+        frequency: "hourly (+45s after boot)",
+        lastRun: settings.last_scheduler_run_at || null,
+        lastResult: settings.last_scheduler_result || null,
+        lastError: settings.last_scheduler_error || null,
+        nextRun: settings.last_scheduler_run_at
+          ? new Date(
+              new Date(settings.last_scheduler_run_at).getTime() + 60 * 60 * 1000
+            ).toISOString()
+          : null,
+        dailyTarget: settings.daily_article_target,
+        launchBatchRemaining: settings.launch_batch_remaining || 0,
+        serverSide: true,
+        requiresAdminOpen: false,
+        requiresBrowser: false,
       },
       queue: {
         topicsWaiting: counts.topicsWaiting,
@@ -49,6 +74,10 @@ contentAutomationRouter.get("/status", async (_req: Request, res: Response) => {
         scheduled: counts.scheduled,
         published: counts.published,
         failed: counts.failed,
+      },
+      seo: {
+        searchConsole: "NOT CONNECTED",
+        note: "Search Console metrics appear here when credentials are configured. Indexing is not claimed without evidence.",
       },
       recent: {
         jobs: recentJobs,

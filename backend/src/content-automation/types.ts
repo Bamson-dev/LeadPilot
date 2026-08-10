@@ -36,6 +36,9 @@ export interface ContentAutomationSettings {
   daily_image_limit: number;
   publish_slot_hours: number[];
   launch_batch_remaining: number;
+  last_scheduler_run_at: string | null;
+  last_scheduler_result: string | null;
+  last_scheduler_error: string | null;
   updated_at: string;
 }
 
