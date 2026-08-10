@@ -18,7 +18,7 @@ export const DEFAULT_CONTENT_SETTINGS: Omit<ContentAutomationSettings, "id" | "u
     "Freelancing",
     "SMMA",
   ],
-  max_generation_attempts: 3,
+  max_generation_attempts: 4,
   max_retries: 3,
   daily_research_limit: 40,
   daily_image_limit: 8,

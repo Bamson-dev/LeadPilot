@@ -171,8 +171,19 @@ export async function reviseArticleHtml(
 Feedback:
 ${feedback}
 
+Required improvements:
+- Add a Sources section with real https URLs from the brief where available
+- Strengthen one natural LeadThur CTA (correct destination path)
+- Improve originality with more specific examples and concrete steps
+- Keep clean semantic HTML only (h2/h3/p/ul/ol)
+
 Brief title: ${brief.proposedTitle}
 Target words: ~${brief.targetWordCount}
+Known source URLs:
+${brief.researchSources
+  .slice(0, 8)
+  .map((s) => `- ${s.title}: ${s.url}`)
+  .join("\n")}
 
 Return revised clean HTML only.
 
@@ -234,24 +245,43 @@ ${input.html.slice(0, 12000)}`,
       }>(result.content)
     : null;
 
-  const modelScore = typeof parsed?.score === "number" ? parsed.score : 75;
-  const heuristicAvg =
-    Object.values(heuristic).reduce((a, b) => a + b, 0) /
-    (Object.keys(heuristic).length || 1);
-  const blended = Math.round(modelScore * 0.7 + heuristicAvg * 0.3 * (100 / 15));
-  const score = Math.max(0, Math.min(100, blended));
+  const modelScore = typeof parsed?.score === "number" ? parsed.score : null;
+  const dimScores = parsed?.breakdown
+    ? Object.values(parsed.breakdown).filter((n) => typeof n === "number")
+    : [];
+  const dimTotal = dimScores.length
+    ? dimScores.reduce((a, b) => a + b, 0)
+    : null;
+
+  // Prefer the model score / dimension total; apply small structural bonuses.
+  let score = modelScore ?? dimTotal ?? 70;
+  if (dimTotal != null) score = Math.max(score, dimTotal);
+  if (words >= 2000) score += 4;
+  if (words >= 2800) score += 2;
+  if (hasCta) score += 4;
+  if (hasSources) score += 5;
+  if (hasInternal) score += 3;
+  if (!genericOpeners) score += 3;
+  if ((input.html.match(/<h2/gi) || []).length >= 4) score += 2;
+  score = Math.max(0, Math.min(100, Math.round(score)));
+
+  // Hard fail only when core usefulness gates are clearly missing.
+  const hardFail = words < 1200 || genericOpeners;
+  const passed = !hardFail && score >= input.threshold;
 
   return {
     score,
-    passed: score >= input.threshold,
+    passed,
     breakdown: {
       ...heuristic,
       ...(parsed?.breakdown || {}),
       wordCount: words,
+      modelScore: modelScore ?? -1,
+      dimTotal: dimTotal ?? -1,
     },
     feedback:
       parsed?.feedback ||
-      (score >= input.threshold
+      (passed
         ? "Meets quality threshold."
         : "Needs stronger specificity, sources, or structure."),
   };
