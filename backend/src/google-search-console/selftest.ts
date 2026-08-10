@@ -55,6 +55,16 @@ async function main() {
   assert.ok(url.includes("access_type=offline"));
   assert.ok(!url.includes("test-client-secret"));
 
+  const { pickSearchConsoleSiteUrl } = await import("./config");
+  assert.strictEqual(
+    pickSearchConsoleSiteUrl(["sc-domain:leadthur.com"], "https://leadthur.com/"),
+    "sc-domain:leadthur.com"
+  );
+  assert.strictEqual(
+    pickSearchConsoleSiteUrl(["https://leadthur.com/"], "https://leadthur.com/"),
+    "https://leadthur.com/"
+  );
+
   console.log("GSC selftest PASS");
 }
 

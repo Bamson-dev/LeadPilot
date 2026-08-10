@@ -7,6 +7,7 @@ import {
   getGscRedirectUri,
   getGscSiteUrl,
   isGscConfigured,
+  pickSearchConsoleSiteUrl,
 } from "./config";
 import { encryptGscSecret, hashOAuthState } from "./crypto";
 import {
@@ -177,26 +178,22 @@ export async function completeOAuthCallback(input: {
 
     const sites = await listSearchConsoleSites(tokens.accessToken);
     const expected = getGscSiteUrl();
-    const normalizedExpected = expected.replace(/\/$/, "");
-    const matched = sites.some((s) => {
-      const n = s.replace(/\/$/, "");
-      return n === normalizedExpected || n === `sc-domain:leadthur.com`;
-    });
-    // Also accept property listed exactly as configured (with trailing slash).
-    const matchedExact = sites.includes(expected) || matched;
-    if (!matchedExact) {
+    const matchedSite = pickSearchConsoleSiteUrl(sites, expected);
+    if (!matchedSite) {
       logger.warn("GSC property verification failed", {
         expected,
         siteCount: sites.length,
       });
       return {
         ok: false,
-        reason: "property_unavailable — authorized account cannot access the LeadThur Search Console property",
+        reason:
+          "property_unavailable — authorized account cannot access the LeadThur Search Console property",
       };
     }
 
     await upsertConnection({
-      site_url: expected,
+      // Persist the exact Google property URL (may be sc-domain:…).
+      site_url: matchedSite,
       refresh_token_encrypted: encryptGscSecret(tokens.refreshToken),
       scopes: tokens.scope.split(/\s+/).filter(Boolean),
       status: "connected",

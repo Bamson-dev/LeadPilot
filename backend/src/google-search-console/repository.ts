@@ -2,12 +2,29 @@ import { supabase } from "../database/client";
 import { getGscSiteUrl } from "./config";
 import type { GscConnection, GscConnectionStatus, GscPageRow, GscQueryRow } from "./types";
 
+async function resolvedStatsSiteUrl(): Promise<string> {
+  const connection = await getActiveConnection();
+  return connection?.site_url || getGscSiteUrl();
+}
+
 export async function getActiveConnection(): Promise<GscConnection | null> {
+  // Prefer env site URL, but fall back to the latest provider row so domain-property
+  // connections (sc-domain:…) remain findable after OAuth resolution.
   const siteUrl = getGscSiteUrl();
-  const { data, error } = await supabase
+  const byEnv = await supabase
     .from("google_search_console_connections")
     .select("*")
     .eq("site_url", siteUrl)
+    .maybeSingle();
+  if (byEnv.error) throw new Error(byEnv.error.message);
+  if (byEnv.data) return byEnv.data as GscConnection;
+
+  const { data, error } = await supabase
+    .from("google_search_console_connections")
+    .select("*")
+    .eq("provider", "google_search_console")
+    .order("updated_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
   if (error) throw new Error(error.message);
   return (data as GscConnection | null) || null;
@@ -50,6 +67,18 @@ export async function upsertConnection(
     row.rows_collected = patch.rows_collected ?? 0;
   }
 
+  // Update-by-id when site_url changes (env URL-prefix → sc-domain property).
+  if (existing?.id && existing.site_url !== patch.site_url) {
+    const { data, error } = await supabase
+      .from("google_search_console_connections")
+      .update(row)
+      .eq("id", existing.id)
+      .select("*")
+      .single();
+    if (error) throw new Error(error.message);
+    return data as GscConnection;
+  }
+
   const { data, error } = await supabase
     .from("google_search_console_connections")
     .upsert(row, { onConflict: "site_url" })
@@ -63,7 +92,8 @@ export async function markConnectionStatus(
   status: GscConnectionStatus,
   error?: { code?: string; message?: string }
 ): Promise<void> {
-  const siteUrl = getGscSiteUrl();
+  const connection = await getActiveConnection();
+  if (!connection?.id) return;
   const updates: Record<string, unknown> = {
     status,
     updated_at: new Date().toISOString(),
@@ -76,12 +106,13 @@ export async function markConnectionStatus(
   const { error: dbError } = await supabase
     .from("google_search_console_connections")
     .update(updates)
-    .eq("site_url", siteUrl);
+    .eq("id", connection.id);
   if (dbError) throw new Error(dbError.message);
 }
 
 export async function clearRefreshToken(): Promise<void> {
-  const siteUrl = getGscSiteUrl();
+  const connection = await getActiveConnection();
+  if (!connection?.id) return;
   const { error } = await supabase
     .from("google_search_console_connections")
     .update({
@@ -89,7 +120,7 @@ export async function clearRefreshToken(): Promise<void> {
       status: "disconnected",
       updated_at: new Date().toISOString(),
     })
-    .eq("site_url", siteUrl);
+    .eq("id", connection.id);
   if (error) throw new Error(error.message);
 }
 
@@ -138,10 +169,11 @@ export async function purgeExpiredOAuthStates(): Promise<void> {
 export async function startSyncRun(
   trigger: "scheduler" | "manual" | "connect"
 ): Promise<string> {
+  const siteUrl = await resolvedStatsSiteUrl();
   const { data, error } = await supabase
     .from("google_search_console_sync_runs")
     .insert({
-      site_url: getGscSiteUrl(),
+      site_url: siteUrl,
       trigger,
       status: "running",
     })
@@ -194,7 +226,7 @@ export async function upsertDailyRows(
   }>
 ): Promise<number> {
   if (!rows.length) return 0;
-  const siteUrl = getGscSiteUrl();
+  const siteUrl = await resolvedStatsSiteUrl();
   const payload = rows.map((r) => ({
     site_url: siteUrl,
     ...r,
@@ -209,7 +241,7 @@ export async function upsertDailyRows(
 
 export async function upsertPageRows(rows: GscPageRow[]): Promise<number> {
   if (!rows.length) return 0;
-  const siteUrl = getGscSiteUrl();
+  const siteUrl = await resolvedStatsSiteUrl();
   const payload = rows.map((r) => ({
     site_url: siteUrl,
     report_date: r.report_date,
@@ -235,7 +267,7 @@ export async function upsertPageRows(rows: GscPageRow[]): Promise<number> {
 
 export async function upsertQueryRows(rows: GscQueryRow[]): Promise<number> {
   if (!rows.length) return 0;
-  const siteUrl = getGscSiteUrl();
+  const siteUrl = await resolvedStatsSiteUrl();
   const payload = rows.map((r) => ({
     site_url: siteUrl,
     report_date: r.report_date,
@@ -262,7 +294,7 @@ export async function pruneOldStats(retentionDays = 400): Promise<void> {
   const cutoff = new Date();
   cutoff.setUTCDate(cutoff.getUTCDate() - retentionDays);
   const cutoffStr = cutoff.toISOString().slice(0, 10);
-  const siteUrl = getGscSiteUrl();
+  const siteUrl = await resolvedStatsSiteUrl();
   await supabase
     .from("google_search_console_daily")
     .delete()
@@ -293,7 +325,7 @@ export async function getOverview(days: number): Promise<{
   position: number;
   days: number;
 }> {
-  const siteUrl = getGscSiteUrl();
+  const siteUrl = await resolvedStatsSiteUrl();
   const { data, error } = await supabase
     .from("google_search_console_daily")
     .select("clicks, impressions, ctr, position")
@@ -312,7 +344,7 @@ export async function getOverview(days: number): Promise<{
 }
 
 export async function getTrends(days: number) {
-  const siteUrl = getGscSiteUrl();
+  const siteUrl = await resolvedStatsSiteUrl();
   const { data, error } = await supabase
     .from("google_search_console_daily")
     .select("report_date, clicks, impressions, ctr, position")
@@ -328,7 +360,7 @@ export async function getTopPages(
   sortBy: "clicks" | "impressions" | "ctr" | "position" = "clicks",
   limit = 50
 ) {
-  const siteUrl = getGscSiteUrl();
+  const siteUrl = await resolvedStatsSiteUrl();
   const { data, error } = await supabase
     .from("google_search_console_pages")
     .select("page, clicks, impressions, ctr, position")
@@ -376,7 +408,7 @@ export async function getTopQueries(
   sortBy: "clicks" | "impressions" | "ctr" | "position" = "clicks",
   limit = 50
 ) {
-  const siteUrl = getGscSiteUrl();
+  const siteUrl = await resolvedStatsSiteUrl();
   const { data, error } = await supabase
     .from("google_search_console_queries")
     .select("query, clicks, impressions, ctr, position")
@@ -420,7 +452,7 @@ export async function getTopQueries(
 }
 
 export async function countStoredRows(): Promise<number> {
-  const siteUrl = getGscSiteUrl();
+  const siteUrl = await resolvedStatsSiteUrl();
   const [d, p, q] = await Promise.all([
     supabase
       .from("google_search_console_daily")

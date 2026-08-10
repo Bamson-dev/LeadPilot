@@ -1,7 +1,8 @@
 import { logger } from "../utils/logger";
+import { getGscSiteUrl, pickSearchConsoleSiteUrl } from "./config";
 import { decryptGscSecret } from "./crypto";
 import { refreshAccessToken } from "./oauth";
-import { querySearchAnalytics } from "./client";
+import { listSearchConsoleSites, querySearchAnalytics } from "./client";
 import {
   finishSyncRun,
   getActiveConnection,
@@ -43,7 +44,12 @@ export async function runGscSync(
 
   try {
     const connection = await getActiveConnection();
-    if (!connection || connection.status !== "connected" || !connection.refresh_token_encrypted) {
+    // Allow retry from error state when a refresh token is still present.
+    if (
+      !connection ||
+      !connection.refresh_token_encrypted ||
+      (connection.status !== "connected" && connection.status !== "error")
+    ) {
       return { ok: false, rowsUpserted: 0, error: "not_connected" };
     }
 
@@ -81,25 +87,49 @@ export async function runGscSync(
       return { ok: false, rowsUpserted: 0, error: message };
     }
 
+    // Resolve the exact Google property URL (URL-prefix vs domain property).
+    const sites = await listSearchConsoleSites(accessToken);
+    const siteUrl =
+      pickSearchConsoleSiteUrl(sites, connection.site_url) ||
+      pickSearchConsoleSiteUrl(sites, getGscSiteUrl());
+    if (!siteUrl) {
+      const message =
+        "property_unavailable — authorized account cannot access the LeadThur Search Console property";
+      await markConnectionStatus("error", { code: "property_unavailable", message });
+      await finishSyncRun(runId, {
+        status: "failed",
+        errorCode: "property_unavailable",
+        errorMessage: message,
+      });
+      return { ok: false, rowsUpserted: 0, error: message };
+    }
+    if (siteUrl !== connection.site_url) {
+      await upsertConnection({ site_url: siteUrl, status: "connected" });
+    }
+
     const { startDate, endDate } = reportingWindow();
     let rowsUpserted = 0;
 
     const daily = await querySearchAnalytics(accessToken, {
+      siteUrl,
       startDate,
       endDate,
       dimensions: ["date"],
     });
     rowsUpserted += await upsertDailyRows(
-      daily.map((r) => ({
-        report_date: String(r.keys?.[0] || ""),
-        clicks: Math.round(Number(r.clicks || 0)),
-        impressions: Math.round(Number(r.impressions || 0)),
-        ctr: Number(r.ctr || 0),
-        position: Number(r.position || 0),
-      })).filter((r) => r.report_date)
+      daily
+        .map((r) => ({
+          report_date: String(r.keys?.[0] || ""),
+          clicks: Math.round(Number(r.clicks || 0)),
+          impressions: Math.round(Number(r.impressions || 0)),
+          ctr: Number(r.ctr || 0),
+          position: Number(r.position || 0),
+        }))
+        .filter((r) => r.report_date)
     );
 
     const pages = await querySearchAnalytics(accessToken, {
+      siteUrl,
       startDate,
       endDate,
       dimensions: ["date", "page"],
@@ -117,6 +147,7 @@ export async function runGscSync(
     rowsUpserted += await upsertPageRows(pageRows);
 
     const queries = await querySearchAnalytics(accessToken, {
+      siteUrl,
       startDate,
       endDate,
       dimensions: ["date", "query"],
@@ -137,7 +168,7 @@ export async function runGscSync(
     const totalRows = await countStoredRows();
     const next = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     await upsertConnection({
-      site_url: connection.site_url,
+      site_url: siteUrl,
       status: "connected",
       last_successful_sync_at: new Date().toISOString(),
       last_sync_at: new Date().toISOString(),
@@ -148,7 +179,7 @@ export async function runGscSync(
       last_error_message: null,
     });
     await finishSyncRun(runId, { status: "success", rowsUpserted });
-    logger.info("GSC sync completed", { trigger, rowsUpserted, totalRows });
+    logger.info("GSC sync completed", { trigger, rowsUpserted, totalRows, siteUrl });
     return { ok: true, rowsUpserted };
   } catch (err) {
     const message = err instanceof Error ? err.message : "sync_failed";

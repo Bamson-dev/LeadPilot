@@ -11,7 +11,12 @@ export async function processGscSyncTick(): Promise<void> {
   tickRunning = true;
   try {
     const connection = await getActiveConnection();
-    if (!connection || connection.status !== "connected") {
+    // Retry error-state connections that still have credentials.
+    if (
+      !connection ||
+      !["connected", "error"].includes(connection.status) ||
+      !connection.refresh_token_encrypted
+    ) {
       return;
     }
     const next = connection.next_sync_at

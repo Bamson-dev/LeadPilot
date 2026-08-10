@@ -1,5 +1,4 @@
 import { logger } from "../utils/logger";
-import { getGscSiteUrl } from "./config";
 
 export type SearchAnalyticsRow = {
   keys?: string[];
@@ -32,13 +31,14 @@ export async function listSearchConsoleSites(accessToken: string): Promise<strin
 export async function querySearchAnalytics(
   accessToken: string,
   input: {
+    siteUrl: string;
     startDate: string;
     endDate: string;
     dimensions: string[];
     rowLimit?: number;
   }
 ): Promise<SearchAnalyticsRow[]> {
-  const siteUrl = encodeURIComponent(getGscSiteUrl());
+  const siteUrl = encodeURIComponent(input.siteUrl);
   const response = await fetch(
     `https://www.googleapis.com/webmasters/v3/sites/${siteUrl}/searchAnalytics/query`,
     {
@@ -62,6 +62,7 @@ export async function querySearchAnalytics(
     logger.error("GSC searchAnalytics.query failed", {
       status: response.status,
       dimensions: input.dimensions.join(","),
+      siteUrl: input.siteUrl,
       body: body.slice(0, 300),
     });
     throw new Error(`search_analytics_failed:${response.status}`);
