@@ -55,12 +55,20 @@ async function requestImage(
       status: response.status,
       body: errBody.slice(0, 400),
     });
+    let detail = `http_${response.status}`;
+    try {
+      const parsed = JSON.parse(errBody) as { error?: { code?: string; type?: string } };
+      detail =
+        parsed.error?.code || parsed.error?.type || detail;
+    } catch {
+      /* keep http status detail */
+    }
     return {
       ok: false,
       reason:
         response.status === 401
           ? "auth_error"
-          : `api_error:${response.status}`,
+          : `api_error:${detail}`,
       status: response.status,
     };
   }

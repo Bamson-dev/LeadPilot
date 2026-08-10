@@ -5,7 +5,7 @@ import {
   updateContentSettings,
   updateJob,
 } from "./repository";
-import { discoverAndQueueTopics, publishReadyJob, runContentJob } from "./pipeline";
+import { discoverAndQueueTopics, publishReadyJob, repairFailedJobImages, runContentJob } from "./pipeline";
 import { logger } from "../utils/logger";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -47,6 +47,8 @@ export async function processContentAutomationTick(): Promise<void> {
     const dailyCap = settings.daily_article_target;
     if (publishedToday >= dailyCap && launchRemaining <= 0) {
       logger.info("Daily article target already met", { publishedToday });
+      // Still attempt cover repairs for published jobs with failed images.
+      await repairFailedJobImages(2);
       return;
     }
 
@@ -146,6 +148,9 @@ export async function processContentAutomationTick(): Promise<void> {
       target: dailyCap,
       launchRemaining: remainingLaunch,
     });
+
+    // Opportunistic cover repair (does not create new articles).
+    await repairFailedJobImages(2);
   } catch (err) {
     tickResult = "FAILED";
     tickError = err instanceof Error ? err.message : "unknown";

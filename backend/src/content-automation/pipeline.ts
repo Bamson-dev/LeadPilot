@@ -15,11 +15,13 @@ import {
   getContentSettings,
   getJobById,
   getTopicById,
+  listJobs,
   listPublishedBlogSummaries,
   publishBlogPost,
   recordGenerationRun,
   recordQualityCheck,
   replaceJobSources,
+  updateBlogPostCover,
   updateJob,
   updateTopicStatus,
 } from "./repository";
@@ -324,6 +326,63 @@ export async function publishReadyJob(jobId: string): Promise<ContentJob> {
     published_at: new Date().toISOString(),
     scheduled_for: null,
   });
+}
+
+/** Backfill Storage covers for published jobs whose image step failed. */
+export async function repairFailedJobImages(limit = 2): Promise<number> {
+  const settings = await getContentSettings();
+  if (!settings.auto_image_generation) return 0;
+  const imagesToday = await countImagesToday();
+  if (imagesToday >= settings.daily_image_limit) return 0;
+
+  const published = await listJobs("PUBLISHED", 30);
+  const needing = published.filter(
+    (j) =>
+      j.blog_post_id &&
+      typeof j.image_status === "string" &&
+      j.image_status.startsWith("failed:")
+  );
+  let repaired = 0;
+  for (const job of needing.slice(0, limit)) {
+    if ((await countImagesToday()) >= settings.daily_image_limit) break;
+    const title =
+      (job.meta as { title?: string } | null)?.title ||
+      "LeadThur editorial blog header";
+    const concept =
+      (job.meta as { imageConcept?: string } | null)?.imageConcept ||
+      `Professional editorial illustration for: ${title}`;
+    const started = Date.now();
+    const image = await generateArticleImage(
+      `Professional editorial blog header image, no text overlays, clean modern style: ${concept}`,
+      { slugHint: (job.meta as { slug?: string } | null)?.slug || title }
+    );
+    await recordGenerationRun({
+      job_id: job.id,
+      stage: "image_generation",
+      provider: "openai",
+      latency_ms: Date.now() - started,
+      success: image.ok,
+      error_category: image.ok ? undefined : image.reason,
+    });
+    if (!image.ok || !job.blog_post_id) {
+      await updateJob(job.id, { image_status: `failed:${image.ok ? "unknown" : image.reason}` });
+      continue;
+    }
+    await updateBlogPostCover(job.blog_post_id, image.imageUrl);
+    const imageAlt = `${title} — editorial illustration`;
+    await updateJob(job.id, {
+      image_status: "generated",
+      image_alt: imageAlt,
+      meta: {
+        ...(job.meta || {}),
+        coverImage: image.imageUrl,
+        imageAlt,
+      },
+    });
+    repaired += 1;
+    logger.info("Repaired blog cover image", { jobId: job.id });
+  }
+  return repaired;
 }
 
 export async function scheduleReadyJob(jobId: string, when: Date): Promise<ContentJob> {

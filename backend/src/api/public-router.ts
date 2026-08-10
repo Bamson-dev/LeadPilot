@@ -36,10 +36,13 @@ router.get("/blog/posts", async (req: Request, res: Response) => {
   try {
     const { category, tag, limit = "12", offset = "0", featured } = req.query;
 
+    // Never select cover_image in list queries: legacy rows store multi-MB data-URI
+    // covers that timeout PostgREST and break sitemap generation (8s frontend timeout).
+    // HTTP Storage URLs are resolved on the detail endpoint / OG tags.
     let query = supabase
       .from("blog_posts")
       .select(
-        "id, title, slug, excerpt, cover_image, author, author_title, category, tags, read_time, published_at, featured, updated_at"
+        "id, title, slug, excerpt, author, author_title, category, tags, read_time, published_at, featured, updated_at"
       )
       .eq("status", "published")
       .order("published_at", { ascending: false })
@@ -52,14 +55,7 @@ router.get("/blog/posts", async (req: Request, res: Response) => {
     const { data, error } = await query;
     if (error) throw error;
 
-    // List payloads must stay small: omit huge base64 data-URI covers (full image still on detail).
-    const posts = (data || []).map((post) => {
-      const cover = typeof post.cover_image === "string" ? post.cover_image : null;
-      if (cover && cover.startsWith("data:")) {
-        return { ...post, cover_image: null };
-      }
-      return post;
-    });
+    const posts = (data || []).map((post) => ({ ...post, cover_image: null }));
 
     res.json({ posts });
   } catch (err) {
@@ -84,6 +80,12 @@ router.get("/blog/posts/:slug", async (req: Request, res: Response) => {
     if (error) throw error;
     if (!data) {
       res.status(404).json({ error: "Post not found" });
+      return;
+    }
+
+    const cover = typeof data.cover_image === "string" ? data.cover_image : null;
+    if (cover && cover.startsWith("data:")) {
+      res.json({ ...data, cover_image: null });
       return;
     }
 

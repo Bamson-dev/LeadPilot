@@ -62,9 +62,29 @@ export async function updateContentSettings(
     if (patch[key] !== undefined) updates[key] = patch[key];
   }
 
+  // Patch only — never re-apply DEFAULT_CONTENT_SETTINGS on update.
+  // Upserting defaults was resetting automation_enabled/auto_publishing to false
+  // on every scheduler heartbeat.
+  const { data: existing } = await supabase
+    .from("content_automation_settings")
+    .select("id")
+    .eq("id", 1)
+    .maybeSingle();
+
+  if (!existing) {
+    const { data, error } = await supabase
+      .from("content_automation_settings")
+      .insert({ id: 1, ...DEFAULT_CONTENT_SETTINGS, ...updates })
+      .select("*")
+      .single();
+    if (error) throw new Error(error.message);
+    return data as ContentAutomationSettings;
+  }
+
   const { data, error } = await supabase
     .from("content_automation_settings")
-    .upsert({ id: 1, ...DEFAULT_CONTENT_SETTINGS, ...updates })
+    .update(updates)
+    .eq("id", 1)
     .select("*")
     .single();
 
@@ -433,6 +453,17 @@ export async function publishBlogPost(postId: string): Promise<void> {
   const { error } = await supabase
     .from("blog_posts")
     .update({ status: "published", published_at: now, updated_at: now })
+    .eq("id", postId);
+  if (error) throw new Error(error.message);
+}
+
+export async function updateBlogPostCover(
+  postId: string,
+  coverImage: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("blog_posts")
+    .update({ cover_image: coverImage, updated_at: new Date().toISOString() })
     .eq("id", postId);
   if (error) throw new Error(error.message);
 }
