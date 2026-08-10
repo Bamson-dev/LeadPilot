@@ -3,6 +3,7 @@ import { mapOldSequenceStepToV3 } from "../services/trial-email-content-v3";
 import { computeNextSequenceEmailAt } from "../services/trial-sequence-schedule";
 import { logger } from "../utils/logger";
 import { CONTENT_AUTOMATION_SQL } from "./content-automation-sql";
+import { GOOGLE_SEARCH_CONSOLE_SQL } from "../google-search-console/sql";
 
 const FREE_TRIAL_IP_USAGE_SQL = `
 create table if not exists free_trial_ip_usage (
@@ -40,6 +41,12 @@ declare
     'content_generation_runs',
     'content_quality_checks',
     'content_performance',
+    'google_search_console_connections',
+    'google_search_console_oauth_states',
+    'google_search_console_daily',
+    'google_search_console_pages',
+    'google_search_console_queries',
+    'google_search_console_sync_runs',
     'search_history',
     'user_searches',
     'lead_statuses',
@@ -173,6 +180,16 @@ export async function runStartupMigrations(): Promise<void> {
       logger.info("[migrations] Applied content automation tables", { ref });
     } else {
       logger.info("[migrations] content automation tables already present", { ref });
+    }
+
+    const gscTable = await client.query(
+      "select to_regclass('public.google_search_console_connections') as table_exists"
+    );
+    if (!gscTable.rows[0]?.table_exists) {
+      await client.query(GOOGLE_SEARCH_CONSOLE_SQL);
+      logger.info("[migrations] Applied Google Search Console tables", { ref });
+    } else {
+      logger.info("[migrations] Google Search Console tables already present", { ref });
     }
 
     // Migrate active v1/v2 nurture users onto the 30-email (v3) sequence proportionally.

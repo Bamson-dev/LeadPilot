@@ -14,6 +14,7 @@ import {
   Sparkles,
   Users,
   FlaskConical,
+  Search,
 } from "lucide-react";
 import { cn } from "@/utils/utils";
 
@@ -26,6 +27,7 @@ export type AdminNavId =
   | "broadcast"
   | "blog"
   | "content"
+  | "search-console"
   | "scripts"
   | "analytics"
   | "settings";
@@ -46,6 +48,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { id: "broadcast", label: "Broadcast", href: "/admin/broadcast", icon: Radio },
   { id: "blog", label: "Blog", href: "/admin/blog", icon: FileText },
   { id: "content", label: "Content Automation", href: "/admin/content-automation", icon: Sparkles },
+  { id: "search-console", label: "Search Console", href: "/admin/search-console", icon: Search },
   { id: "scripts", label: "Global Scripts", href: "/admin/scripts", icon: Code2 },
   { id: "analytics", label: "Analytics", href: "/admin/analytics", icon: BarChart3 },
   { id: "settings", label: "Settings", href: "/admin/settings", icon: Settings },

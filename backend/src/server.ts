@@ -43,6 +43,8 @@ import { initOutreachSendQueue, shutdownOutreachSendQueue } from "./queue/outrea
 import { ensureOutreachPaystackPlans } from "./services/outreach-paystack-plans";
 import { startOutreachGraceScheduler } from "./services/outreach-grace-scheduler";
 import { contentAutomationRouter } from "./content-automation/admin-router";
+import { googleSearchConsoleRouter } from "./google-search-console/admin-router";
+import { startGoogleSearchConsoleScheduler } from "./google-search-console/scheduler";
 import { startContentAutomationScheduler } from "./content-automation/scheduler";
 
 export const app = express();
@@ -118,6 +120,7 @@ function registerRoutes(): void {
   app.use("/trial", trialRouter);
   app.use("/admin", adminRouter);
   app.use("/admin/content-automation", contentAutomationRouter);
+  app.use("/admin/integrations/google-search-console", googleSearchConsoleRouter);
   app.use("/affiliate", affiliateRouter);
   app.use("/checkout", checkoutRouter);
   app.use("/topup", topupRouter);
@@ -253,6 +256,7 @@ async function start(): Promise<void> {
     await initOutreachSendQueue();
     startOutreachGraceScheduler();
     startContentAutomationScheduler();
+    startGoogleSearchConsoleScheduler();
     if (config.PAYSTACK_SECRET_KEY) {
       void ensureOutreachPaystackPlans().catch((err) => {
         logger.error("Outreach Paystack plan setup failed", {
