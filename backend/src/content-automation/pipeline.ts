@@ -204,6 +204,17 @@ export async function runContentJob(
           latency_ms: Date.now() - imgStarted,
           success: image.ok,
           error_category: image.ok ? undefined : image.reason,
+          metadata: image.ok
+            ? { model: image.model }
+            : image.probe
+              ? {
+                  modelTried: image.probe.modelTried,
+                  httpStatus: image.probe.httpStatus,
+                  openaiCode: image.probe.openaiCode,
+                  openaiType: image.probe.openaiType,
+                  openaiMessage: image.probe.openaiMessage,
+                }
+              : { reason: image.reason },
         });
         if (image.ok) {
           coverImage = image.imageUrl;
@@ -363,6 +374,17 @@ export async function repairFailedJobImages(limit = 2): Promise<number> {
       latency_ms: Date.now() - started,
       success: image.ok,
       error_category: image.ok ? undefined : image.reason,
+      metadata: image.ok
+        ? { model: image.model }
+        : image.probe
+          ? {
+              modelTried: image.probe.modelTried,
+              httpStatus: image.probe.httpStatus,
+              openaiCode: image.probe.openaiCode,
+              openaiType: image.probe.openaiType,
+              openaiMessage: image.probe.openaiMessage,
+            }
+          : { reason: image.reason },
     });
     if (!image.ok || !job.blog_post_id) {
       await updateJob(job.id, { image_status: `failed:${image.ok ? "unknown" : image.reason}` });

@@ -7,6 +7,7 @@ import {
   generateOneArticleDraft,
   getProviderStatus,
   publishReadyJob,
+  repairFailedJobImages,
   runContentJob,
 } from "./pipeline";
 import {
@@ -19,6 +20,7 @@ import {
   updateJob,
 } from "./repository";
 import { processContentAutomationTick } from "./scheduler";
+import { probeOpenAiImageGeneration } from "./providers/openai-image";
 
 export const contentAutomationRouter = Router();
 
@@ -225,5 +227,54 @@ contentAutomationRouter.post("/tick", async (_req: Request, res: Response) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: "Tick failed" });
+  }
+});
+
+contentAutomationRouter.post("/test-image", async (_req: Request, res: Response) => {
+  try {
+    const result = await probeOpenAiImageGeneration();
+    res.json({
+      success: result.ok,
+      // Safe diagnostic fields only — never include API keys.
+      reason: result.reason,
+      modelTried: result.modelTried,
+      httpStatus: result.httpStatus ?? null,
+      openaiCode: result.openaiCode ?? null,
+      openaiType: result.openaiType ?? null,
+      openaiMessage: result.openaiMessage ?? null,
+      imageUrl: result.imageUrl ?? null,
+      keyConfigured: Boolean(
+        process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim().length > 0
+      ),
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: err instanceof Error ? err.message : "Image probe failed",
+    });
+  }
+});
+
+contentAutomationRouter.post("/repair-images", async (req: Request, res: Response) => {
+  try {
+    const limit = Math.min(8, Math.max(1, Number((req.body as { limit?: number })?.limit) || 4));
+    const repaired = await repairFailedJobImages(limit);
+    const jobs = await listJobs("PUBLISHED", 20);
+    res.json({
+      success: true,
+      repaired,
+      images: jobs
+        .filter((j) => j.image_status)
+        .map((j) => ({
+          id: j.id,
+          status: j.status,
+          image_status: j.image_status,
+          coverImage: (j.meta as { coverImage?: string } | null)?.coverImage || null,
+        })),
+    });
+  } catch (err) {
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Image repair failed",
+    });
   }
 });

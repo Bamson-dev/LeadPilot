@@ -48,7 +48,7 @@ export async function processContentAutomationTick(): Promise<void> {
     if (publishedToday >= dailyCap && launchRemaining <= 0) {
       logger.info("Daily article target already met", { publishedToday });
       // Still attempt cover repairs for published jobs with failed images.
-      await repairFailedJobImages(2);
+      await repairFailedJobImages(4);
       return;
     }
 
@@ -150,7 +150,7 @@ export async function processContentAutomationTick(): Promise<void> {
     });
 
     // Opportunistic cover repair (does not create new articles).
-    await repairFailedJobImages(2);
+    await repairFailedJobImages(4);
   } catch (err) {
     tickResult = "FAILED";
     tickError = err instanceof Error ? err.message : "unknown";
