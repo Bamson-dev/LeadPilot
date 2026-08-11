@@ -19,7 +19,12 @@ function normalizeUrl(url: string): string {
 
 function blogSlugFromUrl(url: string): string | null {
   const m = url.match(/\/blog\/([^/?#]+)/i);
-  return m?.[1] ? decodeURIComponent(m[1]) : null;
+  if (!m?.[1]) return null;
+  const slug = decodeURIComponent(m[1]).toLowerCase();
+  if (slug === "category" || slug === "tag" || slug === "page") return null;
+  // Only article paths: /blog/{slug} (reject /blog/category/x etc.)
+  if (/\/blog\/[^/]+\/./i.test(url)) return null;
+  return slug;
 }
 
 function scoreOpportunity(input: {
@@ -90,7 +95,7 @@ export async function analyzeSeoOpportunities(days = 28): Promise<{
 }> {
   const half = Math.max(7, Math.floor(days / 2));
   const [pages, queries, trends, posts] = await Promise.all([
-    getTopPages(days, "impressions", 100),
+    getTopPages(days, "impressions", 250),
     getTopQueries(days, "impressions", 100),
     getTrends(days),
     listPublishedBlogPosts(300),
