@@ -120,7 +120,9 @@ Rules:
     if (created.length >= limit) break;
 
     const dupPost = existingPosts.find(
-      (p) => titleSimilarity(p.title, candidate.title) >= 0.72
+      (p) =>
+        titleSimilarity(p.title, candidate.title) >= 0.72 ||
+        titleSimilarity(p.slug, slugify(candidate.title)) >= 0.85
     );
     if (dupPost) {
       logger.info("Skipping topic with existing coverage", {

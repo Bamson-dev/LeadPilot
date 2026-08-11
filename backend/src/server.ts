@@ -48,6 +48,7 @@ import { startGoogleSearchConsoleScheduler } from "./google-search-console/sched
 import { seoIntelligenceRouter } from "./seo-intelligence/admin-router";
 import { startSeoIntelligenceScheduler } from "./seo-intelligence/scheduler";
 import { startContentAutomationScheduler } from "./content-automation/scheduler";
+import { mediaRouter } from "./storage/media-router";
 
 export const app = express();
 
@@ -93,8 +94,9 @@ app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
 
 // Health routes — CORS applied above so browser fetches from www.leadthur.com work.
-app.use("/health", healthRouter);
-app.use("/api/health", healthRouter);
+  app.use("/health", healthRouter);
+  app.use("/api/health", healthRouter);
+  app.use("/media", mediaRouter);
 
 let routesRegistered = false;
 

@@ -35,6 +35,12 @@ export interface ContentAutomationSettings {
   daily_research_limit: number;
   daily_image_limit: number;
   publish_slot_hours: number[];
+  publishing_interval_hours: number;
+  last_publication_at: string | null;
+  next_scheduled_publication_at: string | null;
+  image_storage_provider: "local" | "supabase" | "auto";
+  last_image_storage_at: string | null;
+  last_image_storage_error: string | null;
   launch_batch_remaining: number;
   last_scheduler_run_at: string | null;
   last_scheduler_result: string | null;
@@ -75,6 +81,7 @@ export interface ContentJob {
   leadthur_cta: string | null;
   image_status: string | null;
   image_alt: string | null;
+  image_storage_provider: string | null;
   scheduled_for: string | null;
   published_at: string | null;
   error_message: string | null;

@@ -1,7 +1,6 @@
 import { getOpenAiApiKey } from "./../config";
 import { logger } from "../../utils/logger";
-import { supabase } from "../../database/client";
-import { randomUUID } from "crypto";
+import { storeBlogCoverImage } from "../../storage/blog-cover-storage";
 
 type ImageModel = "gpt-image-1" | "gpt-image-1-mini" | "dall-e-3" | "dall-e-2";
 
@@ -14,29 +13,10 @@ export type ImageProbeResult = {
   openaiType?: string | null;
   openaiMessage?: string | null;
   imageUrl?: string;
+  storageProvider?: string;
 };
 
-async function uploadCoverPng(bytes: Buffer, slugHint: string): Promise<string | null> {
-  const safe = slugHint
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60);
-  const path = `covers/${safe || "article"}-${randomUUID().slice(0, 8)}.png`;
-  const { error } = await supabase.storage.from("blog-covers").upload(path, bytes, {
-    contentType: "image/png",
-    upsert: false,
-  });
-  if (error) {
-    logger.error("Blog cover upload failed", { error: error.message });
-    return null;
-  }
-  const { data } = supabase.storage.from("blog-covers").getPublicUrl(path);
-  return data.publicUrl || null;
-}
-
 function buildRequestBody(model: ImageModel, prompt: string): Record<string, unknown> {
-  // GPT image models: no response_format (always b64). DALL·E retired for many accounts (Mar 2026).
   if (model === "gpt-image-1" || model === "gpt-image-1-mini") {
     return {
       model,
@@ -104,8 +84,7 @@ async function requestImage(
       openaiType,
       body: errBody.slice(0, 400),
     });
-    const detail =
-      openaiCode || openaiType || `http_${response.status}`;
+    const detail = openaiCode || openaiType || `http_${response.status}`;
     return {
       ok: false,
       reason:
@@ -144,9 +123,19 @@ const MODEL_CHAIN: ImageModel[] = [
 
 export async function generateArticleImage(
   prompt: string,
-  options: { slugHint?: string } = {}
+  options: {
+    slugHint?: string;
+    articleId?: string;
+    storageProvider?: "local" | "supabase" | "auto";
+  } = {}
 ): Promise<
-  | { ok: true; imageUrl: string; revisedPrompt?: string; model?: string }
+  | {
+      ok: true;
+      imageUrl: string;
+      revisedPrompt?: string;
+      model?: string;
+      storageProvider?: string;
+    }
   | { ok: false; reason: string; probe?: ImageProbeResult }
 > {
   const apiKey = getOpenAiApiKey();
@@ -182,8 +171,15 @@ export async function generateArticleImage(
       }
 
       const bytes = Buffer.from(result.b64, "base64");
-      const imageUrl = await uploadCoverPng(bytes, options.slugHint || "article");
-      if (!imageUrl) {
+      const stored = await storeBlogCoverImage(
+        {
+          bytes,
+          slugHint: options.slugHint || "article",
+          articleId: options.articleId,
+        },
+        options.storageProvider || "local"
+      );
+      if (!stored) {
         return {
           ok: false,
           reason: "upload_failed",
@@ -191,7 +187,7 @@ export async function generateArticleImage(
             ok: false,
             reason: "upload_failed",
             modelTried,
-            openaiMessage: "OpenAI succeeded but Supabase blog-covers upload failed",
+            openaiMessage: "OpenAI succeeded but image storage failed (local + fallback)",
           },
         };
       }
@@ -200,13 +196,15 @@ export async function generateArticleImage(
         model: result.model,
         latencyMs: Date.now() - started,
         bytes: bytes.length,
+        storageProvider: stored.provider,
       });
 
       return {
         ok: true,
-        imageUrl,
+        imageUrl: stored.url,
         revisedPrompt: result.revisedPrompt,
         model: result.model,
+        storageProvider: stored.provider,
       };
     }
 
@@ -235,7 +233,7 @@ export async function probeOpenAiImageGeneration(): Promise<ImageProbeResult> {
   }
   const result = await generateArticleImage(
     "Simple abstract editorial illustration, soft geometric shapes, no text, professional blog header style",
-    { slugHint: "probe-test" }
+    { slugHint: "probe-test", storageProvider: "auto" }
   );
   if (result.ok) {
     return {
@@ -243,6 +241,7 @@ export async function probeOpenAiImageGeneration(): Promise<ImageProbeResult> {
       reason: "ok",
       modelTried: [result.model || "unknown"],
       imageUrl: result.imageUrl,
+      storageProvider: result.storageProvider,
     };
   }
   return (

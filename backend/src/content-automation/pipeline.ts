@@ -24,10 +24,14 @@ import {
   updateBlogPostCover,
   updateJob,
   updateTopicStatus,
+  updateContentSettings,
 } from "./repository";
 import { discoverTopics } from "./topic-discovery";
 import type { ContentJob, ProviderStatus } from "./types";
 import { logger } from "../utils/logger";
+import {
+  computeNextPublicationAfterPublish,
+} from "./publish-schedule";
 
 export function getProviderStatus(): ProviderStatus {
   return {
@@ -72,6 +76,7 @@ export async function runContentJob(
 
   try {
     // RESEARCH
+    logger.info("CONTENT_GENERATION_STARTED", { jobId, topic: topic.title.slice(0, 80) });
     job = await updateJob(jobId, {
       status: "RESEARCHING",
       attempt_count: job.attempt_count + 1,
@@ -188,14 +193,17 @@ export async function runContentJob(
     let coverImage: string | null = null;
     let imageAlt: string | null = null;
     let imageStatus = "skipped";
+    let imageStorageProvider: string | null = null;
     if (settings.auto_image_generation && !options.skipImage) {
       const imagesToday = await countImagesToday();
       if (imagesToday < settings.daily_image_limit) {
         job = await updateJob(jobId, { status: "IMAGE_GENERATION" });
+        logger.info("IMAGE_GENERATION_STARTED", { jobId });
         const imgStarted = Date.now();
         const imagePrompt = `Professional editorial blog header image, no text overlays, clean modern style: ${brief.imageConcept}`;
         const image = await generateArticleImage(imagePrompt, {
           slugHint: brief.proposedTitle,
+          storageProvider: settings.image_storage_provider,
         });
         await recordGenerationRun({
           job_id: jobId,
@@ -205,7 +213,7 @@ export async function runContentJob(
           success: image.ok,
           error_category: image.ok ? undefined : image.reason,
           metadata: image.ok
-            ? { model: image.model }
+            ? { model: image.model, storageProvider: image.storageProvider }
             : image.probe
               ? {
                   modelTried: image.probe.modelTried,
@@ -220,6 +228,15 @@ export async function runContentJob(
           coverImage = image.imageUrl;
           imageAlt = `${brief.proposedTitle} — editorial illustration`;
           imageStatus = "generated";
+          imageStorageProvider = image.storageProvider || null;
+          logger.info("IMAGE_GENERATION_COMPLETED", {
+            jobId,
+            provider: image.storageProvider,
+          });
+          await updateContentSettings({
+            last_image_storage_at: new Date().toISOString(),
+            last_image_storage_error: null,
+          } as never);
         } else {
           imageStatus = `failed:${image.reason}`;
           logger.warn("Continuing without image", { reason: image.reason });
@@ -274,6 +291,7 @@ export async function runContentJob(
       leadthur_cta: capability.cta,
       image_status: imageStatus,
       image_alt: imageAlt,
+      image_storage_provider: imageStorageProvider,
       meta: {
         ...meta,
         slug,
@@ -287,7 +305,9 @@ export async function runContentJob(
 
     await updateTopicStatus(topic.id, "USED");
 
-    if (options.publish || (settings.auto_publishing && settings.automation_enabled)) {
+    // Only publish when explicitly requested (manual admin action).
+    // Scheduled publishing is handled by the scheduler.
+    if (options.publish === true) {
       job = await publishReadyJob(jobId);
     }
 
@@ -326,11 +346,24 @@ export async function publishReadyJob(jobId: string): Promise<ContentJob> {
 
   await publishBlogPost(job.blog_post_id);
   await ensurePerformanceRow(job.blog_post_id, job.id);
+  const publishedAt = new Date();
   await recordGenerationRun({
     job_id: jobId,
     stage: "publish",
     success: true,
   });
+  logger.info("ARTICLE_PUBLISHED", {
+    jobId,
+    blogPostId: job.blog_post_id,
+    publishedAt: publishedAt.toISOString(),
+  });
+
+  const nextPublication = computeNextPublicationAfterPublish(settings, publishedAt.getTime());
+  await updateContentSettings({
+    last_publication_at: publishedAt.toISOString(),
+    next_scheduled_publication_at: nextPublication.toISOString(),
+    last_image_storage_at: settings.last_image_storage_at,
+  } as never);
 
   return updateJob(jobId, {
     status: "PUBLISHED",
@@ -365,7 +398,10 @@ export async function repairFailedJobImages(limit = 2): Promise<number> {
     const started = Date.now();
     const image = await generateArticleImage(
       `Professional editorial blog header image, no text overlays, clean modern style: ${concept}`,
-      { slugHint: (job.meta as { slug?: string } | null)?.slug || title }
+      {
+        slugHint: (job.meta as { slug?: string } | null)?.slug || title,
+        storageProvider: settings.image_storage_provider,
+      }
     );
     await recordGenerationRun({
       job_id: job.id,

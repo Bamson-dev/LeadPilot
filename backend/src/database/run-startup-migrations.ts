@@ -3,6 +3,7 @@ import { mapOldSequenceStepToV3 } from "../services/trial-email-content-v3";
 import { computeNextSequenceEmailAt } from "../services/trial-sequence-schedule";
 import { logger } from "../utils/logger";
 import { CONTENT_AUTOMATION_SQL } from "./content-automation-sql";
+import { CONTENT_AUTOMATION_HARDENING_SQL } from "./content-automation-hardening-sql";
 import { GOOGLE_SEARCH_CONSOLE_SQL } from "../google-search-console/sql";
 import { SEO_INTELLIGENCE_SQL } from "../seo-intelligence/sql";
 
@@ -187,6 +188,17 @@ export async function runStartupMigrations(): Promise<void> {
       logger.info("[migrations] Applied content automation tables", { ref });
     } else {
       logger.info("[migrations] content automation tables already present", { ref });
+    }
+
+    const publishingIntervalCol = await client.query(
+      `select column_name from information_schema.columns
+       where table_schema = 'public'
+         and table_name = 'content_automation_settings'
+         and column_name = 'publishing_interval_hours'`
+    );
+    if (publishingIntervalCol.rows.length === 0) {
+      await client.query(CONTENT_AUTOMATION_HARDENING_SQL);
+      logger.info("[migrations] Applied content automation hardening columns", { ref });
     }
 
     const gscTable = await client.query(

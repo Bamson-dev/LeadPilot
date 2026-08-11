@@ -5,27 +5,36 @@ import {
   updateContentSettings,
   updateJob,
 } from "./repository";
-import { discoverAndQueueTopics, publishReadyJob, repairFailedJobImages, runContentJob } from "./pipeline";
+import {
+  discoverAndQueueTopics,
+  publishReadyJob,
+  repairFailedJobImages,
+  runContentJob,
+  scheduleReadyJob,
+} from "./pipeline";
+import {
+  canPublishScheduledJob,
+  computeNextPublicationAfterPublish,
+  computeNextPublicationAt,
+} from "./publish-schedule";
 import { logger } from "../utils/logger";
 
 const HOUR_MS = 60 * 60 * 1000;
 let interval: ReturnType<typeof setInterval> | null = null;
 let tickRunning = false;
 
-function nextSlotDate(slotHours: number[]): Date {
-  const now = new Date();
-  const sorted = [...slotHours].sort((a, b) => a - b);
-  for (const hour of sorted) {
-    const candidate = new Date(now);
-    candidate.setUTCMinutes(0, 0, 0);
-    candidate.setUTCHours(hour);
-    if (candidate.getTime() > now.getTime() + 5 * 60 * 1000) return candidate;
-  }
-  const tomorrow = new Date(now);
-  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
-  tomorrow.setUTCMinutes(0, 0, 0);
-  tomorrow.setUTCHours(sorted[0] ?? 8);
-  return tomorrow;
+async function scheduleJobForNextSlot(jobId: string): Promise<void> {
+  const settings = await getContentSettings();
+  const when = computeNextPublicationAt(settings);
+  await scheduleReadyJob(jobId, when);
+  await updateContentSettings({
+    next_scheduled_publication_at: when.toISOString(),
+  } as never);
+  logger.info("ARTICLE_PUBLISH_SCHEDULED", {
+    jobId,
+    scheduledFor: when.toISOString(),
+    intervalHours: settings.publishing_interval_hours ?? 3,
+  });
 }
 
 export async function processContentAutomationTick(): Promise<void> {
@@ -34,7 +43,7 @@ export async function processContentAutomationTick(): Promise<void> {
   let tickResult: "SUCCESS" | "FAILED" = "SUCCESS";
   let tickError: string | null = null;
   try {
-    logger.info("Content automation scheduler tick");
+    logger.info("SCHEDULER_TICK", { module: "content_automation" });
     const settings = await getContentSettings();
     const launchRemaining = Number(settings.launch_batch_remaining || 0);
     const active = settings.automation_enabled || launchRemaining > 0;
@@ -47,22 +56,28 @@ export async function processContentAutomationTick(): Promise<void> {
     const dailyCap = settings.daily_article_target;
     if (publishedToday >= dailyCap && launchRemaining <= 0) {
       logger.info("Daily article target already met", { publishedToday });
-      // Still attempt cover repairs for published jobs with failed images.
       await repairFailedJobImages(4);
       return;
     }
 
-    // Publish due scheduled jobs first
+    // Publish due scheduled jobs — respects 3-hour interval (restart-safe)
     const scheduled = await listJobs("SCHEDULED", 20);
     const now = Date.now();
-    for (const job of scheduled) {
-      if (!job.scheduled_for) continue;
-      if (new Date(job.scheduled_for).getTime() > now) continue;
+    for (const job of scheduled.sort((a, b) => {
+      const ta = a.scheduled_for ? new Date(a.scheduled_for).getTime() : 0;
+      const tb = b.scheduled_for ? new Date(b.scheduled_for).getTime() : 0;
+      return ta - tb;
+    })) {
       if ((await countPublishedToday()) >= dailyCap && launchRemaining <= 0) break;
+      const freshSettings = await getContentSettings();
+      if (!canPublishScheduledJob(freshSettings, job.scheduled_for, now)) {
+        continue;
+      }
       try {
         await publishReadyJob(job.id);
       } catch (err) {
-        logger.error("Scheduled publish failed", {
+        logger.error("ARTICLE_PUBLISH_FAILED", {
+          jobId: job.id,
           error: err instanceof Error ? err.message : "unknown",
         });
       }
@@ -85,7 +100,7 @@ export async function processContentAutomationTick(): Promise<void> {
       await discoverAndQueueTopics(Math.max(dailyCap, launchRemaining, 4));
     }
 
-    // Launch batch: generate + publish immediately until remaining hits 0
+    // Launch batch: generate + schedule (never immediate publish)
     let remainingLaunch = launchRemaining;
     let launchAttempts = 0;
     while (remainingLaunch > 0 && launchAttempts < remainingLaunch + 6) {
@@ -94,12 +109,15 @@ export async function processContentAutomationTick(): Promise<void> {
       const nextReady = (await listJobs("READY", 1))[0];
       if (nextReady) {
         try {
-          await publishReadyJob(nextReady.id);
+          if (settings.auto_publishing) {
+            await scheduleJobForNextSlot(nextReady.id);
+          } else {
+            await publishReadyJob(nextReady.id);
+          }
           remainingLaunch -= 1;
           await updateContentSettings({ launch_batch_remaining: remainingLaunch });
-          logger.info("Launch batch published ready job", { remainingLaunch });
         } catch (err) {
-          logger.error("Launch batch publish failed", {
+          logger.error("Launch batch schedule failed", {
             error: err instanceof Error ? err.message : "unknown",
           });
           break;
@@ -107,11 +125,15 @@ export async function processContentAutomationTick(): Promise<void> {
         continue;
       }
       if (nextQualified) {
-        const generated = await runContentJob(nextQualified.id, { publish: true });
-        if (generated.status === "PUBLISHED") {
+        const generated = await runContentJob(nextQualified.id, { publish: false });
+        if (generated.status === "READY") {
+          if (settings.auto_publishing) {
+            await scheduleJobForNextSlot(generated.id);
+          } else {
+            await publishReadyJob(generated.id);
+          }
           remainingLaunch -= 1;
           await updateContentSettings({ launch_batch_remaining: remainingLaunch });
-          logger.info("Launch batch progress", { remainingLaunch });
         } else {
           logger.error("Launch batch item failed; continuing with next topic", {
             status: generated.status,
@@ -126,18 +148,30 @@ export async function processContentAutomationTick(): Promise<void> {
       if (!created) break;
     }
 
-    // Steady-state: advance one qualified job per tick when automation enabled
+    // Steady-state: generate one article per tick; schedule for next interval slot
     if (settings.automation_enabled && remainingLaunch <= 0) {
       if ((await countPublishedToday()) < dailyCap) {
-        const nextQualified = (await listJobs("QUALIFIED", 1))[0];
-        if (nextQualified) {
-          const generated = await runContentJob(nextQualified.id, { publish: false });
-          if (generated.status === "READY" && settings.auto_publishing) {
-            const slot = nextSlotDate(settings.publish_slot_hours);
-            await updateJob(generated.id, {
-              status: "SCHEDULED",
-              scheduled_for: slot.toISOString(),
-            });
+        const hasScheduled = (await listJobs("SCHEDULED", 1)).length > 0;
+        const hasReady = (await listJobs("READY", 1)).length > 0;
+        if (!hasScheduled && !hasReady) {
+          const nextQualified = (await listJobs("QUALIFIED", 1))[0];
+          if (nextQualified) {
+            logger.info("CONTENT_GENERATION_STARTED", { jobId: nextQualified.id });
+            const generated = await runContentJob(nextQualified.id, { publish: false });
+            if (generated.status === "READY") {
+              logger.info("CONTENT_GENERATION_COMPLETED", {
+                jobId: generated.id,
+                quality: generated.quality_score,
+              });
+              if (settings.auto_publishing) {
+                await scheduleJobForNextSlot(generated.id);
+              }
+            } else if (generated.status === "FAILED") {
+              logger.error("CONTENT_GENERATION_FAILED", {
+                jobId: generated.id,
+                error: generated.error_message,
+              });
+            }
           }
         }
       }
@@ -149,23 +183,18 @@ export async function processContentAutomationTick(): Promise<void> {
       launchRemaining: remainingLaunch,
     });
 
-    // Opportunistic cover repair (does not create new articles).
     await repairFailedJobImages(4);
   } catch (err) {
     tickResult = "FAILED";
     tickError = err instanceof Error ? err.message : "unknown";
-    logger.error("Content automation tick failed", {
-      error: tickError,
-    });
+    logger.error("Content automation tick failed", { error: tickError });
   } finally {
     try {
-      const next = new Date(Date.now() + HOUR_MS).toISOString();
       await updateContentSettings({
         last_scheduler_run_at: new Date().toISOString(),
         last_scheduler_result: tickResult,
         last_scheduler_error: tickError,
       } as never);
-      void next;
     } catch {
       /* ignore heartbeat write failures */
     }
@@ -190,3 +219,6 @@ export function stopContentAutomationScheduler(): void {
     interval = null;
   }
 }
+
+// Exported for tests
+export { computeNextPublicationAfterPublish, computeNextPublicationAt };

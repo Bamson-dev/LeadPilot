@@ -21,6 +21,9 @@ import {
 } from "./repository";
 import { processContentAutomationTick } from "./scheduler";
 import { probeOpenAiImageGeneration } from "./providers/openai-image";
+import { getAutomationHealth } from "./automation-health";
+import { getLocalStorageStats } from "../storage/blog-cover-storage";
+import { computeNextPublicationAt } from "./publish-schedule";
 
 export const contentAutomationRouter = Router();
 
@@ -28,13 +31,23 @@ contentAutomationRouter.use(requireAdminAuth);
 
 contentAutomationRouter.get("/status", async (_req: Request, res: Response) => {
   try {
-    const [settings, counts, providers, recentJobs, recentFailed] = await Promise.all([
+    const [settings, counts, providers, recentJobs, recentFailed, automationHealth, storageStats, scheduledJobs] =
+      await Promise.all([
       getContentSettings(),
       getDashboardCounts(),
       Promise.resolve(getProviderStatus()),
       listJobs(undefined, 8),
       listJobs("FAILED", 5),
+      getAutomationHealth(),
+      getLocalStorageStats(),
+      listJobs("SCHEDULED", 1),
     ]);
+
+    const nextScheduledJob = scheduledJobs[0];
+    const nextPublication =
+      settings.next_scheduled_publication_at ||
+      nextScheduledJob?.scheduled_for ||
+      computeNextPublicationAt(settings).toISOString();
 
     res.json({
       automation: settings.automation_enabled ? "running" : "paused",
@@ -49,6 +62,18 @@ contentAutomationRouter.get("/status", async (_req: Request, res: Response) => {
           settings.daily_article_target - counts.publishedToday
         ),
       },
+      publishing: {
+        intervalHours: settings.publishing_interval_hours ?? 3,
+        lastPublication: settings.last_publication_at,
+        nextPublication,
+        nextScheduledJob: nextScheduledJob
+          ? {
+              id: nextScheduledJob.id,
+              scheduledFor: nextScheduledJob.scheduled_for,
+              title: (nextScheduledJob.meta as { title?: string })?.title ?? null,
+            }
+          : null,
+      },
       scheduler: {
         status:
           settings.automation_enabled || Number(settings.launch_batch_remaining || 0) > 0
@@ -56,6 +81,7 @@ contentAutomationRouter.get("/status", async (_req: Request, res: Response) => {
             : "PAUSED",
         process: "production-backend:startContentAutomationScheduler",
         frequency: "hourly (+45s after boot)",
+        publishingIntervalHours: settings.publishing_interval_hours ?? 3,
         lastRun: settings.last_scheduler_run_at || null,
         lastResult: settings.last_scheduler_result || null,
         lastError: settings.last_scheduler_error || null,
@@ -70,6 +96,17 @@ contentAutomationRouter.get("/status", async (_req: Request, res: Response) => {
         requiresAdminOpen: false,
         requiresBrowser: false,
       },
+      imageStorage: {
+        provider: settings.image_storage_provider ?? "local",
+        path: storageStats.path,
+        imageCount: storageStats.imageCount,
+        bytesUsed: storageStats.bytesUsed,
+        healthy: storageStats.healthy,
+        lastWriteAt: settings.last_image_storage_at ?? storageStats.lastWriteAt,
+        lastError: settings.last_image_storage_error ?? storageStats.lastError,
+        supabaseFallbackAvailable: true,
+      },
+      automationHealth,
       queue: {
         topicsWaiting: counts.topicsWaiting,
         drafts: counts.drafts,
@@ -92,6 +129,16 @@ contentAutomationRouter.get("/status", async (_req: Request, res: Response) => {
       error: err instanceof Error ? err.message : "unknown",
     });
     res.status(500).json({ error: "Failed to load content automation status" });
+  }
+});
+
+contentAutomationRouter.get("/health", async (_req: Request, res: Response) => {
+  try {
+    res.json({ health: await getAutomationHealth() });
+  } catch (err) {
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "health_failed",
+    });
   }
 });
 

@@ -24,10 +24,26 @@ type StatusPayload = {
     failed: number;
     remaining?: number;
   };
+  publishing?: {
+    intervalHours: number;
+    lastPublication: string | null;
+    nextPublication: string | null;
+    nextScheduledJob?: { id: string; scheduledFor: string | null; title: string | null };
+  };
+  imageStorage?: {
+    provider: string;
+    path: string;
+    imageCount: number;
+    bytesUsed: number;
+    healthy: boolean;
+    supabaseFallbackAvailable: boolean;
+  };
+  automationHealth?: Record<string, unknown>;
   scheduler?: {
     status: string;
     process: string;
     frequency: string;
+    publishingIntervalHours?: number;
     lastRun: string | null;
     lastResult: string | null;
     nextRun: string | null;
@@ -127,8 +143,40 @@ export function ContentAutomationWorkspace() {
           value={`${status?.today.published ?? 0}/${status?.today.target ?? 4}`}
         />
         <Metric label="Remaining today" value={String(status?.today.remaining ?? "—")} />
-        <Metric label="Launch batch left" value={String(status?.scheduler?.launchBatchRemaining ?? status?.settings.launch_batch_remaining ?? 0)} />
+        <Metric
+          label="Publish interval"
+          value={`${status?.publishing?.intervalHours ?? status?.scheduler?.publishingIntervalHours ?? 3}h`}
+        />
       </div>
+
+      <section className="rounded border border-neutral-200 bg-white p-4">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+          Publishing schedule
+        </h2>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-sm">
+          <Metric
+            label="Next publication"
+            value={
+              status?.publishing?.nextPublication
+                ? new Date(status.publishing.nextPublication).toLocaleString()
+                : "—"
+            }
+          />
+          <Metric
+            label="Last publication"
+            value={
+              status?.publishing?.lastPublication
+                ? new Date(status.publishing.lastPublication).toLocaleString()
+                : "—"
+            }
+          />
+          <Metric
+            label="Scheduled article"
+            value={status?.publishing?.nextScheduledJob?.title?.slice(0, 40) || "—"}
+          />
+          <Metric label="Launch batch left" value={String(status?.scheduler?.launchBatchRemaining ?? status?.settings.launch_batch_remaining ?? 0)} />
+        </div>
+      </section>
 
       <section className="rounded border border-neutral-200 bg-white p-4">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
@@ -154,6 +202,33 @@ export function ContentAutomationWorkspace() {
         <Metric label="Scheduled" value={String(status?.queue.scheduled ?? 0)} />
         <Metric label="Failed" value={String(status?.queue.failed ?? 0)} />
       </div>
+
+      <section className="rounded border border-neutral-200 bg-white p-4">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+          Image storage
+        </h2>
+        <div className="grid gap-2 sm:grid-cols-4 text-sm">
+          <Metric label="Provider" value={status?.imageStorage?.provider || "—"} />
+          <Metric label="Local images" value={String(status?.imageStorage?.imageCount ?? 0)} />
+          <Metric
+            label="Storage health"
+            value={status?.imageStorage?.healthy ? "HEALTHY" : "DEGRADED"}
+          />
+          <Metric
+            label="Supabase fallback"
+            value={status?.imageStorage?.supabaseFallbackAvailable ? "Available" : "—"}
+          />
+        </div>
+      </section>
+
+      <section className="rounded border border-neutral-200 bg-white p-4">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+          Automation health
+        </h2>
+        <pre className="max-h-48 overflow-auto rounded bg-neutral-50 p-3 text-xs text-neutral-700">
+          {JSON.stringify(status?.automationHealth ?? {}, null, 2)}
+        </pre>
+      </section>
 
       <section className="rounded border border-neutral-200 bg-white p-4">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">

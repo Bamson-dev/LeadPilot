@@ -51,6 +51,12 @@ export async function updateContentSettings(
     "daily_research_limit",
     "daily_image_limit",
     "publish_slot_hours",
+    "publishing_interval_hours",
+    "last_publication_at",
+    "next_scheduled_publication_at",
+    "image_storage_provider",
+    "last_image_storage_at",
+    "last_image_storage_error",
     "launch_batch_remaining",
     "last_scheduler_run_at",
     "last_scheduler_result",
@@ -275,6 +281,7 @@ export async function updateJob(
     leadthur_cta: string | null;
     image_status: string | null;
     image_alt: string | null;
+    image_storage_provider: string | null;
     scheduled_for: string | null;
     published_at: string | null;
     error_message: string | null;
