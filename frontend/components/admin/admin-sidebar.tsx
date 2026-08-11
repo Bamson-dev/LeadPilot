@@ -15,6 +15,7 @@ import {
   Users,
   FlaskConical,
   Search,
+  TrendingUp,
 } from "lucide-react";
 import { cn } from "@/utils/utils";
 
@@ -28,6 +29,7 @@ export type AdminNavId =
   | "blog"
   | "content"
   | "search-console"
+  | "seo-intelligence"
   | "scripts"
   | "analytics"
   | "settings";
@@ -49,6 +51,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { id: "blog", label: "Blog", href: "/admin/blog", icon: FileText },
   { id: "content", label: "Content Automation", href: "/admin/content-automation", icon: Sparkles },
   { id: "search-console", label: "Search Console", href: "/admin/search-console", icon: Search },
+  { id: "seo-intelligence", label: "SEO Intelligence", href: "/admin/seo-intelligence", icon: TrendingUp },
   { id: "scripts", label: "Global Scripts", href: "/admin/scripts", icon: Code2 },
   { id: "analytics", label: "Analytics", href: "/admin/analytics", icon: BarChart3 },
   { id: "settings", label: "Settings", href: "/admin/settings", icon: Settings },

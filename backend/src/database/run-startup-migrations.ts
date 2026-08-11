@@ -4,6 +4,7 @@ import { computeNextSequenceEmailAt } from "../services/trial-sequence-schedule"
 import { logger } from "../utils/logger";
 import { CONTENT_AUTOMATION_SQL } from "./content-automation-sql";
 import { GOOGLE_SEARCH_CONSOLE_SQL } from "../google-search-console/sql";
+import { SEO_INTELLIGENCE_SQL } from "../seo-intelligence/sql";
 
 const FREE_TRIAL_IP_USAGE_SQL = `
 create table if not exists free_trial_ip_usage (
@@ -47,6 +48,12 @@ declare
     'google_search_console_pages',
     'google_search_console_queries',
     'google_search_console_sync_runs',
+    'seo_optimization_settings',
+    'seo_opportunities',
+    'seo_optimization_jobs',
+    'seo_article_versions',
+    'seo_optimization_results',
+    'seo_article_cooldowns',
     'search_history',
     'user_searches',
     'lead_statuses',
@@ -190,6 +197,16 @@ export async function runStartupMigrations(): Promise<void> {
       logger.info("[migrations] Applied Google Search Console tables", { ref });
     } else {
       logger.info("[migrations] Google Search Console tables already present", { ref });
+    }
+
+    const seoTable = await client.query(
+      "select to_regclass('public.seo_optimization_settings') as table_exists"
+    );
+    if (!seoTable.rows[0]?.table_exists) {
+      await client.query(SEO_INTELLIGENCE_SQL);
+      logger.info("[migrations] Applied SEO Intelligence tables", { ref });
+    } else {
+      logger.info("[migrations] SEO Intelligence tables already present", { ref });
     }
 
     // Migrate active v1/v2 nurture users onto the 30-email (v3) sequence proportionally.
