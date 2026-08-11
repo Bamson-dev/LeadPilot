@@ -180,41 +180,41 @@ export function DashboardWorkspace() {
             {[
               {
                 label: "Total Users",
-                value: isDemoMode ? 447 : overview.totalUsers,
+                value: isDemoMode ? 782 : overview.totalUsers,
                 sub: `${overview.newUsersToday} new today`,
                 colorClass: "text-[var(--lt-accent)]",
               },
               {
                 label: "Active Users",
-                value: isDemoMode ? 389 : overview.activeUsers,
+                value: isDemoMode ? 681 : overview.activeUsers,
                 sub: `${overview.suspendedUsers} suspended`,
                 colorClass: "text-[var(--lt-success)]",
               },
               {
                 label: "New This Week",
-                value: isDemoMode ? 61 : overview.newUsersThisWeek,
+                value: isDemoMode ? 107 : overview.newUsersThisWeek,
                 sub: "activated accounts",
                 colorClass: "text-[var(--lt-cyan)]",
               },
               {
                 label: "Est. Revenue",
                 value: isDemoMode
-                  ? "₦6,705,000"
+                  ? "₦15,120,000"
                   : `₦${overview.estimatedRevenue.toLocaleString()}`,
                 sub: isDemoMode
-                  ? "at ₦15,000 per user"
+                  ? "443 at ₦15,000 · 339 at ₦25,000"
                   : `at ₦${SALE_PRICE_NGN.toLocaleString()} per user`,
                 colorClass: "text-[var(--lt-warning)]",
               },
               {
                 label: "Paid Searches",
-                value: isDemoMode ? "5,400" : overview.totalSearches,
+                value: isDemoMode ? "9,460" : overview.totalSearches,
                 sub: "by paying users",
                 colorClass: "text-[var(--lt-accent)]",
               },
               {
                 label: "Trial Searches",
-                value: isDemoMode ? "1,163" : overview.totalTrialSearches,
+                value: isDemoMode ? "2,035" : overview.totalTrialSearches,
                 sub: "free preview usage",
                 colorClass: "text-[var(--lt-text-muted)]",
               },
