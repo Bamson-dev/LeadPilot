@@ -19,9 +19,23 @@ import {
 } from "./publish-schedule";
 import { logger } from "../utils/logger";
 
-const HOUR_MS = 60 * 60 * 1000;
+const TICK_MS = 15 * 60 * 1000;
+const TICK_WATCHDOG_MS = 20 * 60 * 1000;
+const MAX_GENERATIONS_PER_TICK = 2;
 let interval: ReturnType<typeof setInterval> | null = null;
 let tickRunning = false;
+let tickStartedAt = 0;
+
+async function runIsolated(label: string, fn: () => Promise<void>): Promise<void> {
+  try {
+    await fn();
+  } catch (err) {
+    logger.error("Content automation phase failed; continuing", {
+      phase: label,
+      error: err instanceof Error ? err.message : "unknown",
+    });
+  }
+}
 
 async function scheduleJobForNextSlot(jobId: string): Promise<void> {
   const settings = await getContentSettings();
@@ -37,9 +51,129 @@ async function scheduleJobForNextSlot(jobId: string): Promise<void> {
   });
 }
 
+async function publishDueJobs(dailyCap: number, launchRemaining: number): Promise<number> {
+  let published = 0;
+  const scheduled = await listJobs("SCHEDULED", 20);
+  const now = Date.now();
+  const ordered = [...scheduled].sort((a, b) => {
+    const ta = a.scheduled_for ? new Date(a.scheduled_for).getTime() : 0;
+    const tb = b.scheduled_for ? new Date(b.scheduled_for).getTime() : 0;
+    return ta - tb;
+  });
+
+  for (const job of ordered) {
+    if ((await countPublishedToday()) >= dailyCap && launchRemaining <= 0) break;
+    const freshSettings = await getContentSettings();
+    if (!canPublishScheduledJob(freshSettings, job.scheduled_for, now)) continue;
+    try {
+      await publishReadyJob(job.id);
+      published += 1;
+    } catch (err) {
+      logger.error("ARTICLE_PUBLISH_FAILED", {
+        jobId: job.id,
+        error: err instanceof Error ? err.message : "unknown",
+      });
+    }
+  }
+  return published;
+}
+
+async function queueReadyDrafts(dailyCap: number): Promise<number> {
+  const settings = await getContentSettings();
+  if (!settings.auto_publishing) return 0;
+  if ((await countPublishedToday()) >= dailyCap) return 0;
+  const readyJobs = await listJobs("READY", 10);
+  let queued = 0;
+  for (const job of readyJobs) {
+    if ((await countPublishedToday()) >= dailyCap) break;
+    await scheduleJobForNextSlot(job.id);
+    queued += 1;
+  }
+  return queued;
+}
+
+async function ensureTopicSupply(dailyCap: number, launchRemaining: number): Promise<void> {
+  const ready = await listJobs("READY", 10);
+  const scheduled = await listJobs("SCHEDULED", 10);
+  const qualified = await listJobs("QUALIFIED", 10);
+  const needed = Math.max(dailyCap, launchRemaining, 4);
+  if (ready.length + scheduled.length + qualified.length < needed) {
+    await discoverAndQueueTopics(needed);
+  }
+}
+
+async function fillGenerationPipeline(dailyCap: number): Promise<void> {
+  const settings = await getContentSettings();
+  let attempts = 0;
+  while (attempts < MAX_GENERATIONS_PER_TICK) {
+    if ((await countPublishedToday()) >= dailyCap) return;
+    const remainingToday = dailyCap - (await countPublishedToday());
+    const scheduledCount = (await listJobs("SCHEDULED", 20)).length;
+    const readyCount = (await listJobs("READY", 20)).length;
+    if (scheduledCount + readyCount >= remainingToday) return;
+
+    let nextQualified = (await listJobs("QUALIFIED", 1))[0];
+    if (!nextQualified) {
+      await discoverAndQueueTopics(4);
+      nextQualified = (await listJobs("QUALIFIED", 1))[0];
+      if (!nextQualified) return;
+    }
+
+    attempts += 1;
+    logger.info("CONTENT_GENERATION_STARTED", { jobId: nextQualified.id });
+    try {
+      const generated = await runContentJob(nextQualified.id, { publish: false });
+      if (generated.status === "READY") {
+        logger.info("CONTENT_GENERATION_COMPLETED", {
+          jobId: generated.id,
+          quality: generated.quality_score,
+        });
+        if (settings.auto_publishing) {
+          await scheduleJobForNextSlot(generated.id);
+        }
+      } else {
+        logger.error("CONTENT_GENERATION_FAILED", {
+          jobId: generated.id,
+          status: generated.status,
+          error: generated.error_message,
+        });
+      }
+    } catch (err) {
+      logger.error("CONTENT_GENERATION_FAILED", {
+        jobId: nextQualified.id,
+        error: err instanceof Error ? err.message : "unknown",
+      });
+    }
+  }
+}
+
+async function retryTransientJobs(): Promise<void> {
+  const settings = await getContentSettings();
+  const retrying = await listJobs("RETRYING", 5);
+  for (const job of retrying) {
+    try {
+      if (job.attempt_count >= settings.max_retries) {
+        await updateJob(job.id, { status: "FAILED" });
+        continue;
+      }
+      await runContentJob(job.id, { publish: false });
+    } catch (err) {
+      logger.error("Content job retry failed; continuing", {
+        jobId: job.id,
+        error: err instanceof Error ? err.message : "unknown",
+      });
+    }
+  }
+}
+
 export async function processContentAutomationTick(): Promise<void> {
-  if (tickRunning) return;
+  if (tickRunning) {
+    if (Date.now() - tickStartedAt < TICK_WATCHDOG_MS) return;
+    logger.error("Content automation tick watchdog reset stuck run");
+    tickRunning = false;
+  }
   tickRunning = true;
+  tickStartedAt = Date.now();
   let tickResult: "SUCCESS" | "FAILED" = "SUCCESS";
   let tickError: string | null = null;
   try {
@@ -52,139 +186,93 @@ export async function processContentAutomationTick(): Promise<void> {
       return;
     }
 
-    const publishedToday = await countPublishedToday();
     const dailyCap = settings.daily_article_target;
+
+    // 1. Always publish due work first. Generation failures must never block this.
+    await runIsolated("publish_due", async () => {
+      await publishDueJobs(dailyCap, launchRemaining);
+    });
+
+    const publishedToday = await countPublishedToday();
     if (publishedToday >= dailyCap && launchRemaining <= 0) {
       logger.info("Daily article target already met", { publishedToday });
-      await repairFailedJobImages(4);
+      await runIsolated("repair_images", async () => {
+        await repairFailedJobImages(4);
+      });
       return;
     }
 
-    // Publish due scheduled jobs — respects 3-hour interval (restart-safe)
-    const scheduled = await listJobs("SCHEDULED", 20);
-    const now = Date.now();
-    for (const job of scheduled.sort((a, b) => {
-      const ta = a.scheduled_for ? new Date(a.scheduled_for).getTime() : 0;
-      const tb = b.scheduled_for ? new Date(b.scheduled_for).getTime() : 0;
-      return ta - tb;
-    })) {
-      if ((await countPublishedToday()) >= dailyCap && launchRemaining <= 0) break;
-      const freshSettings = await getContentSettings();
-      if (!canPublishScheduledJob(freshSettings, job.scheduled_for, now)) {
-        continue;
-      }
-      try {
-        await publishReadyJob(job.id);
-      } catch (err) {
-        logger.error("ARTICLE_PUBLISH_FAILED", {
-          jobId: job.id,
-          error: err instanceof Error ? err.message : "unknown",
-        });
-      }
-    }
+    // 2. Move every READY draft onto the 3-hour calendar, then publish if due now.
+    await runIsolated("queue_ready", async () => {
+      await queueReadyDrafts(dailyCap);
+    });
+    await runIsolated("publish_due_after_queue", async () => {
+      await publishDueJobs(dailyCap, launchRemaining);
+    });
 
-    // Retry failed/retrying jobs carefully
-    const retrying = await listJobs("RETRYING", 5);
-    for (const job of retrying) {
-      if (job.attempt_count >= settings.max_retries) {
-        await updateJob(job.id, { status: "FAILED" });
-        continue;
-      }
-      await runContentJob(job.id, { publish: false });
-    }
+    // 3. Retry transient jobs without stopping the publisher.
+    await runIsolated("retry_jobs", async () => {
+      await retryTransientJobs();
+    });
 
-    // Ensure topic/job supply
-    const ready = await listJobs("READY", 10);
-    const qualifiedJobs = await listJobs("QUALIFIED", 10);
-    if (ready.length + qualifiedJobs.length < Math.max(dailyCap, launchRemaining)) {
-      await discoverAndQueueTopics(Math.max(dailyCap, launchRemaining, 4));
-    }
+    // 4. Keep topic supply full so a failed article never empties the queue.
+    await runIsolated("topic_supply", async () => {
+      await ensureTopicSupply(dailyCap, launchRemaining);
+    });
 
     // Launch batch: generate + schedule (never immediate publish)
     let remainingLaunch = launchRemaining;
-    let launchAttempts = 0;
-    while (remainingLaunch > 0 && launchAttempts < remainingLaunch + 6) {
-      launchAttempts += 1;
-      const nextQualified = (await listJobs("QUALIFIED", 1))[0];
-      const nextReady = (await listJobs("READY", 1))[0];
-      if (nextReady) {
-        try {
-          if (settings.auto_publishing) {
+    await runIsolated("launch_batch", async () => {
+      let launchAttempts = 0;
+      while (remainingLaunch > 0 && launchAttempts < remainingLaunch + 6) {
+        launchAttempts += 1;
+        const nextQualified = (await listJobs("QUALIFIED", 1))[0];
+        const nextReady = (await listJobs("READY", 1))[0];
+        if (nextReady) {
+          const current = await getContentSettings();
+          if (current.auto_publishing) {
             await scheduleJobForNextSlot(nextReady.id);
           } else {
             await publishReadyJob(nextReady.id);
           }
           remainingLaunch -= 1;
           await updateContentSettings({ launch_batch_remaining: remainingLaunch });
-        } catch (err) {
-          logger.error("Launch batch schedule failed", {
-            error: err instanceof Error ? err.message : "unknown",
-          });
-          break;
+          continue;
         }
-        continue;
-      }
-      if (nextQualified) {
-        const generated = await runContentJob(nextQualified.id, { publish: false });
-        if (generated.status === "READY") {
-          if (settings.auto_publishing) {
-            await scheduleJobForNextSlot(generated.id);
-          } else {
-            await publishReadyJob(generated.id);
-          }
-          remainingLaunch -= 1;
-          await updateContentSettings({ launch_batch_remaining: remainingLaunch });
-        } else {
-          logger.error("Launch batch item failed; continuing with next topic", {
-            status: generated.status,
-            error: generated.error_message,
-          });
-          await discoverAndQueueTopics(3);
-        }
-        continue;
-      }
-      await discoverAndQueueTopics(4);
-      const created = (await listJobs("QUALIFIED", 1))[0];
-      if (!created) break;
-    }
-
-    // Steady-state: schedule existing READY drafts, then generate if the
-    // pipeline does not already cover today's remaining target.
-    if (settings.automation_enabled && remainingLaunch <= 0) {
-      if ((await countPublishedToday()) < dailyCap) {
-        if (settings.auto_publishing) {
-          const readyJobs = await listJobs("READY", 10);
-          for (const job of readyJobs) {
-            if ((await countPublishedToday()) >= dailyCap) break;
-            await scheduleJobForNextSlot(job.id);
-          }
-        }
-
-        const scheduledCount = (await listJobs("SCHEDULED", 20)).length;
-        const readyCount = (await listJobs("READY", 20)).length;
-        const remainingToday = dailyCap - (await countPublishedToday());
-        if (scheduledCount + readyCount < remainingToday) {
-          const nextQualified = (await listJobs("QUALIFIED", 1))[0];
-          if (nextQualified) {
-            logger.info("CONTENT_GENERATION_STARTED", { jobId: nextQualified.id });
-            const generated = await runContentJob(nextQualified.id, { publish: false });
-            if (generated.status === "READY") {
-              logger.info("CONTENT_GENERATION_COMPLETED", {
-                jobId: generated.id,
-                quality: generated.quality_score,
-              });
-              if (settings.auto_publishing) {
-                await scheduleJobForNextSlot(generated.id);
-              }
-            } else if (generated.status === "FAILED") {
-              logger.error("CONTENT_GENERATION_FAILED", {
-                jobId: generated.id,
-                error: generated.error_message,
-              });
+        if (nextQualified) {
+          const generated = await runContentJob(nextQualified.id, { publish: false });
+          if (generated.status === "READY") {
+            const current = await getContentSettings();
+            if (current.auto_publishing) {
+              await scheduleJobForNextSlot(generated.id);
+            } else {
+              await publishReadyJob(generated.id);
             }
+            remainingLaunch -= 1;
+            await updateContentSettings({ launch_batch_remaining: remainingLaunch });
+          } else {
+            logger.error("Launch batch item failed; continuing with next topic", {
+              status: generated.status,
+              error: generated.error_message,
+            });
+            await discoverAndQueueTopics(3);
           }
+          continue;
         }
+        await discoverAndQueueTopics(4);
+        const created = (await listJobs("QUALIFIED", 1))[0];
+        if (!created) break;
       }
+    });
+
+    // 5. Fill today's remaining slots. A failed generation tries the next topic.
+    if (settings.automation_enabled && remainingLaunch <= 0) {
+      await runIsolated("generate_pipeline", async () => {
+        await fillGenerationPipeline(dailyCap);
+      });
+      await runIsolated("publish_due_after_generate", async () => {
+        await publishDueJobs(dailyCap, remainingLaunch);
+      });
     }
 
     logger.info("Content automation scheduler completed", {
@@ -193,11 +281,20 @@ export async function processContentAutomationTick(): Promise<void> {
       launchRemaining: remainingLaunch,
     });
 
-    await repairFailedJobImages(4);
+    await runIsolated("repair_images", async () => {
+      await repairFailedJobImages(4);
+    });
   } catch (err) {
     tickResult = "FAILED";
     tickError = err instanceof Error ? err.message : "unknown";
     logger.error("Content automation tick failed", { error: tickError });
+    await runIsolated("publish_due_after_error", async () => {
+      const settings = await getContentSettings();
+      await publishDueJobs(
+        settings.daily_article_target,
+        Number(settings.launch_batch_remaining || 0)
+      );
+    });
   } finally {
     try {
       await updateContentSettings({
@@ -219,8 +316,8 @@ export function startContentAutomationScheduler(): void {
   }, 45_000);
   interval = setInterval(() => {
     void processContentAutomationTick();
-  }, HOUR_MS);
-  logger.info("Content automation scheduler started (hourly)");
+  }, TICK_MS);
+  logger.info("Content automation scheduler started (15-minute publish-first ticks)");
 }
 
 export function stopContentAutomationScheduler(): void {

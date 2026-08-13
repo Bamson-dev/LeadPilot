@@ -117,7 +117,7 @@ export async function getAutomationHealth(): Promise<Record<string, unknown>> {
     },
     queue: {
       status: "HEALTHY",
-      mode: "hourly_scheduler",
+      mode: "publish_first_scheduler",
     },
     providers: {
       deepseek: {

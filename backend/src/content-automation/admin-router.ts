@@ -80,14 +80,14 @@ contentAutomationRouter.get("/status", async (_req: Request, res: Response) => {
             ? "RUNNING"
             : "PAUSED",
         process: "production-backend:startContentAutomationScheduler",
-        frequency: "hourly (+45s after boot)",
+        frequency: "every 15 minutes (+45s after boot)",
         publishingIntervalHours: settings.publishing_interval_hours ?? 3,
         lastRun: settings.last_scheduler_run_at || null,
         lastResult: settings.last_scheduler_result || null,
         lastError: settings.last_scheduler_error || null,
         nextRun: settings.last_scheduler_run_at
           ? new Date(
-              new Date(settings.last_scheduler_run_at).getTime() + 60 * 60 * 1000
+              new Date(settings.last_scheduler_run_at).getTime() + 15 * 60 * 1000
             ).toISOString()
           : null,
         dailyTarget: settings.daily_article_target,
