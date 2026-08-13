@@ -148,12 +148,22 @@ export async function processContentAutomationTick(): Promise<void> {
       if (!created) break;
     }
 
-    // Steady-state: generate one article per tick; schedule for next interval slot
+    // Steady-state: schedule existing READY drafts, then generate if the
+    // pipeline does not already cover today's remaining target.
     if (settings.automation_enabled && remainingLaunch <= 0) {
       if ((await countPublishedToday()) < dailyCap) {
-        const hasScheduled = (await listJobs("SCHEDULED", 1)).length > 0;
-        const hasReady = (await listJobs("READY", 1)).length > 0;
-        if (!hasScheduled && !hasReady) {
+        if (settings.auto_publishing) {
+          const readyJobs = await listJobs("READY", 10);
+          for (const job of readyJobs) {
+            if ((await countPublishedToday()) >= dailyCap) break;
+            await scheduleJobForNextSlot(job.id);
+          }
+        }
+
+        const scheduledCount = (await listJobs("SCHEDULED", 20)).length;
+        const readyCount = (await listJobs("READY", 20)).length;
+        const remainingToday = dailyCap - (await countPublishedToday());
+        if (scheduledCount + readyCount < remainingToday) {
           const nextQualified = (await listJobs("QUALIFIED", 1))[0];
           if (nextQualified) {
             logger.info("CONTENT_GENERATION_STARTED", { jobId: nextQualified.id });
