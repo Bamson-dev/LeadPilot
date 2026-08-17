@@ -395,12 +395,12 @@ export function getSearchQueueStatus(): SearchQueueStatus {
 export async function refreshSearchQueueStatus(): Promise<SearchQueueStatus> {
   if (bullQueue && isRedisQueueEnabled()) {
     try {
-      const counts = await bullQueue.getJobCounts(
-        "active",
-        "waiting",
-        "delayed",
-        "prioritized"
-      );
+      const counts = await Promise.race([
+        bullQueue.getJobCounts("active", "waiting", "delayed", "prioritized"),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("queue status timeout")), 2000)
+        ),
+      ]);
       const inline = inlineSearchQueue.getStatus();
       return {
         running: (counts.active ?? 0) + inline.running,

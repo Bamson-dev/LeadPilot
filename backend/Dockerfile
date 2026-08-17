@@ -40,7 +40,9 @@ WORKDIR /app/backend
 
 EXPOSE 3000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD curl -f http://localhost:${PORT:-3000}/health || exit 1
+# Use 127.0.0.1 — `localhost` can resolve to IPv6 while Node listens on IPv4,
+# which marks the container unhealthy and Traefik returns 503.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=90s --retries=5 \
+  CMD curl -fsS --max-time 3 http://127.0.0.1:3000/health || exit 1
 
 CMD ["node", "dist/server.js"]
