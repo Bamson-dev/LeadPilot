@@ -83,6 +83,19 @@ async function sendViaResend(params: {
   }
 }
 
+export async function sendResendEmail(params: {
+  to: string;
+  subject: string;
+  html: string;
+}): Promise<{ success: boolean; messageId?: string | null; error?: string }> {
+  const subject = capitalizeSubjectWords(params.subject);
+  return sendViaResend({
+    to: params.to,
+    subject,
+    html: params.html,
+  });
+}
+
 /**
  * Nurture stream is intentionally separated from Zepto transactional sends.
  * It uses Resend-only so a Zepto account issue does not block critical system mail.

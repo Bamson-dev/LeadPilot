@@ -49,6 +49,8 @@ import { seoIntelligenceRouter } from "./seo-intelligence/admin-router";
 import { startSeoIntelligenceScheduler } from "./seo-intelligence/scheduler";
 import { startContentAutomationScheduler } from "./content-automation/scheduler";
 import { mediaRouter } from "./storage/media-router";
+import { aiMoneyCodeCampaignRouter } from "./email-campaigns/ai-money-code/admin-router";
+import { startAiMoneyCodeScheduler } from "./email-campaigns/ai-money-code/schedule";
 
 export const app = express();
 
@@ -124,6 +126,7 @@ function registerRoutes(): void {
   app.use("/trial", trialRouter);
   app.use("/admin", adminRouter);
   app.use("/admin/content-automation", contentAutomationRouter);
+  app.use("/admin/email-campaigns/ai-money-code", aiMoneyCodeCampaignRouter);
   app.use("/admin/integrations/google-search-console", googleSearchConsoleRouter);
   app.use("/admin/seo-intelligence", seoIntelligenceRouter);
   app.use("/affiliate", affiliateRouter);
@@ -261,6 +264,7 @@ async function start(): Promise<void> {
     await initOutreachSendQueue();
     startOutreachGraceScheduler();
     startContentAutomationScheduler();
+    startAiMoneyCodeScheduler();
     startGoogleSearchConsoleScheduler();
     startSeoIntelligenceScheduler();
     if (config.PAYSTACK_SECRET_KEY) {

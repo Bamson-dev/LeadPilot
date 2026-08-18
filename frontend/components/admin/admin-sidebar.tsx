@@ -28,6 +28,7 @@ export type AdminNavId =
   | "broadcast"
   | "blog"
   | "content"
+  | "email-campaigns"
   | "search-console"
   | "seo-intelligence"
   | "scripts"
@@ -50,6 +51,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { id: "broadcast", label: "Broadcast", href: "/admin/broadcast", icon: Radio },
   { id: "blog", label: "Blog", href: "/admin/blog", icon: FileText },
   { id: "content", label: "Content Automation", href: "/admin/content-automation", icon: Sparkles },
+  { id: "email-campaigns", label: "Email Campaigns", href: "/admin/email-campaigns/ai-money-code", icon: Radio },
   { id: "search-console", label: "Search Console", href: "/admin/search-console", icon: Search },
   { id: "seo-intelligence", label: "SEO Intelligence", href: "/admin/seo-intelligence", icon: TrendingUp },
   { id: "scripts", label: "Global Scripts", href: "/admin/scripts", icon: Code2 },
