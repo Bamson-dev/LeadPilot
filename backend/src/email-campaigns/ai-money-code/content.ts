@@ -5,12 +5,15 @@ import {
   SPECIAL_PRICE_NGN,
   WEBINAR_URL,
   type CampaignEmail,
+  type CampaignEmailTemplate,
+  type RecipientUrgencyContext,
 } from "./types";
+import { getPhaseForDay } from "./campaign-definition";
 
 const webinar = WEBINAR_URL;
 const offer = OFFER_URL;
 
-export const AI_MONEY_CODE_EMAILS: CampaignEmail[] = [
+export const AI_MONEY_CODE_EMAIL_TEMPLATES: CampaignEmailTemplate[] = [
   { day: 1, subject: "LeadThur Is Closing Down.", preview: "Not the company. A mindset.", ctaLabel: "Watch The Free Webinar", ctaUrl: webinar, body: ["Let me clear the headline immediately: LeadThur is not shutting down. What needs to close down is the idea that only coders can build software businesses.", "In three months, LeadThur reached 782 users and an estimated ₦15,120,000 in revenue. That happened because software ownership scales decisions, not effort alone.", "I am hosting a free 60-minute live training: How To Build Software With AI And Get Paid For It. If you've ever thought, 'I have ideas but not technical skills,' this is where that wall starts breaking."] },
   { day: 2, subject: "The developer told me ₦3 million.", preview: "That quote used to end good ideas.", ctaLabel: "Reserve Your Webinar Seat", ctaUrl: webinar, body: ["Most ideas die at the same point: the first development quote. For many people, that quote is bigger than their annual savings.", "AI does not remove work, but it removes the old entry barrier where you needed a full engineering budget before you could even test your idea.", "In the webinar, I will show you a practical path from idea to usable software without waiting for a ₦3 million budget."] },
   { day: 3, subject: "How LeadThur was built (and why this matters to you)", preview: "A product can start small and still become real.", ctaLabel: "Join The Free Training", ctaUrl: webinar, body: ["LeadThur did not become useful because it looked perfect on day one. It became useful because it solved a painful business problem and improved quickly with real user feedback.", "That is the main lesson: software is not magic. It is a sequence of clear decisions. AI can now support those decisions if you know how to direct it properly.", "This training is built around that reality: build useful first, polish next, monetize with intention."] },
@@ -26,7 +29,7 @@ export const AI_MONEY_CODE_EMAILS: CampaignEmail[] = [
   { day: 13, subject: "Building is only half the work", preview: "Monetization is the second half.", ctaLabel: "Watch The Monetization Session", ctaUrl: webinar, body: ["Many products fail because the creator stops at 'it works on my laptop.'", "You still need positioning, offers, distribution, and customer acquisition discipline.", "The webinar includes how to get customers for what you build, not just how to build it."] },
   { day: 14, subject: "I haven't told you the best part yet", preview: "You can begin before you feel fully ready.", ctaLabel: "Reserve Your Seat", ctaUrl: webinar, body: ["The biggest edge is not perfect tools. It is speed of iteration while others are still waiting for confidence.", "AI gives you leverage, but your advantage comes from action plus guidance.", "Tomorrow I will tie everything together clearly. For now, lock in your webinar seat."] },
   { day: 15, subject: "This is the last time I'll explain it like this", preview: "A full recap before we move to the deeper path.", ctaLabel: "Attend The Free Webinar", ctaUrl: webinar, body: ["You now see the core argument: software ownership creates leverage, AI lowers entry barriers, and practical execution turns this into income opportunities.", "The webinar is still the best first step because it gives you structure before commitment.", "Join it now. After this, I will start showing the full program for people who want complete implementation depth."] },
-  { day: 16, subject: "You can start building your first software today", preview: "The full program is live now.", ctaLabel: "View The Program", ctaUrl: offer, body: ["The full program, How To Build Software With AI And Get Paid For It, is available now. You can join now and start learning now.", `Current special price is ₦${SPECIAL_PRICE_NGN.toLocaleString()}. After Sept 16, 2026 at 11:59 PM Africa/Lagos, price returns to ₦${REGULAR_PRICE_NGN.toLocaleString()}.`, "Important: only the special price ends. The program remains available afterward."] },
+  { day: 16, subject: "You can start building your first software today", preview: "The full program is live now.", ctaLabel: "View The Program", ctaUrl: offer, body: ["The full program, How To Build Software With AI And Get Paid For It, is available now. You can join now and start learning now.", `Current special price is ₦${SPECIAL_PRICE_NGN.toLocaleString()}. After your personal special-price deadline, the program remains available at the regular price of ₦${REGULAR_PRICE_NGN.toLocaleString()}.`, "Important: only the special price ends. The program remains available afterward."] },
   { day: 17, subject: "What you will actually learn inside", preview: "A module-by-module transformation path.", ctaLabel: "See Full Curriculum", ctaUrl: offer, body: ["You get a complete path: setup, prompting, idea-to-blueprint, interface quality, functionality, persistence, recovery, deployment, and app-store readiness.", "This is not random theory. It is an implementation sequence designed for real output.", "If you want the guided version rather than piecing videos from different places, this is the right next step."] },
   { day: 18, subject: "Still saying, 'I don't know how to code'?", preview: "You are exactly who this was designed for.", ctaLabel: "Join At Special Price", ctaUrl: offer, body: ["This program is designed for people who are capable but non-technical. It teaches you to direct AI through real build steps with clarity.", "You will still think and decide as the operator. AI helps execute faster; it does not replace responsibility.", "If coding fear has delayed you, this is your structured bridge."] },
   { day: 19, subject: "What can you realistically build?", preview: "Think categories, not fantasies.", ctaLabel: "See Program Details", ctaUrl: offer, body: ["You can build tools for booking, lead handling, CRM workflows, reporting dashboards, simple marketplaces, educational utilities, and internal business automations.", "Not everyone will build the same thing, and that is the point. The system helps you align build direction with real demand around you.", "Join now and start with one practical build."] },
@@ -38,23 +41,76 @@ export const AI_MONEY_CODE_EMAILS: CampaignEmail[] = [
   { day: 25, subject: "Most AI courses stop too early", preview: "Build, deploy, monetize, acquire customers.", ctaLabel: "Get The Full Stack Path", ctaUrl: offer, body: ["Many courses teach only prompting. Real outcomes require deployment and monetization discipline too.", "This program goes beyond 'build a demo' into getting your software online and connecting it to revenue opportunities.", "That difference is why people complete but still cannot earn after most courses."] },
   { day: 26, subject: "You don't need a million-naira idea", preview: "Small painful problems can pay consistently.", ctaLabel: "Start With Realistic Ideas", ctaUrl: offer, body: ["Large outcomes can start from small but costly inefficiencies in local businesses.", "The Idea-To-Blueprint System and App Idea Vault help you identify practical pain worth solving, then convert it into a build plan.", "Execution on real pain beats waiting for a 'perfect' idea."] },
   { day: 27, subject: "What happens after you join?", preview: "Clear onboarding, no confusion.", ctaLabel: "Join And Start Learning", ctaUrl: offer, body: ["After payment, you get immediate access to the full modules and bonuses inside your member area.", "You can begin with setup immediately, follow the sequence module by module, and ship your first useful build faster.", "This is available now, not a waitlist or future launch."] },
-  { day: 28, subject: "Why ₦49,999 is temporary", preview: "Price window ends; program stays available.", ctaLabel: "Take The Special Price", ctaUrl: offer, body: [`The current special price of ₦${SPECIAL_PRICE_NGN.toLocaleString()} ends on Sept 16, 2026 at 11:59 PM Africa/Lagos.`, `After that, the program remains available at ₦${REGULAR_PRICE_NGN.toLocaleString()}.`, "So this is a price window decision, not an availability panic message."] },
-  { day: 29, subject: "Before you say, 'I'll do it later'", preview: "Delay has a direct cost now.", ctaLabel: "Secure The Current Price", ctaUrl: offer, body: ["Waiting feels safe, but in this case delay has a concrete cost: you move from ₦49,999 to ₦100,000 after the deadline.", "If you already know software-building is a skill you need, postponing only makes entry more expensive.", "Decide based on your goals, not temporary hesitation."] },
-  { day: 30, subject: "Final day for ₦49,999 (real deadline tonight)", preview: "Program stays open. Price changes after 11:59 PM Lagos.", ctaLabel: "Join Before Price Returns", ctaUrl: offer, body: ["This is the genuine final day for the ₦49,999 special price.", "Deadline is Sept 16, 2026 at 11:59 PM Africa/Lagos. After that, the program remains available, and the price returns to ₦100,000.", "If this is your path, take the current price before the window closes tonight."] },
+  { day: 28, subject: "Why ₦49,999 is temporary", preview: "Price window ends; program stays available.", ctaLabel: "Take The Special Price", ctaUrl: offer, body: [`The current special price of ₦${SPECIAL_PRICE_NGN.toLocaleString()} is tied to your personal deadline.`, `After that deadline, the program remains available at ₦${REGULAR_PRICE_NGN.toLocaleString()}.`, "So this is a price window decision, not an availability panic message."] },
+  { day: 29, subject: "Before you say, 'I'll do it later'", preview: "Delay has a direct cost now.", ctaLabel: "Secure The Current Price", ctaUrl: offer, body: [`Waiting feels safe, but delay has a concrete cost: you move from ₦${SPECIAL_PRICE_NGN.toLocaleString()} to ₦${REGULAR_PRICE_NGN.toLocaleString()} after your personal deadline.`, "If you already know software-building is a skill you need, postponing only makes entry more expensive.", "Decide based on your goals, not temporary hesitation."] },
+  { day: 30, subject: "Final day for ₦49,999 (real deadline tonight)", preview: "Program stays open. Price changes after 11:59 PM Lagos.", ctaLabel: "Join Before Price Returns", ctaUrl: offer, body: ["This is the genuine final day for the ₦49,999 special price on your personal campaign calendar.", "After your deadline tonight, the program remains available, and the price returns to ₦100,000.", "If this is your path, take the current price before your window closes tonight."] },
 ];
 
-export function getCampaignEmail(day: number): CampaignEmail {
-  const found = AI_MONEY_CODE_EMAILS.find((item) => item.day === day);
+export const AI_MONEY_CODE_EMAILS = AI_MONEY_CODE_EMAIL_TEMPLATES;
+
+function urgencyLineForDay(day: number, ctx: RecipientUrgencyContext): string {
+  const phase = getPhaseForDay(day);
+
+  if (ctx.isPastDeadline) {
+    return `Your personal ₦49,999 special price has expired. The training remains available at the regular ₦100,000 price.`;
+  }
+
+  if (phase === "webinar") {
+    if (ctx.daysRemaining > 7) {
+      return `When the full program opens to you, your ₦49,999 special price will be available until ${ctx.personalDeadlineLagos}. After that deadline, the program stays open at ₦100,000.`;
+    }
+    if (ctx.daysRemaining >= 1) {
+      return `You have ${ctx.daysRemaining} day${ctx.daysRemaining === 1 ? "" : "s"} left on your personal special-price window (${ctx.personalDeadlineLagos}). The program remains available after that; only the ₦49,999 price expires.`;
+    }
+    return `Your personal ₦49,999 special price expires in about ${ctx.hoursRemaining} hour${ctx.hoursRemaining === 1 ? "" : "s"} (${ctx.personalDeadlineLagos}). The program remains available afterward at ₦100,000.`;
+  }
+
+  if (day === 30) {
+    if (ctx.hoursRemaining <= 24) {
+      return `Your ₦49,999 special price expires tonight at ${ctx.personalDeadlineLagos}. After that, the program remains available at ₦100,000.`;
+    }
+    return `Today is your final campaign day for the ₦49,999 special price. Your deadline is ${ctx.personalDeadlineLagos}. The program stays available afterward at ₦100,000.`;
+  }
+
+  if (ctx.daysRemaining > 7) {
+    return `Your ₦49,999 special price is available until ${ctx.personalDeadlineLagos}. You have ${ctx.daysRemaining} days left. After your deadline, the program remains available at ₦100,000.`;
+  }
+  if (ctx.daysRemaining >= 1) {
+    return `You have ${ctx.daysRemaining} day${ctx.daysRemaining === 1 ? "" : "s"} left before your personal ₦49,999 price expires on ${ctx.personalDeadlineDate}. The program stays open at ₦100,000 afterward.`;
+  }
+  return `Your ₦49,999 special price expires in about ${ctx.hoursRemaining} hour${ctx.hoursRemaining === 1 ? "" : "s"} (${ctx.personalDeadlineLagos}). The program remains available at ₦100,000 after that.`;
+}
+
+export function renderCampaignEmail(
+  template: CampaignEmailTemplate,
+  ctx: RecipientUrgencyContext
+): CampaignEmail {
+  const urgency = urgencyLineForDay(template.day, ctx);
+  const body = [...template.body];
+  if (template.day <= 5 || template.day >= 28) {
+    body.push(urgency);
+  } else {
+    body.splice(Math.min(2, body.length), 0, urgency);
+  }
+  return { ...template, body };
+}
+
+export function getCampaignEmailTemplate(day: number): CampaignEmailTemplate {
+  const found = AI_MONEY_CODE_EMAIL_TEMPLATES.find((item) => item.day === day);
   if (!found) throw new Error(`Missing campaign email for day ${day}`);
   return found;
 }
 
+export function getCampaignEmail(day: number, ctx: RecipientUrgencyContext): CampaignEmail {
+  return renderCampaignEmail(getCampaignEmailTemplate(day), ctx);
+}
+
 export function validateCampaignContent(): { ok: boolean; errors: string[] } {
   const errors: string[] = [];
-  if (AI_MONEY_CODE_EMAILS.length !== CAMPAIGN_TOTAL_DAYS) {
-    errors.push(`Expected ${CAMPAIGN_TOTAL_DAYS} emails, found ${AI_MONEY_CODE_EMAILS.length}`);
+  if (AI_MONEY_CODE_EMAIL_TEMPLATES.length !== CAMPAIGN_TOTAL_DAYS) {
+    errors.push(`Expected ${CAMPAIGN_TOTAL_DAYS} emails, found ${AI_MONEY_CODE_EMAIL_TEMPLATES.length}`);
   }
-  for (const email of AI_MONEY_CODE_EMAILS) {
+  for (const email of AI_MONEY_CODE_EMAIL_TEMPLATES) {
     if (!email.subject.trim()) errors.push(`Day ${email.day}: subject missing`);
     if (!email.preview.trim()) errors.push(`Day ${email.day}: preview missing`);
     if (!email.ctaLabel.trim()) errors.push(`Day ${email.day}: cta label missing`);
@@ -70,6 +126,36 @@ export function validateCampaignContent(): { ok: boolean; errors: string[] } {
     const bodyText = email.body.join(" ").toLowerCase();
     if (bodyText.includes("1-on-1 build review")) {
       errors.push(`Day ${email.day}: fast-action bonus must be omitted`);
+    }
+    if (bodyText.includes("sept 16, 2026") || bodyText.includes("september 16, 2026")) {
+      errors.push(`Day ${email.day}: must not hard-code a global calendar deadline`);
+    }
+    if (bodyText.includes("{{")) {
+      errors.push(`Day ${email.day}: raw template variables must not appear in content`);
+    }
+  }
+  return { ok: errors.length === 0, errors };
+}
+
+export function validateRenderedUrgency(ctx: RecipientUrgencyContext): { ok: boolean; errors: string[] } {
+  const errors: string[] = [];
+  for (const template of AI_MONEY_CODE_EMAIL_TEMPLATES) {
+    const rendered = renderCampaignEmail(template, ctx);
+    const text = rendered.body.join(" ").toLowerCase();
+    if (!text.includes("₦49,999") && !text.includes("49,999")) {
+      errors.push(`Day ${template.day}: rendered email missing special price urgency`);
+    }
+    if (!text.includes("100,000") && !text.includes("₦100,000")) {
+      errors.push(`Day ${template.day}: rendered email missing regular price context`);
+    }
+    if (text.includes("{{")) {
+      errors.push(`Day ${template.day}: raw template variables leaked into rendered email`);
+    }
+    if (!ctx.isPastDeadline && !text.includes(ctx.personalDeadlineDate.split(",")[0].toLowerCase().slice(0, 3))) {
+      // deadline month should appear in urgency for active recipients
+      if (!text.includes("deadline") && !text.includes("expires") && !text.includes("left")) {
+        errors.push(`Day ${template.day}: rendered email missing deadline urgency`);
+      }
     }
   }
   return { ok: errors.length === 0, errors };

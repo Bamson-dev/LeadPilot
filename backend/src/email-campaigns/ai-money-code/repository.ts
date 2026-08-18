@@ -1,13 +1,22 @@
 import { supabase } from "../../database/client";
 import { logger } from "../../utils/logger";
 import {
+  buildRecipientUrgencyContext,
+  calculatePersonalDeadlineAt,
+  getCurrentDateInLagos,
+  getRecipientCampaignDay,
+  isPastPersonalDeadline,
+} from "./campaign-definition";
+import {
   CAMPAIGN_KEY,
   CAMPAIGN_NAME,
-  CAMPAIGN_START_DATE,
   CAMPAIGN_TIMEZONE,
-  DEADLINE_AT_ISO,
+  CAMPAIGN_TOTAL_DAYS,
+  LEGACY_CAMPAIGN_START_DATE,
+  LEGACY_DEADLINE_AT_ISO,
   OFFER_URL,
   WEBINAR_URL,
+  type CampaignProgressSummary,
   type CampaignRecipient,
   type CampaignRunLog,
   type CampaignSend,
@@ -33,9 +42,10 @@ export async function ensureCampaignSettings(): Promise<CampaignSettings> {
       campaign_name: CAMPAIGN_NAME,
       enabled: false,
       activated_at: null,
-      campaign_start_date: CAMPAIGN_START_DATE,
+      evergreen_mode: true,
+      campaign_start_date: LEGACY_CAMPAIGN_START_DATE,
       timezone: CAMPAIGN_TIMEZONE,
-      deadline_at: DEADLINE_AT_ISO,
+      deadline_at: LEGACY_DEADLINE_AT_ISO,
       webinar_url: WEBINAR_URL,
       offer_url: OFFER_URL,
       created_at: now,
@@ -55,6 +65,7 @@ export async function ensureCampaignSettings(): Promise<CampaignSettings> {
 export async function setCampaignEnabled(enabled: boolean): Promise<void> {
   const updates: Record<string, unknown> = {
     enabled,
+    evergreen_mode: true,
     updated_at: new Date().toISOString(),
   };
   if (enabled) updates.activated_at = new Date().toISOString();
@@ -65,21 +76,40 @@ export async function setCampaignEnabled(enabled: boolean): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
-export async function enrollRecipients(users: EligiblePaidUser[]): Promise<number> {
+export async function enrollNewRecipients(
+  users: EligiblePaidUser[],
+  campaignStartDate: string,
+  personalDeadlineAt: string
+): Promise<number> {
   if (!users.length) return 0;
+  const now = new Date().toISOString();
   const rows = users.map((u) => ({
     campaign_key: CAMPAIGN_KEY,
     license_id: u.licenseId,
     email: u.email,
     normalized_email: u.normalizedEmail,
-    eligibility_at: new Date().toISOString(),
+    eligibility_at: now,
+    enrolled_at: now,
+    campaign_start_date: campaignStartDate,
+    personal_deadline_at: personalDeadlineAt,
     status: "enrolled",
-    updated_at: new Date().toISOString(),
+    updated_at: now,
   }));
-  const { error } = await supabase
+
+  const { data, error } = await supabase
     .from("email_campaign_recipients")
-    .upsert(rows, { onConflict: "campaign_key,normalized_email" });
+    .upsert(rows, { onConflict: "campaign_key,normalized_email", ignoreDuplicates: true })
+    .select("id");
   if (error) throw new Error(error.message);
+  return data?.length || 0;
+}
+
+/** Activation-time bulk enroll; preserves existing recipients via ignoreDuplicates. */
+export async function enrollRecipients(users: EligiblePaidUser[]): Promise<number> {
+  if (!users.length) return 0;
+  const startDate = getCurrentDateInLagos();
+  const personalDeadlineAt = calculatePersonalDeadlineAt(startDate);
+  await enrollNewRecipients(users, startDate, personalDeadlineAt);
 
   const { count, error: countError } = await supabase
     .from("email_campaign_recipients")
@@ -89,7 +119,7 @@ export async function enrollRecipients(users: EligiblePaidUser[]): Promise<numbe
   return count || 0;
 }
 
-export async function listEnrolledRecipients(): Promise<CampaignRecipient[]> {
+export async function listActiveRecipients(): Promise<CampaignRecipient[]> {
   const { data, error } = await supabase
     .from("email_campaign_recipients")
     .select("*")
@@ -97,6 +127,16 @@ export async function listEnrolledRecipients(): Promise<CampaignRecipient[]> {
     .eq("status", "enrolled");
   if (error) throw new Error(error.message);
   return (data || []) as CampaignRecipient[];
+}
+
+export async function markRecipientCompleted(recipientId: string): Promise<void> {
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("email_campaign_recipients")
+    .update({ status: "completed", completed_at: now, updated_at: now })
+    .eq("id", recipientId)
+    .eq("campaign_key", CAMPAIGN_KEY);
+  if (error) throw new Error(error.message);
 }
 
 export async function getSuccessfulSend(
@@ -113,6 +153,21 @@ export async function getSuccessfulSend(
     .maybeSingle();
   if (error) throw new Error(error.message);
   return (data as CampaignSend | null) || null;
+}
+
+export async function hasSuccessfulSendOnDate(
+  recipientId: string,
+  scheduledDate: string
+): Promise<boolean> {
+  const { count, error } = await supabase
+    .from("email_campaign_sends")
+    .select("id", { head: true, count: "exact" })
+    .eq("campaign_key", CAMPAIGN_KEY)
+    .eq("recipient_id", recipientId)
+    .eq("scheduled_date", scheduledDate)
+    .eq("status", "success");
+  if (error) throw new Error(error.message);
+  return (count || 0) > 0;
 }
 
 export async function getLatestSend(
@@ -218,7 +273,82 @@ export async function finishRunLog(
   if (error) throw new Error(error.message);
 }
 
-export async function getStatusSnapshot(currentDay: number): Promise<{
+async function countRecipientsByStatus(status?: CampaignRecipient["status"]): Promise<number> {
+  let query = supabase
+    .from("email_campaign_recipients")
+    .select("id", { head: true, count: "exact" })
+    .eq("campaign_key", CAMPAIGN_KEY);
+  if (status) query = query.eq("status", status);
+  const { count, error } = await query;
+  if (error) throw new Error(error.message);
+  return count || 0;
+}
+
+export async function getProgressSummary(): Promise<CampaignProgressSummary> {
+  const { data, error } = await supabase
+    .from("email_campaign_recipients")
+    .select("*")
+    .eq("campaign_key", CAMPAIGN_KEY);
+  if (error) throw new Error(error.message);
+
+  const recipients = (data || []) as CampaignRecipient[];
+  const today = getCurrentDateInLagos();
+  const now = new Date();
+  const dayDistribution: Record<string, number> = {};
+  let activeDeadlines = 0;
+  let expiredDeadlines = 0;
+  let nextUpcomingDeadline: string | null = null;
+  let enrolledToday = 0;
+
+  for (const recipient of recipients) {
+    if (recipient.enrolled_at.slice(0, 10) === today || recipient.campaign_start_date === today) {
+      enrolledToday += 1;
+    }
+    if (recipient.status === "completed") {
+      dayDistribution.completed = (dayDistribution.completed || 0) + 1;
+      continue;
+    }
+    if (recipient.status !== "enrolled") continue;
+
+    const day = getRecipientCampaignDay(recipient.campaign_start_date, now);
+    if (day >= 1 && day <= CAMPAIGN_TOTAL_DAYS) {
+      const key = String(day);
+      dayDistribution[key] = (dayDistribution[key] || 0) + 1;
+    } else if (day > CAMPAIGN_TOTAL_DAYS) {
+      dayDistribution.post_sequence = (dayDistribution.post_sequence || 0) + 1;
+    }
+
+    if (isPastPersonalDeadline(recipient.personal_deadline_at, now)) {
+      expiredDeadlines += 1;
+    } else {
+      activeDeadlines += 1;
+      if (!nextUpcomingDeadline || recipient.personal_deadline_at < nextUpcomingDeadline) {
+        nextUpcomingDeadline = recipient.personal_deadline_at;
+      }
+    }
+  }
+
+  const [enrolled, active, completed, paused] = await Promise.all([
+    countRecipientsByStatus(),
+    countRecipientsByStatus("enrolled"),
+    countRecipientsByStatus("completed"),
+    countRecipientsByStatus("paused"),
+  ]);
+
+  return {
+    enrolled,
+    active,
+    completed,
+    paused,
+    enrolledToday,
+    dayDistribution,
+    activeDeadlines,
+    expiredDeadlines,
+    nextUpcomingDeadline,
+  };
+}
+
+export async function getStatusSnapshot(): Promise<{
   settings: CampaignSettings;
   enrolled: number;
   dayAttempted: number;
@@ -226,18 +356,20 @@ export async function getStatusSnapshot(currentDay: number): Promise<{
   dayFailed: number;
   dayPending: number;
   totalSuccess: number;
+  duplicatesPrevented: number;
   recentRuns: CampaignRunLog[];
+  progress: CampaignProgressSummary;
 }> {
   const settings = await ensureCampaignSettings();
-  const recipients = await listEnrolledRecipients();
-  const enrolled = recipients.length;
+  const progress = await getProgressSummary();
+  const lagosDate = getCurrentDateInLagos();
 
-  async function countByStatus(day: number, status?: "pending" | "success" | "failed"): Promise<number> {
+  async function countToday(status?: "pending" | "success" | "failed"): Promise<number> {
     let query = supabase
       .from("email_campaign_sends")
       .select("id", { head: true, count: "exact" })
       .eq("campaign_key", CAMPAIGN_KEY)
-      .eq("campaign_day", day);
+      .eq("scheduled_date", lagosDate);
     if (status) query = query.eq("status", status);
     const { count, error } = await query;
     if (error) throw new Error(error.message);
@@ -245,10 +377,10 @@ export async function getStatusSnapshot(currentDay: number): Promise<{
   }
 
   const [dayAttempted, daySuccess, dayFailed, dayPending, totalSuccess, recentRuns] = await Promise.all([
-    countByStatus(currentDay),
-    countByStatus(currentDay, "success"),
-    countByStatus(currentDay, "failed"),
-    countByStatus(currentDay, "pending"),
+    countToday(),
+    countToday("success"),
+    countToday("failed"),
+    countToday("pending"),
     (async () => {
       const { count, error } = await supabase
         .from("email_campaign_sends")
@@ -273,5 +405,20 @@ export async function getStatusSnapshot(currentDay: number): Promise<{
     })(),
   ]);
 
-  return { settings, enrolled, dayAttempted, daySuccess, dayFailed, dayPending, totalSuccess, recentRuns };
+  return {
+    settings,
+    enrolled: progress.enrolled,
+    dayAttempted,
+    daySuccess,
+    dayFailed,
+    dayPending,
+    totalSuccess,
+    duplicatesPrevented: Math.max(0, dayAttempted - daySuccess - dayFailed - dayPending),
+    recentRuns,
+    progress,
+  };
+}
+
+export function buildUrgencyForRecipient(recipient: CampaignRecipient) {
+  return buildRecipientUrgencyContext(recipient.personal_deadline_at);
 }

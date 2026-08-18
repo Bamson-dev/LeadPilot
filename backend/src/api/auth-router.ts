@@ -12,6 +12,7 @@ import { supabase } from "../database/client";
 import { trackEvent } from "../observability/track";
 import { EVENT_NAMES } from "../observability/event-taxonomy";
 import { logger } from "../utils/logger";
+import { onLicenseActivatedForCampaign } from "../email-campaigns/ai-money-code/hooks";
 
 export const authRouter = Router();
 
@@ -80,6 +81,7 @@ authRouter.post("/activate", async (req: Request, res: Response) => {
       } catch (error) {
         console.error("Email send failed:", { userEmail: normalizedEmail, error });
       }
+      void onLicenseActivatedForCampaign({ licenseId: license.id, email: normalizedEmail });
     }
 
     if (deviceSignature?.trim()) {

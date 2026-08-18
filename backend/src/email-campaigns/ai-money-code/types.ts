@@ -1,15 +1,17 @@
 export const CAMPAIGN_KEY = "ai-money-code-2026";
 export const CAMPAIGN_NAME = "LeadThur AI Money Code Paid User Campaign";
 export const CAMPAIGN_TIMEZONE = "Africa/Lagos";
-export const CAMPAIGN_START_DATE = "2026-08-18";
 export const CAMPAIGN_TOTAL_DAYS = 30;
 export const WEBINAR_URL = "https://aimoneycode.com.ng/reg";
 export const OFFER_URL = "https://aimoneycode.com.ng/offer";
 export const SPECIAL_PRICE_NGN = 49999;
 export const REGULAR_PRICE_NGN = 100000;
-export const DEADLINE_AT_ISO = "2026-09-16T22:59:00.000Z";
 
-export type CampaignEmail = {
+/** Legacy cohort anchor kept for settings display only; scheduling is per-recipient. */
+export const LEGACY_CAMPAIGN_START_DATE = "2026-08-18";
+export const LEGACY_DEADLINE_AT_ISO = "2026-09-16T22:59:00.000Z";
+
+export type CampaignEmailTemplate = {
   day: number;
   subject: string;
   preview: string;
@@ -18,11 +20,25 @@ export type CampaignEmail = {
   ctaUrl: string;
 };
 
+export type CampaignEmail = CampaignEmailTemplate;
+
+export type RecipientUrgencyContext = {
+  personalDeadlineAt: string;
+  personalDeadlineLagos: string;
+  personalDeadlineDate: string;
+  daysRemaining: number;
+  hoursRemaining: number;
+  isPastDeadline: boolean;
+  specialPriceLabel: string;
+  regularPriceLabel: string;
+};
+
 export type CampaignSettings = {
   campaign_key: string;
   campaign_name: string;
   enabled: boolean;
   activated_at: string | null;
+  evergreen_mode: boolean;
   campaign_start_date: string;
   timezone: string;
   deadline_at: string;
@@ -39,6 +55,10 @@ export type CampaignRecipient = {
   email: string;
   normalized_email: string;
   eligibility_at: string | null;
+  enrolled_at: string;
+  campaign_start_date: string;
+  personal_deadline_at: string;
+  completed_at: string | null;
   status: "enrolled" | "paused" | "completed";
   created_at: string;
   updated_at: string;
@@ -91,4 +111,16 @@ export type AudienceSummary = {
   duplicatesRemoved: number;
   internalOrTestExcluded: number;
   finalRecipientCount: number;
+};
+
+export type CampaignProgressSummary = {
+  enrolled: number;
+  active: number;
+  completed: number;
+  paused: number;
+  enrolledToday: number;
+  dayDistribution: Record<string, number>;
+  activeDeadlines: number;
+  expiredDeadlines: number;
+  nextUpcomingDeadline: string | null;
 };

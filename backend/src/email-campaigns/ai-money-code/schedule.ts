@@ -1,6 +1,7 @@
 import { logger } from "../../utils/logger";
-import { getCampaignDay, getCurrentDateInLagos, getNextCampaignDay, isPastDeadline } from "./campaign-definition";
+import { buildRecipientUrgencyContext, getCurrentDateInLagos, getRecipientCampaignDay } from "./campaign-definition";
 import { getCampaignEmail } from "./content";
+import { discoverAndEnrollNewRecipients } from "./enrollment";
 import {
   createPendingSend,
   createRunLog,
@@ -9,7 +10,9 @@ import {
   getLatestSend,
   getStatusSnapshot,
   getSuccessfulSend,
-  listEnrolledRecipients,
+  hasSuccessfulSendOnDate,
+  listActiveRecipients,
+  markRecipientCompleted,
   markSendFailed,
   markSendSuccess,
 } from "./repository";
@@ -33,51 +36,75 @@ export function getSchedulerHealth() {
 }
 
 export async function processAiMoneyCodeTick(trigger = "scheduler"): Promise<{
-  day: number;
   attempted: number;
   success: number;
   failed: number;
   skipped: number;
+  newlyEnrolled: number;
 }> {
   if (tickRunning) {
-    return { day: getCampaignDay(), attempted: 0, success: 0, failed: 0, skipped: 0 };
+    return { attempted: 0, success: 0, failed: 0, skipped: 0, newlyEnrolled: 0 };
   }
   tickRunning = true;
-  const day = getCampaignDay();
   const run = await createRunLog(trigger);
   let attempted = 0;
   let success = 0;
   let failed = 0;
   let skipped = 0;
+  let newlyEnrolled = 0;
   let runError: string | null = null;
   try {
     const settings = await ensureCampaignSettings();
     if (!settings.enabled && trigger !== "activation") {
-      return { day, attempted, success, failed, skipped };
+      return { attempted, success, failed, skipped, newlyEnrolled };
     }
-    if (isPastDeadline() || day < 1 || day > CAMPAIGN_TOTAL_DAYS) {
-      return { day, attempted, success, failed, skipped };
-    }
-    const email = getCampaignEmail(day);
-    const recipients = await listEnrolledRecipients();
+
+    newlyEnrolled = await discoverAndEnrollNewRecipients();
     const lagosDate = getCurrentDateInLagos();
+    const now = new Date();
+    const recipients = await listActiveRecipients();
 
     for (const recipient of recipients) {
-      const existingSuccess = await getSuccessfulSend(recipient.id, day);
-      if (existingSuccess) {
+      const recipientDay = getRecipientCampaignDay(recipient.campaign_start_date, now);
+
+      if (recipientDay < 1) {
         skipped += 1;
         continue;
       }
-      const latest = await getLatestSend(recipient.id, day);
+
+      if (recipientDay > CAMPAIGN_TOTAL_DAYS) {
+        await markRecipientCompleted(recipient.id);
+        skipped += 1;
+        continue;
+      }
+
+      if (await hasSuccessfulSendOnDate(recipient.id, lagosDate)) {
+        skipped += 1;
+        continue;
+      }
+
+      const existingSuccess = await getSuccessfulSend(recipient.id, recipientDay);
+      if (existingSuccess) {
+        skipped += 1;
+        if (recipientDay === CAMPAIGN_TOTAL_DAYS) {
+          await markRecipientCompleted(recipient.id);
+        }
+        continue;
+      }
+
+      const latest = await getLatestSend(recipient.id, recipientDay);
       const retryCount = latest?.status === "failed" ? Math.min((latest.retry_count || 0) + 1, 3) : 0;
       if (latest?.status === "failed" && (latest.retry_count || 0) >= 3) {
         skipped += 1;
         continue;
       }
 
+      const urgency = buildRecipientUrgencyContext(recipient.personal_deadline_at, now);
+      const email = getCampaignEmail(recipientDay, urgency);
+
       const pending = await createPendingSend({
         recipient,
-        day,
+        day: recipientDay,
         scheduledDate: lagosDate,
         subject: email.subject,
         ctaUrl: email.ctaUrl,
@@ -91,12 +118,16 @@ export async function processAiMoneyCodeTick(trigger = "scheduler"): Promise<{
       if (sent.success) {
         await markSendSuccess(pending.id, sent.messageId);
         success += 1;
+        if (recipientDay === CAMPAIGN_TOTAL_DAYS) {
+          await markRecipientCompleted(recipient.id);
+        }
       } else {
         await markSendFailed(pending.id, sent.error || "unknown");
         failed += 1;
       }
     }
-    return { day, attempted, success, failed, skipped };
+
+    return { attempted, success, failed, skipped, newlyEnrolled };
   } catch (err) {
     runError = err instanceof Error ? err.message : "unknown";
     logger.error("AI money code scheduler tick failed", { trigger, error: runError });
@@ -126,22 +157,13 @@ export function startAiMoneyCodeScheduler(): void {
 }
 
 export async function getCampaignOperationalStatus() {
-  const day = getCampaignDay();
-  const snapshot = await getStatusSnapshot(Math.max(1, Math.min(day, CAMPAIGN_TOTAL_DAYS)));
+  const snapshot = await getStatusSnapshot();
   const now = new Date();
   const nextRunAt = new Date(now.getTime() + TICK_MS).toISOString();
-  const nextCampaignDay = getNextCampaignDay();
   return {
     ...snapshot,
-    currentDay: day,
     currentDateLagos: getCurrentDateInLagos(),
-    nextCampaignDay,
-    nextSendDate: nextCampaignDay ? (() => {
-      const d = new Date(now);
-      d.setUTCDate(d.getUTCDate() + 1);
-      return d.toISOString().slice(0, 10);
-    })() : null,
-    nextSendWindow: "Hourly server-side scheduler tick",
+    nextSendWindow: "Hourly server-side scheduler tick (per-recipient evergreen)",
     nextRunAt,
     scheduler: getSchedulerHealth(),
   };

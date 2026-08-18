@@ -10,9 +10,9 @@ type StatusPayload = {
   campaignKey: string;
   campaignName: string;
   enabled: boolean;
+  evergreenMode: boolean;
   activatedAt: string | null;
   currentDateLagos: string;
-  currentCampaignDay: number;
   audience: {
     paidLicenseRecordsFound: number;
     eligibleUniqueEmails: number;
@@ -28,9 +28,8 @@ type StatusPayload = {
     dayFailed: number;
     dayPending: number;
     totalSuccess: number;
-    currentDay: number;
-    nextCampaignDay: number | null;
-    nextSendDate: string | null;
+    duplicatesPrevented: number;
+    currentDateLagos: string;
     nextSendWindow: string;
     nextRunAt: string;
     scheduler: {
@@ -52,19 +51,38 @@ type StatusPayload = {
       skipped: number;
     }>;
   };
+  progress: {
+    enrolled: number;
+    active: number;
+    completed: number;
+    paused: number;
+    enrolledToday: number;
+    dayDistribution: Record<string, number>;
+    activeDeadlines: number;
+    expiredDeadlines: number;
+    nextUpcomingDeadline: string | null;
+  };
+  deadlines: {
+    exampleJoinToday: {
+      startDate: string;
+      personalDeadlineUtc: string;
+      personalDeadlineLagos: string;
+    };
+    exampleJoinDecember: {
+      startDate: string;
+      personalDeadlineUtc: string;
+      personalDeadlineLagos: string;
+    };
+    nextUpcomingRecipientDeadline: string | null;
+    activeSpecialPriceDeadlines: number;
+    expiredSpecialPriceDeadlines: number;
+  };
   settings: {
     campaign_start_date: string;
     timezone: string;
-    deadline_at: string;
     webinar_url: string;
     offer_url: string;
-  };
-  deadline?: {
-    canonicalUtc: string;
-    canonicalLagos: string;
-    storedValue: string;
-    storedLagos: string;
-    valid: boolean;
+    evergreen_mode: boolean;
   };
   selftest: { ok: boolean; errors: string[] };
 };
@@ -118,11 +136,13 @@ export function AiMoneyCodeCampaignWorkspace() {
     }
   }
 
+  const dayDistribution = status?.progress.dayDistribution || {};
+
   return (
     <div className="space-y-6">
       <AdminWorkspaceHeader
         title="AI Money Code Campaign"
-        description="30-day paid-user campaign automation. Day calculation uses Africa/Lagos timezone."
+        description="Evergreen 30-day per-recipient sequence for eligible paid LeadThur users. Each recipient gets their own calendar and personal special-price deadline in Africa/Lagos."
       />
 
       {error ? (
@@ -132,58 +152,79 @@ export function AiMoneyCodeCampaignWorkspace() {
         <div className="rounded border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{message}</div>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <Metric label="Campaign status" value={status?.enabled ? "ACTIVE" : "INACTIVE"} />
-        <Metric label="Current day" value={String(status?.currentCampaignDay ?? "—")} />
-        <Metric label="Lagos date" value={status?.currentDateLagos ?? "—"} />
-        <Metric label="Enrolled recipients" value={String(status?.operational.enrolled ?? 0)} />
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-4">
-        <Metric label="Today's attempted" value={String(status?.operational.dayAttempted ?? 0)} />
-        <Metric label="Today's successful" value={String(status?.operational.daySuccess ?? 0)} />
-        <Metric label="Today's failed" value={String(status?.operational.dayFailed ?? 0)} />
-        <Metric label="Pending retry" value={String(status?.operational.dayPending ?? 0)} />
-      </div>
+      <section className="rounded border border-neutral-200 bg-white p-4">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">Global Campaign Status</h2>
+        <div className="grid gap-4 md:grid-cols-4">
+          <Metric label="Campaign status" value={status?.enabled ? "ACTIVE" : "INACTIVE"} />
+          <Metric label="Evergreen mode" value={status?.evergreenMode ? "ENABLED" : "DISABLED"} />
+          <Metric label="Lagos date" value={status?.currentDateLagos ?? "—"} />
+          <Metric label="Scheduler" value={status?.operational.scheduler.running ? "RUNNING" : "STOPPED"} />
+        </div>
+      </section>
 
       <section className="rounded border border-neutral-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">Settings</h2>
-        <div className="grid gap-2 sm:grid-cols-2 text-sm">
-          <div>Start: <strong>{status?.settings.campaign_start_date || "—"}</strong></div>
-          <div>Timezone: <strong>{status?.settings.timezone || "—"}</strong></div>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">Audience</h2>
+        <div className="grid gap-4 md:grid-cols-3">
+          <Metric label="Eligible paid users" value={String(status?.audience.finalRecipientCount ?? 0)} />
+          <Metric label="Recipients enrolled" value={String(status?.progress.enrolled ?? 0)} />
+          <Metric label="Active recipients" value={String(status?.progress.active ?? 0)} />
+          <Metric label="Completed recipients" value={String(status?.progress.completed ?? 0)} />
+          <Metric label="New enrolled today" value={String(status?.progress.enrolledToday ?? 0)} />
+          <Metric label="Duplicates prevented" value={String(status?.operational.duplicatesPrevented ?? 0)} />
+        </div>
+      </section>
+
+      <section className="rounded border border-neutral-200 bg-white p-4">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">Send Performance (Today)</h2>
+        <div className="grid gap-4 md:grid-cols-4">
+          <Metric label="Attempted" value={String(status?.operational.dayAttempted ?? 0)} />
+          <Metric label="Successful" value={String(status?.operational.daySuccess ?? 0)} />
+          <Metric label="Failed" value={String(status?.operational.dayFailed ?? 0)} />
+          <Metric label="Pending retry" value={String(status?.operational.dayPending ?? 0)} />
+        </div>
+      </section>
+
+      <section className="rounded border border-neutral-200 bg-white p-4">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">Recipient Progress</h2>
+        <div className="grid gap-4 md:grid-cols-4">
+          <Metric label="Completed" value={String(status?.progress.completed ?? 0)} />
+          <Metric label="Active special-price deadlines" value={String(status?.progress.activeDeadlines ?? 0)} />
+          <Metric label="Expired special-price deadlines" value={String(status?.progress.expiredDeadlines ?? 0)} />
+          <Metric label="Next upcoming deadline" value={status?.deadlines.nextUpcomingRecipientDeadline || "—"} />
+        </div>
+        <div className="mt-4 grid gap-2 sm:grid-cols-5 md:grid-cols-10">
+          {Array.from({ length: 30 }, (_, i) => {
+            const day = String(i + 1);
+            return (
+              <div key={day} className="rounded border border-neutral-200 px-2 py-1 text-center text-xs">
+                <div className="text-neutral-500">Day {day}</div>
+                <div className="font-semibold">{dayDistribution[day] ?? 0}</div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="rounded border border-neutral-200 bg-white p-4">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">Personal Deadlines</h2>
+        <div className="grid gap-2 text-sm sm:grid-cols-2">
           <div>
-            Deadline:{" "}
-            <strong>{status?.deadline?.storedLagos || status?.deadline?.canonicalLagos || "—"}</strong>
-            {status?.deadline?.canonicalUtc ? (
-              <span className="ml-2 text-neutral-500">({status.deadline.canonicalUtc})</span>
-            ) : null}
+            Join today example: <strong>{status?.deadlines.exampleJoinToday.personalDeadlineLagos || "—"}</strong>
           </div>
-          <div>Next day: <strong>{status?.operational.nextCampaignDay ?? "—"}</strong></div>
+          <div>
+            Join Dec 10 example: <strong>{status?.deadlines.exampleJoinDecember.personalDeadlineLagos || "—"}</strong>
+          </div>
           <div>Webinar URL: <strong>{status?.settings.webinar_url || "—"}</strong></div>
           <div>Offer URL: <strong>{status?.settings.offer_url || "—"}</strong></div>
         </div>
       </section>
 
       <section className="rounded border border-neutral-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">Audience Summary</h2>
-        <div className="grid gap-2 sm:grid-cols-3 text-sm">
-          <Metric label="Paid license records" value={String(status?.audience.paidLicenseRecordsFound ?? 0)} />
-          <Metric label="Eligible unique" value={String(status?.audience.eligibleUniqueEmails ?? 0)} />
-          <Metric label="Invalid/blank excluded" value={String(status?.audience.invalidOrBlankExcluded ?? 0)} />
-          <Metric label="Duplicates removed" value={String(status?.audience.duplicatesRemoved ?? 0)} />
-          <Metric label="Internal/test excluded" value={String(status?.audience.internalOrTestExcluded ?? 0)} />
-          <Metric label="Final recipient count" value={String(status?.audience.finalRecipientCount ?? 0)} />
-        </div>
-      </section>
-
-      <section className="rounded border border-neutral-200 bg-white p-4">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">Scheduler</h2>
         <div className="grid gap-2 sm:grid-cols-3 text-sm">
-          <Metric label="Running" value={status?.operational.scheduler.running ? "YES" : "NO"} />
           <Metric label="Tick active" value={status?.operational.scheduler.tickRunning ? "YES" : "NO"} />
           <Metric label="Last run" value={status?.operational.scheduler.lastRunAt || "—"} />
           <Metric label="Next run" value={status?.operational.nextRunAt || "—"} />
-          <Metric label="Next send date" value={status?.operational.nextSendDate || "—"} />
           <Metric label="Window" value={status?.operational.nextSendWindow || "—"} />
         </div>
       </section>

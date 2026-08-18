@@ -1,12 +1,11 @@
 import { Router, type Request, type Response } from "express";
 import { requireAdminAuth } from "../../middleware/admin-auth";
 import {
+  calculatePersonalDeadlineAt,
   formatDeadlineInLagos,
-  getCampaignDay,
   getCurrentDateInLagos,
-  isCanonicalDeadline,
+  getEnrollmentStartDate,
 } from "./campaign-definition";
-import { DEADLINE_AT_ISO } from "./types";
 import { activateAiMoneyCodeCampaign } from "./activation";
 import { inspectAudience } from "./eligibility";
 import { ensureCampaignSettings } from "./repository";
@@ -24,23 +23,40 @@ aiMoneyCodeCampaignRouter.get("/status", async (_req: Request, res: Response) =>
       inspectAudience(),
       Promise.resolve(runAiMoneyCodeSelfTest()),
     ]);
+
+    const exampleStartToday = getEnrollmentStartDate();
+    const exampleDeadlineToday = calculatePersonalDeadlineAt(exampleStartToday);
+    const exampleStartDecember = "2026-12-10";
+    const exampleDeadlineDecember = calculatePersonalDeadlineAt(exampleStartDecember);
+
     res.json({
       campaignKey: settings.campaign_key,
       campaignName: settings.campaign_name,
       enabled: settings.enabled,
+      evergreenMode: settings.evergreen_mode,
       activatedAt: settings.activated_at,
       currentDateLagos: getCurrentDateInLagos(),
-      currentCampaignDay: getCampaignDay(),
       settings,
-      deadline: {
-        canonicalUtc: DEADLINE_AT_ISO,
-        canonicalLagos: formatDeadlineInLagos(),
-        storedValue: settings.deadline_at,
-        storedLagos: formatDeadlineInLagos(settings.deadline_at),
-        valid: isCanonicalDeadline(settings.deadline_at),
-      },
       audience: audience.summary,
       operational,
+      progress: operational.progress,
+      deadlines: {
+        exampleJoinToday: {
+          startDate: exampleStartToday,
+          personalDeadlineUtc: exampleDeadlineToday,
+          personalDeadlineLagos: formatDeadlineInLagos(exampleDeadlineToday),
+        },
+        exampleJoinDecember: {
+          startDate: exampleStartDecember,
+          personalDeadlineUtc: exampleDeadlineDecember,
+          personalDeadlineLagos: formatDeadlineInLagos(exampleDeadlineDecember),
+        },
+        nextUpcomingRecipientDeadline: operational.progress.nextUpcomingDeadline
+          ? formatDeadlineInLagos(operational.progress.nextUpcomingDeadline)
+          : null,
+        activeSpecialPriceDeadlines: operational.progress.activeDeadlines,
+        expiredSpecialPriceDeadlines: operational.progress.expiredDeadlines,
+      },
       selftest,
     });
   } catch (err) {
