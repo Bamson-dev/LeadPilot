@@ -46,7 +46,7 @@ export function isCanonicalDeadline(deadlineAt: string): boolean {
 }
 
 export function formatDeadlineInLagos(deadlineAt = DEADLINE_AT_ISO): string {
-  return new Intl.DateTimeFormat("en-US", {
+  const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: CAMPAIGN_TIMEZONE,
     year: "numeric",
     month: "long",
@@ -54,8 +54,9 @@ export function formatDeadlineInLagos(deadlineAt = DEADLINE_AT_ISO): string {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-    timeZoneName: "short",
-  }).format(new Date(deadlineAt));
+  }).formatToParts(new Date(deadlineAt));
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${get("month")} ${get("day")}, ${get("year")} at ${get("hour")}:${get("minute")} ${CAMPAIGN_TIMEZONE}`;
 }
 
 export function isPastDeadline(now = new Date()): boolean {
