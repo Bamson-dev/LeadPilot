@@ -1,6 +1,12 @@
 import { Router, type Request, type Response } from "express";
 import { requireAdminAuth } from "../../middleware/admin-auth";
-import { getCampaignDay, getCurrentDateInLagos } from "./campaign-definition";
+import {
+  formatDeadlineInLagos,
+  getCampaignDay,
+  getCurrentDateInLagos,
+  isCanonicalDeadline,
+} from "./campaign-definition";
+import { DEADLINE_AT_ISO } from "./types";
 import { activateAiMoneyCodeCampaign } from "./activation";
 import { inspectAudience } from "./eligibility";
 import { ensureCampaignSettings } from "./repository";
@@ -26,6 +32,13 @@ aiMoneyCodeCampaignRouter.get("/status", async (_req: Request, res: Response) =>
       currentDateLagos: getCurrentDateInLagos(),
       currentCampaignDay: getCampaignDay(),
       settings,
+      deadline: {
+        canonicalUtc: DEADLINE_AT_ISO,
+        canonicalLagos: formatDeadlineInLagos(),
+        storedValue: settings.deadline_at,
+        storedLagos: formatDeadlineInLagos(settings.deadline_at),
+        valid: isCanonicalDeadline(settings.deadline_at),
+      },
       audience: audience.summary,
       operational,
       selftest,

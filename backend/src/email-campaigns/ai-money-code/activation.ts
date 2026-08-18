@@ -1,5 +1,5 @@
 import { logger } from "../../utils/logger";
-import { assertValidCampaignWindow, getCampaignDay } from "./campaign-definition";
+import { assertValidCampaignWindow, getCampaignDay, isCanonicalDeadline } from "./campaign-definition";
 import { validateCampaignContent } from "./content";
 import { inspectAudience } from "./eligibility";
 import { enrollRecipients, ensureCampaignSettings, setCampaignEnabled } from "./repository";
@@ -26,7 +26,7 @@ export async function activateAiMoneyCodeCampaign(): Promise<{
   if (settings.timezone !== "Africa/Lagos") {
     throw new Error("Campaign timezone mismatch");
   }
-  if (settings.deadline_at !== "2026-09-16T22:59:00.000Z") {
+  if (!isCanonicalDeadline(settings.deadline_at)) {
     throw new Error("Campaign deadline mismatch");
   }
   if (settings.webinar_url !== "https://aimoneycode.com.ng/reg") {

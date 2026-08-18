@@ -32,8 +32,34 @@ export function getCampaignDay(now = new Date()): number {
   return diff + 1;
 }
 
+const CANONICAL_DEADLINE_MS = new Date(DEADLINE_AT_ISO).getTime();
+
+export function getCanonicalDeadlineMs(): number {
+  return CANONICAL_DEADLINE_MS;
+}
+
+/** Compare stored deadline values by instant, not string form (Postgres may return +00:00). */
+export function isCanonicalDeadline(deadlineAt: string): boolean {
+  const parsed = new Date(deadlineAt).getTime();
+  if (Number.isNaN(parsed)) return false;
+  return parsed === CANONICAL_DEADLINE_MS;
+}
+
+export function formatDeadlineInLagos(deadlineAt = DEADLINE_AT_ISO): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: CAMPAIGN_TIMEZONE,
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZoneName: "short",
+  }).format(new Date(deadlineAt));
+}
+
 export function isPastDeadline(now = new Date()): boolean {
-  return now.getTime() > new Date(DEADLINE_AT_ISO).getTime();
+  return now.getTime() > CANONICAL_DEADLINE_MS;
 }
 
 export function getPhaseForDay(day: number): "webinar" | "offer" {

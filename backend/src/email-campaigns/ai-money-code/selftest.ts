@@ -1,4 +1,4 @@
-import { getCampaignDay, isPastDeadline } from "./campaign-definition";
+import { getCampaignDay, isCanonicalDeadline, isPastDeadline } from "./campaign-definition";
 import { AI_MONEY_CODE_EMAILS, validateCampaignContent } from "./content";
 import {
   CAMPAIGN_TIMEZONE,
@@ -44,6 +44,16 @@ export function runAiMoneyCodeSelfTest(): {
 
   checks.deadlineConstant = DEADLINE_AT_ISO === "2026-09-16T22:59:00.000Z";
   if (!checks.deadlineConstant) errors.push("Deadline constant mismatch");
+
+  checks.deadlinePostgresFormat = isCanonicalDeadline("2026-09-16 22:59:00+00");
+  if (!checks.deadlinePostgresFormat) {
+    errors.push("Postgres timestamptz format should match canonical deadline instant");
+  }
+
+  checks.deadlineRejectsWrongInstant = !isCanonicalDeadline("2026-09-16T23:59:00.000Z");
+  if (!checks.deadlineRejectsWrongInstant) {
+    errors.push("Deadline validation should reject non-canonical instants");
+  }
   checks.regularPriceConfigured = REGULAR_PRICE_NGN === 100000;
   checks.specialPriceConfigured = SPECIAL_PRICE_NGN === 49999;
 

@@ -59,6 +59,13 @@ type StatusPayload = {
     webinar_url: string;
     offer_url: string;
   };
+  deadline?: {
+    canonicalUtc: string;
+    canonicalLagos: string;
+    storedValue: string;
+    storedLagos: string;
+    valid: boolean;
+  };
   selftest: { ok: boolean; errors: string[] };
 };
 
@@ -144,7 +151,13 @@ export function AiMoneyCodeCampaignWorkspace() {
         <div className="grid gap-2 sm:grid-cols-2 text-sm">
           <div>Start: <strong>{status?.settings.campaign_start_date || "—"}</strong></div>
           <div>Timezone: <strong>{status?.settings.timezone || "—"}</strong></div>
-          <div>Deadline: <strong>{status?.settings.deadline_at || "—"}</strong></div>
+          <div>
+            Deadline:{" "}
+            <strong>{status?.deadline?.storedLagos || status?.deadline?.canonicalLagos || "—"}</strong>
+            {status?.deadline?.canonicalUtc ? (
+              <span className="ml-2 text-neutral-500">({status.deadline.canonicalUtc})</span>
+            ) : null}
+          </div>
           <div>Next day: <strong>{status?.operational.nextCampaignDay ?? "—"}</strong></div>
           <div>Webinar URL: <strong>{status?.settings.webinar_url || "—"}</strong></div>
           <div>Offer URL: <strong>{status?.settings.offer_url || "—"}</strong></div>
