@@ -134,7 +134,51 @@ export function runAiMoneyCodeSelfTest(): {
   );
   if (!checks.noPermanentCloseClaim) errors.push("Content must not falsely claim permanent enrollment closure");
 
-  checks.fastActionBonusOmitted = true;
+  checks.fastActionBonusOmitted = !AI_MONEY_CODE_EMAIL_TEMPLATES.some((e) =>
+    e.body.join(" ").toLowerCase().includes("1-on-1 build review")
+  );
+  if (!checks.fastActionBonusOmitted) errors.push("Fast-action bonus must remain omitted");
+
+  checks.substantialBodies = AI_MONEY_CODE_EMAIL_TEMPLATES.every((e) => e.body.length >= 6);
+  if (!checks.substantialBodies) errors.push("Every email needs substantial multi-paragraph body content");
+
+  checks.uniqueSubjects =
+    new Set(AI_MONEY_CODE_EMAIL_TEMPLATES.map((e) => e.subject.trim().toLowerCase())).size ===
+    AI_MONEY_CODE_EMAIL_TEMPLATES.length;
+  if (!checks.uniqueSubjects) errors.push("Subject lines must be unique across the 30-day sequence");
+
+  const decemberCtx = buildRecipientUrgencyContext(deadlineB, new Date("2026-12-15T10:00:00+01:00"));
+  const decemberRendered = getCampaignEmail(16, decemberCtx);
+  checks.decemberDeadlineRenders =
+    decemberRendered.body.join(" ").includes(formatDeadlineInLagos(deadlineB)) ||
+    decemberRendered.body.join(" ").includes(formatDeadlineInLagos(deadlineB).split(" at ")[0]);
+  if (!checks.decemberDeadlineRenders) {
+    errors.push("December enrollment must render January personal deadline in email body");
+  }
+
+  const promptEarnEmails = AI_MONEY_CODE_EMAIL_TEMPLATES.filter((e) =>
+    e.body.join(" ").toLowerCase().includes("promptearn")
+  );
+  checks.promptEarnNotSkillProof = promptEarnEmails.every((e) => {
+    const t = e.body.join(" ").toLowerCase();
+    return t.includes("not proof") || t.includes("distinction") || t.includes("operator credibility");
+  });
+  if (!checks.promptEarnNotSkillProof) {
+    errors.push("PromptEarn mentions must keep operator-credibility distinction");
+  }
+
+  checks.noHardCodedGlobalDeadline = !AI_MONEY_CODE_EMAIL_TEMPLATES.some((e) => {
+    const t = e.body.join(" ").toLowerCase();
+    return t.includes("sept 16, 2026") || t.includes("september 16, 2026");
+  });
+  if (!checks.noHardCodedGlobalDeadline) errors.push("Hard-coded global September deadline found in templates");
+
+  checks.programAvailableNowLanguage = AI_MONEY_CODE_EMAIL_TEMPLATES.filter((e) => e.day >= 16).some((e) =>
+    e.body.join(" ").toLowerCase().includes("available now")
+  );
+  if (!checks.programAvailableNowLanguage) {
+    errors.push("Offer-phase emails must state the program is available now");
+  }
 
   return { ok: errors.length === 0, checks, errors };
 }
