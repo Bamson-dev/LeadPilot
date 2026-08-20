@@ -365,7 +365,7 @@ export function AccountLookup({
                 disabled={actionLoading}
                 onClick={() => setShowSuspendForm((v) => !v)}
               >
-                Suspend
+                {showSuspendForm ? "Cancel Suspend" : "Suspend"}
               </Button>
             ) : (
               <Button
@@ -382,6 +382,41 @@ export function AccountLookup({
               </Button>
             )}
           </div>
+
+          {showSuspendForm && !license.is_suspended ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--lt-danger)]/30 bg-[var(--lt-danger)]/5 p-3">
+              <p className="w-full text-xs text-[var(--lt-text-muted)]">
+                Enter an optional reason, then confirm to suspend this account.
+              </p>
+              <Input
+                type="text"
+                value={suspendReason}
+                onChange={(e) => setSuspendReason(e.target.value)}
+                placeholder="Reason (optional)"
+                className="min-w-[200px] flex-1"
+                autoFocus
+              />
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                disabled={actionLoading}
+                onClick={() =>
+                  void runAction(
+                    () =>
+                      suspendAccount(license.email, suspendReason) as Promise<{
+                        message?: string;
+                      }>
+                  ).then(() => {
+                    setShowSuspendForm(false);
+                    setSuspendReason("");
+                  })
+                }
+              >
+                {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm Suspend"}
+              </Button>
+            </div>
+          ) : null}
 
           <Panel className="mt-3">
             <PanelContent className={cn(adminSectionBodyClass, "space-y-3")}>
@@ -523,37 +558,6 @@ export function AccountLookup({
               </div>
             </PanelContent>
           </Panel>
-
-          {showSuspendForm && !license.is_suspended && (
-            <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--lt-danger)]/30 bg-[var(--lt-danger)]/5 p-3">
-              <Input
-                type="text"
-                value={suspendReason}
-                onChange={(e) => setSuspendReason(e.target.value)}
-                placeholder="Reason (optional)"
-                className="min-w-[200px] flex-1"
-              />
-              <Button
-                type="button"
-                variant="destructive"
-                size="sm"
-                disabled={actionLoading}
-                onClick={() =>
-                  runAction(
-                    () =>
-                      suspendAccount(license.email, suspendReason) as Promise<{
-                        message?: string;
-                      }>
-                  ).then(() => {
-                    setShowSuspendForm(false);
-                    setSuspendReason("");
-                  })
-                }
-              >
-                Confirm Suspend
-              </Button>
-            </div>
-          )}
 
           <AdminConfirmDialog
             open={confirmReset}
