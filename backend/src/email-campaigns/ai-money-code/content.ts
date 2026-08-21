@@ -24,7 +24,16 @@ const BANNED_PHRASES = [
   "let's dive in",
   "picture yourself",
   "dear valued customer",
+  "act now before it is too late",
+  "here is the thing",
+  "this is your sign",
+  "don't miss this opportunity",
+  "game changer",
+  "let me be honest",
+  "enrollment closes forever",
   "enrollment closes permanently",
+  "seats are running out",
+  "only a few places remain",
   "1-on-1 build review",
 ];
 
@@ -47,7 +56,7 @@ function urgencyLineForDay(day: number, ctx: RecipientUrgencyContext): string {
     return `You do not have to buy today. But you should understand what you are deciding about before your personal deadline on ${deadline} passes. After that date, ₦49,999 becomes ₦100,000 while the program remains available.`;
   }
   if (day === 15) {
-    return `The training is not disappearing. Your ₦49,999 window is what expires on ${deadline}. After that, the program remains available at ₦100,000. Until then, start with the free webinar.`;
+    return `AI Money Code is available now. Your ₦49,999 special price remains available until ${deadline}. After that, the same program stays open at ₦100,000.`;
   }
   if (day === 28) {
     return `Your current ₦49,999 access expires on ${deadline}. After that exact moment, the program remains available at ₦100,000.`;
@@ -123,17 +132,17 @@ export function validateCampaignContent(): { ok: boolean; errors: string[] } {
     if (!email.body.length || email.body.some((line) => !line.trim())) {
       errors.push(`Day ${email.day}: body is incomplete`);
     }
-    if (email.body.length < 6) {
+    if (email.body.length < 8) {
       errors.push(`Day ${email.day}: body too short (${email.body.length} paragraphs; need substantial depth)`);
     }
     const bodyChars = email.body.join(" ").length;
-    if (bodyChars < 900) {
-      errors.push(`Day ${email.day}: body too thin (${bodyChars} chars)`);
+    if (bodyChars < 2000) {
+      errors.push(`Day ${email.day}: body too thin (${bodyChars} chars; expect ~400+ words)`);
     }
-    if (email.day <= 15 && email.ctaUrl !== WEBINAR_URL) {
+    if (email.day <= 14 && email.ctaUrl !== WEBINAR_URL) {
       errors.push(`Day ${email.day}: expected webinar CTA`);
     }
-    if (email.day >= 16 && email.ctaUrl !== OFFER_URL) {
+    if (email.day >= 15 && email.ctaUrl !== OFFER_URL) {
       errors.push(`Day ${email.day}: expected offer CTA`);
     }
     const bodyText = email.body.join(" ").toLowerCase();

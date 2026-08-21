@@ -111,7 +111,7 @@ export function buildRecipientUrgencyContext(
 }
 
 export function getPhaseForDay(day: number): "webinar" | "offer" {
-  return day <= 15 ? "webinar" : "offer";
+  return day <= 14 ? "webinar" : "offer";
 }
 
 export function getEnrollmentStartDate(now = new Date()): string {

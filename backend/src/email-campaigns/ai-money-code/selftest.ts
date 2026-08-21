@@ -91,9 +91,13 @@ export function runAiMoneyCodeSelfTest(): {
   checks.day1CtaWebinar = day1Email.ctaUrl === WEBINAR_URL;
   if (!checks.day1CtaWebinar) errors.push("Day 1 CTA mismatch");
 
-  const day16Email = getCampaignEmail(16, sampleCtx);
-  checks.day16CtaOffer = day16Email.ctaUrl === OFFER_URL;
-  if (!checks.day16CtaOffer) errors.push("Day 16 CTA mismatch");
+  const day15Email = getCampaignEmail(15, sampleCtx);
+  checks.day15CtaOffer = day15Email.ctaUrl === OFFER_URL;
+  if (!checks.day15CtaOffer) errors.push("Day 15 CTA mismatch");
+
+  const day14Email = getCampaignEmail(14, sampleCtx);
+  checks.day14CtaWebinar = day14Email.ctaUrl === WEBINAR_URL;
+  if (!checks.day14CtaWebinar) errors.push("Day 14 CTA mismatch");
 
   checks.noRawTemplateVars = !day1Email.body.join(" ").includes("{{");
   if (!checks.noRawTemplateVars) errors.push("Rendered email leaked template variables");
@@ -124,14 +128,29 @@ export function runAiMoneyCodeSelfTest(): {
     day15Rendered.body.join(" ").includes("₦49,999");
   if (!checks.day15HasUrgency) errors.push("Day 15 must include urgency");
 
-  checks.programAvailableAfterDeadline = AI_MONEY_CODE_EMAIL_TEMPLATES.some((e) =>
-    e.body.join(" ").toLowerCase().includes("remains available")
-  );
-  if (!checks.programAvailableAfterDeadline) errors.push("Content must clarify program remains available after special price");
+  checks.programAvailableAfterDeadline = AI_MONEY_CODE_EMAIL_TEMPLATES.every((e) => {
+    const rendered = renderCampaignEmail(e, sampleCtx);
+    return rendered.body.join(" ").toLowerCase().includes("remains available") ||
+      rendered.body.join(" ").includes("₦100,000");
+  });
+  if (!checks.programAvailableAfterDeadline) {
+    errors.push("Every rendered email must clarify program remains available after special price");
+  }
 
-  checks.noPermanentCloseClaim = !AI_MONEY_CODE_EMAIL_TEMPLATES.some((e) =>
-    e.body.join(" ").toLowerCase().includes("enrollment closes permanently")
+  // Prefer templates also state it in offer phase:
+  checks.offerStatesRemainsAvailable = AI_MONEY_CODE_EMAIL_TEMPLATES.filter((e) => e.day >= 15).some((e) =>
+    e.body.join(" ").toLowerCase().includes("remains available") ||
+    e.body.join(" ").toLowerCase().includes("available at") ||
+    e.body.join(" ").includes("₦100,000") ||
+    e.body.join(" ").includes("${regular}")
   );
+  if (!checks.offerStatesRemainsAvailable) {
+    errors.push("Offer-phase content must clarify availability after price change");
+  }
+  checks.noPermanentCloseClaim = !AI_MONEY_CODE_EMAIL_TEMPLATES.some((e) => {
+    const t = e.body.join(" ").toLowerCase();
+    return t.includes("enrollment closes permanently") || t.includes("enrollment closes forever");
+  });
   if (!checks.noPermanentCloseClaim) errors.push("Content must not falsely claim permanent enrollment closure");
 
   checks.fastActionBonusOmitted = !AI_MONEY_CODE_EMAIL_TEMPLATES.some((e) =>
@@ -139,7 +158,7 @@ export function runAiMoneyCodeSelfTest(): {
   );
   if (!checks.fastActionBonusOmitted) errors.push("Fast-action bonus must remain omitted");
 
-  checks.substantialBodies = AI_MONEY_CODE_EMAIL_TEMPLATES.every((e) => e.body.length >= 6);
+  checks.substantialBodies = AI_MONEY_CODE_EMAIL_TEMPLATES.every((e) => e.body.length >= 8);
   if (!checks.substantialBodies) errors.push("Every email needs substantial multi-paragraph body content");
 
   checks.uniqueSubjects =
@@ -148,7 +167,7 @@ export function runAiMoneyCodeSelfTest(): {
   if (!checks.uniqueSubjects) errors.push("Subject lines must be unique across the 30-day sequence");
 
   const decemberCtx = buildRecipientUrgencyContext(deadlineB, new Date("2026-12-15T10:00:00+01:00"));
-  const decemberRendered = getCampaignEmail(16, decemberCtx);
+  const decemberRendered = getCampaignEmail(15, decemberCtx);
   checks.decemberDeadlineRenders =
     decemberRendered.body.join(" ").includes(formatDeadlineInLagos(deadlineB)) ||
     decemberRendered.body.join(" ").includes(formatDeadlineInLagos(deadlineB).split(" at ")[0]);
@@ -159,10 +178,17 @@ export function runAiMoneyCodeSelfTest(): {
   const promptEarnEmails = AI_MONEY_CODE_EMAIL_TEMPLATES.filter((e) =>
     e.body.join(" ").toLowerCase().includes("promptearn")
   );
-  checks.promptEarnNotSkillProof = promptEarnEmails.every((e) => {
-    const t = e.body.join(" ").toLowerCase();
-    return t.includes("not proof") || t.includes("distinction") || t.includes("operator credibility");
-  });
+  checks.promptEarnNotSkillProof =
+    promptEarnEmails.length === 0 ||
+    promptEarnEmails.every((e) => {
+      const t = e.body.join(" ").toLowerCase();
+      return (
+        t.includes("not proof") ||
+        t.includes("distinction") ||
+        t.includes("operator credibility") ||
+        t.includes("not evidence")
+      );
+    });
   if (!checks.promptEarnNotSkillProof) {
     errors.push("PromptEarn mentions must keep operator-credibility distinction");
   }
@@ -173,12 +199,21 @@ export function runAiMoneyCodeSelfTest(): {
   });
   if (!checks.noHardCodedGlobalDeadline) errors.push("Hard-coded global September deadline found in templates");
 
-  checks.programAvailableNowLanguage = AI_MONEY_CODE_EMAIL_TEMPLATES.filter((e) => e.day >= 16).some((e) =>
+  checks.programAvailableNowLanguage = AI_MONEY_CODE_EMAIL_TEMPLATES.filter((e) => e.day >= 15).some((e) =>
     e.body.join(" ").toLowerCase().includes("available now")
   );
   if (!checks.programAvailableNowLanguage) {
     errors.push("Offer-phase emails must state the program is available now");
   }
+
+  checks.nurtureCtas = AI_MONEY_CODE_EMAIL_TEMPLATES.filter((e) => e.day <= 14).every(
+    (e) => e.ctaUrl === WEBINAR_URL
+  );
+  checks.salesCtas = AI_MONEY_CODE_EMAIL_TEMPLATES.filter((e) => e.day >= 15).every(
+    (e) => e.ctaUrl === OFFER_URL
+  );
+  if (!checks.nurtureCtas) errors.push("Days 1-14 must use webinar CTA");
+  if (!checks.salesCtas) errors.push("Days 15-30 must use offer CTA");
 
   return { ok: errors.length === 0, checks, errors };
 }
