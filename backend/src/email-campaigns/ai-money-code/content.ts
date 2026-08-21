@@ -14,10 +14,15 @@ export const AI_MONEY_CODE_EMAILS = AI_MONEY_CODE_EMAIL_TEMPLATES;
 
 const BANNED_PHRASES = [
   "imagine a world where",
+  "imagine this",
+  "here's the thing",
+  "here is the thing",
   "revolutionary opportunity",
   "unlock your potential",
+  "unlock",
   "leverage ai",
   "game-changing",
+  "game changer",
   "seize this opportunity",
   "the future is here",
   "in today's fast-paced world",
@@ -25,16 +30,22 @@ const BANNED_PHRASES = [
   "picture yourself",
   "dear valued customer",
   "act now before it is too late",
-  "here is the thing",
+  "act now before it's too late",
   "this is your sign",
   "don't miss this opportunity",
-  "game changer",
+  "don't miss out",
   "let me be honest",
+  "let me tell you something",
+  "your journey starts now",
+  "transform your life",
+  "secret formula",
   "enrollment closes forever",
   "enrollment closes permanently",
   "seats are running out",
   "only a few places remain",
+  "limited spots",
   "1-on-1 build review",
+  "are you ready to",
 ];
 
 /** Varied, natural urgency tied to the recipient's stored personal deadline. */
@@ -58,11 +69,17 @@ function urgencyLineForDay(day: number, ctx: RecipientUrgencyContext): string {
   if (day === 15) {
     return `AI Money Code is available now. Your ₦49,999 special price remains available until ${deadline}. After that, the same program stays open at ₦100,000.`;
   }
+  if (day === 25) {
+    return `Your ₦49,999 special price expires on ${deadline}. After that exact moment, the program remains available at ₦100,000. Only the special price ends.`;
+  }
+  if (day === 26) {
+    return `Two prices, one program: join by ${deadline} at ₦49,999, or wait and pay ₦100,000 later. The training remains available either way.`;
+  }
   if (day === 28) {
     return `Your current ₦49,999 access expires on ${deadline}. After that exact moment, the program remains available at ₦100,000.`;
   }
   if (day === 29) {
-    return `Waiting has a financial consequence now: after ${deadline}, entry moves from ₦49,999 to ₦100,000 while the same program stays open.`;
+    return `You are near the end of your personal special-price window. Your ₦49,999 rate ends at ${deadline}. After that, the same program remains available at ₦100,000.`;
   }
   if (day === 30) {
     if (ctx.hoursRemaining <= 24) {

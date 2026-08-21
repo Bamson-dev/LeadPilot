@@ -215,5 +215,57 @@ export function runAiMoneyCodeSelfTest(): {
   if (!checks.nurtureCtas) errors.push("Days 1-14 must use webinar CTA");
   if (!checks.salesCtas) errors.push("Days 15-30 must use offer CTA");
 
+  checks.uniqueOpenings =
+    new Set(AI_MONEY_CODE_EMAIL_TEMPLATES.map((e) => e.body[0].trim().toLowerCase())).size ===
+    AI_MONEY_CODE_EMAIL_TEMPLATES.length;
+  checks.uniqueClosings =
+    new Set(AI_MONEY_CODE_EMAIL_TEMPLATES.map((e) => e.body[e.body.length - 1].trim().toLowerCase())).size ===
+    AI_MONEY_CODE_EMAIL_TEMPLATES.length;
+  checks.uniqueCtaLabels =
+    new Set(AI_MONEY_CODE_EMAIL_TEMPLATES.map((e) => e.ctaLabel.trim().toLowerCase())).size ===
+    AI_MONEY_CODE_EMAIL_TEMPLATES.length;
+  if (!checks.uniqueOpenings) errors.push("Email openings must be unique");
+  if (!checks.uniqueClosings) errors.push("Email closings must be unique");
+  if (!checks.uniqueCtaLabels) errors.push("CTA labels must be unique");
+
+  checks.salesDoNotUseWebinarUrl = AI_MONEY_CODE_EMAIL_TEMPLATES.filter((e) => e.day >= 15).every(
+    (e) => e.ctaUrl === OFFER_URL && !e.body.join(" ").includes(WEBINAR_URL)
+  );
+  if (!checks.salesDoNotUseWebinarUrl) errors.push("Days 15-30 must not route to webinar registration");
+
+  checks.nurtureHasContextBeforeCta = AI_MONEY_CODE_EMAIL_TEMPLATES.filter((e) => e.day <= 14).every(
+    (e) => e.body.length >= 8 && e.body.join(" ").split(/\s+/).length >= 350
+  );
+  if (!checks.nurtureHasContextBeforeCta) {
+    errors.push("Days 1-14 must provide substantial context before webinar CTA");
+  }
+
+  checks.salesHaveDepth = AI_MONEY_CODE_EMAIL_TEMPLATES.filter((e) => e.day >= 15).every(
+    (e) => e.body.join(" ").split(/\s+/).length >= 400
+  );
+  if (!checks.salesHaveDepth) errors.push("Days 15-30 need substantial conversion depth");
+
+  checks.noFakePermanentClose = !AI_MONEY_CODE_EMAIL_TEMPLATES.some((e) => {
+    const t = e.body.join(" ").toLowerCase();
+    return (
+      t.includes("doors close forever") ||
+      t.includes("never get another chance") ||
+      t.includes("last chance to join ai money code ever") ||
+      t.includes("program disappears")
+    );
+  });
+  if (!checks.noFakePermanentClose) errors.push("Fake permanent-close language found");
+
+  checks.everyEmailHasPreview = AI_MONEY_CODE_EMAIL_TEMPLATES.every((e) => e.preview.trim().length > 10);
+  if (!checks.everyEmailHasPreview) errors.push("Every email needs meaningful preview text");
+
+  // Infrastructure regression: progress math still per-recipient (no shared calendar)
+  checks.progressPreservedByDesign =
+    getRecipientCampaignDay("2026-08-18", new Date("2026-08-21T10:00:00+01:00")) === 4 &&
+    getRecipientCampaignDay("2026-08-20", new Date("2026-08-21T10:00:00+01:00")) === 2;
+  if (!checks.progressPreservedByDesign) {
+    errors.push("Recipient progress must remain tied to personal campaign_start_date");
+  }
+
   return { ok: errors.length === 0, checks, errors };
 }
