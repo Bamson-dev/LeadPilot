@@ -46,6 +46,7 @@ check("mailthur metadata forwards", () => {
 
 check("LeadThur lifetime checkout is not forwarded", () => {
   assert.equal(isMailthurPaystackEvent({ product: "LeadThur Lifetime" }), false);
+  assert.equal(isMailthurPaystackEvent({ product: "leadthur" }), false);
 });
 
 check("LeadThur topup metadata is not forwarded", () => {

@@ -34,7 +34,9 @@ router.post("/initialize", async (req: Request, res: Response) => {
     const frontendUrl = config.FRONTEND_URL.replace(/\/$/, "");
 
     const metadata: Record<string, string> = {
-      product: "LeadThur Lifetime",
+      product: "leadthur",
+      product_name: "LeadThur Lifetime",
+      source: "leadthur_checkout",
       cancel_action: `${frontendUrl}/`,
     };
 
@@ -198,6 +200,13 @@ router.post("/verify", async (req: Request, res: Response) => {
       amount: tx.amount,
       metadata: tx.metadata,
     });
+
+    if (result.commissionSkippedReason === "not_leadthur_product") {
+      res.status(400).json({
+        error: "This payment is not a LeadThur purchase and was not fulfilled.",
+      });
+      return;
+    }
 
     res.json({
       success: true,

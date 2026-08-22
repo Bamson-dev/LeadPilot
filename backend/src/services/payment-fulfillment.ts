@@ -20,6 +20,7 @@ import {
 } from "../database/outreach-repository";
 import { createCommissionForReferral } from "./license-service";
 import { sendAccessEmail, sendPaymentConfirmationEmail } from "./email";
+import { isLeadThurLifetimePaystackCharge } from "./paystack-product-guard";
 import { markTrialSignupConverted } from "../database/free-trial-repository";
 import { trackEvent } from "../observability/track";
 import { EVENT_NAMES } from "../observability/event-taxonomy";
@@ -223,6 +224,19 @@ export async function fulfillPaystackCharge(params: {
   amount: number;
   metadata?: Record<string, unknown>;
 }): Promise<FulfillPaymentResult> {
+  if (!isLeadThurLifetimePaystackCharge({ reference: params.reference, metadata: params.metadata })) {
+    logger.warn("Skipping Paystack fulfillment for non-LeadThur product", {
+      reference: params.reference,
+      email: params.email.toLowerCase().trim(),
+    });
+    return {
+      alreadyFulfilled: false,
+      emailSent: false,
+      commissionCreated: false,
+      commissionSkippedReason: "not_leadthur_product",
+    };
+  }
+
   return fulfillPayment({
     email: params.email,
     reference: params.reference,

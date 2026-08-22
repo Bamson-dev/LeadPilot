@@ -16,6 +16,7 @@ import {
   isOutreachPaystackMetadata,
   processOutreachPaystackWebhookEvent,
 } from "../services/payment-fulfillment";
+import { isLeadThurLifetimePaystackCharge } from "../services/paystack-product-guard";
 import {
   handleMailthurPaystackForward,
   isMailthurPaystackEvent,
@@ -182,6 +183,16 @@ webhookRouter.post(
         }
       }
 
+      const previewMeta = (event.data?.metadata ?? {}) as Record<string, unknown>;
+      if (!isLeadThurLifetimePaystackCharge({ reference, metadata: previewMeta })) {
+        logger.info("Ignoring Paystack charge.success for non-LeadThur product", {
+          reference: reference ?? null,
+          event: event.event,
+        });
+        res.status(200).send("ok");
+        return;
+      }
+
       res.status(200).send("ok");
 
       setImmediate(() => {
@@ -204,6 +215,14 @@ webhookRouter.post(
 
             if (!email || !ref) {
               logger.error("Missing email or reference in Paystack webhook", { event });
+              return;
+            }
+
+            if (!isLeadThurLifetimePaystackCharge({ reference: ref, metadata: meta })) {
+              logger.info("Ignoring Paystack charge.success for non-LeadThur product", {
+                reference: ref,
+                event: event.event,
+              });
               return;
             }
 
