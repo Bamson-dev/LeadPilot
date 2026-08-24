@@ -1,5 +1,7 @@
 import { randomBytes } from "crypto";
 import { supabase } from "./client";
+import { queryPg, isPgConfigured } from "./pg-pool";
+import { isSupabaseServiceRestricted } from "./supabase-errors";
 import { generateUniqueRefCode } from "../services/license-service";
 import { trackEvent } from "../observability/track";
 import { EVENT_NAMES } from "../observability/event-taxonomy";
@@ -58,6 +60,102 @@ export function normalizeLicenseRow(row: Record<string, unknown>): LicenseKey {
       0,
     is_suspended: Boolean(row.is_suspended),
     max_devices: (row.max_devices as number | undefined) ?? 2,
+  };
+}
+
+type AuthLicenseRow = Pick<
+  LicenseKey,
+  "id" | "email" | "key" | "activated" | "is_suspended" | "suspension_reason"
+>;
+
+async function lookupLicenseAuthRowPg(
+  key: string,
+  email?: string
+): Promise<AuthLicenseRow | null | undefined> {
+  if (!isPgConfigured()) return undefined;
+  const params = email ? [key, email] : [key];
+  const emailClause = email ? "and email = $2" : "";
+  const rows = await queryPg<Record<string, unknown>>(
+    `select id, email, key, activated, is_suspended, suspension_reason
+     from license_keys
+     where key = $1 ${emailClause}
+     limit 1`,
+    params
+  );
+  if (rows === null) return undefined;
+  const row = rows[0];
+  return row ? (normalizeLicenseRow(row) as AuthLicenseRow) : null;
+}
+
+export type LicenseAuthLookupResult = {
+  license: AuthLicenseRow | null;
+  unavailable: boolean;
+  viaPg: boolean;
+};
+
+/** License read for login flows — falls back to direct Postgres when REST is restricted. */
+export async function lookupLicenseAuthRow(
+  key: string,
+  email?: string
+): Promise<LicenseAuthLookupResult> {
+  const normalizedKey = key.trim().toUpperCase();
+  const normalizedEmail = email?.toLowerCase().trim();
+
+  let query = supabase
+    .from("license_keys")
+    .select(LICENSE_AUTH_SELECT)
+    .eq("key", normalizedKey);
+  if (normalizedEmail) query = query.eq("email", normalizedEmail);
+  const { data, error } = await query.single();
+
+  if (!error && data) {
+    return {
+      license: normalizeLicenseRow(data as Record<string, unknown>) as AuthLicenseRow,
+      unavailable: false,
+      viaPg: false,
+    };
+  }
+  if (error && isSupabaseRowNotFound(error)) {
+    return { license: null, unavailable: false, viaPg: false };
+  }
+
+  const shouldPgFallback =
+    Boolean(error) &&
+    (isSupabaseServiceRestricted(error) || isPgConfigured());
+
+  if (shouldPgFallback) {
+    const pgLicense = await lookupLicenseAuthRowPg(normalizedKey, normalizedEmail);
+    if (pgLicense !== undefined) {
+      return { license: pgLicense, unavailable: false, viaPg: true };
+    }
+  }
+
+  if (error) {
+    logger.error("lookupLicenseAuthRow failed", {
+      keyPrefix: normalizedKey.slice(0, 8),
+      error: error.message,
+    });
+  }
+  return { license: null, unavailable: true, viaPg: false };
+}
+
+export async function probeLicenseAuthLookup(): Promise<{
+  ok: boolean;
+  viaPg: boolean;
+  code: string | null;
+  message: string | null;
+}> {
+  const probe = await lookupLicenseAuthRow("__health_probe__", "health-probe@invalid.local");
+  if (!probe.unavailable) {
+    return { ok: true, viaPg: probe.viaPg, code: null, message: null };
+  }
+  return {
+    ok: false,
+    viaPg: false,
+    code: "SERVICE_RESTRICTED",
+    message: isPgConfigured()
+      ? "Supabase REST unavailable and Postgres fallback failed"
+      : "Supabase REST restricted — set SUPABASE_DB_PASSWORD in Coolify for Postgres fallback",
   };
 }
 
@@ -178,11 +276,26 @@ export async function activateLicense(licenseId: string): Promise<LicenseKey> {
     .select(LICENSE_ROW_SELECT)
     .single();
 
-  if (error || !data) {
-    throw new Error(error?.message ?? "Failed to activate license");
+  if (!error && data) {
+    return normalizeLicenseRow(data as Record<string, unknown>);
   }
 
-  return normalizeLicenseRow(data as Record<string, unknown>);
+  if (error && !isSupabaseServiceRestricted(error) && !isPgConfigured()) {
+    throw new Error(error.message ?? "Failed to activate license");
+  }
+
+  const rows = await queryPg<Record<string, unknown>>(
+    `update license_keys
+     set activated = true, activated_at = now()
+     where id = $1
+     returning *`,
+    [licenseId]
+  );
+  const row = rows?.[0];
+  if (!row) {
+    throw new Error(error?.message ?? "Failed to activate license");
+  }
+  return normalizeLicenseRow(row);
 }
 
 export async function getLicenseByPaymentReference(
@@ -458,7 +571,9 @@ async function writeDeviceSlot(
     .update({ [slotKey]: deviceSignature })
     .eq("id", licenseId);
 
-  if (error) {
+  if (!error) return { ok: true };
+
+  if (!isSupabaseServiceRestricted(error) && !isPgConfigured()) {
     logger.error("registerDevice slot update failed", {
       licenseId,
       slot: slotKey,
@@ -467,7 +582,18 @@ async function writeDeviceSlot(
     return { ok: false, reason: "Device registration failed. Try again." };
   }
 
-  return { ok: true };
+  const rows = await queryPg(
+    `update license_keys set ${slotKey} = $1 where id = $2 returning id`,
+    [deviceSignature, licenseId]
+  );
+  if (rows?.[0]) return { ok: true };
+
+  logger.error("registerDevice slot update failed", {
+    licenseId,
+    slot: slotKey,
+    error: error.message,
+  });
+  return { ok: false, reason: "Device registration failed. Try again." };
 }
 
 async function resetDevicesToSingle(
@@ -486,6 +612,19 @@ async function resetDevicesToSingle(
     .eq("id", licenseId);
 
   if (resetError) {
+    if (isSupabaseServiceRestricted(resetError) || isPgConfigured()) {
+      const rows = await queryPg(
+        `update license_keys
+         set device_one = $1, device_two = null, device_three = null, device_four = null
+         where id = $2
+         returning id`,
+        [deviceSignature, licenseId]
+      );
+      if (rows?.[0]) {
+        logger.info("registerDevice reset device slots via pg", { licenseId, reason });
+        return { allowed: true };
+      }
+    }
     logger.error("registerDevice device reset failed", {
       licenseId,
       error: resetError.message,
@@ -516,7 +655,17 @@ export async function registerDevice(
     .eq("id", licenseId)
     .single();
 
-  if (error || !data) {
+  let licenseData = data as Record<string, unknown> | null;
+  if ((error || !licenseData) && (isSupabaseServiceRestricted(error) || isPgConfigured())) {
+    const rows = await queryPg<Record<string, unknown>>(
+      `select device_one, device_two, device_three, device_four, max_devices, search_count, searches_used
+       from license_keys where id = $1 limit 1`,
+      [licenseId]
+    );
+    licenseData = rows?.[0] ?? null;
+  }
+
+  if (!licenseData) {
     logger.error("registerDevice license lookup failed", {
       licenseId,
       error: error?.message ?? "no data",
@@ -524,18 +673,18 @@ export async function registerDevice(
     return { allowed: false, reason: "License not found" };
   }
 
-  const storedMax = (data.max_devices as number | null) || 4;
+  const storedMax = (licenseData.max_devices as number | null) || 4;
   const maxDevices = Math.min(4, Math.max(4, storedMax));
   const searchesUsed = Math.max(
-    Number(data.search_count ?? 0),
-    Number(data.searches_used ?? 0)
+    Number(licenseData.search_count ?? 0),
+    Number(licenseData.searches_used ?? 0)
   );
 
   const slots = [
-    { key: "device_one" as const, value: data.device_one as string | null },
-    { key: "device_two" as const, value: data.device_two as string | null },
-    { key: "device_three" as const, value: data.device_three as string | null },
-    { key: "device_four" as const, value: data.device_four as string | null },
+    { key: "device_one" as const, value: licenseData.device_one as string | null },
+    { key: "device_two" as const, value: licenseData.device_two as string | null },
+    { key: "device_three" as const, value: licenseData.device_three as string | null },
+    { key: "device_four" as const, value: licenseData.device_four as string | null },
   ];
 
   const isFilled = (value: string | null | undefined) =>

@@ -2,15 +2,12 @@ import { Router, type Request, type Response } from "express";
 import {
   activateLicense,
   getLicenseByKeyAndEmail,
-  isSupabaseRowNotFound,
-  LICENSE_AUTH_SELECT,
-  normalizeLicenseRow,
+  lookupLicenseAuthRow,
   registerDevice,
 } from "../database/license-repository";
 import { ensureRefCodeForEmail } from "../services/license-service";
 import { getLicenseUsage } from "../services/topup-service";
 import { sendWelcomeEmail } from "../services/email";
-import { supabase } from "../database/client";
 import { trackEvent } from "../observability/track";
 import { EVENT_NAMES } from "../observability/event-taxonomy";
 import { logger } from "../utils/logger";
@@ -40,17 +37,11 @@ authRouter.post("/activate", async (req: Request, res: Response) => {
     const normalizedEmail = email.toLowerCase().trim();
     const normalizedKey = key.trim().toUpperCase();
 
-    const { data: licenseRow, error: licenseLookupError } = await supabase
-      .from("license_keys")
-      .select(LICENSE_AUTH_SELECT)
-      .eq("key", normalizedKey)
-      .eq("email", normalizedEmail)
-      .single();
+    const lookup = await lookupLicenseAuthRow(normalizedKey, normalizedEmail);
 
-    if (licenseLookupError && !isSupabaseRowNotFound(licenseLookupError)) {
+    if (lookup.unavailable) {
       logger.error("License login lookup failed", {
         keyPrefix: normalizedKey.slice(0, 8),
-        error: licenseLookupError.message,
       });
       trackEvent({
         eventName: EVENT_NAMES.LICENSE_ACTIVATION_FAILED,
@@ -67,10 +58,7 @@ authRouter.post("/activate", async (req: Request, res: Response) => {
       return;
     }
 
-    const license =
-      licenseRow && !licenseLookupError
-        ? normalizeLicenseRow(licenseRow as Record<string, unknown>)
-        : null;
+    const license = lookup.license;
 
     if (!license) {
       trackEvent({
@@ -235,15 +223,10 @@ authRouter.get("/status", async (req: Request, res: Response) => {
       return;
     }
 
-    const { data: license, error } = await supabase
-      .from("license_keys")
-      .select(LICENSE_AUTH_SELECT)
-      .eq("key", licenseKey)
-      .eq("email", email)
-      .single();
+    const lookup = await lookupLicenseAuthRow(licenseKey, email);
 
-    if (error && !isSupabaseRowNotFound(error)) {
-      logger.error("Auth status license lookup failed", { error: error.message });
+    if (lookup.unavailable) {
+      logger.error("Auth status license lookup failed");
       res.status(503).json({
         valid: false,
         reason:
@@ -252,6 +235,8 @@ authRouter.get("/status", async (req: Request, res: Response) => {
       });
       return;
     }
+
+    const license = lookup.license;
 
     if (!license) {
       res.status(401).json({
@@ -337,27 +322,19 @@ authRouter.post("/register-device", async (req: Request, res: Response) => {
 
     const normalizedEmail = email.toLowerCase().trim();
     const normalizedKey = key.trim().toUpperCase();
-    const { data: licenseRow, error: licenseLookupError } = await supabase
-      .from("license_keys")
-      .select(LICENSE_AUTH_SELECT)
-      .eq("key", normalizedKey)
-      .eq("email", normalizedEmail)
-      .single();
+    const lookup = await lookupLicenseAuthRow(normalizedKey, normalizedEmail);
 
-    if (licenseLookupError && !isSupabaseRowNotFound(licenseLookupError)) {
-      logger.error("Device registration license lookup failed", {
-        error: licenseLookupError.message,
-      });
+    if (lookup.unavailable) {
+      logger.error("Device registration license lookup failed");
       res.status(503).json({ error: "Device registration temporarily unavailable" });
       return;
     }
 
-    if (!licenseRow || licenseLookupError) {
+    const license = lookup.license;
+    if (!license) {
       res.status(401).json({ error: "Invalid license" });
       return;
     }
-
-    const license = normalizeLicenseRow(licenseRow as Record<string, unknown>);
 
     if (!license.activated) {
       res.status(401).json({ error: "Account not activated" });
@@ -393,25 +370,20 @@ authRouter.post("/validate", async (req: Request, res: Response) => {
 
     const normalizedKey = key.trim().toUpperCase();
     const normalizedEmail = email.toLowerCase().trim();
-    const { data, error } = await supabase
-      .from("license_keys")
-      .select(LICENSE_AUTH_SELECT)
-      .eq("key", normalizedKey)
-      .eq("email", normalizedEmail)
-      .single();
+    const lookup = await lookupLicenseAuthRow(normalizedKey, normalizedEmail);
 
-    if (error && !isSupabaseRowNotFound(error)) {
-      logger.error("License validate lookup failed", { error: error.message });
+    if (lookup.unavailable) {
+      logger.error("License validate lookup failed");
       res.status(503).json({ error: "Validation temporarily unavailable" });
       return;
     }
 
-    if (!data || error) {
+    if (!lookup.license) {
       res.status(401).json({ valid: false });
       return;
     }
 
-    res.json({ valid: true, activated: data.activated });
+    res.json({ valid: true, activated: lookup.license.activated });
   } catch (err) {
     res.status(500).json({ error: "Validation failed" });
   }
