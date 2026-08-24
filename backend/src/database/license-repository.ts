@@ -9,9 +9,11 @@ import { logger } from "../utils/logger";
 export const LICENSE_AUTH_SELECT =
   "id, email, key, activated, is_suspended, suspension_reason";
 
-/** PostgREST returns this when `.single()` finds zero rows. */
-export function isSupabaseRowNotFound(error: { code?: string } | null): boolean {
-  return error?.code === "PGRST116";
+/** PostgREST returns PGRST116 when `.single()` gets zero or multiple rows. */
+export function isSupabaseRowNotFound(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  if (error.code === "PGRST116") return true;
+  return /0 rows|multiple \(or no\) rows returned/i.test(error.message ?? "");
 }
 
 /** Broader read shape for admin/repository callers. */

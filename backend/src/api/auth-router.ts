@@ -44,6 +44,7 @@ authRouter.post("/activate", async (req: Request, res: Response) => {
       .from("license_keys")
       .select(LICENSE_AUTH_SELECT)
       .eq("key", normalizedKey)
+      .eq("email", normalizedEmail)
       .single();
 
     if (licenseLookupError && !isSupabaseRowNotFound(licenseLookupError)) {
@@ -236,12 +237,23 @@ authRouter.get("/status", async (req: Request, res: Response) => {
 
     const { data: license, error } = await supabase
       .from("license_keys")
-      .select("id, activated, is_suspended, suspension_reason, email, key")
+      .select(LICENSE_AUTH_SELECT)
       .eq("key", licenseKey)
       .eq("email", email)
       .single();
 
-    if (error || !license) {
+    if (error && !isSupabaseRowNotFound(error)) {
+      logger.error("Auth status license lookup failed", { error: error.message });
+      res.status(503).json({
+        valid: false,
+        reason:
+          "Login is temporarily unavailable. Please try again in a few minutes or contact support on WhatsApp 09067285890.",
+        code: "SERVICE_UNAVAILABLE",
+      });
+      return;
+    }
+
+    if (!license) {
       res.status(401).json({
         valid: false,
         reason: "Invalid license key",
@@ -383,7 +395,7 @@ authRouter.post("/validate", async (req: Request, res: Response) => {
     const normalizedEmail = email.toLowerCase().trim();
     const { data, error } = await supabase
       .from("license_keys")
-      .select("activated")
+      .select(LICENSE_AUTH_SELECT)
       .eq("key", normalizedKey)
       .eq("email", normalizedEmail)
       .single();

@@ -12,13 +12,19 @@ import {
 import type { SearchQueueStatus } from "../queue/search-queue-types";
 import { getClientIpDiagnostics } from "../middleware/rate-limit";
 import { getGitCommitSha } from "../utils/build-info";
+import { getSupabaseConfigDiagnostics } from "../utils/supabase-config";
 import { supabase } from "../database/client";
+import { isSupabaseRowNotFound } from "../database/license-repository";
 
 const router = Router();
 
 let cachedQueue: SearchQueueStatus = getSearchQueueStatus();
 let cachedIpCapReady = true;
 let cachedLicenseAuthReady = true;
+let cachedLicenseAuthProbe: { code: string | null; message: string | null } = {
+  code: null,
+  message: null,
+};
 let refreshInFlight = false;
 
 async function isFreeTrialIpCapReady(): Promise<boolean> {
@@ -26,13 +32,27 @@ async function isFreeTrialIpCapReady(): Promise<boolean> {
   return !error;
 }
 
-async function isLicenseAuthLookupReady(): Promise<boolean> {
+async function probeLicenseAuthLookup(): Promise<{
+  ok: boolean;
+  code: string | null;
+  message: string | null;
+}> {
   const { error } = await supabase
     .from("license_keys")
-    .select("id, key, email")
-    .eq("activated", true)
-    .limit(1);
-  return !error;
+    .select("id, email, key, activated")
+    .eq("key", "__health_probe__")
+    .eq("email", "health-probe@invalid.local")
+    .single();
+
+  if (!error || isSupabaseRowNotFound(error)) {
+    return { ok: true, code: null, message: null };
+  }
+
+  return {
+    ok: false,
+    code: error.code ?? null,
+    message: error.message ?? null,
+  };
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
@@ -75,9 +95,11 @@ function scheduleBackgroundRefresh(): void {
       if (typeof ready === "boolean") cachedIpCapReady = ready;
     })
     .catch(() => undefined);
-  void withTimeout(isLicenseAuthLookupReady(), 1500)
-    .then((ready) => {
-      if (typeof ready === "boolean") cachedLicenseAuthReady = ready;
+  void withTimeout(probeLicenseAuthLookup(), 1500)
+    .then((probe) => {
+      if (!probe) return;
+      cachedLicenseAuthReady = probe.ok;
+      cachedLicenseAuthProbe = { code: probe.code, message: probe.message };
     })
     .catch(() => undefined)
     .finally(() => {
@@ -101,6 +123,11 @@ router.get("/", (_req, res) => {
     gitCommitSha: getGitCommitSha(),
     freeTrialIpCapReady: cachedIpCapReady,
     licenseAuthLookupReady: cachedLicenseAuthReady,
+    supabase: {
+      ...getSupabaseConfigDiagnostics(),
+      licenseAuthErrorCode: cachedLicenseAuthProbe.code,
+      licenseAuthErrorMessage: cachedLicenseAuthProbe.message,
+    },
   });
 });
 
