@@ -2,10 +2,12 @@ import { supabase } from "../database/client";
 import { trackEvent } from "./track";
 import { EVENT_NAMES } from "./event-taxonomy";
 import { hashEmail } from "./privacy";
+import { countLocalSearchStarted } from "../storage/local-analytics-store";
+import { analyticsUsesSupabase } from "./analytics-data-source";
 
 /**
  * Emit first_search / second_search once per user (idempotent).
- * Uses prior search_started count; current event may still be in the flush batch.
+ * Uses license search_count when possible to avoid Supabase analytics reads.
  */
 export function trackSearchOrdinals(input: {
   userEmail?: string | null;
@@ -18,21 +20,36 @@ export function trackSearchOrdinals(input: {
 
   void (async () => {
     try {
-      let query = supabase
-        .from("analytics_events")
-        .select("id", { count: "exact", head: true })
-        .eq("event_name", EVENT_NAMES.SEARCH_STARTED)
-        .eq("source", "server");
+      let ordinal = 0;
 
-      if (emailHash) {
-        query = query.eq("user_email_hash", emailHash);
-      } else if (input.licenseId) {
-        query = query.eq("license_id", input.licenseId);
+      if (input.licenseId && !input.isTrial) {
+        const { data } = await supabase
+          .from("license_keys")
+          .select("search_count, searches_used")
+          .eq("id", input.licenseId)
+          .maybeSingle();
+        const used = Math.max(
+          Number(data?.search_count ?? 0),
+          Number(data?.searches_used ?? 0)
+        );
+        ordinal = used + 1;
+      } else if (!analyticsUsesSupabase()) {
+        const prior = await countLocalSearchStarted({
+          userEmailHash: emailHash,
+          licenseId: input.licenseId,
+        });
+        ordinal = prior + 1;
+      } else {
+        let query = supabase
+          .from("analytics_events")
+          .select("id", { count: "exact", head: true })
+          .eq("event_name", EVENT_NAMES.SEARCH_STARTED)
+          .eq("source", "server");
+        if (emailHash) query = query.eq("user_email_hash", emailHash);
+        else if (input.licenseId) query = query.eq("license_id", input.licenseId);
+        const { count } = await query;
+        ordinal = (count ?? 0) + 1;
       }
-
-      const { count } = await query;
-      const prior = count ?? 0;
-      const ordinal = prior + 1; // current search not necessarily flushed yet
 
       if (ordinal === 1) {
         trackEvent({

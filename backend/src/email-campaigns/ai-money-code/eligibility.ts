@@ -1,5 +1,6 @@
 import { supabase } from "../../database/client";
 import type { AudienceSummary, EligiblePaidUser } from "./types";
+import { cached } from "../../observability/query-cache";
 
 type LicenseRow = {
   id: string;
@@ -28,6 +29,13 @@ function hasUsableEmail(email: string): boolean {
 }
 
 export async function inspectAudience(): Promise<{
+  users: EligiblePaidUser[];
+  summary: AudienceSummary;
+}> {
+  return cached("ai-money-code:inspect-audience", 10 * 60 * 1000, inspectAudienceUncached);
+}
+
+async function inspectAudienceUncached(): Promise<{
   users: EligiblePaidUser[];
   summary: AudienceSummary;
 }> {

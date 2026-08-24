@@ -8,6 +8,8 @@ import { getApiLatencySnapshot } from "./latency-metrics";
 import { registerObservabilityPolishRoutes } from "./admin-observability-polish";
 import { getAdminQueueMetrics } from "../queue/search-queue";
 import { getRedisUrl } from "../queue/redis-connection";
+import { countAnalyticsEvents, listAnalyticsEvents } from "./analytics-data-source";
+import { cached } from "./query-cache";
 
 const router = Router();
 
@@ -51,46 +53,44 @@ function applyEventDimensionFilters<T extends { eq: (col: string, val: string) =
 router.get("/overview", requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const { from, to } = parseRange(req);
-    const names = [
-      EVENT_NAMES.LANDING_VIEWED,
-      EVENT_NAMES.FREETRIAL_VIEWED,
-      EVENT_NAMES.TRIAL_EMAIL_SUBMITTED,
-      EVENT_NAMES.CHECKOUT_STARTED,
-      EVENT_NAMES.PAYMENT_COMPLETED,
-      EVENT_NAMES.LICENSE_ACTIVATED,
-      EVENT_NAMES.SEARCH_STARTED,
-      EVENT_NAMES.SEARCH_COMPLETED,
-      EVENT_NAMES.SEARCH_FAILED,
-      EVENT_NAMES.CSV_EXPORT,
-      EVENT_NAMES.MAILBOX_CONNECTED,
-      EVENT_NAMES.EMAIL_SENT,
-    ];
+    const cacheKey = `obs:overview:${from}:${to}`;
+    const payload = await cached(cacheKey, 120_000, async () => {
+      const names = [
+        EVENT_NAMES.LANDING_VIEWED,
+        EVENT_NAMES.FREETRIAL_VIEWED,
+        EVENT_NAMES.TRIAL_EMAIL_SUBMITTED,
+        EVENT_NAMES.CHECKOUT_STARTED,
+        EVENT_NAMES.PAYMENT_COMPLETED,
+        EVENT_NAMES.LICENSE_ACTIVATED,
+        EVENT_NAMES.SEARCH_STARTED,
+        EVENT_NAMES.SEARCH_COMPLETED,
+        EVENT_NAMES.SEARCH_FAILED,
+        EVENT_NAMES.CSV_EXPORT,
+        EVENT_NAMES.MAILBOX_CONNECTED,
+        EVENT_NAMES.EMAIL_SENT,
+      ];
 
-    const counts: Record<string, number> = {};
-    await Promise.all(
-      names.map(async (name) => {
-        const { count } = await supabase
-          .from("analytics_events")
-          .select("id", { count: "exact", head: true })
-          .eq("event_name", name)
-          .gte("occurred_at", from)
-          .lte("occurred_at", to);
-        counts[name] = count ?? 0;
-      })
-    );
+      const counts: Record<string, number> = {};
+      await Promise.all(
+        names.map(async (name) => {
+          counts[name] = await countAnalyticsEvents({ from, to, eventName: name });
+        })
+      );
 
-    const { count: openAlerts } = await supabase
-      .from("analytics_alerts")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "open");
+      const { count: openAlerts } = await supabase
+        .from("analytics_alerts")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "open");
 
-    res.json({
-      from,
-      to,
-      counts,
-      openAlerts: openAlerts ?? 0,
-      note: "Counts are from analytics_events only. Zero means no events tracked yet in range.",
+      return {
+        from,
+        to,
+        counts,
+        openAlerts: openAlerts ?? 0,
+        note: "Counts are from server-local analytics (Supabase sync disabled by default).",
+      };
     });
+    res.json(payload);
   } catch (err) {
     logger.error("[observability] overview failed", {
       error: err instanceof Error ? err.message : "unknown",
@@ -106,30 +106,16 @@ router.get("/events", requireAdminAuth, async (req: Request, res: Response) => {
     const eventName = typeof req.query.eventName === "string" ? req.query.eventName : null;
     const category = typeof req.query.category === "string" ? req.query.category : null;
     const search = typeof req.query.q === "string" ? req.query.q.trim() : "";
-    const sort = req.query.sort === "asc" ? true : false;
+    const sort = req.query.sort === "asc";
 
-    let query = supabase
-      .from("analytics_events")
-      .select("*", { count: "exact" })
-      .gte("occurred_at", from)
-      .lte("occurred_at", to)
-      .order("occurred_at", { ascending: sort })
-      .range(offset, offset + limit - 1);
-
-    if (eventName) query = query.eq("event_name", eventName);
-    if (category) query = query.eq("event_category", category);
-    if (search) {
-      query = query.or(
-        `event_name.ilike.%${search}%,page_path.ilike.%${search}%,correlation_id.ilike.%${search}%,search_id.ilike.%${search}%`
-      );
-    }
-
-    const { data, error, count } = await query;
-    if (error) throw error;
+    const { rows, total } = await listAnalyticsEvents(
+      { from, to, eventName, category, search: search || undefined },
+      { limit, offset, ascending: sort }
+    );
 
     res.json({
-      events: data || [],
-      total: count ?? 0,
+      events: rows,
+      total,
       limit,
       offset,
       from,
@@ -148,18 +134,12 @@ router.get("/funnels", requireAdminAuth, async (req: Request, res: Response) => 
     const { from, to } = parseRange(req);
     const steps = await Promise.all(
       FUNNEL_STEPS.map(async (step) => {
-        let query = supabase
-          .from("analytics_events")
-          .select("id,occurred_at,session_id,duration_ms", { count: "exact" })
-          .eq("event_name", step)
-          .gte("occurred_at", from)
-          .lte("occurred_at", to)
-          .limit(2000);
-        query = applyEventDimensionFilters(query as never, req) as typeof query;
-        const { data, count, error } = await query;
-        if (error) throw error;
-
-        const durations = (data || [])
+        const count = await countAnalyticsEvents({ from, to, eventName: step });
+        const { rows } = await listAnalyticsEvents(
+          { from, to, eventName: step },
+          { limit: 2000, offset: 0, ascending: true }
+        );
+        const durations = rows
           .map((r) => r.duration_ms)
           .filter((d): d is number => typeof d === "number" && d >= 0)
           .sort((a, b) => a - b);
@@ -172,7 +152,7 @@ router.get("/funnels", requireAdminAuth, async (req: Request, res: Response) => 
 
         return {
           step,
-          count: count ?? 0,
+          count,
           avgDurationMs,
           medianDurationMs,
         };
@@ -215,48 +195,27 @@ router.get("/searches", requireAdminAuth, async (req: Request, res: Response) =>
     const { from, to } = parseRange(req);
     const { limit, offset } = parsePaging(req);
 
-    const { data, error, count } = await supabase
-      .from("analytics_events")
-      .select("*", { count: "exact" })
-      .eq("event_category", "search")
-      .gte("occurred_at", from)
-      .lte("occurred_at", to)
-      .order("occurred_at", { ascending: false })
-      .range(offset, offset + limit - 1);
+    const { rows, total } = await listAnalyticsEvents(
+      { from, to, category: "search" },
+      { limit, offset, ascending: false }
+    );
 
-    if (error) throw error;
-
-    const { count: started } = await supabase
-      .from("analytics_events")
-      .select("id", { count: "exact", head: true })
-      .eq("event_name", EVENT_NAMES.SEARCH_STARTED)
-      .gte("occurred_at", from)
-      .lte("occurred_at", to);
-
-    const { count: completed } = await supabase
-      .from("analytics_events")
-      .select("id", { count: "exact", head: true })
-      .eq("event_name", EVENT_NAMES.SEARCH_COMPLETED)
-      .gte("occurred_at", from)
-      .lte("occurred_at", to);
-
-    const { count: failed } = await supabase
-      .from("analytics_events")
-      .select("id", { count: "exact", head: true })
-      .eq("event_name", EVENT_NAMES.SEARCH_FAILED)
-      .gte("occurred_at", from)
-      .lte("occurred_at", to);
+    const [started, completed, failed] = await Promise.all([
+      countAnalyticsEvents({ from, to, eventName: EVENT_NAMES.SEARCH_STARTED }),
+      countAnalyticsEvents({ from, to, eventName: EVENT_NAMES.SEARCH_COMPLETED }),
+      countAnalyticsEvents({ from, to, eventName: EVENT_NAMES.SEARCH_FAILED }),
+    ]);
 
     res.json({
       from,
       to,
       summary: {
-        started: started ?? 0,
-        completed: completed ?? 0,
-        failed: failed ?? 0,
+        started,
+        completed,
+        failed,
       },
-      events: data || [],
-      total: count ?? 0,
+      events: rows,
+      total,
       limit,
       offset,
     });
@@ -273,25 +232,24 @@ router.get("/errors", requireAdminAuth, async (req: Request, res: Response) => {
     const { from, to } = parseRange(req);
     const { limit, offset } = parsePaging(req);
 
-    const { data, error, count } = await supabase
-      .from("analytics_events")
-      .select("*", { count: "exact" })
-      .in("event_name", [
-        EVENT_NAMES.EXCEPTION,
-        EVENT_NAMES.API_ERROR,
-        EVENT_NAMES.SEARCH_FAILED,
-        EVENT_NAMES.EMAIL_FAILED,
-        EVENT_NAMES.SMTP_FAILURE,
-        EVENT_NAMES.WEBHOOK_FAILURE,
-        EVENT_NAMES.BROWSER_CRASH,
-      ])
-      .gte("occurred_at", from)
-      .lte("occurred_at", to)
-      .order("occurred_at", { ascending: false })
-      .range(offset, offset + limit - 1);
+    const errorNames = [
+      EVENT_NAMES.EXCEPTION,
+      EVENT_NAMES.API_ERROR,
+      EVENT_NAMES.SEARCH_FAILED,
+      EVENT_NAMES.EMAIL_FAILED,
+      EVENT_NAMES.SMTP_FAILURE,
+      EVENT_NAMES.WEBHOOK_FAILURE,
+      EVENT_NAMES.BROWSER_CRASH,
+    ];
+    const { rows, total } = await listAnalyticsEvents(
+      { from, to },
+      { limit: 5000, offset: 0, ascending: false }
+    );
+    const events = rows
+      .filter((r) => errorNames.includes(r.event_name as (typeof errorNames)[number]))
+      .slice(offset, offset + limit);
 
-    if (error) throw error;
-    res.json({ events: data || [], total: count ?? 0, limit, offset, from, to });
+    res.json({ events, total, limit, offset, from, to });
   } catch (err) {
     logger.error("[observability] errors failed", {
       error: err instanceof Error ? err.message : "unknown",
@@ -318,14 +276,8 @@ router.get("/infrastructure", requireAdminAuth, async (_req: Request, res: Respo
     const redisConnected = Boolean(getRedisUrl());
     const since1h = new Date(Date.now() - 60 * 60 * 1000).toISOString();
 
-    const countNamed = async (name: string) => {
-      const { count } = await supabase
-        .from("analytics_events")
-        .select("id", { count: "exact", head: true })
-        .eq("event_name", name)
-        .gte("occurred_at", since1h);
-      return count ?? 0;
-    };
+    const countNamed = async (name: string) =>
+      countAnalyticsEvents({ from: since1h, to: new Date().toISOString(), eventName: name });
 
     const [searchFailures1h, smtpFailures1h, browserCrashes1h, webhookFailures1h, apiErrors1h, activationFailures1h] =
       await Promise.all([
@@ -337,14 +289,11 @@ router.get("/infrastructure", requireAdminAuth, async (_req: Request, res: Respo
         countNamed(EVENT_NAMES.LICENSE_ACTIVATION_FAILED),
       ]);
 
-    const { data: completedDurations } = await supabase
-      .from("analytics_events")
-      .select("duration_ms")
-      .eq("event_name", EVENT_NAMES.SEARCH_COMPLETED)
-      .gte("occurred_at", since1h)
-      .not("duration_ms", "is", null)
-      .limit(500);
-    const durationVals = (completedDurations || [])
+    const { rows: completedDurations } = await listAnalyticsEvents(
+      { from: since1h, to: new Date().toISOString(), eventName: EVENT_NAMES.SEARCH_COMPLETED },
+      { limit: 500, offset: 0, ascending: false }
+    );
+    const durationVals = completedDurations
       .map((r) => r.duration_ms)
       .filter((d): d is number => typeof d === "number");
     const avgSearchDurationMs1h =
@@ -374,30 +323,7 @@ router.get("/infrastructure", requireAdminAuth, async (_req: Request, res: Respo
       api_latency: getApiLatencySnapshot(),
     };
 
-    void supabase.from("analytics_tech_snapshots").insert({
-      captured_at: snapshot.captured_at,
-      queue_active: snapshot.queue_active,
-      queue_waiting: snapshot.queue_waiting,
-      queue_failed_24h: snapshot.queue_failed_24h,
-      queue_mode: snapshot.queue_mode,
-      memory_rss_mb: snapshot.memory_rss_mb,
-      memory_heap_mb: snapshot.memory_heap_mb,
-      redis_connected: snapshot.redis_connected,
-      search_failures_1h: snapshot.search_failures_1h,
-      smtp_failures_1h: snapshot.smtp_failures_1h,
-      api_latency_p50_ms: snapshot.api_latency.p50Ms,
-      api_latency_p95_ms: snapshot.api_latency.p95Ms,
-      properties: {
-        browser_crashes_1h: browserCrashes1h,
-        webhook_failures_1h: webhookFailures1h,
-        api_errors_1h: apiErrors1h,
-        activation_failures_1h: activationFailures1h,
-        avg_search_duration_ms_1h: avgSearchDurationMs1h,
-        worker_healthy: workerHealthy,
-        api_latency_p99_ms: snapshot.api_latency.p99Ms,
-        api_latency_samples: snapshot.api_latency.sampleCount,
-      },
-    });
+    // Snapshots live in memory/latency ring buffer — skip Supabase writes on free tier.
 
     const checkoutStarted1h = await countNamed(EVENT_NAMES.CHECKOUT_STARTED);
     const checkoutAbandoned1h = await countNamed(EVENT_NAMES.CHECKOUT_ABANDONED);
@@ -460,81 +386,75 @@ router.get("/alerts", requireAdminAuth, async (req: Request, res: Response) => {
 router.get("/kpis", requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const { from, to } = parseRange(req);
-    const count = async (name: string) => {
-      const { count: c } = await supabase
-        .from("analytics_events")
-        .select("id", { count: "exact", head: true })
-        .eq("event_name", name)
-        .gte("occurred_at", from)
-        .lte("occurred_at", to);
-      return c ?? 0;
-    };
+    const cacheKey = `obs:kpis:${from}:${to}`;
+    const payload = await cached(cacheKey, 120_000, async () => {
+      const count = async (name: string) =>
+        countAnalyticsEvents({ from, to, eventName: name });
 
-    const [
-      trialStarted,
-      paid,
-      activated,
-      firstSearch,
-      secondSearch,
-      outreach,
-      checkoutStarted,
-      checkoutAbandoned,
-      paymentSuccess,
-      paymentFailed,
-      csvExport,
-      mailboxConnected,
-      emailSent,
-    ] = await Promise.all([
-      count(EVENT_NAMES.TRIAL_STARTED),
-      count(EVENT_NAMES.PAYMENT_COMPLETED),
-      count(EVENT_NAMES.LICENSE_ACTIVATED),
-      count(EVENT_NAMES.FIRST_SEARCH),
-      count(EVENT_NAMES.SECOND_SEARCH),
-      count(EVENT_NAMES.FIRST_OUTREACH),
-      count(EVENT_NAMES.CHECKOUT_STARTED),
-      count(EVENT_NAMES.CHECKOUT_ABANDONED),
-      count(EVENT_NAMES.PAYMENT_COMPLETED),
-      count(EVENT_NAMES.PAYMENT_FAILED),
-      count(EVENT_NAMES.CSV_EXPORT),
-      count(EVENT_NAMES.MAILBOX_CONNECTED),
-      count(EVENT_NAMES.EMAIL_SENT),
-    ]);
+      const [
+        trialStarted,
+        paid,
+        activated,
+        firstSearch,
+        secondSearch,
+        outreach,
+        checkoutStarted,
+        checkoutAbandoned,
+        paymentSuccess,
+        paymentFailed,
+        csvExport,
+        mailboxConnected,
+        emailSent,
+      ] = await Promise.all([
+        count(EVENT_NAMES.TRIAL_STARTED),
+        count(EVENT_NAMES.PAYMENT_COMPLETED),
+        count(EVENT_NAMES.LICENSE_ACTIVATED),
+        count(EVENT_NAMES.FIRST_SEARCH),
+        count(EVENT_NAMES.SECOND_SEARCH),
+        count(EVENT_NAMES.FIRST_OUTREACH),
+        count(EVENT_NAMES.CHECKOUT_STARTED),
+        count(EVENT_NAMES.CHECKOUT_ABANDONED),
+        count(EVENT_NAMES.PAYMENT_COMPLETED),
+        count(EVENT_NAMES.PAYMENT_FAILED),
+        count(EVENT_NAMES.CSV_EXPORT),
+        count(EVENT_NAMES.MAILBOX_CONNECTED),
+        count(EVENT_NAMES.EMAIL_SENT),
+      ]);
 
-    const rate = (num: number, den: number) =>
-      den > 0 ? Math.round((num / den) * 1000) / 10 : null;
+      const rate = (num: number, den: number) =>
+        den > 0 ? Math.round((num / den) * 1000) / 10 : null;
 
-    res.json({
-      from,
-      to,
-      kpis: {
-        trialToPaidRate: rate(paid, trialStarted),
-        paidToActivationRate: rate(activated, paid),
-        activationToFirstSearchRate: rate(firstSearch, activated),
-        firstToSecondSearchRate: rate(secondSearch, firstSearch),
-        secondSearchToOutreachRate: rate(outreach, secondSearch),
-        checkoutAbandonRate: rate(checkoutAbandoned, checkoutStarted),
-        paymentSuccessRate: rate(
-          paymentSuccess,
-          paymentSuccess + paymentFailed
-        ),
-        mailboxAdoptionRate: rate(mailboxConnected, activated),
-        counts: {
-          trialStarted,
-          paid,
-          activated,
-          firstSearch,
-          secondSearch,
-          outreach,
-          checkoutStarted,
-          checkoutAbandoned,
-          paymentSuccess,
-          paymentFailed,
-          csvExport,
-          mailboxConnected,
-          emailSent,
+      return {
+        from,
+        to,
+        kpis: {
+          trialToPaidRate: rate(paid, trialStarted),
+          paidToActivationRate: rate(activated, paid),
+          activationToFirstSearchRate: rate(firstSearch, activated),
+          firstToSecondSearchRate: rate(secondSearch, firstSearch),
+          secondSearchToOutreachRate: rate(outreach, secondSearch),
+          checkoutAbandonRate: rate(checkoutAbandoned, checkoutStarted),
+          paymentSuccessRate: rate(paymentSuccess, paymentSuccess + paymentFailed),
+          mailboxAdoptionRate: rate(mailboxConnected, activated),
+          counts: {
+            trialStarted,
+            paid,
+            activated,
+            firstSearch,
+            secondSearch,
+            outreach,
+            checkoutStarted,
+            checkoutAbandoned,
+            paymentSuccess,
+            paymentFailed,
+            csvExport,
+            mailboxConnected,
+            emailSent,
+          },
         },
-      },
+      };
     });
+    res.json(payload);
   } catch (err) {
     logger.error("[observability] kpis failed", {
       error: err instanceof Error ? err.message : "unknown",
@@ -546,17 +466,8 @@ router.get("/kpis", requireAdminAuth, async (req: Request, res: Response) => {
 router.get("/events.csv", requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const { from, to } = parseRange(req);
-    const { data, error } = await supabase
-      .from("analytics_events")
-      .select(
-        "occurred_at,event_name,event_category,source,page_path,utm_source,utm_medium,utm_campaign,device,browser,country,search_id,correlation_id,duration_ms"
-      )
-      .gte("occurred_at", from)
-      .lte("occurred_at", to)
-      .order("occurred_at", { ascending: false })
-      .limit(2000);
-
-    if (error) throw error;
+    const { rows } = await listAnalyticsEvents({ from, to }, { limit: 2000, offset: 0, ascending: false });
+    const data = rows;
 
     const headers = [
       "occurred_at",

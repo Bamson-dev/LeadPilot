@@ -1,4 +1,3 @@
-import { supabase } from "../database/client";
 import { logger } from "../utils/logger";
 import { categoryForEvent, type EventCategory } from "./event-taxonomy";
 import {
@@ -6,6 +5,7 @@ import {
   hashEmail,
   sanitizeProperties,
 } from "./privacy";
+import { persistAnalyticsBatch, type AnalyticsEventRow } from "./analytics-data-source";
 
 export interface AnalyticsEventInput {
   eventName: string;
@@ -38,38 +38,6 @@ export interface AnalyticsEventInput {
   durationMs?: number | null;
   idempotencyKey?: string | null;
 }
-
-type AnalyticsEventRow = {
-  event_name: string;
-  event_category: string;
-  occurred_at: string;
-  session_id: string | null;
-  anonymous_id: string | null;
-  user_email_hash: string | null;
-  license_id: string | null;
-  correlation_id: string | null;
-  search_id: string | null;
-  job_id: string | null;
-  source: string;
-  environment: string;
-  page_path: string | null;
-  referrer: string | null;
-  utm_source: string | null;
-  utm_medium: string | null;
-  utm_campaign: string | null;
-  utm_content: string | null;
-  utm_term: string | null;
-  fbclid: string | null;
-  gclid: string | null;
-  landing_page: string | null;
-  country: string | null;
-  device: string | null;
-  browser: string | null;
-  os: string | null;
-  properties: Record<string, unknown>;
-  duration_ms: number | null;
-  idempotency_key: string | null;
-};
 
 const MAX_BATCH = 50;
 let queue: AnalyticsEventRow[] = [];
@@ -120,32 +88,9 @@ async function flushQueue(): Promise<void> {
   flushing = true;
   const batch = queue.splice(0, MAX_BATCH);
   try {
-    const { error } = await supabase.from("analytics_events").insert(batch);
-    if (error) {
-      // Unique idempotency collisions are expected; ignore those.
-      if (error.code === "23505") {
-        logger.debug("[observability] duplicate events ignored", { count: batch.length });
-      } else {
-        // Table may not exist yet in some envs — never break product paths
-        logger.warn("[observability] event flush failed", {
-          error: error.message,
-          count: batch.length,
-        });
-        for (const row of batch) {
-          logger.info("[analytics-event]", {
-            event: row.event_name,
-            category: row.event_category,
-            correlationId: row.correlation_id,
-            searchId: row.search_id,
-            sessionId: row.session_id,
-            source: row.source,
-            properties: row.properties,
-          });
-        }
-      }
-    }
+    await persistAnalyticsBatch(batch);
   } catch (err) {
-    logger.warn("[observability] event flush exception", {
+    logger.warn("[observability] event flush failed", {
       error: err instanceof Error ? err.message : "unknown",
       count: batch.length,
     });
