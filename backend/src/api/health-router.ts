@@ -29,7 +29,8 @@ async function isFreeTrialIpCapReady(): Promise<boolean> {
 async function isLicenseAuthLookupReady(): Promise<boolean> {
   const { error } = await supabase
     .from("license_keys")
-    .select("id")
+    .select("id, key, email")
+    .eq("activated", true)
     .limit(1);
   return !error;
 }

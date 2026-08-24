@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import {
   activateLicense,
   getLicenseByKeyAndEmail,
+  isSupabaseRowNotFound,
   LICENSE_AUTH_SELECT,
   normalizeLicenseRow,
   registerDevice,
@@ -43,9 +44,9 @@ authRouter.post("/activate", async (req: Request, res: Response) => {
       .from("license_keys")
       .select(LICENSE_AUTH_SELECT)
       .eq("key", normalizedKey)
-      .maybeSingle();
+      .single();
 
-    if (licenseLookupError) {
+    if (licenseLookupError && !isSupabaseRowNotFound(licenseLookupError)) {
       logger.error("License login lookup failed", {
         keyPrefix: normalizedKey.slice(0, 8),
         error: licenseLookupError.message,
@@ -65,9 +66,10 @@ authRouter.post("/activate", async (req: Request, res: Response) => {
       return;
     }
 
-    const license = licenseRow
-      ? normalizeLicenseRow(licenseRow as Record<string, unknown>)
-      : null;
+    const license =
+      licenseRow && !licenseLookupError
+        ? normalizeLicenseRow(licenseRow as Record<string, unknown>)
+        : null;
 
     if (!license) {
       trackEvent({
@@ -328,9 +330,9 @@ authRouter.post("/register-device", async (req: Request, res: Response) => {
       .select(LICENSE_AUTH_SELECT)
       .eq("key", normalizedKey)
       .eq("email", normalizedEmail)
-      .maybeSingle();
+      .single();
 
-    if (licenseLookupError) {
+    if (licenseLookupError && !isSupabaseRowNotFound(licenseLookupError)) {
       logger.error("Device registration license lookup failed", {
         error: licenseLookupError.message,
       });
@@ -338,7 +340,7 @@ authRouter.post("/register-device", async (req: Request, res: Response) => {
       return;
     }
 
-    if (!licenseRow) {
+    if (!licenseRow || licenseLookupError) {
       res.status(401).json({ error: "Invalid license" });
       return;
     }
@@ -384,15 +386,15 @@ authRouter.post("/validate", async (req: Request, res: Response) => {
       .select("activated")
       .eq("key", normalizedKey)
       .eq("email", normalizedEmail)
-      .maybeSingle();
+      .single();
 
-    if (error) {
+    if (error && !isSupabaseRowNotFound(error)) {
       logger.error("License validate lookup failed", { error: error.message });
       res.status(503).json({ error: "Validation temporarily unavailable" });
       return;
     }
 
-    if (!data) {
+    if (!data || error) {
       res.status(401).json({ valid: false });
       return;
     }
