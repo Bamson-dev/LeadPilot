@@ -5,6 +5,14 @@ import { trackEvent } from "../observability/track";
 import { EVENT_NAMES } from "../observability/event-taxonomy";
 import { logger } from "../utils/logger";
 
+/** Columns used by /auth/status — known-good on production PostgREST. */
+export const LICENSE_AUTH_SELECT =
+  "id, email, key, activated, is_suspended, suspension_reason";
+
+/** Broader read shape for admin/repository callers. */
+export const LICENSE_ROW_SELECT =
+  "id, email, key, activated, activated_at, payment_channel, payment_reference, searches_used, exports_used, search_count, monthly_search_limit, export_count, last_reset_at, is_suspended, suspension_reason, max_devices, notes, search_credits, total_credits_purchased, created_at";
+
 export interface LicenseKey {
   id: string;
   email: string;
@@ -73,7 +81,7 @@ export async function createLicenseKey(params: {
       monthly_search_limit: 100,
       search_count: 0,
     })
-    .select("*")
+    .select(LICENSE_ROW_SELECT)
     .single();
 
   if (error || !data) {
@@ -97,11 +105,17 @@ export async function getLicenseKeyByKey(key: string): Promise<LicenseKey | null
   const normalized = key.trim().toUpperCase();
   const { data, error } = await supabase
     .from("license_keys")
-    .select("*")
+    .select(LICENSE_AUTH_SELECT)
     .eq("key", normalized)
     .maybeSingle();
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    logger.error("getLicenseKeyByKey failed", {
+      keyPrefix: normalized.slice(0, 8),
+      error: error.message,
+    });
+    return null;
+  }
   return data ? normalizeLicenseRow(data as Record<string, unknown>) : null;
 }
 
@@ -109,12 +123,15 @@ export async function getLicenseKeyByEmail(email: string): Promise<LicenseKey | 
   const normalized = email.toLowerCase().trim();
   const { data, error } = await supabase
     .from("license_keys")
-    .select("*")
+    .select(LICENSE_ROW_SELECT)
     .eq("email", normalized)
     .order("created_at", { ascending: false })
     .limit(1);
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    logger.error("getLicenseKeyByEmail failed", { error: error.message });
+    return null;
+  }
   const row = data?.[0];
   return row ? normalizeLicenseRow(row as Record<string, unknown>) : null;
 }
@@ -123,7 +140,11 @@ export async function lookupLicensesByEmail(email: string): Promise<LicenseKey[]
   const trimmed = email.trim();
   const normalized = trimmed.toLowerCase();
 
-  let query = supabase.from("license_keys").select("*").order("created_at", { ascending: false }).limit(10);
+  let query = supabase
+    .from("license_keys")
+    .select(LICENSE_ROW_SELECT)
+    .order("created_at", { ascending: false })
+    .limit(10);
 
   if (trimmed.includes("@")) {
     query = query.eq("email", normalized);
@@ -132,7 +153,10 @@ export async function lookupLicensesByEmail(email: string): Promise<LicenseKey[]
   }
 
   const { data, error } = await query;
-  if (error) throw new Error(error.message);
+  if (error) {
+    logger.error("lookupLicensesByEmail failed", { error: error.message });
+    return [];
+  }
   return (data ?? []).map((row) => normalizeLicenseRow(row as Record<string, unknown>));
 }
 
@@ -144,7 +168,7 @@ export async function activateLicense(licenseId: string): Promise<LicenseKey> {
       activated_at: new Date().toISOString(),
     })
     .eq("id", licenseId)
-    .select("*")
+    .select(LICENSE_ROW_SELECT)
     .single();
 
   if (error || !data) {
@@ -159,22 +183,31 @@ export async function getLicenseByPaymentReference(
 ): Promise<LicenseKey | null> {
   const { data, error } = await supabase
     .from("license_keys")
-    .select("*")
+    .select(LICENSE_ROW_SELECT)
     .eq("payment_reference", reference)
     .maybeSingle();
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    logger.error("getLicenseByPaymentReference failed", {
+      referencePrefix: reference.slice(0, 12),
+      error: error.message,
+    });
+    return null;
+  }
   return data ? normalizeLicenseRow(data as Record<string, unknown>) : null;
 }
 
 export async function listRecentLicenses(limit = 50): Promise<LicenseKey[]> {
   const { data, error } = await supabase
     .from("license_keys")
-    .select("*")
+    .select(LICENSE_ROW_SELECT)
     .order("created_at", { ascending: false })
     .limit(limit);
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    logger.error("listRecentLicenses failed", { error: error.message });
+    return [];
+  }
   return (data ?? []).map((row) => normalizeLicenseRow(row as Record<string, unknown>));
 }
 
@@ -192,13 +225,19 @@ export async function getLicenseByKeyAndEmail(
 
   const { data, error } = await supabase
     .from("license_keys")
-    .select("*")
+    .select(LICENSE_ROW_SELECT)
     .eq("key", normalizedKey)
     .eq("email", normalizedEmail)
     .eq("activated", true)
     .maybeSingle();
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    logger.error("getLicenseByKeyAndEmail failed", {
+      keyPrefix: normalizedKey.slice(0, 8),
+      error: error.message,
+    });
+    return null;
+  }
   return data ? normalizeLicenseRow(data as Record<string, unknown>) : null;
 }
 

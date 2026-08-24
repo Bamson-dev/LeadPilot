@@ -18,10 +18,19 @@ const router = Router();
 
 let cachedQueue: SearchQueueStatus = getSearchQueueStatus();
 let cachedIpCapReady = true;
+let cachedLicenseAuthReady = true;
 let refreshInFlight = false;
 
 async function isFreeTrialIpCapReady(): Promise<boolean> {
   const { error } = await supabase.from("free_trial_ip_usage").select("ip_address").limit(1);
+  return !error;
+}
+
+async function isLicenseAuthLookupReady(): Promise<boolean> {
+  const { error } = await supabase
+    .from("license_keys")
+    .select("id")
+    .limit(1);
   return !error;
 }
 
@@ -64,6 +73,11 @@ function scheduleBackgroundRefresh(): void {
     .then((ready) => {
       if (typeof ready === "boolean") cachedIpCapReady = ready;
     })
+    .catch(() => undefined);
+  void withTimeout(isLicenseAuthLookupReady(), 1500)
+    .then((ready) => {
+      if (typeof ready === "boolean") cachedLicenseAuthReady = ready;
+    })
     .catch(() => undefined)
     .finally(() => {
       refreshInFlight = false;
@@ -85,6 +99,7 @@ router.get("/", (_req, res) => {
     version: process.env.npm_package_version || "1.0.0",
     gitCommitSha: getGitCommitSha(),
     freeTrialIpCapReady: cachedIpCapReady,
+    licenseAuthLookupReady: cachedLicenseAuthReady,
   });
 });
 

@@ -2,7 +2,8 @@ import { Router, type Request, type Response } from "express";
 import {
   activateLicense,
   getLicenseByKeyAndEmail,
-  getLicenseKeyByKey,
+  LICENSE_AUTH_SELECT,
+  normalizeLicenseRow,
   registerDevice,
 } from "../database/license-repository";
 import { ensureRefCodeForEmail } from "../services/license-service";
@@ -38,7 +39,35 @@ authRouter.post("/activate", async (req: Request, res: Response) => {
     const normalizedEmail = email.toLowerCase().trim();
     const normalizedKey = key.trim().toUpperCase();
 
-    const license = await getLicenseKeyByKey(normalizedKey);
+    const { data: licenseRow, error: licenseLookupError } = await supabase
+      .from("license_keys")
+      .select(LICENSE_AUTH_SELECT)
+      .eq("key", normalizedKey)
+      .maybeSingle();
+
+    if (licenseLookupError) {
+      logger.error("License login lookup failed", {
+        keyPrefix: normalizedKey.slice(0, 8),
+        error: licenseLookupError.message,
+      });
+      trackEvent({
+        eventName: EVENT_NAMES.LICENSE_ACTIVATION_FAILED,
+        source: "server",
+        userEmail: normalizedEmail,
+        properties: { reason: "database_unavailable" },
+        idempotencyKey: `license_activation_failed:db:${Date.now()}`,
+      });
+      res.status(503).json({
+        error:
+          "Login is temporarily unavailable. Please try again in a few minutes or contact support on WhatsApp 09067285890.",
+        code: "SERVICE_UNAVAILABLE",
+      });
+      return;
+    }
+
+    const license = licenseRow
+      ? normalizeLicenseRow(licenseRow as Record<string, unknown>)
+      : null;
 
     if (!license) {
       trackEvent({
@@ -69,6 +98,24 @@ authRouter.post("/activate", async (req: Request, res: Response) => {
         idempotencyKey: `license_activation_failed:mismatch:${license.id}:${normalizedEmail}`,
       });
       res.status(401).json({ error: "License key does not match this email" });
+      return;
+    }
+
+    if (license.is_suspended) {
+      trackEvent({
+        eventName: EVENT_NAMES.LICENSE_ACTIVATION_FAILED,
+        source: "server",
+        userEmail: normalizedEmail,
+        licenseId: license.id,
+        properties: { reason: "suspended" },
+        idempotencyKey: `license_activation_failed:suspended:${license.id}`,
+      });
+      res.status(403).json({
+        error:
+          license.suspension_reason ||
+          "Your account has been suspended. Contact support on WhatsApp 09067285890.",
+        code: "SUSPENDED",
+      });
       return;
     }
 
@@ -142,15 +189,22 @@ authRouter.post("/activate", async (req: Request, res: Response) => {
       activated: true,
     });
   } catch (err) {
-    logger.error("License activation failed", {
-      error: err instanceof Error ? err.message : "unknown",
-    });
+    const message = err instanceof Error ? err.message : "unknown";
+    logger.error("License activation failed", { error: message });
     trackEvent({
       eventName: EVENT_NAMES.LICENSE_ACTIVATION_FAILED,
       source: "server",
       properties: { reason: "exception" },
     });
-    res.status(500).json({ error: "Activation failed" });
+    const serviceUnavailable = /egress|quota|402|restricted|service unavailable/i.test(
+      message
+    );
+    res.status(serviceUnavailable ? 503 : 500).json({
+      error: serviceUnavailable
+        ? "Login is temporarily unavailable. Please try again in a few minutes or contact support on WhatsApp 09067285890."
+        : "Activation failed",
+      code: serviceUnavailable ? "SERVICE_UNAVAILABLE" : "ACTIVATION_FAILED",
+    });
   }
 });
 
@@ -269,11 +323,27 @@ authRouter.post("/register-device", async (req: Request, res: Response) => {
 
     const normalizedEmail = email.toLowerCase().trim();
     const normalizedKey = key.trim().toUpperCase();
-    const license = await getLicenseKeyByKey(normalizedKey);
-    if (!license || license.email !== normalizedEmail) {
+    const { data: licenseRow, error: licenseLookupError } = await supabase
+      .from("license_keys")
+      .select(LICENSE_AUTH_SELECT)
+      .eq("key", normalizedKey)
+      .eq("email", normalizedEmail)
+      .maybeSingle();
+
+    if (licenseLookupError) {
+      logger.error("Device registration license lookup failed", {
+        error: licenseLookupError.message,
+      });
+      res.status(503).json({ error: "Device registration temporarily unavailable" });
+      return;
+    }
+
+    if (!licenseRow) {
       res.status(401).json({ error: "Invalid license" });
       return;
     }
+
+    const license = normalizeLicenseRow(licenseRow as Record<string, unknown>);
 
     if (!license.activated) {
       res.status(401).json({ error: "Account not activated" });
@@ -307,13 +377,27 @@ authRouter.post("/validate", async (req: Request, res: Response) => {
       return;
     }
 
-    const license = await getLicenseKeyByKey(key);
-    if (!license || license.email !== email.toLowerCase().trim()) {
+    const normalizedKey = key.trim().toUpperCase();
+    const normalizedEmail = email.toLowerCase().trim();
+    const { data, error } = await supabase
+      .from("license_keys")
+      .select("activated")
+      .eq("key", normalizedKey)
+      .eq("email", normalizedEmail)
+      .maybeSingle();
+
+    if (error) {
+      logger.error("License validate lookup failed", { error: error.message });
+      res.status(503).json({ error: "Validation temporarily unavailable" });
+      return;
+    }
+
+    if (!data) {
       res.status(401).json({ valid: false });
       return;
     }
 
-    res.json({ valid: true, activated: license.activated });
+    res.json({ valid: true, activated: data.activated });
   } catch (err) {
     res.status(500).json({ error: "Validation failed" });
   }

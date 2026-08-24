@@ -57,7 +57,9 @@ export async function activateLicense(email: string, key: string) {
       data.error ??
         (data.code === "MAX_DEVICES"
           ? "Maximum devices reached. Contact support on WhatsApp 09067285890 to reset your devices."
-          : "Activation failed")
+          : data.code === "SERVICE_UNAVAILABLE"
+            ? "Login is temporarily unavailable. Please try again in a few minutes."
+            : "Activation failed")
     );
   }
 
