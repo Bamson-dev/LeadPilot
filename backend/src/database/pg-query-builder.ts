@@ -31,6 +31,24 @@ function quoteTable(name: string): string {
   return `"${name}"`;
 }
 
+/** node-pg returns timestamptz as Date; Supabase REST returns ISO strings. Normalize for app code. */
+function normalizeCell(value: unknown): unknown {
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value)) return value.map(normalizeCell);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, normalizeCell(v)])
+    );
+  }
+  return value;
+}
+
+function normalizeRow(row: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(row).map(([k, v]) => [k, normalizeCell(v)])
+  ) as Record<string, unknown>;
+}
+
 function buildWhere(filters: Filter[], params: unknown[]): string {
   const parts: string[] = [];
   for (const f of filters) {
@@ -132,7 +150,7 @@ export class PgQueryBuilder {
 
       const rows = await queryPg<Record<string, unknown>>(sql, params);
       if (rows === null) throw new Error("Postgres select failed");
-      return { data: rows, error: null };
+      return { data: rows.map(normalizeRow), error: null };
     } catch (err) {
       const message = err instanceof Error ? err.message : "select failed";
       return { data: null, error: { code: "PG_ERROR", message }, count: null };
@@ -317,13 +335,14 @@ class PgMutateBuilder {
   }
 
   private formatResult(rows: Record<string, unknown>[]): QueryResult {
+    const normalized = rows.map(normalizeRow);
     if (this.selectCols) {
       if (this.singleResult) {
-        return { data: rows[0] ?? null, error: null, count: null };
+        return { data: normalized[0] ?? null, error: null, count: null };
       }
-      return { data: rows, error: null, count: rows.length };
+      return { data: normalized, error: null, count: normalized.length };
     }
-    return { data: null, error: null, count: rows.length };
+    return { data: null, error: null, count: normalized.length };
   }
 }
 

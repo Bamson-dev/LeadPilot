@@ -24,6 +24,17 @@ import {
   type EligiblePaidUser,
 } from "./types";
 
+function asIsoString(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value instanceof Date) return value.toISOString();
+  if (value == null) return "";
+  return String(value);
+}
+
+function asDatePrefix(value: unknown): string {
+  return asIsoString(value).slice(0, 10);
+}
+
 export async function ensureCampaignSettings(): Promise<CampaignSettings> {
   const { data, error } = await supabase
     .from("email_campaign_settings")
@@ -301,7 +312,9 @@ export async function getProgressSummary(): Promise<CampaignProgressSummary> {
   let enrolledToday = 0;
 
   for (const recipient of recipients) {
-    if (recipient.enrolled_at.slice(0, 10) === today || recipient.campaign_start_date === today) {
+    const enrolledAt = asDatePrefix(recipient.enrolled_at);
+    const startDate = asDatePrefix(recipient.campaign_start_date);
+    if (enrolledAt === today || startDate === today) {
       enrolledToday += 1;
     }
     if (recipient.status === "completed") {
@@ -310,7 +323,7 @@ export async function getProgressSummary(): Promise<CampaignProgressSummary> {
     }
     if (recipient.status !== "enrolled") continue;
 
-    const day = getRecipientCampaignDay(recipient.campaign_start_date, now);
+    const day = getRecipientCampaignDay(startDate, now);
     if (day >= 1 && day <= CAMPAIGN_TOTAL_DAYS) {
       const key = String(day);
       dayDistribution[key] = (dayDistribution[key] || 0) + 1;
@@ -318,12 +331,13 @@ export async function getProgressSummary(): Promise<CampaignProgressSummary> {
       dayDistribution.post_sequence = (dayDistribution.post_sequence || 0) + 1;
     }
 
-    if (isPastPersonalDeadline(recipient.personal_deadline_at, now)) {
+    if (isPastPersonalDeadline(asIsoString(recipient.personal_deadline_at), now)) {
       expiredDeadlines += 1;
     } else {
       activeDeadlines += 1;
-      if (!nextUpcomingDeadline || recipient.personal_deadline_at < nextUpcomingDeadline) {
-        nextUpcomingDeadline = recipient.personal_deadline_at;
+      const deadlineIso = asIsoString(recipient.personal_deadline_at);
+      if (!nextUpcomingDeadline || deadlineIso < nextUpcomingDeadline) {
+        nextUpcomingDeadline = deadlineIso;
       }
     }
   }

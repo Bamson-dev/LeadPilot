@@ -19,7 +19,7 @@ import {
   updateContentSettings,
   updateJob,
 } from "./repository";
-import { processContentAutomationTick } from "./scheduler";
+import { processContentAutomationTick, publishMissedBlogBacklog } from "./scheduler";
 import { probeOpenAiImageGeneration } from "./providers/openai-image";
 import { getAutomationHealth } from "./automation-health";
 import { getLocalStorageStats } from "../storage/blog-cover-storage";
@@ -265,6 +265,17 @@ contentAutomationRouter.get("/topics", async (req: Request, res: Response) => {
     res.json({ topics: await listTopics(status, 50) });
   } catch (err) {
     res.status(500).json({ error: "Failed to list topics" });
+  }
+});
+
+contentAutomationRouter.post("/catch-up", async (_req: Request, res: Response) => {
+  try {
+    const result = await publishMissedBlogBacklog(40);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Catch-up publish failed",
+    });
   }
 });
 

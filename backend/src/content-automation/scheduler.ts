@@ -314,6 +314,13 @@ export function startContentAutomationScheduler(): void {
   setTimeout(() => {
     void processContentAutomationTick();
   }, 45_000);
+  setTimeout(() => {
+    void publishMissedBlogBacklog().catch((err) => {
+      logger.error("Startup blog backlog catch-up failed", {
+        error: err instanceof Error ? err.message : "unknown",
+      });
+    });
+  }, 90_000);
   interval = setInterval(() => {
     void processContentAutomationTick();
   }, TICK_MS);
@@ -325,6 +332,50 @@ export function stopContentAutomationScheduler(): void {
     clearInterval(interval);
     interval = null;
   }
+}
+
+/** Publish all READY and overdue SCHEDULED blog jobs (catch-up after outage). */
+export async function publishMissedBlogBacklog(maxPosts = 40): Promise<{
+  published: number;
+  skipped: number;
+  errors: string[];
+}> {
+  const errors: string[] = [];
+  let published = 0;
+  let skipped = 0;
+  const now = Date.now();
+
+  const ready = await listJobs("READY", maxPosts);
+  const scheduled = await listJobs("SCHEDULED", maxPosts);
+  const dueScheduled = scheduled.filter((job) => {
+    if (!job.scheduled_for) return true;
+    return new Date(job.scheduled_for).getTime() <= now;
+  });
+
+  const queue = [...ready, ...dueScheduled];
+  logger.info("Blog backlog catch-up starting", { ready: ready.length, dueScheduled: dueScheduled.length });
+
+  for (const job of queue) {
+    if (published >= maxPosts) break;
+    if (!job.blog_post_id) {
+      skipped += 1;
+      continue;
+    }
+    try {
+      await publishReadyJob(job.id, { bypassDailyCap: true });
+      published += 1;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "unknown";
+      if (message.includes("not publishable") || message.includes("no blog post")) {
+        skipped += 1;
+        continue;
+      }
+      errors.push(`${job.id}: ${message}`);
+    }
+  }
+
+  logger.info("Blog backlog catch-up finished", { published, skipped, errors: errors.length });
+  return { published, skipped, errors };
 }
 
 // Exported for tests

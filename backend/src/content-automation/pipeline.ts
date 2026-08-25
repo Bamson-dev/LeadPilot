@@ -329,7 +329,10 @@ export async function runContentJob(
   }
 }
 
-export async function publishReadyJob(jobId: string): Promise<ContentJob> {
+export async function publishReadyJob(
+  jobId: string,
+  options?: { bypassDailyCap?: boolean }
+): Promise<ContentJob> {
   const job = await getJobById(jobId);
   if (!job) throw new Error("Job not found");
   if (job.status === "PUBLISHED") return job;
@@ -340,7 +343,7 @@ export async function publishReadyJob(jobId: string): Promise<ContentJob> {
 
   const publishedToday = await countPublishedToday();
   const settings = await getContentSettings();
-  if (publishedToday >= settings.daily_article_target) {
+  if (!options?.bypassDailyCap && publishedToday >= settings.daily_article_target) {
     throw new Error("Daily publish limit reached");
   }
 
