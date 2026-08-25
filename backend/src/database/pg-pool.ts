@@ -24,7 +24,7 @@ export function getPgPool(): pg.Pool | null {
   pool = new pg.Pool({
     connectionString: `postgresql://postgres.${ref}:${encodeURIComponent(password)}@aws-0-${region}.pooler.supabase.com:6543/postgres`,
     ssl: { rejectUnauthorized: false },
-    max: 4,
+    max: 10,
     idleTimeoutMillis: 30_000,
   });
 
