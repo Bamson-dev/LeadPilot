@@ -30,15 +30,23 @@ export function getCurrentDateInLagos(now = new Date()): string {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
+/** Normalize Postgres DATE / timestamptz / ISO strings to YYYY-MM-DD. */
+export function toCampaignDateOnly(value: unknown): string {
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (typeof value === "string") return value.trim().slice(0, 10);
+  return String(value ?? "").slice(0, 10);
+}
+
 /** Per-recipient campaign day from enrollment start date in Africa/Lagos. */
-export function getRecipientCampaignDay(campaignStartDate: string, now = new Date()): number {
-  const [sy, sm, sd] = campaignStartDate.split("-").map(Number);
+export function getRecipientCampaignDay(campaignStartDate: unknown, now = new Date()): number {
+  const [sy, sm, sd] = toCampaignDateOnly(campaignStartDate).split("-").map(Number);
+  if (!Number.isFinite(sy) || !Number.isFinite(sm) || !Number.isFinite(sd)) return NaN;
   const current = datePartsInTz(now, CAMPAIGN_TIMEZONE);
   return epochDay(current.year, current.month, current.day) - epochDay(sy, sm, sd) + 1;
 }
 
-export function getDay30Date(campaignStartDate: string): string {
-  const [y, m, d] = campaignStartDate.split("-").map(Number);
+export function getDay30Date(campaignStartDate: unknown): string {
+  const [y, m, d] = toCampaignDateOnly(campaignStartDate).split("-").map(Number);
   return dateStrFromEpochDay(epochDay(y, m, d) + (CAMPAIGN_TOTAL_DAYS - 1));
 }
 

@@ -135,7 +135,6 @@ export class PgQueryBuilder {
           `select count(*)::text as count from ${table}${where}`,
           params
         );
-        if (rows === null) throw new Error("Postgres count failed");
         return { data: null, error: null, count: Number(rows[0]?.count ?? 0) };
       }
 
@@ -149,7 +148,6 @@ export class PgQueryBuilder {
       }
 
       const rows = await queryPg<Record<string, unknown>>(sql, params);
-      if (rows === null) throw new Error("Postgres select failed");
       return { data: rows.map(normalizeRow), error: null };
     } catch (err) {
       const message = err instanceof Error ? err.message : "select failed";

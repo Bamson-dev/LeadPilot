@@ -6,6 +6,7 @@ import {
   getCurrentDateInLagos,
   getRecipientCampaignDay,
   isPastPersonalDeadline,
+  toCampaignDateOnly,
 } from "./campaign-definition";
 import {
   CAMPAIGN_KEY,
@@ -32,7 +33,7 @@ function asIsoString(value: unknown): string {
 }
 
 function asDatePrefix(value: unknown): string {
-  return asIsoString(value).slice(0, 10);
+  return toCampaignDateOnly(value);
 }
 
 export async function ensureCampaignSettings(): Promise<CampaignSettings> {

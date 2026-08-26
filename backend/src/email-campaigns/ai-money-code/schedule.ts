@@ -1,5 +1,9 @@
 import { logger } from "../../utils/logger";
-import { buildRecipientUrgencyContext, getCurrentDateInLagos, getRecipientCampaignDay } from "./campaign-definition";
+import {
+  buildRecipientUrgencyContext,
+  getCurrentDateInLagos,
+  getRecipientCampaignDay,
+} from "./campaign-definition";
 import { getCampaignEmail } from "./content";
 import { discoverAndEnrollNewRecipients } from "./enrollment";
 import {
@@ -67,7 +71,7 @@ export async function processAiMoneyCodeTick(trigger = "scheduler"): Promise<{
     for (const recipient of recipients) {
       const recipientDay = getRecipientCampaignDay(recipient.campaign_start_date, now);
 
-      if (recipientDay < 1) {
+      if (!Number.isFinite(recipientDay) || recipientDay < 1) {
         skipped += 1;
         continue;
       }

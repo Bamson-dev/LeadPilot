@@ -38,17 +38,16 @@ export function getPgPool(): pg.Pool | null {
 export async function queryPg<T extends Record<string, unknown>>(
   text: string,
   params: unknown[] = []
-): Promise<T[] | null> {
+): Promise<T[]> {
   const client = getPgPool();
-  if (!client) return null;
+  if (!client) throw new Error("Postgres pool not configured");
   try {
     const result = await client.query(text, params);
     return result.rows as T[];
   } catch (err) {
-    logger.error("[pg-pool] query failed", {
-      error: err instanceof Error ? err.message : "unknown",
-    });
-    return null;
+    const message = err instanceof Error ? err.message : "unknown";
+    logger.error("[pg-pool] query failed", { error: message, sql: text.slice(0, 200) });
+    throw err instanceof Error ? err : new Error(message);
   }
 }
 

@@ -42,6 +42,13 @@ export function runAiMoneyCodeSelfTest(): {
   checks.recipientDay1FutureYear = getRecipientCampaignDay("2027-03-01", new Date("2027-03-01T09:00:00+01:00")) === 1;
   if (!checks.recipientDay1FutureYear) errors.push("Recipient enrolling in 2027 should be Day 1");
 
+  checks.postgresIsoStartDate = getRecipientCampaignDay("2026-08-18T00:00:00.000Z", new Date("2026-08-26T10:00:00+01:00")) === 9;
+  if (!checks.postgresIsoStartDate) errors.push("Postgres ISO start dates should map to the correct campaign day");
+
+  checks.postgresDateObjectStartDate =
+    getRecipientCampaignDay(new Date("2026-08-18T00:00:00.000Z"), new Date("2026-08-26T10:00:00+01:00")) === 9;
+  if (!checks.postgresDateObjectStartDate) errors.push("Postgres Date start values should map to the correct campaign day");
+
   const userA = getRecipientCampaignDay("2026-08-18", new Date("2026-08-20T10:00:00+01:00"));
   const userB = getRecipientCampaignDay("2026-12-10", new Date("2026-08-20T10:00:00+01:00"));
   checks.differentCalendars = userA === 3 && userB < 1;
