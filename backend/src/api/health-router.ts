@@ -12,6 +12,7 @@ import {
 import type { SearchQueueStatus } from "../queue/search-queue-types";
 import { getClientIpDiagnostics } from "../middleware/rate-limit";
 import { getGitCommitSha } from "../utils/build-info";
+import { getDigitalSkillXForwardSecret } from "../services/digitalskillx-handoff";
 import { getSupabaseConfigDiagnostics } from "../utils/supabase-config";
 import { probeLicenseAuthLookup } from "../database/license-repository";
 import { isPgConfigured } from "../database/pg-pool";
@@ -110,6 +111,7 @@ router.get("/", (_req, res) => {
     gitCommitSha: getGitCommitSha(),
     freeTrialIpCapReady: cachedIpCapReady,
     licenseAuthLookupReady: cachedLicenseAuthReady,
+    digitalskillxForwardSecretConfigured: getDigitalSkillXForwardSecret().length >= 32,
     supabase: {
       ...getSupabaseConfigDiagnostics(),
       pgConfigured: isPgConfigured(),

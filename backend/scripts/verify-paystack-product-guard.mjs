@@ -20,6 +20,11 @@ function compact(value) {
 
 const LEADTHUR_CHECKOUT_REFERENCE = /^LP-\d{10,}-[A-Z0-9]+$/i;
 const LEADTHUR_PAGE_SLUGS = new Set(["leadthur"]);
+const DIGITALSKILLX_AIAPP_PRODUCT_KEY = "build-software-with-ai";
+const DIGITALSKILLX_AIAPP_PAGE_SLUG = "aiapp";
+const DIGITALSKILLX_AIAPP_AMOUNT_KOBO = 4_999_900;
+const DIGITALSKILLX_AIAPP_CURRENCY = "NGN";
+
 const FOREIGN_PRODUCT_MARKERS = [
   "mailthur",
   "aimoneycode",
@@ -27,6 +32,9 @@ const FOREIGN_PRODUCT_MARKERS = [
   "promptearn",
   "nairainvoice",
   "naira invoice",
+  "digitalskillx",
+  DIGITALSKILLX_AIAPP_PRODUCT_KEY,
+  DIGITALSKILLX_AIAPP_PAGE_SLUG,
 ];
 
 function collectStrings(value, out, depth = 0) {
@@ -60,6 +68,55 @@ function pageSlugFromUrl(value) {
     return null;
   }
   return null;
+}
+
+function hasAiappPageIdentity(values) {
+  return values.some((value) => {
+    const slug = pageSlugFromUrl(value);
+    if (slug === DIGITALSKILLX_AIAPP_PAGE_SLUG) return true;
+    return value.toLowerCase().includes(`pay/${DIGITALSKILLX_AIAPP_PAGE_SLUG}`);
+  });
+}
+
+function metadataMatchesDigitalSkillX(meta) {
+  if (!meta) return false;
+  const productKey = meta.product_key ?? meta.product;
+  if (typeof productKey === "string") {
+    const lowered = productKey.toLowerCase();
+    if (lowered === DIGITALSKILLX_AIAPP_PRODUCT_KEY || lowered === "digitalskillx") return true;
+  }
+  const paymentPage = meta.payment_page ?? meta.payment_page_slug ?? meta.page_slug;
+  if (typeof paymentPage === "string" && paymentPage.toLowerCase().includes(DIGITALSKILLX_AIAPP_PAGE_SLUG)) {
+    return true;
+  }
+  const haystack = [];
+  collectStrings(meta, haystack);
+  return hasAiappPageIdentity(haystack);
+}
+
+function isDigitalSkillXPaystackEvent(event) {
+  const data = event.data;
+  if (!data) return false;
+  const meta = parsePaystackMetadata(data.metadata);
+  if (metadataMatchesDigitalSkillX(meta)) {
+    if (typeof data.amount === "number" && data.amount !== DIGITALSKILLX_AIAPP_AMOUNT_KOBO) return false;
+    if (String(data.currency ?? "NGN").toUpperCase() !== DIGITALSKILLX_AIAPP_CURRENCY) return false;
+    return true;
+  }
+  const pageSlug = data.page?.slug?.toLowerCase();
+  if (pageSlug?.includes(DIGITALSKILLX_AIAPP_PAGE_SLUG)) {
+    return (
+      data.amount === DIGITALSKILLX_AIAPP_AMOUNT_KOBO &&
+      String(data.currency ?? "NGN").toUpperCase() === DIGITALSKILLX_AIAPP_CURRENCY
+    );
+  }
+  const haystack = [];
+  collectStrings(meta, haystack);
+  return (
+    hasAiappPageIdentity(haystack) &&
+    data.amount === DIGITALSKILLX_AIAPP_AMOUNT_KOBO &&
+    String(data.currency ?? "NGN").toUpperCase() === DIGITALSKILLX_AIAPP_CURRENCY
+  );
 }
 
 function productField(metadata) {
@@ -100,6 +157,20 @@ function hasLeadThurProductMarker(values, metadata) {
 function isLeadThurLifetimePaystackCharge(input) {
   const reference = input.reference?.trim() ?? "";
   const metadata = parsePaystackMetadata(input.metadata ?? undefined);
+
+  if (
+    isDigitalSkillXPaystackEvent({
+      data: {
+        reference,
+        amount: input.amount ?? undefined,
+        currency: input.currency ?? undefined,
+        metadata,
+      },
+    })
+  ) {
+    return false;
+  }
+
   if (metadata?.type === "topup") return false;
   const checkoutType = metadata?.outreach_type ?? metadata?.type;
   if (checkoutType === "subscription" || checkoutType === "pack") return false;
@@ -173,6 +244,78 @@ check("AI Money Code is not LeadThur", () => {
     isLeadThurLifetimePaystackCharge({
       reference: "T999999999999999",
       metadata: { product: "AI Money Code", referrer: "https://paystack.shop/pay/aimoneycode" },
+    }),
+    false
+  );
+});
+
+check("DigitalSkillX aiapp payment is not LeadThur", () => {
+  assert.equal(
+    isLeadThurLifetimePaystackCharge({
+      reference: "T_aiapp_001",
+      amount: DIGITALSKILLX_AIAPP_AMOUNT_KOBO,
+      currency: DIGITALSKILLX_AIAPP_CURRENCY,
+      metadata: { product_key: DIGITALSKILLX_AIAPP_PRODUCT_KEY },
+    }),
+    false
+  );
+});
+
+check("DigitalSkillX aiapp page slug is detected", () => {
+  assert.equal(
+    isDigitalSkillXPaystackEvent({
+      event: "charge.success",
+      data: {
+        reference: "T_aiapp_002",
+        amount: DIGITALSKILLX_AIAPP_AMOUNT_KOBO,
+        currency: DIGITALSKILLX_AIAPP_CURRENCY,
+        page: { slug: "aiapp" },
+      },
+    }),
+    true
+  );
+});
+
+check("DigitalSkillX amount alone is not detected", () => {
+  assert.equal(
+    isDigitalSkillXPaystackEvent({
+      event: "charge.success",
+      data: {
+        reference: "T_unknown_amount_only",
+        amount: DIGITALSKILLX_AIAPP_AMOUNT_KOBO,
+        currency: DIGITALSKILLX_AIAPP_CURRENCY,
+        metadata: {},
+      },
+    }),
+    false
+  );
+});
+
+check("DigitalSkillX wrong amount with aiapp slug rejected", () => {
+  assert.equal(
+    isDigitalSkillXPaystackEvent({
+      event: "charge.success",
+      data: {
+        reference: "T_aiapp_bad_amount",
+        amount: 2_000_000,
+        currency: DIGITALSKILLX_AIAPP_CURRENCY,
+        page: { slug: "aiapp" },
+      },
+    }),
+    false
+  );
+});
+
+check("LeadThur payment must never enroll into DigitalSkillX", () => {
+  assert.equal(
+    isDigitalSkillXPaystackEvent({
+      event: "charge.success",
+      data: {
+        reference: "LP-1786343304640-4WA4OQ",
+        amount: 50_000_000,
+        currency: "NGN",
+        metadata: { product: "leadthur", source: "leadthur_checkout" },
+      },
     }),
     false
   );

@@ -19,6 +19,9 @@
     "build:backend": "npm run build --workspace=@leadthur/shared && npm run build --workspace=@leadthur/backend",
     "build:frontend": "npm run build --workspace=@leadthur/frontend",
     "lint": "npm run lint --workspace=@leadthur/frontend && npm run lint --workspace=@leadthur/backend",
+    "typecheck": "npm run typecheck --workspace=@leadthur/backend",
+    "test:unit": "npm run test:unit --workspace=@leadthur/backend",
+    "test:security-scan": "npm run test:security-scan --workspace=@leadthur/backend",
     "setup": "npx playwright install chromium",
     "check-playwright": "node -e \"require('playwright').chromium.launch().then(b=>b.close()).then(()=>console.log('Playwright OK')).catch(e=>{console.error(e.message);process.exit(1)})\""
   }

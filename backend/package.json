@@ -7,9 +7,12 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc && node scripts/verify-email-field-parity.mjs && node scripts/verify-frontend-email-display.mjs && node scripts/verify-paystack-product-guard.mjs",
+    "build": "tsc && node scripts/verify-email-field-parity.mjs && node scripts/verify-frontend-email-display.mjs && node scripts/verify-paystack-product-guard.mjs && node scripts/verify-paystack-security-scan.mjs",
     "start": "node dist/server.js",
     "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "node scripts/verify-paystack-product-guard.mjs && node --import tsx scripts/verify-paystack-digitalskillx-routing.mts",
+    "test:security-scan": "node scripts/verify-paystack-security-scan.mjs",
     "send-domain-change": "tsx src/scripts/send-domain-change.ts"
   },
   "dependencies": {

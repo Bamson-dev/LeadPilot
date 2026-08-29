@@ -1,4 +1,9 @@
 import { parsePaystackMetadata } from "./paystack-webhook-forward";
+import {
+  DIGITALSKILLX_AIAPP_PAGE_SLUG,
+  DIGITALSKILLX_AIAPP_PRODUCT_KEY,
+  isDigitalSkillXPaystackEvent,
+} from "./paystack-digitalskillx-forward";
 
 /** In-app LeadThur checkout references: LP-{timestamp}-{random}. */
 const LEADTHUR_CHECKOUT_REFERENCE = /^LP-\d{10,}-[A-Z0-9]+$/i;
@@ -12,11 +17,16 @@ const FOREIGN_PRODUCT_MARKERS = [
   "promptearn",
   "nairainvoice",
   "naira invoice",
+  "digitalskillx",
+  DIGITALSKILLX_AIAPP_PRODUCT_KEY,
+  DIGITALSKILLX_AIAPP_PAGE_SLUG,
 ];
 
 export type PaystackChargeIdentity = {
   reference?: string | null;
   metadata?: Record<string, unknown> | string | null;
+  amount?: number | null;
+  currency?: string | null;
 };
 
 function compact(value: string): string {
@@ -102,6 +112,19 @@ function hasLeadThurProductMarker(values: string[], metadata?: Record<string, un
 export function isLeadThurLifetimePaystackCharge(input: PaystackChargeIdentity): boolean {
   const reference = input.reference?.trim() ?? "";
   const metadata = parsePaystackMetadata(input.metadata ?? undefined);
+
+  if (
+    isDigitalSkillXPaystackEvent({
+      data: {
+        reference,
+        amount: input.amount ?? undefined,
+        currency: input.currency ?? undefined,
+        metadata: metadata ?? undefined,
+      },
+    })
+  ) {
+    return false;
+  }
 
   if (metadata?.type === "topup") return false;
 

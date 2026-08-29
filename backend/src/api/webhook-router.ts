@@ -16,11 +16,16 @@ import {
   isOutreachPaystackMetadata,
   processOutreachPaystackWebhookEvent,
 } from "../services/payment-fulfillment";
-import { isLeadThurLifetimePaystackCharge } from "../services/paystack-product-guard";
+import {
+  isDigitalSkillXPaystackEvent,
+  routeDigitalSkillXCharge,
+} from "../services/paystack-digitalskillx-forward";
 import {
   handleMailthurPaystackForward,
   isMailthurPaystackEvent,
 } from "../services/paystack-webhook-forward";
+import { isLeadThurLifetimePaystackCharge } from "../services/paystack-product-guard";
+import { safeEqualHex } from "../services/digitalskillx-handoff";
 import { logger } from "../utils/logger";
 import { trackEvent } from "../observability/track";
 import { EVENT_NAMES } from "../observability/event-taxonomy";
@@ -62,7 +67,7 @@ webhookRouter.post(
         .update(rawBody)
         .digest("hex");
 
-      if (!signature || signature !== expectedHash) {
+      if (!signature || !safeEqualHex(signature, expectedHash)) {
         logger.warn("Invalid Paystack webhook signature — check sk_test/sk_live matches dashboard");
         res.status(200).send("ok");
         return;
@@ -74,7 +79,9 @@ webhookRouter.post(
           customer?: { email?: string };
           reference?: string;
           amount?: number;
+          currency?: string;
           metadata?: Record<string, unknown> | string;
+          page?: { slug?: string; name?: string } | null;
           subscription?: Record<string, unknown>;
           subscription_code?: string;
           next_payment_date?: string;
@@ -174,6 +181,60 @@ webhookRouter.post(
         return;
       }
 
+      // Pre-screen on the signed payload, then re-confirm against Paystack's
+      // verify API inside the router before any DigitalSkillX fulfillment.
+      if (isDigitalSkillXPaystackEvent(event)) {
+        const routed = await routeDigitalSkillXCharge(
+          { reference, eventType: event.event },
+          { rawBody, paystackSignature: signature }
+        );
+
+        if (routed.outcome === "forwarded") {
+          if (routed.contentType) {
+            res.setHeader("Content-Type", routed.contentType);
+          }
+          res.status(routed.status).send(routed.body);
+          return;
+        }
+
+        if (routed.outcome === "retryable") {
+          trackEvent({
+            eventName: EVENT_NAMES.WEBHOOK_FAILURE,
+            source: "webhook",
+            properties: {
+              gateway: "paystack",
+              scope: "digitalskillx",
+              reference: reference ?? null,
+              message: routed.reason,
+            },
+            idempotencyKey: reference
+              ? `webhook_failure:paystack:digitalskillx:${reference}`
+              : undefined,
+          });
+          // Non-2xx makes Paystack retry the delivery.
+          res.status(503).send("digitalskillx_unavailable");
+          return;
+        }
+
+        res.status(200).send("ok");
+        return;
+      }
+
+      const previewMeta = (event.data?.metadata ?? {}) as Record<string, unknown>;
+      if (!isLeadThurLifetimePaystackCharge({
+        reference,
+        metadata: previewMeta,
+        amount: event.data?.amount,
+        currency: event.data?.currency,
+      })) {
+        logger.info("Ignoring Paystack charge.success for non-LeadThur product", {
+          reference: reference ?? null,
+          event: event.event,
+        });
+        res.status(200).send("ok");
+        return;
+      }
+
       if (reference) {
         const existing = await getLicenseByPaymentReference(reference);
         if (existing) {
@@ -181,16 +242,6 @@ webhookRouter.post(
           res.status(200).json({ received: true });
           return;
         }
-      }
-
-      const previewMeta = (event.data?.metadata ?? {}) as Record<string, unknown>;
-      if (!isLeadThurLifetimePaystackCharge({ reference, metadata: previewMeta })) {
-        logger.info("Ignoring Paystack charge.success for non-LeadThur product", {
-          reference: reference ?? null,
-          event: event.event,
-        });
-        res.status(200).send("ok");
-        return;
       }
 
       res.status(200).send("ok");
@@ -218,7 +269,14 @@ webhookRouter.post(
               return;
             }
 
-            if (!isLeadThurLifetimePaystackCharge({ reference: ref, metadata: meta })) {
+            if (
+              !isLeadThurLifetimePaystackCharge({
+                reference: ref,
+                metadata: meta,
+                amount,
+                currency: event.data?.currency,
+              })
+            ) {
               logger.info("Ignoring Paystack charge.success for non-LeadThur product", {
                 reference: ref,
                 event: event.event,

@@ -89,13 +89,22 @@ export async function resolveBankAccount(params: {
   });
 }
 
-export async function verifyTransaction(reference: string): Promise<{
+export interface PaystackVerifiedTransaction {
   status: string;
   amount: number;
+  currency?: string;
   customer: { email: string };
-  metadata: Record<string, unknown>;
+  metadata: Record<string, unknown> | string | null;
   reference: string;
-}> {
+  /** Present for Payment Page purchases; Paystack omits it for API-initiated charges. */
+  page?: { id?: number; slug?: string; name?: string } | null;
+  plan?: { plan_code?: string; name?: string } | null;
+  paidAt?: string | null;
+}
+
+export async function verifyTransaction(
+  reference: string
+): Promise<PaystackVerifiedTransaction> {
   return paystackHttp("GET", `/transaction/verify/${encodeURIComponent(reference)}`);
 }
 

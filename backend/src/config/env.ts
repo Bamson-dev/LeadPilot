@@ -21,6 +21,8 @@ const envSchema = z
     RESEND_API_KEY: z.string().optional(),
     EMAIL_FROM: z.string().email().optional(),
     DEEPSEEK_API_KEY: z.string().optional(),
+    DIGITALSKILLX_PAYSTACK_WEBHOOK_URL: z.string().url().optional(),
+    DIGITALSKILLX_FORWARD_SECRET: z.string().min(32).optional(),
   })
   .superRefine((data, ctx) => {
     if (data.NODE_ENV === "production") {

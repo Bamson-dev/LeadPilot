@@ -10,6 +10,7 @@ import {
   verifyFlutterwaveByTxRef,
 } from "../services/flutterwave-client";
 import { getPaystack, paystackAsync, verifyTransaction } from "../services/paystack-client";
+import { parsePaystackMetadata } from "../services/paystack-webhook-forward";
 import { trackEvent } from "../observability/track";
 import { EVENT_NAMES } from "../observability/event-taxonomy";
 import { logger } from "../utils/logger";
@@ -198,7 +199,7 @@ router.post("/verify", async (req: Request, res: Response) => {
       email,
       reference: tx.reference || ref,
       amount: tx.amount,
-      metadata: tx.metadata,
+      metadata: parsePaystackMetadata(tx.metadata ?? undefined),
     });
 
     if (result.commissionSkippedReason === "not_leadthur_product") {
