@@ -11,7 +11,9 @@ type Filter =
   | { kind: "lte"; col: string; val: unknown }
   | { kind: "ilike"; col: string; pattern: string }
   | { kind: "isNull"; col: string }
-  | { kind: "isNotNull"; col: string };
+  | { kind: "isNotNull"; col: string }
+  | { kind: "contains"; col: string; vals: unknown[] }
+  | { kind: "or"; filter: string };
 
 type OrderBy = { col: string; ascending: boolean };
 
@@ -55,10 +57,50 @@ function normalizeRow(row: Record<string, unknown>): Record<string, unknown> {
   ) as Record<string, unknown>;
 }
 
+/** PostgREST column ref, e.g. `properties->>email_channel` → `properties->>'email_channel'`. */
+function sqlColumnRef(col: string): string {
+  const arrow = col.indexOf("->>");
+  if (arrow !== -1) {
+    const base = col.slice(0, arrow);
+    const key = col.slice(arrow + 3).replace(/'/g, "''");
+    return `${quoteIdent(base)}->>'${key}'`;
+  }
+  return quoteIdent(col);
+}
+
+/** Parse one PostgREST `.or()` clause token, e.g. `col.is.null` or `col.neq.value`. */
+function parsePostgrestOrToken(token: string, params: unknown[]): string {
+  if (token.endsWith(".is.null")) {
+    return `${sqlColumnRef(token.slice(0, -".is.null".length))} is null`;
+  }
+  const neqAt = token.indexOf(".neq.");
+  if (neqAt !== -1) {
+    params.push(token.slice(neqAt + ".neq.".length));
+    return `${sqlColumnRef(token.slice(0, neqAt))} <> $${params.length}`;
+  }
+  const eqAt = token.indexOf(".eq.");
+  if (eqAt !== -1) {
+    params.push(token.slice(eqAt + ".eq.".length));
+    return `${sqlColumnRef(token.slice(0, eqAt))} = $${params.length}`;
+  }
+  throw new Error(`Unsupported PostgREST or token: ${token}`);
+}
+
+function buildOrClause(orFilter: string, params: unknown[]): string {
+  const tokens = orFilter.split(",").map((t) => t.trim()).filter(Boolean);
+  if (!tokens.length) return "true";
+  return `(${tokens.map((t) => parsePostgrestOrToken(t, params)).join(" or ")})`;
+}
+
 function buildWhere(filters: Filter[], params: unknown[]): string {
   const parts: string[] = [];
   for (const f of filters) {
-    if (f.kind === "eq") {
+    if (f.kind === "or") {
+      parts.push(buildOrClause(f.filter, params));
+    } else if (f.kind === "contains") {
+      params.push(f.vals);
+      parts.push(`${quoteIdent(f.col)} @> $${params.length}::text[]`);
+    } else if (f.kind === "eq") {
       params.push(f.val);
       parts.push(`${quoteIdent(f.col)} = $${params.length}`);
     } else if (f.kind === "in") {
@@ -175,6 +217,18 @@ export class PgQueryBuilder {
 
   ilike(col: string, pattern: string): this {
     this.filters.push({ kind: "ilike", col, pattern });
+    return this;
+  }
+
+  /** Array contains — `tags @> '{value}'` for text[] columns. */
+  contains(col: string, vals: unknown[]): this {
+    this.filters.push({ kind: "contains", col, vals });
+    return this;
+  }
+
+  /** PostgREST-style OR filter string, e.g. `col.is.null,col.neq.value`. */
+  or(filter: string): this {
+    this.filters.push({ kind: "or", filter });
     return this;
   }
 
@@ -303,6 +357,11 @@ class PgMutateBuilder {
 
   eq(col: string, val: unknown): this {
     this.filters.push({ kind: "eq", col, val });
+    return this;
+  }
+
+  in(col: string, vals: unknown[]): this {
+    this.filters.push({ kind: "in", col, vals });
     return this;
   }
 
