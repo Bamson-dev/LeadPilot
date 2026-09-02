@@ -75,16 +75,19 @@ async function lookupLicenseAuthRowPg(
   if (!isPgConfigured()) return undefined;
   const params = email ? [key, email] : [key];
   const emailClause = email ? "and email = $2" : "";
-  const rows = await queryPg<Record<string, unknown>>(
-    `select id, email, key, activated, is_suspended, suspension_reason
-     from license_keys
-     where key = $1 ${emailClause}
-     limit 1`,
-    params
-  );
-  if (rows === null) return undefined;
-  const row = rows[0];
-  return row ? (normalizeLicenseRow(row) as AuthLicenseRow) : null;
+  try {
+    const rows = await queryPg<Record<string, unknown>>(
+      `select id, email, key, activated, is_suspended, suspension_reason
+       from license_keys
+       where key = $1 ${emailClause}
+       limit 1`,
+      params
+    );
+    const row = rows[0];
+    return row ? (normalizeLicenseRow(row) as AuthLicenseRow) : null;
+  } catch {
+    return undefined;
+  }
 }
 
 export type LicenseAuthLookupResult = {
@@ -356,7 +359,7 @@ export async function getLicenseByKeyAndEmail(
       keyPrefix: normalizedKey.slice(0, 8),
       error: error.message,
     });
-    return null;
+    throw new Error(error.message);
   }
   return data ? normalizeLicenseRow(data as Record<string, unknown>) : null;
 }

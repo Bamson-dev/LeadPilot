@@ -3,9 +3,15 @@ import { logger } from "../utils/logger";
 
 type Filter =
   | { kind: "eq"; col: string; val: unknown }
+  | { kind: "neq"; col: string; val: unknown }
   | { kind: "in"; col: string; vals: unknown[] }
   | { kind: "gte"; col: string; val: unknown }
-  | { kind: "ilike"; col: string; pattern: string };
+  | { kind: "gt"; col: string; val: unknown }
+  | { kind: "lt"; col: string; val: unknown }
+  | { kind: "lte"; col: string; val: unknown }
+  | { kind: "ilike"; col: string; pattern: string }
+  | { kind: "isNull"; col: string }
+  | { kind: "isNotNull"; col: string };
 
 type OrderBy = { col: string; ascending: boolean };
 
@@ -68,6 +74,22 @@ function buildWhere(filters: Filter[], params: unknown[]): string {
     } else if (f.kind === "gte") {
       params.push(f.val);
       parts.push(`${quoteIdent(f.col)} >= $${params.length}`);
+    } else if (f.kind === "gt") {
+      params.push(f.val);
+      parts.push(`${quoteIdent(f.col)} > $${params.length}`);
+    } else if (f.kind === "lt") {
+      params.push(f.val);
+      parts.push(`${quoteIdent(f.col)} < $${params.length}`);
+    } else if (f.kind === "lte") {
+      params.push(f.val);
+      parts.push(`${quoteIdent(f.col)} <= $${params.length}`);
+    } else if (f.kind === "neq") {
+      params.push(f.val);
+      parts.push(`${quoteIdent(f.col)} <> $${params.length}`);
+    } else if (f.kind === "isNull") {
+      parts.push(`${quoteIdent(f.col)} is null`);
+    } else if (f.kind === "isNotNull") {
+      parts.push(`${quoteIdent(f.col)} is not null`);
     } else if (f.kind === "ilike") {
       params.push(f.pattern);
       parts.push(`${quoteIdent(f.col)} ilike $${params.length}`);
@@ -80,8 +102,10 @@ export class PgQueryBuilder {
   private filters: Filter[] = [];
   private orderBy: OrderBy | null = null;
   private limitN: number | null = null;
+  private offsetN: number | null = null;
   private selectCols = "*";
   private countOnly = false;
+  private includeCount = false;
 
   constructor(private readonly table: string) {}
 
@@ -89,6 +113,9 @@ export class PgQueryBuilder {
     if (opts?.count === "exact" && opts?.head) {
       this.countOnly = true;
       return this;
+    }
+    if (opts?.count === "exact") {
+      this.includeCount = true;
     }
     this.selectCols = columns;
     return this;
@@ -109,6 +136,43 @@ export class PgQueryBuilder {
     return this;
   }
 
+  gt(col: string, val: unknown): this {
+    this.filters.push({ kind: "gt", col, val });
+    return this;
+  }
+
+  lt(col: string, val: unknown): this {
+    this.filters.push({ kind: "lt", col, val });
+    return this;
+  }
+
+  lte(col: string, val: unknown): this {
+    this.filters.push({ kind: "lte", col, val });
+    return this;
+  }
+
+  neq(col: string, val: unknown): this {
+    this.filters.push({ kind: "neq", col, val });
+    return this;
+  }
+
+  /** Supabase-style null checks: `.not(col, "is", null)` → IS NOT NULL */
+  not(col: string, op: string, val: unknown): this {
+    if (op === "is" && val === null) {
+      this.filters.push({ kind: "isNotNull", col });
+    } else if (op === "is" && val !== null) {
+      this.filters.push({ kind: "isNull", col });
+    }
+    return this;
+  }
+
+  is(col: string, val: unknown): this {
+    if (val === null) {
+      this.filters.push({ kind: "isNull", col });
+    }
+    return this;
+  }
+
   ilike(col: string, pattern: string): this {
     this.filters.push({ kind: "ilike", col, pattern });
     return this;
@@ -121,6 +185,13 @@ export class PgQueryBuilder {
 
   limit(n: number): this {
     this.limitN = n;
+    return this;
+  }
+
+  /** Supabase `.range(from, to)` — inclusive end index. */
+  range(from: number, to: number): this {
+    this.offsetN = Math.max(0, from);
+    this.limitN = Math.max(0, to - from + 1);
     return this;
   }
 
@@ -138,9 +209,22 @@ export class PgQueryBuilder {
         return { data: null, error: null, count: Number(rows[0]?.count ?? 0) };
       }
 
+      let totalCount: number | null = null;
+      if (this.includeCount) {
+        const countRows = await queryPg<{ count: string }>(
+          `select count(*)::text as count from ${table}${where}`,
+          params
+        );
+        totalCount = Number(countRows[0]?.count ?? 0);
+      }
+
       let sql = `select ${this.selectCols === "*" ? "*" : this.selectCols} from ${table}${where}`;
       if (this.orderBy) {
         sql += ` order by ${quoteIdent(this.orderBy.col)} ${this.orderBy.ascending ? "asc" : "desc"}`;
+      }
+      if (this.offsetN != null) {
+        params.push(this.offsetN);
+        sql += ` offset $${params.length}`;
       }
       if (this.limitN != null) {
         params.push(this.limitN);
@@ -148,7 +232,11 @@ export class PgQueryBuilder {
       }
 
       const rows = await queryPg<Record<string, unknown>>(sql, params);
-      return { data: rows.map(normalizeRow), error: null };
+      return {
+        data: rows.map(normalizeRow),
+        error: null,
+        count: this.includeCount ? totalCount : null,
+      };
     } catch (err) {
       const message = err instanceof Error ? err.message : "select failed";
       return { data: null, error: { code: "PG_ERROR", message }, count: null };
