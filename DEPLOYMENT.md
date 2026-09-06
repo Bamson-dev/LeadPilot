@@ -44,7 +44,19 @@ Optional for staging QA (does **not** bypass per-email trial search limits):
 
 - `RATE_LIMIT_IP_ALLOWLIST=162.120.188.117` — comma-separated IPs that skip the per-IP request rate limit on `/freetrial` and other rate-limited routes
 
-**Production Supabase project:** `oytbynwogudfqqaxxrjq` (`https://oytbynwogudfqqaxxrjq.supabase.co`).  
+**Production Supabase project:** `oytbynwogudfqqaxxrjq` (`https://oytbynwogudfqqaxxrjq.supabase.co`).
+
+### Login broken (`exceed_egress_quota` / 503 on `/auth/activate`)
+
+When `/health` shows `licenseAuthErrorMessage` containing `exceed_egress_quota` and `pgConfigured: false`:
+
+1. Supabase Dashboard → **Lead Rush** → **Settings → Database** → copy **Database password** (reset if unknown).
+2. Coolify → **lead-pilot** → **Environment Variables** → add `SUPABASE_DB_PASSWORD` = that password.
+3. **Redeploy** (not Restart only).
+4. Verify: `/health` → `pgConfigured: true`, `licenseAuthLookupReady: true`, `licenseAuthViaPg: true`.
+
+This uses Supabase’s free connection pooler — **no extra Supabase bill**. Cost: **$0**.
+
 If `freeTrialIpCapReady` is `false` on `/health` after deploy, either set `SUPABASE_DB_PASSWORD` in Coolify and redeploy, or run `supabase/migrations/035_free_trial_ip_usage.sql` once in the Supabase SQL editor.
 
 ## GitHub Actions auto-deploy (Coolify)
@@ -94,14 +106,48 @@ fetch("https://staging-backend.leadthur.com/health/client-ip").then((r) => r.jso
 
 Check `resolvedIp` and `allowlisted`. If `allowlisted` is false, add `resolvedIp` to `RATE_LIMIT_IP_ALLOWLIST` in Coolify (not the IP from a script with a spoofed `X-Forwarded-For` header).
 
-## Vercel (frontend)
+## Frontend on Coolify (recommended — no Vercel)
+
+Use this when Vercel pauses the free team (Fluid CPU / DEPLOYMENT_DISABLED). The API already runs on Coolify; host the Next.js app there too.
+
+### Coolify service settings
 
 | Setting | Value |
 |---------|-------|
-| Root Directory | `frontend` |
-| `NEXT_PUBLIC_API_URL` | `https://backend.leadthur.com` |
+| Source | Same GitHub repo as backend (`Bamson-dev/LeadPilot`), branch `main` |
+| Base Directory | `/` (monorepo root — **not** `/frontend`) |
+| Dockerfile Path | `frontend/Dockerfile` |
+| Port | `3000` |
+| Health Check Path | `/` |
+| Domains | `www.leadthur.com` and `leadthur.com` |
 
-See [`deploy/VERCEL.md`](./deploy/VERCEL.md).
+### Build / runtime env (copy from old Vercel project)
+
+| Variable | Value |
+|----------|-------|
+| `NEXT_PUBLIC_API_URL` | `https://backend.leadthur.com` |
+| `NEXT_PUBLIC_FRONTEND_URL` | `https://www.leadthur.com` |
+| `NEXT_PUBLIC_SUPABASE_URL` | same as Vercel |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | same as Vercel |
+| `NEXT_PUBLIC_FLUTTERWAVE_PUBLIC_KEY` | same as Vercel (if used) |
+
+Mark these as **available at build time** in Coolify (Next.js bakes `NEXT_PUBLIC_*` into the client bundle).
+
+### DNS (Cloudflare) — leave Vercel
+
+1. Cloudflare → `leadthur.com` → **DNS**.
+2. Remove / disable the `www` (and apex) records that point at **Vercel** (`*.vercel-dns-*.com`).
+3. Add the same style of records you use for `backend.leadthur.com` — typically **A** → Contabo VPS IP (`167.86.106.198`), Proxied (orange cloud), for:
+   - `www`
+   - `@` (apex), optional redirect to `www` in Coolify
+4. In Coolify frontend service → **Domains** → add `www.leadthur.com` → Generate SSL.
+5. Wait 1–5 minutes, then: `curl -sI https://www.leadthur.com` should return **200** (not Vercel `402` / `DEPLOYMENT_DISABLED`).
+
+Backend CORS already allows `https://www.leadthur.com` via `FRONTEND_URL`. Confirm Coolify backend env still has `FRONTEND_URL=https://www.leadthur.com`.
+
+### Legacy Vercel notes
+
+Only if you upgrade Vercel again: Root Directory `frontend`, `NEXT_PUBLIC_API_URL=https://backend.leadthur.com`. See [`deploy/VERCEL.md`](./deploy/VERCEL.md).
 
 ## Testing Production
 
