@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { GlobalScriptsSection } from "@/components/admin/global-scripts-section";
 import { AdminWorkspaceHeader } from "@/components/admin/admin-workspace-header";
 import { getAdminFetchHeaders, getAdminJsonHeaders } from "@/components/admin/admin-utils";
+import { getApiUrl } from "@/utils/env";
 
 export function ScriptsWorkspace() {
   const [headScripts, setHeadScripts] = useState("");
@@ -13,7 +14,7 @@ export function ScriptsWorkspace() {
 
   const loadSiteSettings = useCallback(async () => {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/site-settings`, {
+      const res = await fetch(`${getApiUrl()}/admin/site-settings`, {
         headers: getAdminFetchHeaders(),
       });
       if (res.ok) {
@@ -34,7 +35,7 @@ export function ScriptsWorkspace() {
     setScriptsSaving(true);
     setScriptsMsg("");
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/site-settings`, {
+      const res = await fetch(`${getApiUrl()}/admin/site-settings`, {
         method: "POST",
         headers: getAdminJsonHeaders(),
         body: JSON.stringify({ headScripts, bodyScripts }),

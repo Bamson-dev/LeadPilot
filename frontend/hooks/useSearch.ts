@@ -770,7 +770,7 @@ export function useSearch(options?: UseSearchOptions) {
         eventSourceRef.current.close();
       }
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL?.trim()?.replace(/\/$/, "") || getApiUrl();
+      const apiUrl = getApiUrl();
       if (!apiUrl) return;
 
       const es = new EventSource(`${apiUrl}/search/${searchId}/stream${getLicenseQueryString()}`);

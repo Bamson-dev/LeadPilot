@@ -1,5 +1,5 @@
 import { getDeviceId } from "@/lib/device";
-import { getApiUrl } from "@/utils/env";
+import { getApiUrl, isNetworkFetchError, networkFetchErrorMessage } from "@/utils/env";
 
 export async function registerDeviceForLicense(email: string, key: string): Promise<void> {
   const deviceSignature = getDeviceId();
@@ -7,15 +7,23 @@ export async function registerDeviceForLicense(email: string, key: string): Prom
     throw new Error("Could not identify this device. Try a different browser.");
   }
 
-  const res = await fetch(`${getApiUrl()}/auth/register-device`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      email: email.toLowerCase().trim(),
-      key: key.trim().toUpperCase(),
-      deviceSignature,
-    }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${getApiUrl()}/auth/register-device`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: email.toLowerCase().trim(),
+        key: key.trim().toUpperCase(),
+        deviceSignature,
+      }),
+    });
+  } catch (err) {
+    if (isNetworkFetchError(err)) {
+      throw new Error(networkFetchErrorMessage("register this device"));
+    }
+    throw err;
+  }
 
   const data = (await res.json().catch(() => ({}))) as {
     error?: string;
@@ -36,15 +44,28 @@ export async function activateLicense(email: string, key: string) {
     throw new Error("Could not identify this device. Try a different browser.");
   }
 
-  const res = await fetch(`${getApiUrl()}/auth/activate`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      email,
-      key: key.trim().toUpperCase(),
-      deviceSignature,
-    }),
-  });
+  const apiUrl = getApiUrl();
+  if (!apiUrl) {
+    throw new Error("Login is misconfigured. Contact support on WhatsApp 09067285890.");
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`${apiUrl}/auth/activate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        key: key.trim().toUpperCase(),
+        deviceSignature,
+      }),
+    });
+  } catch (err) {
+    if (isNetworkFetchError(err)) {
+      throw new Error(networkFetchErrorMessage("log you in"));
+    }
+    throw err;
+  }
 
   const data = (await res.json().catch(() => ({}))) as {
     error?: string;

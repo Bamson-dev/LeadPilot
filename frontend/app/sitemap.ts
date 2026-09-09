@@ -1,8 +1,9 @@
 import { MetadataRoute } from "next";
+import { getApiUrl } from "@/utils/env";
 
 async function getBlogPosts() {
   try {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    const apiUrl = getApiUrl();
     if (!apiUrl) return [];
     const res = await fetch(`${apiUrl}/public/blog/posts?limit=120`, {
       // Avoid Next build-time data cache over 2MB and fail gracefully on slow origin.

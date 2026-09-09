@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/utils/utils";
+import { getApiUrl } from "@/utils/env";
 
 export const metadata: Metadata = {
   title: "Blog — LeadThur",
@@ -48,7 +49,7 @@ const CATEGORIES = [
 
 async function getPosts(category?: string, tag?: string) {
   try {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    const apiUrl = getApiUrl();
     const params = new URLSearchParams({ limit: "20" });
     if (category) params.set("category", category);
     if (tag) params.set("tag", tag);

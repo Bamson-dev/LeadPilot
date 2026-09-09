@@ -3,10 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { AdminWorkspaceHeader } from "@/components/admin/admin-workspace-header";
 import { getAdminToken } from "@/services/admin-api";
+import { getApiUrl } from "@/utils/env";
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
-  "https://backend.leadthur.com";
+const API_BASE = getApiUrl() || "https://backend.leadthur.com";
 
 type StatusPayload = {
   automation: string;

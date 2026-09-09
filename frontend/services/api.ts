@@ -230,9 +230,9 @@ export async function startSearch(
 }
 
 export async function testBackendConnection(): Promise<string> {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL?.trim()?.replace(/\/$/, "") ?? "";
+  const apiUrl = getApiUrl();
   if (!apiUrl) {
-    return "Failed: NEXT_PUBLIC_API_URL is not set";
+    return "Failed: API URL is not set";
   }
   try {
     const res = await fetch(`${apiUrl}/health`, { cache: "no-store" });

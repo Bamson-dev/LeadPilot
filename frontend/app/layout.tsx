@@ -11,6 +11,7 @@ import {
 } from "@/lib/site-scripts-safety";
 import { AnalyticsPageTracker } from "@/components/analytics/analytics-page-tracker";
 import { AnalyticsBehaviourTracker } from "@/components/analytics/analytics-behaviour-tracker";
+import { getApiUrl } from "@/utils/env";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -75,10 +76,10 @@ async function getSiteScripts(): Promise<{
   bodyScripts: string;
 }> {
   try {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    const apiUrl = getApiUrl();
 
     if (!apiUrl) {
-      console.warn("[getSiteScripts] NEXT_PUBLIC_API_URL missing");
+      console.warn("[getSiteScripts] API URL missing");
       return { headScripts: "", bodyScripts: "" };
     }
 

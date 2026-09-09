@@ -125,13 +125,16 @@ Use this when Vercel pauses the free team (Fluid CPU / DEPLOYMENT_DISABLED). The
 
 | Variable | Value |
 |----------|-------|
-| `NEXT_PUBLIC_API_URL` | `https://backend.leadthur.com` |
+| `NEXT_PUBLIC_API_URL` | `https://backend.leadthur.com` (Docker build remaps browser calls to same-origin `/backend` proxy) |
+| `BACKEND_ORIGIN` | `https://backend.leadthur.com` (rewrite + SSR upstream; set at build and runtime) |
 | `NEXT_PUBLIC_FRONTEND_URL` | `https://www.leadthur.com` |
 | `NEXT_PUBLIC_SUPABASE_URL` | same as Vercel |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | same as Vercel |
 | `NEXT_PUBLIC_FLUTTERWAVE_PUBLIC_KEY` | same as Vercel (if used) |
 
-Mark these as **available at build time** in Coolify (Next.js bakes `NEXT_PUBLIC_*` into the client bundle).
+Mark `NEXT_PUBLIC_*` as **available at build time** in Coolify. Keep `BACKEND_ORIGIN` on the running container too.
+
+**User login tip:** Tell customers to open `https://www.leadthur.com/activate` (with **www**). Bare `https://leadthur.com` can hang if apex DNS is still a Namecheap URL-forward.
 
 ### DNS (Cloudflare) — leave Vercel
 

@@ -11,6 +11,7 @@ import {
   prepareArticleContent,
   type BlogPostListItem,
 } from "@/lib/blog-content";
+import { getApiUrl } from "@/utils/env";
 
 type BlogPost = {
   title: string;
@@ -31,7 +32,7 @@ type BlogPost = {
 
 async function getPost(slug: string): Promise<BlogPost | null> {
   try {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    const apiUrl = getApiUrl();
     const res = await fetch(`${apiUrl}/public/blog/posts/${slug}`, { next: { revalidate: 60 } });
     if (!res.ok) return null;
     return await res.json();
@@ -44,7 +45,7 @@ async function getRelatedPosts(category: string | undefined, slug: string): Prom
   if (!category) return [];
 
   try {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    const apiUrl = getApiUrl();
     const res = await fetch(
       `${apiUrl}/public/blog/posts?category=${encodeURIComponent(category)}&limit=4`,
       { next: { revalidate: 60 } }

@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
+import { getApiUrl } from "@/utils/env";
 
 async function resolveTag(slug: string): Promise<string | null> {
   try {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    const apiUrl = getApiUrl();
     const res = await fetch(`${apiUrl}/public/blog/posts?limit=500`, {
       next: { revalidate: 3600 },
     });

@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Panel, PanelContent, PanelHeader, PanelTitle } from "@/components/ui/panel";
 import { generateAccess } from "@/services/admin-api";
 import { useSearchParams } from "next/navigation";
+import { getApiUrl } from "@/utils/env";
 
 export function AccountsWorkspace() {
   const searchParams = useSearchParams();
@@ -42,7 +43,7 @@ export function AccountsWorkspace() {
     async (preset?: string, from?: string, to?: string) => {
       setActivationsLoading(true);
       try {
-        let url = `${process.env.NEXT_PUBLIC_API_URL}/admin/activations`;
+        let url = `${getApiUrl()}/admin/activations`;
 
         if (from && to) {
           url += `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
