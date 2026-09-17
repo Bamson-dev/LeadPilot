@@ -8,6 +8,8 @@ import { PublicSuccessCard } from "@/components/public/public-success-card";
 import { PublicFunnelShell } from "@/components/public/public-funnel-shell";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/utils/utils";
+import { SALE_PRICE_NGN, SALE_PRICE_USD } from "@/constants/pricing";
+import { trackMetaPurchase } from "@/lib/meta-pixel";
 
 type CheckoutKind = "legacy" | "outreach";
 
@@ -177,6 +179,13 @@ function CheckoutSuccessContent() {
                 ? "Activation email sent. Check inbox and spam."
                 : "License created. Check spam or contact support for your key.")
           );
+
+          // Meta Pixel Purchase — eventID = payment reference for future CAPI dedup
+          trackMetaPurchase({
+            eventID: reference!,
+            value: isFlutterwave ? SALE_PRICE_USD : SALE_PRICE_NGN,
+            currency: isFlutterwave ? "USD" : "NGN",
+          });
         } else {
           setStatus("warn");
           setStatusText(
@@ -198,7 +207,7 @@ function CheckoutSuccessContent() {
     return () => {
       cancelled = true;
     };
-  }, [reference, gateway, isOutreachReference]);
+  }, [reference, gateway, isOutreachReference, isFlutterwave]);
 
   return (
     <PublicSuccessCard

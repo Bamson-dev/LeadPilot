@@ -11,6 +11,7 @@ import {
 } from "@/lib/site-scripts-safety";
 import { AnalyticsPageTracker } from "@/components/analytics/analytics-page-tracker";
 import { AnalyticsBehaviourTracker } from "@/components/analytics/analytics-behaviour-tracker";
+import { MetaPixel } from "@/components/analytics/meta-pixel";
 import { getApiUrl } from "@/utils/env";
 
 const inter = Inter({
@@ -141,6 +142,7 @@ export default async function RootLayout({
         ))}
 
         {children}
+        <MetaPixel />
         <AnalyticsPageTracker />
         <AnalyticsBehaviourTracker />
 

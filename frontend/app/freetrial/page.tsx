@@ -20,6 +20,7 @@ import { SALE_PRICE_USD } from "@/constants/pricing";
 import { TRIAL_EMAIL_KEY } from "@/constants/trial";
 import { PublicFunnelShell } from "@/components/public/public-funnel-shell";
 import { track } from "@/lib/analytics";
+import { trackMetaLead } from "@/lib/meta-pixel";
 import {
   LeadRowMobile,
   LockIcon,
@@ -721,7 +722,11 @@ export default function FreeTrialPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
-      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        existing?: boolean;
+        success?: boolean;
+      };
       if (!res.ok) {
         if (res.status === 429) {
           throw new Error(
@@ -758,6 +763,11 @@ export default function FreeTrialPage() {
         userEmail: email,
         idempotencyKey: `trial_started:${email}`,
       });
+
+      // Meta Pixel Lead — new trial signups only (API existing:false), once per email
+      if (body.existing !== true) {
+        trackMetaLead({ email });
+      }
     } catch (err) {
       setGateError(err instanceof Error ? err.message : "Signup failed. Please try again.");
     } finally {
