@@ -258,7 +258,9 @@ export function SettingsPageWorkspace() {
                     <div>
                       <dt className="text-[var(--lt-text-muted)]">Free searches left</dt>
                       <dd className="mt-0.5 font-semibold tabular-nums">
-                        {(usage?.freeSearchesRemaining ?? 0).toLocaleString()}
+                        {usage
+                          ? usage.freeSearchesRemaining.toLocaleString()
+                          : "—"}
                       </dd>
                     </div>
                     <div>

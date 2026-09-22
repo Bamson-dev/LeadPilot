@@ -49,10 +49,10 @@ export function normalizeLicenseRow(row: Record<string, unknown>): LicenseKey {
   const license = row as unknown as LicenseKey;
   return {
     ...license,
-    search_count:
-      (row.search_count as number | undefined) ??
-      (row.searches_used as number | undefined) ??
-      0,
+    search_count: Math.max(
+      Number(row.search_count ?? 0),
+      Number(row.searches_used ?? 0)
+    ),
     monthly_search_limit: (row.monthly_search_limit as number | undefined) ?? 100,
     export_count:
       (row.export_count as number | undefined) ??
@@ -364,13 +364,39 @@ export async function getLicenseByKeyAndEmail(
   return data ? normalizeLicenseRow(data as Record<string, unknown>) : null;
 }
 
-export async function consumeSearch(licenseId: string): Promise<{
-  success: boolean;
-  reason?: string;
-  searchesRemaining: number;
-  creditsRemaining: number;
-  usedCredits: boolean;
-}> {
+/** Prefer the higher of the two legacy counters so desync never under-counts usage. */
+export function effectiveSearchesUsed(row: {
+  search_count?: number | null;
+  searches_used?: number | null;
+}): number {
+  return Math.max(Number(row.search_count ?? 0), Number(row.searches_used ?? 0));
+}
+
+export function monthsSinceLastReset(
+  lastResetRaw: string | null | undefined,
+  now: Date = new Date()
+): number {
+  if (!lastResetRaw) return 1;
+  const lastReset = new Date(lastResetRaw);
+  if (Number.isNaN(lastReset.getTime())) return 1;
+  return (
+    (now.getFullYear() - lastReset.getFullYear()) * 12 +
+    (now.getMonth() - lastReset.getMonth())
+  );
+}
+
+type SearchMeterRow = {
+  searches_used?: number | null;
+  search_count?: number | null;
+  monthly_search_limit?: number | null;
+  search_credits?: number | null;
+  last_reset_at?: string | null;
+  activated?: boolean | null;
+  is_suspended?: boolean | null;
+  suspension_reason?: string | null;
+};
+
+async function loadSearchMeterRow(licenseId: string): Promise<SearchMeterRow | null> {
   const { data: license, error } = await supabase
     .from("license_keys")
     .select(
@@ -379,7 +405,92 @@ export async function consumeSearch(licenseId: string): Promise<{
     .eq("id", licenseId)
     .single();
 
-  if (error || !license) {
+  if (error || !license) return null;
+  return license as SearchMeterRow;
+}
+
+/** Read-only allowance check — does not charge. */
+export async function peekSearchAllowance(licenseId: string): Promise<{
+  allowed: boolean;
+  remaining: number;
+  reason?: string;
+  creditsRemaining: number;
+}> {
+  const license = await loadSearchMeterRow(licenseId);
+
+  if (!license) {
+    return {
+      allowed: false,
+      remaining: 0,
+      reason: "License not found",
+      creditsRemaining: 0,
+    };
+  }
+
+  if (!license.activated) {
+    return {
+      allowed: false,
+      remaining: 0,
+      reason: "License not activated",
+      creditsRemaining: 0,
+    };
+  }
+
+  if (license.is_suspended) {
+    return {
+      allowed: false,
+      remaining: 0,
+      reason:
+        (license.suspension_reason as string | null) ||
+        "Account suspended. Contact support.",
+      creditsRemaining: 0,
+    };
+  }
+
+  const now = new Date();
+  let searchesUsed = effectiveSearchesUsed(license);
+  if (monthsSinceLastReset(license.last_reset_at, now) >= 1) {
+    searchesUsed = 0;
+  }
+
+  const monthlyLimit = license.monthly_search_limit ?? 100;
+  const creditsRemaining = license.search_credits ?? 0;
+  const freeRemaining = Math.max(0, monthlyLimit - searchesUsed);
+
+  if (freeRemaining > 0) {
+    return {
+      allowed: true,
+      remaining: freeRemaining,
+      creditsRemaining,
+    };
+  }
+
+  if (creditsRemaining >= 3) {
+    return {
+      allowed: true,
+      remaining: 0,
+      creditsRemaining,
+    };
+  }
+
+  return {
+    allowed: false,
+    remaining: 0,
+    reason: "Search limit reached",
+    creditsRemaining,
+  };
+}
+
+export async function consumeSearch(licenseId: string): Promise<{
+  success: boolean;
+  reason?: string;
+  searchesRemaining: number;
+  creditsRemaining: number;
+  usedCredits: boolean;
+}> {
+  const license = await loadSearchMeterRow(licenseId);
+
+  if (!license) {
     return {
       success: false,
       reason: "License not found",
@@ -412,19 +523,10 @@ export async function consumeSearch(licenseId: string): Promise<{
   }
 
   const now = new Date();
-  const lastResetRaw = license.last_reset_at as string | null;
-  const lastReset = lastResetRaw ? new Date(lastResetRaw) : now;
-  const monthsSinceReset =
-    (now.getFullYear() - lastReset.getFullYear()) * 12 +
-    (now.getMonth() - lastReset.getMonth());
+  let searchesUsed = effectiveSearchesUsed(license);
 
-  let searchesUsed =
-    (license.search_count as number | undefined) ??
-    (license.searches_used as number | undefined) ??
-    0;
-
-  if (monthsSinceReset >= 1) {
-    await supabase
+  if (monthsSinceLastReset(license.last_reset_at, now) >= 1) {
+    const { error: resetError } = await supabase
       .from("license_keys")
       .update({
         searches_used: 0,
@@ -434,19 +536,47 @@ export async function consumeSearch(licenseId: string): Promise<{
       })
       .eq("id", licenseId);
 
+    if (resetError) {
+      logger.error("Monthly search reset failed", {
+        licenseId,
+        error: resetError.message,
+      });
+      return {
+        success: false,
+        reason: "Unable to verify search allowance. Please try again shortly.",
+        searchesRemaining: 0,
+        creditsRemaining: license.search_credits ?? 0,
+        usedCredits: false,
+      };
+    }
+
     searchesUsed = 0;
   }
 
-  const monthlyLimit = (license.monthly_search_limit as number | undefined) ?? 100;
-  const creditsRemaining = (license.search_credits as number | undefined) ?? 0;
+  const monthlyLimit = license.monthly_search_limit ?? 100;
+  const creditsRemaining = license.search_credits ?? 0;
   const freeRemaining = monthlyLimit - searchesUsed;
 
   if (freeRemaining > 0) {
     const nextCount = searchesUsed + 1;
-    await supabase
+    const { error: incError } = await supabase
       .from("license_keys")
       .update({ searches_used: nextCount, search_count: nextCount })
       .eq("id", licenseId);
+
+    if (incError) {
+      logger.error("Search count increment failed", {
+        licenseId,
+        error: incError.message,
+      });
+      return {
+        success: false,
+        reason: "Unable to verify search allowance. Please try again shortly.",
+        searchesRemaining: freeRemaining,
+        creditsRemaining,
+        usedCredits: false,
+      };
+    }
 
     return {
       success: true,
@@ -457,10 +587,24 @@ export async function consumeSearch(licenseId: string): Promise<{
   }
 
   if (creditsRemaining >= 3) {
-    await supabase
+    const { error: creditError } = await supabase
       .from("license_keys")
       .update({ search_credits: creditsRemaining - 3 })
       .eq("id", licenseId);
+
+    if (creditError) {
+      logger.error("Search credit debit failed", {
+        licenseId,
+        error: creditError.message,
+      });
+      return {
+        success: false,
+        reason: "Unable to verify search allowance. Please try again shortly.",
+        searchesRemaining: 0,
+        creditsRemaining,
+        usedCredits: false,
+      };
+    }
 
     return {
       success: true,
@@ -479,6 +623,119 @@ export async function consumeSearch(licenseId: string): Promise<{
   };
 }
 
+/** Undo a charge when the search never actually started (busy/queue/create failure). */
+export async function refundSearch(
+  licenseId: string,
+  usedCredits: boolean
+): Promise<void> {
+  const license = await loadSearchMeterRow(licenseId);
+  if (!license) return;
+
+  if (usedCredits) {
+    const credits = license.search_credits ?? 0;
+    const { error } = await supabase
+      .from("license_keys")
+      .update({ search_credits: credits + 3 })
+      .eq("id", licenseId);
+    if (error) {
+      logger.error("Search credit refund failed", {
+        licenseId,
+        error: error.message,
+      });
+    }
+    return;
+  }
+
+  const used = effectiveSearchesUsed(license);
+  const next = Math.max(0, used - 1);
+  const { error } = await supabase
+    .from("license_keys")
+    .update({ searches_used: next, search_count: next })
+    .eq("id", licenseId);
+  if (error) {
+    logger.error("Search count refund failed", {
+      licenseId,
+      error: error.message,
+    });
+  }
+}
+
+/** Persist overdue monthly resets so usage UI and metering stay in sync. */
+export async function ensureMonthlySearchReset(licenseId: string): Promise<{
+  searchesUsed: number;
+  monthlyLimit: number;
+  searchCredits: number;
+} | null> {
+  const license = await loadSearchMeterRow(licenseId);
+  if (!license) return null;
+
+  const now = new Date();
+  const monthlyLimit = license.monthly_search_limit ?? 100;
+  const searchCredits = license.search_credits ?? 0;
+  let searchesUsed = effectiveSearchesUsed(license);
+
+  if (monthsSinceLastReset(license.last_reset_at, now) >= 1) {
+    const { error } = await supabase
+      .from("license_keys")
+      .update({
+        searches_used: 0,
+        search_count: 0,
+        last_reset_at: now.toISOString(),
+        limit_email_sent: false,
+      })
+      .eq("id", licenseId);
+    if (error) {
+      logger.error("ensureMonthlySearchReset failed", {
+        licenseId,
+        error: error.message,
+      });
+    } else {
+      searchesUsed = 0;
+    }
+  } else if (
+    Number(license.search_count ?? 0) !== Number(license.searches_used ?? 0)
+  ) {
+    // Heal counter desync within the current period.
+    const { error } = await supabase
+      .from("license_keys")
+      .update({ searches_used: searchesUsed, search_count: searchesUsed })
+      .eq("id", licenseId);
+    if (error) {
+      logger.error("Search counter sync failed", {
+        licenseId,
+        error: error.message,
+      });
+    }
+  }
+
+  return { searchesUsed, monthlyLimit, searchCredits };
+}
+
+export async function checkSearchAllowance(licenseId: string): Promise<{
+  allowed: boolean;
+  remaining: number;
+  reason?: string;
+  creditsRemaining?: number;
+}> {
+  const result = await peekSearchAllowance(licenseId);
+
+  if (!result.allowed) {
+    return {
+      allowed: false,
+      remaining: 0,
+      reason: result.reason,
+      creditsRemaining: result.creditsRemaining,
+    };
+  }
+
+  return {
+    allowed: true,
+    remaining: result.remaining,
+    creditsRemaining: result.creditsRemaining,
+  };
+}
+
+/** @deprecated Prefer checkSearchAllowance + consumeSearch so failed starts are not charged. */
 export async function checkAndIncrementSearchCount(licenseId: string): Promise<{
   allowed: boolean;
   remaining: number;

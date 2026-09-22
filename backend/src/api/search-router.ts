@@ -37,6 +37,10 @@ import {
 } from "../queue/search-queue";
 import { checkSearchLimit } from "../middleware/check-search-limit";
 import { requireLicense } from "../middleware/require-license";
+import {
+  consumeSearch,
+  refundSearch,
+} from "../database/license-repository";
 import { trackSearch } from "../services/abuse-detection";
 import { registerStream, removeStream } from "../services/stream-registry";
 import { formatSearchMessage } from "../utils/search-messages";
@@ -643,6 +647,17 @@ export async function handleFreeTrialSearch(
 searchRouter.post("/freetrial", handleFreeTrialSearch);
 
 searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => {
+  let charged = false;
+  let usedCredits = false;
+  const licenseIdForRefund =
+    req.licenseId && req.licenseId !== "unknown" ? req.licenseId : null;
+
+  const refundIfCharged = async () => {
+    if (!charged || !licenseIdForRefund) return;
+    charged = false;
+    await refundSearch(licenseIdForRefund, usedCredits);
+  };
+
   try {
     const { query, location } = req.body as { query?: string; location?: string };
 
@@ -674,6 +689,36 @@ searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => 
       });
       return;
     }
+
+    if (!licenseIdForRefund) {
+      res.status(401).json({
+        error: "License key required. Please activate your account at /activate",
+        code: "NO_LICENSE",
+      });
+      return;
+    }
+
+    // Charge only after validation + capacity checks pass.
+    const charge = await consumeSearch(licenseIdForRefund);
+    if (!charge.success) {
+      const isSearchLimitReached = charge.reason === "Search limit reached";
+      if (isSearchLimitReached) {
+        res.status(402).json({
+          error: "search_limit_reached",
+          message: "You have used all your searches for this month.",
+          searchesRemaining: 0,
+          creditsRemaining: charge.creditsRemaining,
+        });
+        return;
+      }
+      res.status(403).json({ error: charge.reason ?? "Search not allowed" });
+      return;
+    }
+
+    charged = true;
+    usedCredits = charge.usedCredits;
+    req.searchesRemaining = charge.searchesRemaining;
+    req.creditsRemaining = charge.creditsRemaining;
 
     if (req.licenseId && req.licenseId !== "unknown") {
       trackSearch(req.licenseId);
@@ -730,6 +775,7 @@ searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => 
         cacheHit: true,
       });
 
+      charged = false; // job started — keep the charge
       res.status(201).json({
         searchId: newJob.id,
         status: "completed",
@@ -774,6 +820,7 @@ searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => 
       isTrial: false,
     });
 
+    charged = false; // job started — keep the charge
     res.status(201).json({
       searchId: searchJob.id,
       status: queuePosition > 0 ? "queued" : "running",
@@ -788,6 +835,7 @@ searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => 
           : `Searching for ${trimmedQuery} in ${trimmedLocation}`,
     } satisfies SearchResponse);
   } catch (err) {
+    await refundIfCharged();
     logger.error("POST /search failed", {
       error: err instanceof Error ? err.message : "unknown",
     });

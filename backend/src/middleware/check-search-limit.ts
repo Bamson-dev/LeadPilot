@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import {
-  checkAndIncrementSearchCount,
+  checkSearchAllowance,
   getLicenseByKeyAndEmail,
 } from "../database/license-repository";
 import { supabase } from "../database/client";
@@ -9,7 +9,8 @@ import { logger } from "../utils/logger";
 
 /**
  * Search metering must fail closed.
- * Any license lookup or limit-check failure returns 503 — never grants free searches.
+ * This middleware only verifies allowance — the search handler charges after
+ * validation / capacity checks so failed starts do not burn quota.
  */
 export async function checkSearchLimit(
   req: Request,
@@ -68,7 +69,7 @@ export async function checkSearchLimit(
     };
 
     try {
-      limitCheck = await checkAndIncrementSearchCount(license.id);
+      limitCheck = await checkSearchAllowance(license.id);
     } catch (limitErr) {
       logger.error("Limit check failed — denying search (fail-closed)", {
         error: limitErr instanceof Error ? limitErr.message : "unknown",

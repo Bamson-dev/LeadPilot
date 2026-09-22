@@ -1,4 +1,5 @@
 import { supabase } from "../database/client";
+import { ensureMonthlySearchReset } from "../database/license-repository";
 import { sendTopUpConfirmationEmail } from "./email";
 import { logger } from "../utils/logger";
 
@@ -233,41 +234,19 @@ export async function getLicenseUsage(licenseId: string): Promise<{
   freeSearchesRemaining: number;
   creditSearchesRemaining: number;
 } | null> {
-  const { data: license, error } = await supabase
-    .from("license_keys")
-    .select(
-      "searches_used, search_count, monthly_search_limit, search_credits, last_reset_at"
-    )
-    .eq("id", licenseId)
-    .single();
+  const reset = await ensureMonthlySearchReset(licenseId);
+  if (!reset) return null;
 
-  if (error || !license) return null;
-
-  const now = new Date();
-  const lastResetRaw = license.last_reset_at as string | null;
-  const lastReset = lastResetRaw ? new Date(lastResetRaw) : now;
-  const monthsSinceReset =
-    (now.getFullYear() - lastReset.getFullYear()) * 12 +
-    (now.getMonth() - lastReset.getMonth());
-
-  let searchesUsed =
-    (license.search_count as number | undefined) ??
-    (license.searches_used as number | undefined) ??
-    0;
-
-  if (monthsSinceReset >= 1) {
-    searchesUsed = 0;
-  }
-
-  const monthlyLimit = (license.monthly_search_limit as number | undefined) ?? 100;
-  const searchCredits = (license.search_credits as number | undefined) ?? 0;
-  const freeSearchesRemaining = Math.max(0, monthlyLimit - searchesUsed);
+  const freeSearchesRemaining = Math.max(
+    0,
+    reset.monthlyLimit - reset.searchesUsed
+  );
 
   return {
-    monthly_search_limit: monthlyLimit,
-    searches_used: searchesUsed,
-    search_credits: searchCredits,
+    monthly_search_limit: reset.monthlyLimit,
+    searches_used: reset.searchesUsed,
+    search_credits: reset.searchCredits,
     freeSearchesRemaining,
-    creditSearchesRemaining: Math.floor(searchCredits / 3),
+    creditSearchesRemaining: Math.floor(reset.searchCredits / 3),
   };
 }
