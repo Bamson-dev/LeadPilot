@@ -184,15 +184,16 @@ export async function sendEmail(params: {
   return false;
 }
 
-async function deliver(params: { to: string; subject: string; html: string }): Promise<void> {
+async function deliver(params: { to: string; subject: string; html: string }): Promise<boolean> {
   try {
-    await sendEmail(params);
+    return await sendEmail(params);
   } catch (err) {
     logger.error("Unexpected email delivery error", {
       to: params.to,
       subject: params.subject,
       error: err instanceof Error ? err.message : "unknown",
     });
+    return false;
   }
 }
 
@@ -227,19 +228,20 @@ function wrapTrial(body: string, recipientEmail: string, step: number): string {
   });
 }
 
-export async function sendAccessEmail(to: string, licenseKey: string): Promise<void> {
+export async function sendAccessEmail(to: string, licenseKey: string): Promise<boolean> {
+  const activateUrl = `https://www.leadthur.com/activate?key=${encodeURIComponent(licenseKey)}`;
   const body = `
     ${emailHeading("Your LeadThur access is ready")}
     ${emailParagraph("Your lifetime access is now active. Here is your license key.")}
     <div class="stat-box">
       <div class="detail-row"><strong>License key</strong><br>${escapeHtml(licenseKey)}</div>
     </div>
-    ${emailParagraph("Go to your dashboard, enter this key, and run your first search. Type any business type and any city. You get 1,000+ potential clients with direct contact details in about 60 seconds.")}
-    ${emailButton("Go to your dashboard", "https://leadthur.com/dashboard")}
-    <p class="meta">If you have trouble activating, contact support and we will help you immediately.</p>
+    ${emailParagraph("Click the button below, enter the email you paid with, and open your dashboard. Type any business type and any city. You get 1,000+ potential clients with direct contact details in about 60 seconds.")}
+    ${emailButton("Activate my access", activateUrl)}
+    <p class="meta">If you have trouble activating, contact support on WhatsApp 09067285890 and we will help you immediately.</p>
   `;
 
-  await deliver({
+  return deliver({
     to,
     subject: "Your LeadThur Access Is Ready",
     html: wrapTransactional(body, to),
@@ -253,7 +255,7 @@ export async function sendWelcomeEmail(to: string): Promise<void> {
     ${emailParagraph("1. Type any business type — restaurants, salons, law firms, gyms, agencies.")}
     ${emailParagraph("2. Type any city — Lagos, London, Dubai, New York, Nairobi, Accra, and more.")}
     ${emailParagraph("3. Export your list and start pitching the same day.")}
-    ${emailButton("Start your first search", "https://leadthur.com/dashboard")}
+    ${emailButton("Start your first search", "https://www.leadthur.com/activate")}
     <p class="meta">One payment. No monthly fees. LeadThur is yours for life.</p>
   `;
 
@@ -264,7 +266,7 @@ export async function sendWelcomeEmail(to: string): Promise<void> {
   });
 }
 
-export async function sendPaymentConfirmationEmail(to: string, amount: string): Promise<void> {
+export async function sendPaymentConfirmationEmail(to: string, amount: string): Promise<boolean> {
   const body = `
     ${emailHeading("Payment confirmed")}
     ${emailParagraph("We received your payment and your LeadThur lifetime access is now active.")}
@@ -273,11 +275,11 @@ export async function sendPaymentConfirmationEmail(to: string, amount: string): 
       <div class="detail-row"><strong>Amount paid</strong><br>${escapeHtml(amount)}</div>
       <div class="detail-row"><strong>Access</strong><br>Lifetime. No renewal.</div>
     </div>
-    ${emailButton("Go to your dashboard", "https://leadthur.com/dashboard")}
+    ${emailButton("Activate my access", "https://www.leadthur.com/activate")}
     <p class="meta">Keep this email for your records.</p>
   `;
 
-  await deliver({
+  return deliver({
     to,
     subject: "Payment Confirmed — LeadThur Lifetime Access Activated",
     html: wrapTransactional(body, to),
@@ -304,7 +306,7 @@ export async function sendTrialWelcomeEmail(to: string): Promise<void> {
     ${emailHeading("Your free trial is ready")}
     ${emailParagraph("You have two free searches on LeadThur. No card. No commitment. See exactly what you get before you decide anything.")}
     ${emailHighlight("Search any business type and city. See 1,000+ results with direct contact details. No card required for the trial.")}
-    ${emailButton("Start my free trial", "https://leadthur.com/dashboard")}
+    ${emailButton("Start my free trial", "https://www.leadthur.com/freetrial")}
     <p class="meta">After your two free searches, lifetime access is a one-time payment. No subscriptions.</p>
   `;
 
@@ -676,7 +678,7 @@ function formatBroadcastBody(body: string): string {
     .map((line) => line.trim())
     .filter(Boolean);
   const htmlLines = lines.map((line) => emailParagraph(line)).join("");
-  return `${htmlLines}${emailButton("Open LeadThur", "https://leadthur.com")}${emailSignature()}`;
+  return `${htmlLines}${emailButton("Open LeadThur", "https://www.leadthur.com")}${emailSignature()}`;
 }
 
 export async function sendTrialBroadcastEmail(

@@ -115,9 +115,10 @@ function registerRoutes(): void {
 
   app.use(observabilityLatency);
 
+  // Webhooks first with raw body (HMAC) — before any global body parsers.
+  app.use("/webhooks", webhookRouter);
   // Parse bodies before routers that accept POST (unsubscribe confirm form is urlencoded).
   app.use(express.urlencoded({ extended: false }));
-  app.use("/webhooks", webhookRouter);
   app.use("/unsubscribe", unsubscribeRouter);
   // Admin blog posts may include base64 cover images and rich HTML — allow larger payloads.
   app.use("/admin", express.json({ limit: "15mb" }));
@@ -273,6 +274,19 @@ async function start(): Promise<void> {
           error: err instanceof Error ? err.message : "unknown",
         });
       });
+      // Catch lifetime payments whose webhooks were missed (every 20 minutes).
+      const { reconcileRecentPaystackLifetimePayments } = await import(
+        "./services/payment-fulfillment"
+      );
+      const runReconcile = () => {
+        void reconcileRecentPaystackLifetimePayments(72).catch((err) => {
+          logger.error("Scheduled Paystack reconcile failed", {
+            error: err instanceof Error ? err.message : "unknown",
+          });
+        });
+      };
+      setTimeout(runReconcile, 45_000);
+      setInterval(runReconcile, 20 * 60 * 1000);
     }
   } catch (err) {
     logger.error("Backend configuration failed — /health works, API routes disabled", {

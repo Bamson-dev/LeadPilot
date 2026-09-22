@@ -49,16 +49,20 @@ function parseFlutterwaveMeta(
 
 webhookRouter.post(
   "/paystack",
-  express.raw({ type: "application/json" }),
+  express.raw({ type: "*/*" }),
   async (req: Request, res: Response) => {
     try {
       const signature = req.headers["x-paystack-signature"] as string | undefined;
-      const rawBody = req.body as Buffer;
+      const rawBody = Buffer.isBuffer(req.body)
+        ? req.body
+        : Buffer.from(
+            typeof req.body === "string" ? req.body : JSON.stringify(req.body ?? {})
+          );
       const secret = config.PAYSTACK_SECRET_KEY;
 
       if (!secret) {
         logger.warn("Paystack webhook received but PAYSTACK_SECRET_KEY is not set");
-        res.status(200).send("ok");
+        res.status(500).send("paystack_not_configured");
         return;
       }
 
@@ -68,8 +72,22 @@ webhookRouter.post(
         .digest("hex");
 
       if (!signature || !safeEqualHex(signature, expectedHash)) {
-        logger.warn("Invalid Paystack webhook signature — check sk_test/sk_live matches dashboard");
-        res.status(200).send("ok");
+        logger.warn("Invalid Paystack webhook signature — check sk_test/sk_live matches dashboard", {
+          hasSignature: Boolean(signature),
+          bodyBytes: rawBody.length,
+        });
+        trackEvent({
+          eventName: EVENT_NAMES.WEBHOOK_FAILURE,
+          source: "webhook",
+          properties: {
+            gateway: "paystack",
+            scope: "signature",
+            message: "invalid_signature",
+            bodyBytes: rawBody.length,
+          },
+        });
+        // Non-2xx so Paystack retries (important if body was truncated in transit).
+        res.status(401).send("invalid_signature");
         return;
       }
 
@@ -97,25 +115,26 @@ webhookRouter.post(
         event.event === "subscription.disable";
 
       if (isOutreachEvent) {
-        res.status(200).send("ok");
-        setImmediate(() => {
-          void processOutreachPaystackWebhookEvent(event).catch((err) => {
-            logger.error("Outreach Paystack webhook processing failed", {
-              event: event.event,
-              error: err instanceof Error ? err.message : "unknown",
-            });
-            trackEvent({
-              eventName: EVENT_NAMES.WEBHOOK_FAILURE,
-              source: "webhook",
-              properties: {
-                gateway: "paystack",
-                scope: "outreach",
-                event: event.event ?? null,
-                message: err instanceof Error ? err.message : "unknown",
-              },
-            });
+        try {
+          await processOutreachPaystackWebhookEvent(event);
+          res.status(200).send("ok");
+        } catch (err) {
+          logger.error("Outreach Paystack webhook processing failed", {
+            event: event.event,
+            error: err instanceof Error ? err.message : "unknown",
           });
-        });
+          trackEvent({
+            eventName: EVENT_NAMES.WEBHOOK_FAILURE,
+            source: "webhook",
+            properties: {
+              gateway: "paystack",
+              scope: "outreach",
+              event: event.event ?? null,
+              message: err instanceof Error ? err.message : "unknown",
+            },
+          });
+          res.status(500).send("outreach_fulfillment_failed");
+        }
         return;
       }
 
@@ -148,36 +167,33 @@ webhookRouter.post(
       const metadata = (event.data?.metadata ?? {}) as Record<string, unknown>;
 
       if (metadata.type === "topup") {
-        res.status(200).send("ok");
-        setImmediate(() => {
-          void (async () => {
-            try {
-              await fulfillTopUpPayment({
-                reference: reference ?? "",
-                amount: event.data?.amount ?? 0,
-                channel: (event.data as { channel?: string })?.channel,
-                metadata,
-              });
-            } catch (err) {
-              logger.error("Top up webhook processing failed", {
-                error: err instanceof Error ? err.message : "unknown",
-              });
-              trackEvent({
-                eventName: EVENT_NAMES.WEBHOOK_FAILURE,
-                source: "webhook",
-                properties: {
-                  gateway: "paystack",
-                  scope: "topup",
-                  reference: reference ?? null,
-                  message: err instanceof Error ? err.message : "unknown",
-                },
-                idempotencyKey: reference
-                  ? `webhook_failure:paystack:topup:${reference}`
-                  : undefined,
-              });
-            }
-          })();
-        });
+        try {
+          await fulfillTopUpPayment({
+            reference: reference ?? "",
+            amount: event.data?.amount ?? 0,
+            channel: (event.data as { channel?: string })?.channel,
+            metadata,
+          });
+          res.status(200).send("ok");
+        } catch (err) {
+          logger.error("Top up webhook processing failed", {
+            error: err instanceof Error ? err.message : "unknown",
+          });
+          trackEvent({
+            eventName: EVENT_NAMES.WEBHOOK_FAILURE,
+            source: "webhook",
+            properties: {
+              gateway: "paystack",
+              scope: "topup",
+              reference: reference ?? null,
+              message: err instanceof Error ? err.message : "unknown",
+            },
+            idempotencyKey: reference
+              ? `webhook_failure:paystack:topup:${reference}`
+              : undefined,
+          });
+          res.status(500).send("topup_fulfillment_failed");
+        }
         return;
       }
 
@@ -244,74 +260,74 @@ webhookRouter.post(
         }
       }
 
-      res.status(200).send("ok");
+      try {
+        const email = event.data?.customer?.email;
+        const ref = event.data?.reference;
+        const amount = event.data?.amount ?? 0;
+        const meta = (event.data?.metadata ?? {}) as Record<string, unknown>;
 
-      setImmediate(() => {
-        void (async () => {
-          try {
-            const email = event.data?.customer?.email;
-            const ref = event.data?.reference;
-            const amount = event.data?.amount ?? 0;
-            const meta = (event.data?.metadata ?? {}) as Record<string, unknown>;
+        if (!email || !ref) {
+          logger.error("Missing email or reference in Paystack webhook", { event });
+          res.status(400).send("missing_email_or_reference");
+          return;
+        }
 
-            if (meta.type === "topup") {
-              await fulfillTopUpPayment({
-                reference: ref ?? "",
-                amount,
-                channel: (event.data as { channel?: string })?.channel,
-                metadata: meta,
-              });
-              return;
-            }
+        if (
+          !isLeadThurLifetimePaystackCharge({
+            reference: ref,
+            metadata: meta,
+            amount,
+            currency: event.data?.currency,
+          })
+        ) {
+          logger.info("Ignoring Paystack charge.success for non-LeadThur product", {
+            reference: ref,
+            event: event.event,
+          });
+          res.status(200).send("ok");
+          return;
+        }
 
-            if (!email || !ref) {
-              logger.error("Missing email or reference in Paystack webhook", { event });
-              return;
-            }
+        const duplicate = await getLicenseByPaymentReference(ref);
+        if (duplicate) {
+          logger.info("Webhook duplicate skipped", { reference: ref });
+          res.status(200).send("ok");
+          return;
+        }
 
-            if (
-              !isLeadThurLifetimePaystackCharge({
-                reference: ref,
-                metadata: meta,
-                amount,
-                currency: event.data?.currency,
-              })
-            ) {
-              logger.info("Ignoring Paystack charge.success for non-LeadThur product", {
-                reference: ref,
-                event: event.event,
-              });
-              return;
-            }
+        // Await fulfillment BEFORE acknowledging Paystack so failures are retried.
+        const fulfilled = await fulfillPaystackCharge({
+          email,
+          reference: ref,
+          amount,
+          metadata: meta,
+        });
 
-            const duplicate = await getLicenseByPaymentReference(ref);
-            if (duplicate) {
-              logger.info("Webhook duplicate skipped in async handler", { reference: ref });
-              return;
-            }
+        logger.info("Paystack lifetime webhook fulfilled", {
+          reference: ref,
+          email: email.toLowerCase().trim(),
+          emailSent: fulfilled.emailSent,
+          alreadyFulfilled: fulfilled.alreadyFulfilled,
+        });
 
-            await fulfillPaystackCharge({
-              email,
-              reference: ref,
-              amount,
-              metadata: meta,
-            });
-          } catch (err) {
-            logger.error("Webhook processing failed", {
-              error: err instanceof Error ? err.message : "unknown",
-            });
-            trackEvent({
-              eventName: EVENT_NAMES.WEBHOOK_FAILURE,
-              source: "webhook",
-              properties: {
-                gateway: "paystack",
-                scope: "lifetime",
-                message: err instanceof Error ? err.message : "unknown",
-              },
-            });
-          }
-        })();
-      });
+        res.status(200).send("ok");
+      } catch (err) {
+        logger.error("Webhook processing failed", {
+          error: err instanceof Error ? err.message : "unknown",
+          reference: reference ?? null,
+        });
+        trackEvent({
+          eventName: EVENT_NAMES.WEBHOOK_FAILURE,
+          source: "webhook",
+          properties: {
+            gateway: "paystack",
+            scope: "lifetime",
+            reference: reference ?? null,
+            message: err instanceof Error ? err.message : "unknown",
+          },
+        });
+        res.status(500).send("lifetime_fulfillment_failed");
+      }
     } catch (err) {
       logger.error("Webhook handler error", {
         error: err instanceof Error ? err.message : "unknown",
@@ -325,7 +341,7 @@ webhookRouter.post(
           message: err instanceof Error ? err.message : "unknown",
         },
       });
-      res.status(200).send("ok");
+      res.status(500).send("webhook_handler_error");
     }
   }
 );

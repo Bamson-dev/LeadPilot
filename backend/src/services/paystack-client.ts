@@ -45,6 +45,7 @@ async function paystackHttp<T>(
   const url = new URL(`https://api.paystack.co${path}`);
   if (query) {
     for (const [k, v] of Object.entries(query)) {
+      if (v == null || v === "") continue;
       url.searchParams.set(k, v);
     }
   }
@@ -183,4 +184,40 @@ export async function initializePaystackTransaction(params: {
     body.plan = params.planCode;
   }
   return paystackHttp("POST", "/transaction/initialize", body);
+}
+
+export type PaystackListedTransaction = {
+  id?: number;
+  status?: string;
+  reference?: string;
+  amount?: number;
+  currency?: string;
+  paid_at?: string | null;
+  customer?: { email?: string };
+  metadata?: Record<string, unknown> | string | null;
+};
+
+/** Recent Paystack charges — used to backfill missed webhook fulfillments. */
+export async function listPaystackTransactions(params: {
+  status?: string;
+  from?: string;
+  to?: string;
+  perPage?: number;
+  page?: number;
+}): Promise<PaystackListedTransaction[]> {
+  const query: Record<string, string> = {
+    status: params.status ?? "success",
+    perPage: String(params.perPage ?? 50),
+    page: String(params.page ?? 1),
+  };
+  if (params.from) query.from = params.from;
+  if (params.to) query.to = params.to;
+
+  const data = await paystackHttp<PaystackListedTransaction[] | PaystackListedTransaction>(
+    "GET",
+    "/transaction",
+    undefined,
+    query
+  );
+  return Array.isArray(data) ? data : data ? [data] : [];
 }

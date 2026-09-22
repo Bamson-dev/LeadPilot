@@ -25,6 +25,7 @@ import { SALE_PRICE_NGN } from "../constants/pricing";
 import { listTrialSignups } from "../database/free-trial-repository";
 import { getAdminQueueMetrics } from "../queue/search-queue";
 import { logger } from "../utils/logger";
+import { reconcileRecentPaystackLifetimePayments } from "../services/payment-fulfillment";
 
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
 
@@ -904,17 +905,36 @@ adminRouter.post("/resend-access", requireAdminAuth, async (req: Request, res: R
       return;
     }
 
-    await sendAccessEmail(email.toLowerCase().trim(), data.key as string);
+    const sent = await sendAccessEmail(email.toLowerCase().trim(), data.key as string);
 
     res.json({
-      success: true,
-      message: `Activation email resent to ${email}`,
+      success: sent,
+      message: sent
+        ? `Activation email resent to ${email}`
+        : `License found but email failed to send for ${email}`,
     });
   } catch (err) {
     logger.error("Resend access failed", {
       error: err instanceof Error ? err.message : "unknown",
     });
     res.status(500).json({ error: "Failed to resend access" });
+  }
+});
+
+adminRouter.post("/reconcile-paystack", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const hoursRaw = (req.body as { hours?: number })?.hours;
+    const hours =
+      typeof hoursRaw === "number" && hoursRaw > 0 && hoursRaw <= 168 ? hoursRaw : 72;
+    const result = await reconcileRecentPaystackLifetimePayments(hours);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    logger.error("Paystack reconcile failed", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Reconcile failed",
+    });
   }
 });
 

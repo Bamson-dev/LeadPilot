@@ -25,6 +25,8 @@ import { markTrialSignupConverted } from "../database/free-trial-repository";
 import { trackEvent } from "../observability/track";
 import { EVENT_NAMES } from "../observability/event-taxonomy";
 import { logger } from "../utils/logger";
+import { listPaystackTransactions } from "./paystack-client";
+import { parsePaystackMetadata } from "./paystack-webhook-forward";
 
 export type PaymentGateway = "paystack" | "flutterwave";
 
@@ -118,10 +120,20 @@ export async function fulfillPayment(params: {
       email,
       gateway: params.gateway,
     });
+    let emailSent = false;
+    try {
+      emailSent = await sendAccessEmail(email, existing.key);
+    } catch (error) {
+      logger.error("Resend access email failed for already-fulfilled payment", {
+        userEmail: email,
+        reference,
+        error,
+      });
+    }
     return {
       alreadyFulfilled: true,
       licenseKey: existing.key,
-      emailSent: false,
+      emailSent,
       commissionCreated: false,
       commissionSkippedReason: "already_fulfilled",
     };
@@ -142,9 +154,18 @@ export async function fulfillPayment(params: {
       params.amount,
       params.currency
     );
-    await sendAccessEmail(email, license.key);
-    await sendPaymentConfirmationEmail(email, paymentAmount);
-    emailSent = true;
+    const accessOk = await sendAccessEmail(email, license.key);
+    const confirmOk = await sendPaymentConfirmationEmail(email, paymentAmount);
+    emailSent = accessOk;
+    if (!accessOk) {
+      logger.error("Access email failed after license create — user needs resend", {
+        userEmail: email,
+        reference,
+        gateway: params.gateway,
+        keyPrefix: license.key.slice(0, 12),
+        confirmOk,
+      });
+    }
   } catch (error) {
     logger.error("Email send failed", {
       userEmail: email,
@@ -224,7 +245,13 @@ export async function fulfillPaystackCharge(params: {
   amount: number;
   metadata?: Record<string, unknown>;
 }): Promise<FulfillPaymentResult> {
-  if (!isLeadThurLifetimePaystackCharge({ reference: params.reference, metadata: params.metadata })) {
+  if (
+    !isLeadThurLifetimePaystackCharge({
+      reference: params.reference,
+      metadata: params.metadata,
+      amount: params.amount,
+    })
+  ) {
     logger.warn("Skipping Paystack fulfillment for non-LeadThur product", {
       reference: params.reference,
       email: params.email.toLowerCase().trim(),
@@ -517,4 +544,116 @@ export async function processOutreachPaystackWebhookEvent(event: {
       subscriptionCode,
     });
   }
+}
+
+export type PaystackReconcileResult = {
+  scanned: number;
+  fulfilled: number;
+  skipped: number;
+  failed: number;
+  references: string[];
+};
+
+/** Backfill LeadThur lifetime licenses for recent Paystack successes missing a local license. */
+export async function reconcileRecentPaystackLifetimePayments(
+  lookbackHours = 72
+): Promise<PaystackReconcileResult> {
+  const to = new Date();
+  const from = new Date(to.getTime() - lookbackHours * 60 * 60 * 1000);
+  const fromStr = from.toISOString().slice(0, 10);
+  const toStr = to.toISOString().slice(0, 10);
+
+  const result: PaystackReconcileResult = {
+    scanned: 0,
+    fulfilled: 0,
+    skipped: 0,
+    failed: 0,
+    references: [],
+  };
+
+  for (let page = 1; page <= 5; page++) {
+    let rows: Awaited<ReturnType<typeof listPaystackTransactions>> = [];
+    try {
+      rows = await listPaystackTransactions({
+        status: "success",
+        from: fromStr,
+        to: toStr,
+        perPage: 50,
+        page,
+      });
+    } catch (err) {
+      logger.error("Paystack reconcile list failed", {
+        error: err instanceof Error ? err.message : "unknown",
+        page,
+      });
+      break;
+    }
+
+    if (!rows.length) break;
+
+    for (const tx of rows) {
+      result.scanned += 1;
+      const reference = tx.reference?.trim();
+      const email = tx.customer?.email?.toLowerCase().trim();
+      const amount = tx.amount ?? 0;
+      const metadata = parsePaystackMetadata(tx.metadata ?? undefined);
+
+      if (!reference || !email) {
+        result.skipped += 1;
+        continue;
+      }
+
+      if (
+        !isLeadThurLifetimePaystackCharge({
+          reference,
+          metadata,
+          amount,
+          currency: tx.currency,
+        })
+      ) {
+        result.skipped += 1;
+        continue;
+      }
+
+      try {
+        const existing = await getLicenseByPaymentReference(reference);
+        if (existing) {
+          result.skipped += 1;
+          continue;
+        }
+
+        const fulfilled = await fulfillPaystackCharge({
+          email,
+          reference,
+          amount,
+          metadata,
+        });
+
+        if (fulfilled.commissionSkippedReason === "not_leadthur_product") {
+          result.skipped += 1;
+          continue;
+        }
+
+        result.fulfilled += 1;
+        result.references.push(reference);
+        logger.info("Paystack reconcile fulfilled missing license", {
+          reference,
+          email,
+          emailSent: fulfilled.emailSent,
+        });
+      } catch (err) {
+        result.failed += 1;
+        logger.error("Paystack reconcile fulfill failed", {
+          reference,
+          email,
+          error: err instanceof Error ? err.message : "unknown",
+        });
+      }
+    }
+
+    if (rows.length < 50) break;
+  }
+
+  logger.info("Paystack lifetime reconcile complete", result);
+  return result;
 }

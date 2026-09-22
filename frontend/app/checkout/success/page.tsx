@@ -167,6 +167,8 @@ function CheckoutSuccessContent() {
           message?: string;
           emailSent?: boolean;
           error?: string;
+          licenseKey?: string | null;
+          alreadyFulfilled?: boolean;
         };
 
         if (cancelled) return;
@@ -179,6 +181,17 @@ function CheckoutSuccessContent() {
                 ? "Activation email sent. Check inbox and spam."
                 : "License created. Check spam or contact support for your key.")
           );
+
+          if (data.licenseKey) {
+            try {
+              localStorage.setItem("leadthur_key", data.licenseKey);
+              const emailHint = localStorage.getItem("lp_trial_email");
+              if (emailHint) localStorage.setItem("leadthur_email", emailHint);
+            } catch {
+              /* ignore */
+            }
+            setOutreachDetail(`Your license key: ${data.licenseKey}`);
+          }
 
           // Meta Pixel Purchase — eventID = payment reference for future CAPI dedup
           trackMetaPurchase({
