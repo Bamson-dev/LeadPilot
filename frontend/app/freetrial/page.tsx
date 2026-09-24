@@ -867,7 +867,7 @@ export default function FreeTrialPage() {
         }
         setSearchesRemaining(0);
         setStatus("limit");
-        setShowUpgradePanel(true);
+        setShowUpgradePanel(false);
         return;
       }
 
@@ -910,9 +910,25 @@ export default function FreeTrialPage() {
   }
 
   const bottomPad = showUpgradePanel ? 420 : 40;
+  const secondaryCtaButton =
+    gatePassed || status === "limit" ? (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="min-h-12 border-[var(--lt-border)] text-xs font-semibold text-[var(--lt-text-muted)] hover:text-[var(--lt-text)]"
+        onClick={resetTrialSession}
+      >
+        New Trial
+      </Button>
+    ) : null;
 
   return (
-    <PublicFunnelShell bottomPad={bottomPad} showFooter={!showUpgradePanel}>
+    <PublicFunnelShell
+      bottomPad={bottomPad}
+      showFooter={!showUpgradePanel}
+      secondaryCta={secondaryCtaButton}
+    >
         {bootstrapping && gatePassed ? (
           <Panel className="py-12 text-center">
             <PanelContent className="flex flex-col items-center gap-3">

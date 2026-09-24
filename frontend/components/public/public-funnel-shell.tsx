@@ -12,6 +12,7 @@ export interface PublicFunnelShellProps {
   bottomPad?: number;
   ctaHref?: string;
   ctaLabel?: string;
+  secondaryCta?: React.ReactNode;
   showFooter?: boolean;
   className?: string;
   mainClassName?: string;
@@ -22,6 +23,7 @@ export function PublicFunnelShell({
   bottomPad = 0,
   ctaHref = "/checkout",
   ctaLabel = "Get Full Access",
+  secondaryCta,
   showFooter = true,
   className,
   mainClassName,
@@ -38,9 +40,12 @@ export function PublicFunnelShell({
         >
           LeadThur
         </Link>
-        <Button variant="soft" size="sm" className="min-h-12" asChild>
-          <Link href={ctaHref}>{ctaLabel}</Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          {secondaryCta}
+          <Button variant="soft" size="sm" className="min-h-12" asChild>
+            <Link href={ctaHref}>{ctaLabel}</Link>
+          </Button>
+        </div>
       </header>
 
       <main
