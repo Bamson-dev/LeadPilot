@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "backend/**"
+      - "frontend/**"
       - "shared/**"
       - "docker-compose.yml"
       - "supabase/migrations/**"
