@@ -928,32 +928,38 @@ export default function FreeTrialPage() {
                 Type one business type and one city. Get real businesses with phone numbers
                 and email addresses in about 60 seconds. Twice, free.
               </p>
-              <Input
-                type="email"
-                placeholder="your@email.com"
-                value={gateEmail}
-                onChange={(e) => setGateEmail(e.target.value)}
-                disabled={gateLoading}
-                className="min-h-12 text-base"
-                onKeyDown={(e) => e.key === "Enter" && void handleGateSubmit()}
-              />
-              {gateError ? (
-                <Alert variant="danger">
-                  <AlertDescription>{gateError}</AlertDescription>
-                </Alert>
-              ) : null}
-              {message && !gateError ? (
-                <p className="m-0 text-sm text-[var(--lt-accent-soft)]">{message}</p>
-              ) : null}
-              <Button
-                type="button"
-                size="lg"
-                className="h-12 w-full text-base font-extrabold"
-                onClick={() => void handleGateSubmit()}
-                disabled={gateLoading || !gateEmail.trim()}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void handleGateSubmit();
+                }}
+                className="space-y-4"
               >
-                {gateLoading ? "Starting..." : "Start My 2 Free Searches"}
-              </Button>
+                <Input
+                  type="email"
+                  placeholder="your@email.com"
+                  value={gateEmail}
+                  onChange={(e) => setGateEmail(e.target.value)}
+                  disabled={gateLoading}
+                  className="min-h-12 text-base"
+                />
+                {gateError ? (
+                  <Alert variant="danger">
+                    <AlertDescription>{gateError}</AlertDescription>
+                  </Alert>
+                ) : null}
+                {message && !gateError ? (
+                  <p className="m-0 text-sm text-[var(--lt-accent-soft)]">{message}</p>
+                ) : null}
+                <Button
+                  type="submit"
+                  size="lg"
+                  className="h-12 w-full text-base font-extrabold"
+                  disabled={gateLoading || !gateEmail.trim()}
+                >
+                  {gateLoading ? "Starting..." : "Start My 2 Free Searches"}
+                </Button>
+              </form>
               <p className="m-0 text-xs text-[var(--lt-text-subtle)]">
                 No card. No spam. Two searches, then you decide.
               </p>

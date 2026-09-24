@@ -6,9 +6,7 @@ const PRODUCTION_BACKEND = "https://backend.leadthur.com";
  * on the server they resolve to BACKEND_ORIGIN for direct upstream calls.
  */
 export function getApiUrl(): string {
-  const url = process.env.NEXT_PUBLIC_API_URL?.trim();
-  if (!url) return "";
-
+  const url = process.env.NEXT_PUBLIC_API_URL?.trim() || PRODUCTION_BACKEND;
   const cleaned = url.replace(/\/$/, "");
 
   if (cleaned.startsWith("/") && !cleaned.startsWith("//")) {
