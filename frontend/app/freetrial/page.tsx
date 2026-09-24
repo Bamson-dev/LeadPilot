@@ -1119,7 +1119,7 @@ export default function FreeTrialPage() {
           </>
         )}
       <TrialPaywallPanel
-        visible={showUpgradePanel && gatePassed}
+        visible={showUpgradePanel && gatePassed && status !== "limit" && leads.length > 0}
         visibleSampleCount={leads.length}
         tierOne={PAYWALL_TIER_ONE}
         tierTwo={PAYWALL_TIER_TWO}
