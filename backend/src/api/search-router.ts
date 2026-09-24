@@ -515,7 +515,10 @@ export async function handleFreeTrialSearch(
     }
 
     const requestIp = clientIp(req);
-    ipCapBypassed = isRateLimitAllowlisted(requestIp);
+    const disableIpCap =
+      process.env.DISABLE_FREE_TRIAL_IP_CAP === "true" ||
+      process.env.DISABLE_IP_TRIAL_CAP === "true";
+    ipCapBypassed = isRateLimitAllowlisted(requestIp) || disableIpCap;
 
     if (!ipCapBypassed) {
       const ipStatus = await getTrialIpSearchStatus(requestIp);

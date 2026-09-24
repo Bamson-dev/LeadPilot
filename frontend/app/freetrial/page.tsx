@@ -985,13 +985,45 @@ export default function FreeTrialPage() {
                   <Button size="lg" className="mx-auto h-12 w-full max-w-md font-extrabold" onClick={openUpgrade}>
                     Unlock Every Business Now
                   </Button>
+                  <div className="mx-auto mt-4 max-w-md space-y-3 rounded-xl border border-[var(--lt-accent)]/20 bg-[var(--lt-bg-card)]/50 p-4 text-left">
+                    <p className="m-0 text-xs font-semibold text-[var(--lt-text-muted)]">
+                      Or run another 2 free searches with a new email:
+                    </p>
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const nextEmail = gateEmail.trim();
+                        resetTrialSession();
+                        if (nextEmail) {
+                          setGateEmail(nextEmail);
+                          void handleGateSubmit();
+                        }
+                      }}
+                      className="flex flex-col gap-2.5 sm:flex-row"
+                    >
+                      <Input
+                        type="email"
+                        placeholder="new@email.com"
+                        value={gateEmail}
+                        onChange={(e) => setGateEmail(e.target.value)}
+                        className="min-h-11 text-sm"
+                      />
+                      <Button
+                        type="submit"
+                        size="default"
+                        className="h-11 shrink-0 font-bold"
+                      >
+                        Start Fresh Trial
+                      </Button>
+                    </form>
+                  </div>
                   <Button
                     type="button"
-                    variant="outline"
-                    className="mx-auto h-12 w-full max-w-md"
+                    variant="ghost"
+                    className="mx-auto text-xs text-[var(--lt-text-subtle)]"
                     onClick={resetTrialSession}
                   >
-                    Start fresh with a different email
+                    Clear session and start over
                   </Button>
                 </PanelContent>
               </Panel>
