@@ -1066,7 +1066,7 @@ export default function FreeTrialPage() {
                   />
                 ) : null}
 
-                {status !== "searching" && (
+                {status !== "searching" && leads.length === 0 && (
                   <TrialExamplePills onSelect={applyTrialSuggestion} />
                 )}
               </>
@@ -1102,16 +1102,9 @@ export default function FreeTrialPage() {
 
                 <div className="flex flex-col gap-2 md:hidden">
                   {leads.map((lead, index) => {
-                    const fadeRowsFrom = Math.max(leads.length - 3, 0);
-                    const faded = index >= fadeRowsFrom && leads.length >= 8;
                     return (
                       <Fragment key={lead.id}>
-                        <div
-                          style={{
-                            opacity: faded ? 0.45 : 1,
-                            filter: faded ? "blur(1.5px)" : undefined,
-                          }}
-                        >
+                        <div>
                           <LeadRowMobile lead={lead} />
                         </div>
                         {index === paywallSentinelIndex ? (

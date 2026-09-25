@@ -162,15 +162,37 @@ export function TrialPhoneValue({ phone }: { phone: string | null }) {
   return <LockedContactValue value="+44 20 7946 0958" />;
 }
 
+export function formatTrialRating(
+  rating: number | string | null | undefined,
+  reviewsCount?: number | string | null
+): string {
+  const n = typeof rating === "number" ? rating : Number(rating);
+  if (!Number.isFinite(n) || n <= 0) return "n/a";
+  const shown = Number.isInteger(n) ? String(n) : n.toFixed(1);
+  const reviews = typeof reviewsCount === "number" ? reviewsCount : Number(reviewsCount);
+  if (Number.isFinite(reviews) && reviews > 0) {
+    return `★ ${shown} (${reviews.toLocaleString()} reviews)`;
+  }
+  return `★ ${shown}`;
+}
+
+export function TrialRatingValue({
+  rating,
+  reviewsCount,
+}: {
+  rating: number | string | null | undefined;
+  reviewsCount?: number | string | null;
+}) {
+  return (
+    <span className="text-sm font-semibold text-[var(--lt-text-muted)]">
+      {formatTrialRating(rating, reviewsCount)}
+    </span>
+  );
+}
+
 export function LeadRowMobile({ lead }: { lead: TrialLeadRow }) {
   const emailDisplay =
     lead.verifiedEmails[0] ?? lead.emails[0] ?? lead.email ?? "contact@business.com";
-  const ratingDisplay =
-    lead.rating != null
-      ? `★ ${lead.rating}${
-          lead.reviews_count != null ? ` (${lead.reviews_count.toLocaleString()} reviews)` : ""
-        }`
-      : "n/a";
 
   return (
     <Panel className="animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -192,7 +214,7 @@ export function LeadRowMobile({ lead }: { lead: TrialLeadRow }) {
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <span className="shrink-0 text-[var(--lt-text-subtle)]">Rating</span>
-          <LockedContactValue value={ratingDisplay} />
+          <TrialRatingValue rating={lead.rating} reviewsCount={lead.reviews_count} />
         </div>
       </PanelContent>
     </Panel>
@@ -213,7 +235,7 @@ export function TrialResultsTable({
   paywallSentinelAfterIndex?: number;
 }) {
   return (
-    <Panel className="relative hidden overflow-hidden md:block">
+    <Panel className="hidden overflow-hidden md:block">
       <div className="grid grid-cols-[1.8fr_2fr_1.4fr_2fr_1fr] border-b border-[var(--lt-border)] bg-[var(--lt-surface-2)] px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-[var(--lt-text-subtle)]">
         <span>Business</span>
         <span>Address</span>
@@ -226,19 +248,12 @@ export function TrialResultsTable({
           lead.verifiedEmails[0] ?? lead.emails[0] ?? lead.email ?? "",
           "contact@business.com"
         );
-        const ratingDisplay = lead.rating != null ? `★ ${lead.rating}` : "n/a";
-        const fadeRowsFrom = Math.max(leads.length - 3, 0);
-        const faded = i >= fadeRowsFrom && leads.length >= 8;
 
         return (
           <div key={lead.id}>
             <div
               className="grid grid-cols-[1.8fr_2fr_1.4fr_2fr_1fr] items-center border-b border-[var(--lt-border)] px-4 py-3.5 text-sm last:border-b-0 animate-in fade-in slide-in-from-bottom-1 duration-300"
-              style={{
-                animationDelay: `${i * 40}ms`,
-                opacity: faded ? 0.45 : 1,
-                filter: faded ? "blur(1.5px)" : undefined,
-              }}
+              style={{ animationDelay: `${i * 40}ms` }}
             >
               <span className="font-semibold text-[var(--lt-text)]">{lead.business_name}</span>
               <span className="text-[var(--lt-text-muted)]" title={lead.address || undefined}>
@@ -251,7 +266,7 @@ export function TrialResultsTable({
                 <LockedContactValue value={emailDisplay} />
               </span>
               <span>
-                <LockedContactValue value={ratingDisplay} />
+                <TrialRatingValue rating={lead.rating} reviewsCount={lead.reviews_count} />
               </span>
             </div>
             {paywallSentinelRef && i === paywallSentinelAfterIndex ? (
@@ -260,12 +275,6 @@ export function TrialResultsTable({
           </div>
         );
       })}
-      {leads.length >= 8 ? (
-        <div
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-[var(--lt-bg)] via-[var(--lt-bg)]/80 to-transparent"
-          aria-hidden
-        />
-      ) : null}
     </Panel>
   );
 }
@@ -281,7 +290,7 @@ export function TrialSearchProgress({
   searching: boolean;
   sampleCount?: number;
 }) {
-  if (!searching && businessesFound === 0) return null;
+  if (!searching) return null;
 
   const teaserCount = sampleCount ?? Math.min(15, businessesFound);
 
@@ -292,17 +301,13 @@ export function TrialSearchProgress({
       aria-live="polite"
     >
       <AlertDescription className="space-y-2">
-        {searching ? (
-          <div className="flex items-center gap-2.5">
-            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[var(--lt-accent-soft)]" aria-hidden />
-            <p className="m-0 text-sm font-medium text-[var(--lt-text)]">{message}</p>
-          </div>
-        ) : null}
+        <div className="flex items-center gap-2.5">
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[var(--lt-accent-soft)]" aria-hidden />
+          <p className="m-0 text-sm font-medium text-[var(--lt-text)]">{message}</p>
+        </div>
         {businessesFound > 0 ? (
           <p className="m-0 text-sm font-bold text-[var(--lt-accent-soft)]">
-            {searching
-              ? `${teaserCount.toLocaleString()} businesses found`
-              : `Showing ${teaserCount} of 1,000+ businesses`}
+            {teaserCount.toLocaleString()} of 1,000+ businesses found
           </p>
         ) : null}
       </AlertDescription>
@@ -331,8 +336,8 @@ export function TrialSampleBanner({
           You are seeing {sampleCount} of 1,000+ businesses{place}.
         </p>
         <p className="mt-1.5 m-0 text-sm text-[var(--lt-text-muted)]">
-          Emails and ratings are locked on this free preview. Unlock the full list to contact every
-          business.
+          Emails stay locked. Phone numbers that were not found stay locked. Ratings are visible on
+          this preview. Unlock the full list to contact every business.
         </p>
       </AlertDescription>
     </Alert>
