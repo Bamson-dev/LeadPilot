@@ -16,6 +16,11 @@ const CHECKOUT_BALANCE_MAX_REQUESTS =
 const SEARCH_POLL_MAX_REQUESTS =
   Number(process.env.RATE_LIMIT_SEARCH_POLL_MAX) || 180;
 
+/** Set by the Next.js /backend rewrite so the real visitor IP survives the second Cloudflare hop. */
+export const VISITOR_IP_HEADER = "x-leadthur-client-ip";
+
+const DEFAULT_ORIGIN_IPS = new Set(["167.86.106.198"]);
+
 function headerIp(value: string | string[] | undefined): string | null {
   if (typeof value === "string") {
     const trimmed = value.trim();
@@ -28,30 +33,103 @@ function headerIp(value: string | string[] | undefined): string | null {
   return null;
 }
 
-/** Resolve the client IP behind Cloudflare / reverse proxies. */
-export function clientIp(req: Request): string {
-  const cfConnectingIp = headerIp(req.headers["cf-connecting-ip"]);
-  if (cfConnectingIp) return cfConnectingIp;
+function parseIpList(raw: string | undefined): Set<string> {
+  if (!raw?.trim()) return new Set();
+  return new Set(
+    raw
+      .split(",")
+      .map((ip) => ip.trim())
+      .filter(Boolean)
+  );
+}
 
-  const trueClientIp = headerIp(req.headers["true-client-ip"]);
-  if (trueClientIp) return trueClientIp;
+function originIps(): Set<string> {
+  return new Set([
+    ...DEFAULT_ORIGIN_IPS,
+    ...parseIpList(process.env.ORIGIN_IPS),
+    ...parseIpList(process.env.TRUSTED_PROXY_IPS),
+  ]);
+}
 
-  const realIp = headerIp(req.headers["x-real-ip"]);
-  if (realIp) return realIp;
+function stripIpv4Mapped(ip: string): string {
+  return ip.replace(/^::ffff:/i, "").trim();
+}
 
-  const forwarded = headerIp(req.headers["x-forwarded-for"]);
-  if (forwarded) {
-    const parts = forwarded.split(",").map((part) => part.trim()).filter(Boolean);
-    if (parts.length > 0) {
-      return parts[0];
-    }
+/** Loopback, RFC1918, link-local, and our own origin/proxy addresses. */
+export function isInfrastructureIp(ip: string | null | undefined): boolean {
+  if (!ip) return true;
+  const value = stripIpv4Mapped(ip);
+  if (!value || value === "unknown" || value === "*" || value === "::1") return true;
+  if (originIps().has(value)) return true;
+
+  const parts = value.split(".");
+  if (parts.length === 4 && parts.every((part) => /^\d+$/.test(part))) {
+    const a = Number(parts[0]);
+    const b = Number(parts[1]);
+    if (a === 10 || a === 127) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 0) return true;
   }
 
-  return req.ip ?? "unknown";
+  const lower = value.toLowerCase();
+  if (lower.startsWith("fc") || lower.startsWith("fd") || lower.startsWith("fe80:")) {
+    return true;
+  }
+  return false;
+}
+
+function forwardedIps(req: Request): string[] {
+  const raw = headerIp(req.headers["x-forwarded-for"]);
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((part) => stripIpv4Mapped(part.trim()))
+    .filter(Boolean);
+}
+
+function connectingHopIp(req: Request): string {
+  return (
+    headerIp(req.headers["cf-connecting-ip"]) ||
+    req.ip ||
+    req.socket?.remoteAddress ||
+    "unknown"
+  );
+}
+
+/**
+ * Resolve the client IP behind Cloudflare / reverse proxies.
+ * When the frontend same-origin proxy hits backend.leadthur.com, Cloudflare
+ * overwrites cf-connecting-ip with the VPS origin. Prefer the visitor header
+ * Next.js sets, then the first public address in the forwarded chain.
+ */
+export function clientIp(req: Request): string {
+  const hop = connectingHopIp(req);
+  const visitor = headerIp(req.headers[VISITOR_IP_HEADER]);
+  if (isInfrastructureIp(hop)) {
+    if (visitor && !isInfrastructureIp(visitor)) return visitor;
+    return stripIpv4Mapped(hop);
+  }
+
+  const candidates = [
+    headerIp(req.headers["cf-connecting-ip"]),
+    headerIp(req.headers["true-client-ip"]),
+    headerIp(req.headers["x-real-ip"]),
+    ...forwardedIps(req),
+    req.ip ?? null,
+    req.socket?.remoteAddress ?? null,
+  ]
+    .map((ip) => (ip ? stripIpv4Mapped(ip) : null))
+    .filter((ip): ip is string => Boolean(ip));
+
+  const publicIp = candidates.find((ip) => !isInfrastructureIp(ip));
+  return publicIp || candidates[0] || "unknown";
 }
 
 export interface ClientIpDiagnostics {
   resolvedIp: string;
+  infrastructure: boolean;
   allowlisted: boolean;
   allowlistConfigured: boolean;
   headers: {
@@ -59,6 +137,7 @@ export interface ClientIpDiagnostics {
     "true-client-ip": string | null;
     "x-real-ip": string | null;
     "x-forwarded-for": string | null;
+    "x-leadthur-client-ip": string | null;
   };
   expressReqIp: string | null;
   socketRemoteAddress: string | null;
@@ -69,6 +148,7 @@ export function getClientIpDiagnostics(req: Request): ClientIpDiagnostics {
   const allowlist = parseIpAllowlist();
   return {
     resolvedIp,
+    infrastructure: isInfrastructureIp(resolvedIp),
     allowlisted: allowlist.has(resolvedIp),
     allowlistConfigured: allowlist.size > 0,
     headers: {
@@ -76,6 +156,7 @@ export function getClientIpDiagnostics(req: Request): ClientIpDiagnostics {
       "true-client-ip": headerIp(req.headers["true-client-ip"]),
       "x-real-ip": headerIp(req.headers["x-real-ip"]),
       "x-forwarded-for": headerIp(req.headers["x-forwarded-for"]),
+      "x-leadthur-client-ip": headerIp(req.headers[VISITOR_IP_HEADER]),
     },
     expressReqIp: req.ip ?? null,
     socketRemoteAddress: req.socket?.remoteAddress ?? null,
@@ -83,18 +164,21 @@ export function getClientIpDiagnostics(req: Request): ClientIpDiagnostics {
 }
 
 function parseIpAllowlist(): Set<string> {
-  const raw = process.env.RATE_LIMIT_IP_ALLOWLIST?.trim();
-  if (!raw) return new Set();
-  return new Set(
-    raw
-      .split(",")
-      .map((ip) => ip.trim())
-      .filter(Boolean)
-  );
+  return parseIpList(process.env.RATE_LIMIT_IP_ALLOWLIST);
 }
 
 export function isRateLimitAllowlisted(ip: string): boolean {
   return parseIpAllowlist().has(ip);
+}
+
+function rateLimitIdentity(req: Request): string {
+  const ip = clientIp(req);
+  if (!isInfrastructureIp(ip)) return ip;
+
+  const body = req.body as { email?: unknown } | undefined;
+  const email = typeof body?.email === "string" ? body.email.toLowerCase().trim() : "";
+  if (email.includes("@")) return `trial-email:${email}`;
+  return ip;
 }
 
 export function rateLimit(req: Request, res: Response, next: NextFunction): void {
@@ -105,7 +189,7 @@ export function rateLimit(req: Request, res: Response, next: NextFunction): void
   }
 
   const scope = requestScope(req);
-  const key = `${scope}:${ip}`;
+  const key = `${scope}:${rateLimitIdentity(req)}`;
   const now = Date.now();
   let bucket = buckets.get(key);
 

@@ -53,7 +53,11 @@ import {
   getTrialIpSearchStatus,
   releaseTrialIpSearch,
 } from "../database/free-trial-ip-repository";
-import { clientIp, isRateLimitAllowlisted } from "../middleware/rate-limit";
+import {
+  clientIp,
+  isInfrastructureIp,
+  isRateLimitAllowlisted,
+} from "../middleware/rate-limit";
 import { trackEvent } from "../observability/track";
 import { EVENT_NAMES } from "../observability/event-taxonomy";
 import { trackSearchOrdinals } from "../observability/search-ordinals";
@@ -518,7 +522,12 @@ export async function handleFreeTrialSearch(
     const disableIpCap =
       process.env.DISABLE_FREE_TRIAL_IP_CAP === "true" ||
       process.env.DISABLE_IP_TRIAL_CAP === "true";
-    ipCapBypassed = isRateLimitAllowlisted(requestIp) || disableIpCap;
+    // Same-origin /backend proxy is seen as the VPS origin IP. Do not
+    // share one 2-search cap across every free-trial visitor.
+    ipCapBypassed =
+      isRateLimitAllowlisted(requestIp) ||
+      disableIpCap ||
+      isInfrastructureIp(requestIp);
 
     if (!ipCapBypassed) {
       const ipStatus = await getTrialIpSearchStatus(requestIp);
