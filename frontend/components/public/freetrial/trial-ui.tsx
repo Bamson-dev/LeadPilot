@@ -159,14 +159,7 @@ export function TrialPhoneValue({ phone }: { phone: string | null }) {
       <span className="text-sm font-semibold text-[var(--lt-text-muted)]">{phone.trim()}</span>
     );
   }
-  return (
-    <span
-      className="select-none rounded px-2 py-0.5 text-xs text-[var(--lt-text-muted)] blur-[5px] bg-[var(--lt-accent)]/10"
-      aria-label="Phone not listed"
-    >
-      Not listed
-    </span>
-  );
+  return <LockedContactValue value="+44 20 7946 0958" />;
 }
 
 export function LeadRowMobile({ lead }: { lead: TrialLeadRow }) {
