@@ -48,7 +48,13 @@ jobs:
         run: |
           set -euo pipefail
           curl -fsS -X GET "${{ secrets.COOLIFY_DEPLOY_WEBHOOK_URL }}"
-          echo "Coolify deploy webhook triggered"
+          echo "Backend Coolify deploy webhook triggered"
+          if [ -n "${{ secrets.COOLIFY_FRONTEND_DEPLOY_WEBHOOK_URL }}" ]; then
+            curl -fsS -X GET "${{ secrets.COOLIFY_FRONTEND_DEPLOY_WEBHOOK_URL }}"
+            echo "Frontend Coolify deploy webhook triggered"
+          else
+            echo "::warning::www.leadthur.com is a separate Coolify app. Set GitHub secret COOLIFY_FRONTEND_DEPLOY_WEBHOOK_URL from that app's Deploy webhook, then Redeploy with rebuild — Restart alone keeps the old Next.js image."
+          fi
 
       - name: Deploy over SSH (legacy VPS path)
         if: steps.deploy_config.outputs.method == 'ssh'

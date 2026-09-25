@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export const metadata: Metadata = {
   title: "Try LeadThur Free — 2 Searches, No Card",
   description:
@@ -48,5 +51,7 @@ export const metadata: Metadata = {
 };
 
 export default function FreeTrialLayout({ children }: { children: React.ReactNode }) {
-  return children;
+  return (
+    <div data-lt-build={process.env.NEXT_PUBLIC_GIT_SHA ?? "unknown"}>{children}</div>
+  );
 }

@@ -85,6 +85,22 @@ const nextConfig: NextConfig = {
   transpilePackages: ["@leadthur/shared"],
   // Standalone is for Docker only — breaks default Vercel Next.js deploy
   ...(process.env.DOCKER_BUILD === "1" ? { output: "standalone" as const } : {}),
+  async headers() {
+    return [
+      {
+        source: "/freetrial",
+        headers: [
+          { key: "Cache-Control", value: "private, no-store, max-age=0, must-revalidate" },
+        ],
+      },
+      {
+        source: "/build-id.txt",
+        headers: [
+          { key: "Cache-Control", value: "private, no-store, max-age=0, must-revalidate" },
+        ],
+      },
+    ];
+  },
   async rewrites() {
     // Only proxy when the client is configured to hit the relative path
     if (publicApiUrl !== API_PROXY_PATH && !publicApiUrl.startsWith(`${API_PROXY_PATH}/`)) {
