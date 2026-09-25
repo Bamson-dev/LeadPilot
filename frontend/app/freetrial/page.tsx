@@ -27,6 +27,7 @@ import {
   StarRating,
   TrialExamplePills,
   TrialPaywallPanel,
+  TrialSampleBanner,
   TrialResultsTable,
   TrialSearchGuidance,
   TrialSearchHint,
@@ -867,7 +868,7 @@ export default function FreeTrialPage() {
         }
         setSearchesRemaining(0);
         setStatus("limit");
-        setShowUpgradePanel(false);
+        setShowUpgradePanel(true);
         return;
       }
 
@@ -909,26 +910,11 @@ export default function FreeTrialPage() {
     setMessage("");
   }
 
-  const bottomPad = showUpgradePanel ? 420 : 40;
-  const secondaryCtaButton =
-    gatePassed || status === "limit" ? (
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="min-h-12 border-[var(--lt-border)] text-xs font-semibold text-[var(--lt-text-muted)] hover:text-[var(--lt-text)]"
-        onClick={resetTrialSession}
-      >
-        New Trial
-      </Button>
-    ) : null;
+  const samplePreviewCount = Math.min(MAX_TRIAL_LEADS, leads.length);
+  const bottomPad = 40;
 
   return (
-    <PublicFunnelShell
-      bottomPad={bottomPad}
-      showFooter={!showUpgradePanel}
-      secondaryCta={secondaryCtaButton}
-    >
+    <PublicFunnelShell bottomPad={bottomPad} showFooter>
         {bootstrapping && gatePassed ? (
           <Panel className="py-12 text-center">
             <PanelContent className="flex flex-col items-center gap-3">
@@ -944,38 +930,32 @@ export default function FreeTrialPage() {
                 Type one business type and one city. Get real businesses with phone numbers
                 and email addresses in about 60 seconds. Twice, free.
               </p>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void handleGateSubmit();
-                }}
-                className="space-y-4"
+              <Input
+                type="email"
+                placeholder="your@email.com"
+                value={gateEmail}
+                onChange={(e) => setGateEmail(e.target.value)}
+                disabled={gateLoading}
+                className="min-h-12 text-base"
+                onKeyDown={(e) => e.key === "Enter" && void handleGateSubmit()}
+              />
+              {gateError ? (
+                <Alert variant="danger">
+                  <AlertDescription>{gateError}</AlertDescription>
+                </Alert>
+              ) : null}
+              {message && !gateError ? (
+                <p className="m-0 text-sm text-[var(--lt-accent-soft)]">{message}</p>
+              ) : null}
+              <Button
+                type="button"
+                size="lg"
+                className="h-12 w-full text-base font-extrabold"
+                onClick={() => void handleGateSubmit()}
+                disabled={gateLoading || !gateEmail.trim()}
               >
-                <Input
-                  type="email"
-                  placeholder="your@email.com"
-                  value={gateEmail}
-                  onChange={(e) => setGateEmail(e.target.value)}
-                  disabled={gateLoading}
-                  className="min-h-12 text-base"
-                />
-                {gateError ? (
-                  <Alert variant="danger">
-                    <AlertDescription>{gateError}</AlertDescription>
-                  </Alert>
-                ) : null}
-                {message && !gateError ? (
-                  <p className="m-0 text-sm text-[var(--lt-accent-soft)]">{message}</p>
-                ) : null}
-                <Button
-                  type="submit"
-                  size="lg"
-                  className="h-12 w-full text-base font-extrabold"
-                  disabled={gateLoading || !gateEmail.trim()}
-                >
-                  {gateLoading ? "Starting..." : "Start My 2 Free Searches"}
-                </Button>
-              </form>
+                {gateLoading ? "Starting..." : "Start My 2 Free Searches"}
+              </Button>
               <p className="m-0 text-xs text-[var(--lt-text-subtle)]">
                 No card. No spam. Two searches, then you decide.
               </p>
@@ -1001,45 +981,13 @@ export default function FreeTrialPage() {
                   <Button size="lg" className="mx-auto h-12 w-full max-w-md font-extrabold" onClick={openUpgrade}>
                     Unlock Every Business Now
                   </Button>
-                  <div className="mx-auto mt-4 max-w-md space-y-3 rounded-xl border border-[var(--lt-accent)]/20 bg-[var(--lt-bg-card)]/50 p-4 text-left">
-                    <p className="m-0 text-xs font-semibold text-[var(--lt-text-muted)]">
-                      Or run another 2 free searches with a new email:
-                    </p>
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        const nextEmail = gateEmail.trim();
-                        resetTrialSession();
-                        if (nextEmail) {
-                          setGateEmail(nextEmail);
-                          void handleGateSubmit();
-                        }
-                      }}
-                      className="flex flex-col gap-2.5 sm:flex-row"
-                    >
-                      <Input
-                        type="email"
-                        placeholder="new@email.com"
-                        value={gateEmail}
-                        onChange={(e) => setGateEmail(e.target.value)}
-                        className="min-h-11 text-sm"
-                      />
-                      <Button
-                        type="submit"
-                        size="default"
-                        className="h-11 shrink-0 font-bold"
-                      >
-                        Start Fresh Trial
-                      </Button>
-                    </form>
-                  </div>
                   <Button
                     type="button"
-                    variant="ghost"
-                    className="mx-auto text-xs text-[var(--lt-text-subtle)]"
+                    variant="outline"
+                    className="mx-auto h-12 w-full max-w-md"
                     onClick={resetTrialSession}
                   >
-                    Clear session and start over
+                    Start fresh with a different email
                   </Button>
                 </PanelContent>
               </Panel>
@@ -1109,11 +1057,14 @@ export default function FreeTrialPage() {
                   />
                 ) : null}
 
-                <TrialSearchProgress
-                  message={message}
-                  businessesFound={businessesFoundCount}
-                  searching={status === "searching"}
-                />
+                {status === "searching" ? (
+                  <TrialSearchProgress
+                    message={message}
+                    businessesFound={Math.min(businessesFoundCount, MAX_TRIAL_LEADS)}
+                    searching
+                    sampleCount={MAX_TRIAL_LEADS}
+                  />
+                ) : null}
 
                 {status !== "searching" && (
                   <TrialExamplePills onSelect={applyTrialSuggestion} />
@@ -1123,6 +1074,11 @@ export default function FreeTrialPage() {
 
             {leads.length > 0 && (
               <section className="mt-8">
+                <TrialSampleBanner
+                  sampleCount={samplePreviewCount}
+                  query={activeSearchQuery}
+                  location={activeSearchLocation}
+                />
                 <div className="mb-4 flex flex-col gap-2 md:flex-row">
                   <Button
                     type="button"
@@ -1145,14 +1101,25 @@ export default function FreeTrialPage() {
                 </div>
 
                 <div className="flex flex-col gap-2 md:hidden">
-                  {leads.map((lead, index) => (
-                    <Fragment key={lead.id}>
-                      <LeadRowMobile lead={lead} />
-                      {index === paywallSentinelIndex ? (
-                        <div ref={paywallSentinelMobileRef} className="h-px w-full" aria-hidden />
-                      ) : null}
-                    </Fragment>
-                  ))}
+                  {leads.map((lead, index) => {
+                    const fadeRowsFrom = Math.max(leads.length - 3, 0);
+                    const faded = index >= fadeRowsFrom && leads.length >= 8;
+                    return (
+                      <Fragment key={lead.id}>
+                        <div
+                          style={{
+                            opacity: faded ? 0.45 : 1,
+                            filter: faded ? "blur(1.5px)" : undefined,
+                          }}
+                        >
+                          <LeadRowMobile lead={lead} />
+                        </div>
+                        {index === paywallSentinelIndex ? (
+                          <div ref={paywallSentinelMobileRef} className="h-px w-full" aria-hidden />
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
                 </div>
 
                 <TrialResultsTable
@@ -1162,18 +1129,19 @@ export default function FreeTrialPage() {
                   paywallSentinelRef={paywallSentinelDesktopRef}
                   paywallSentinelAfterIndex={paywallSentinelIndex}
                 />
+
+                <TrialPaywallPanel
+                  visible={showUpgradePanel && gatePassed && status !== "limit"}
+                  visibleSampleCount={samplePreviewCount || MAX_TRIAL_LEADS}
+                  tierOne={PAYWALL_TIER_ONE}
+                  tierTwo={PAYWALL_TIER_TWO}
+                  salePriceUsd={SALE_PRICE_USD}
+                  checkoutUrl={CHECKOUT_URL}
+                />
               </section>
             )}
           </>
         )}
-      <TrialPaywallPanel
-        visible={showUpgradePanel && gatePassed && status !== "limit" && leads.length > 0}
-        visibleSampleCount={leads.length}
-        tierOne={PAYWALL_TIER_ONE}
-        tierTwo={PAYWALL_TIER_TWO}
-        salePriceUsd={SALE_PRICE_USD}
-        checkoutUrl={CHECKOUT_URL}
-      />
     </PublicFunnelShell>
   );
 }

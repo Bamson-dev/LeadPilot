@@ -220,7 +220,7 @@ export function TrialResultsTable({
   paywallSentinelAfterIndex?: number;
 }) {
   return (
-    <Panel className="hidden overflow-hidden md:block">
+    <Panel className="relative hidden overflow-hidden md:block">
       <div className="grid grid-cols-[1.8fr_2fr_1.4fr_2fr_1fr] border-b border-[var(--lt-border)] bg-[var(--lt-surface-2)] px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-[var(--lt-text-subtle)]">
         <span>Business</span>
         <span>Address</span>
@@ -234,12 +234,18 @@ export function TrialResultsTable({
           "contact@business.com"
         );
         const ratingDisplay = lead.rating != null ? `★ ${lead.rating}` : "n/a";
+        const fadeRowsFrom = Math.max(leads.length - 3, 0);
+        const faded = i >= fadeRowsFrom && leads.length >= 8;
 
         return (
           <div key={lead.id}>
             <div
               className="grid grid-cols-[1.8fr_2fr_1.4fr_2fr_1fr] items-center border-b border-[var(--lt-border)] px-4 py-3.5 text-sm last:border-b-0 animate-in fade-in slide-in-from-bottom-1 duration-300"
-              style={{ animationDelay: `${i * 40}ms` }}
+              style={{
+                animationDelay: `${i * 40}ms`,
+                opacity: faded ? 0.45 : 1,
+                filter: faded ? "blur(1.5px)" : undefined,
+              }}
             >
               <span className="font-semibold text-[var(--lt-text)]">{lead.business_name}</span>
               <span className="text-[var(--lt-text-muted)]" title={lead.address || undefined}>
@@ -261,6 +267,12 @@ export function TrialResultsTable({
           </div>
         );
       })}
+      {leads.length >= 8 ? (
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-[var(--lt-bg)] via-[var(--lt-bg)]/80 to-transparent"
+          aria-hidden
+        />
+      ) : null}
     </Panel>
   );
 }
@@ -269,12 +281,16 @@ export function TrialSearchProgress({
   message,
   businessesFound,
   searching,
+  sampleCount,
 }: {
   message: string;
   businessesFound: number;
   searching: boolean;
+  sampleCount?: number;
 }) {
   if (!searching && businessesFound === 0) return null;
+
+  const teaserCount = sampleCount ?? Math.min(15, businessesFound);
 
   return (
     <Alert
@@ -291,9 +307,40 @@ export function TrialSearchProgress({
         ) : null}
         {businessesFound > 0 ? (
           <p className="m-0 text-sm font-bold text-[var(--lt-accent-soft)]">
-            {businessesFound.toLocaleString()} businesses found
+            {searching
+              ? `${teaserCount.toLocaleString()} businesses found`
+              : `Showing ${teaserCount} of 1,000+ businesses`}
           </p>
         ) : null}
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+export function TrialSampleBanner({
+  sampleCount,
+  query,
+  location,
+}: {
+  sampleCount: number;
+  query: string;
+  location: string;
+}) {
+  const place =
+    query.trim() && location.trim()
+      ? ` found for ${query.trim()} in ${location.trim()}`
+      : "";
+
+  return (
+    <Alert className="mb-4 border-[var(--lt-accent)]/30 bg-[var(--lt-accent)]/10">
+      <AlertDescription>
+        <p className="m-0 text-base font-extrabold leading-snug text-[var(--lt-text)]">
+          You are seeing {sampleCount} of 1,000+ businesses{place}.
+        </p>
+        <p className="mt-1.5 m-0 text-sm text-[var(--lt-text-muted)]">
+          Emails and ratings are locked on this free preview. Unlock the full list to contact every
+          business.
+        </p>
       </AlertDescription>
     </Alert>
   );
@@ -317,15 +364,12 @@ export function TrialPaywallPanel({
   if (!visible) return null;
 
   return (
-    <div
-      className="pointer-events-none fixed bottom-0 left-0 right-0 z-50 bg-gradient-to-t from-[var(--lt-bg)] via-[var(--lt-bg)]/95 to-transparent px-4 pb-5 pt-6"
-      aria-live="polite"
-    >
-      <Panel className="pointer-events-auto mx-auto max-h-[min(78vh,560px)] max-w-md overflow-y-auto border-[var(--lt-accent)]/40 shadow-[0_0_80px_rgba(124,58,237,0.2)]">
+    <div className="mt-8" aria-live="polite">
+      <Panel className="mx-auto max-w-md border-[var(--lt-accent)]/40 shadow-[0_0_80px_rgba(124,58,237,0.2)]">
         <PanelContent className="space-y-4 p-6">
           <div className="space-y-2">
             <p className="m-0 text-lg font-extrabold leading-snug text-[var(--lt-text)]">
-              Showing {visibleSampleCount} of 1,000+ businesses matching your search.
+              You are seeing {visibleSampleCount} of 1,000+ businesses matching your search.
             </p>
             <p className="m-0 text-sm leading-relaxed text-[var(--lt-text-muted)]">
               You&apos;re currently viewing only a small sample.
