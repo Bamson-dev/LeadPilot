@@ -35,6 +35,7 @@ import {
   refreshSearchQueueStatus,
   resolveQueuePosition,
 } from "../queue/search-queue";
+import { SEARCH_QUEUE_MAX_WAITING } from "../scraper/utils/constants";
 import { checkSearchLimit } from "../middleware/check-search-limit";
 import { requireLicense } from "../middleware/require-license";
 import {
@@ -518,6 +519,15 @@ export async function handleFreeTrialSearch(
       return;
     }
 
+    const trialQueue = await refreshSearchQueueStatus();
+    if (trialQueue.queued >= SEARCH_QUEUE_MAX_WAITING) {
+      res.status(503).json({
+        error: "Search queue is full. Please try again in a few minutes.",
+        code: "QUEUE_FULL",
+      });
+      return;
+    }
+
     const requestIp = clientIp(req);
     const disableIpCap =
       process.env.DISABLE_FREE_TRIAL_IP_CAP === "true" ||
@@ -694,7 +704,7 @@ searchRouter.post("/", checkSearchLimit, async (req: Request, res: Response) => 
     }
 
     const queueStatus = await refreshSearchQueueStatus();
-    if (queueStatus.queued >= 10) {
+    if (queueStatus.queued >= SEARCH_QUEUE_MAX_WAITING) {
       res.status(503).json({
         error: "Search queue is full. Please try again in a few minutes.",
         code: "QUEUE_FULL",

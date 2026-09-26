@@ -1,9 +1,15 @@
 import { logger } from "../../utils/logger";
 
-const MAX_PLAYWRIGHT_INSTANCES = parseInt(
-  process.env.PLAYWRIGHT_MAX_INSTANCES || "10",
-  10
-);
+const MAX_PLAYWRIGHT_INSTANCES = (() => {
+  const raw =
+    process.env.PLAYWRIGHT_MAX_INSTANCES ||
+    process.env.WORKER_CONCURRENCY ||
+    process.env.SCRAPER_CONCURRENCY ||
+    "12";
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 1) return 12;
+  return Math.min(n, 24);
+})();
 
 let active = 0;
 const waiters: Array<() => void> = [];

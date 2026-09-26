@@ -12,6 +12,11 @@ import {
 import type { SearchQueueStatus } from "../queue/search-queue-types";
 import { getClientIpDiagnostics } from "../middleware/rate-limit";
 import { getGitCommitSha } from "../utils/build-info";
+import {
+  SEARCH_QUEUE_MAX_WAITING,
+  SEARCH_WORKER_CONCURRENCY,
+} from "../scraper/utils/constants";
+import { getPlaywrightSemaphoreStatus } from "../scraper/browser/playwright-semaphore";
 import { getDigitalSkillXForwardSecret } from "../services/digitalskillx-handoff";
 import { getSupabaseConfigDiagnostics } from "../utils/supabase-config";
 import { probeLicenseAuthLookup } from "../database/license-repository";
@@ -105,6 +110,11 @@ router.get("/", (_req, res) => {
       keyFingerprint: getDeepseekKeyFingerprint(),
     },
     queue: cachedQueue,
+    searchCapacity: {
+      maxConcurrent: SEARCH_WORKER_CONCURRENCY,
+      maxWaiting: SEARCH_QUEUE_MAX_WAITING,
+      playwright: getPlaywrightSemaphoreStatus(),
+    },
     memory: memorySnapshot(),
     timestamp: new Date().toISOString(),
     version: process.env.npm_package_version || "1.0.0",

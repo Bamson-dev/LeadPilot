@@ -8,13 +8,13 @@ interface Bucket {
 const buckets = new Map<string, Bucket>();
 
 const WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS) || 60_000;
-const MAX_REQUESTS = Number(process.env.RATE_LIMIT_MAX) || 30;
+const MAX_REQUESTS = Number(process.env.RATE_LIMIT_MAX) || 80;
 const SENDS_MAX_REQUESTS = Number(process.env.RATE_LIMIT_SENDS_MAX) || 60;
 const CHECKOUT_BALANCE_MAX_REQUESTS =
   Number(process.env.RATE_LIMIT_CHECKOUT_BALANCE_MAX) || 120;
 /** Dashboard polls status/results every few seconds for minutes during Phase 2. */
 const SEARCH_POLL_MAX_REQUESTS =
-  Number(process.env.RATE_LIMIT_SEARCH_POLL_MAX) || 180;
+  Number(process.env.RATE_LIMIT_SEARCH_POLL_MAX) || 360;
 
 /** Set by the Next.js /backend rewrite so the real visitor IP survives the second Cloudflare hop. */
 export const VISITOR_IP_HEADER = "x-leadthur-client-ip";

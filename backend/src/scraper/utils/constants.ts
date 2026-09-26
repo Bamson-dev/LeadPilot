@@ -6,7 +6,8 @@ export const MIN_CACHE_LEADS_TO_REUSE = parseInt(
   process.env.MIN_CACHE_LEADS_TO_REUSE || "80",
   10
 );
-export const SCRAPE_CONCURRENCY = 5;
+export const SCRAPE_CONCURRENCY = 8;
+export const MAX_SEARCH_WORKER_CONCURRENCY = 16;
 
 /** Parallel paid search jobs (BullMQ worker + inline fallback). Matches SCRAPER_CONCURRENCY unless WORKER_CONCURRENCY is set. */
 export const SEARCH_WORKER_CONCURRENCY = (() => {
@@ -16,12 +17,19 @@ export const SEARCH_WORKER_CONCURRENCY = (() => {
     String(SCRAPE_CONCURRENCY);
   const n = parseInt(raw, 10);
   if (!Number.isFinite(n) || n < 1) return SCRAPE_CONCURRENCY;
-  return Math.min(n, 10);
+  return Math.min(n, MAX_SEARCH_WORKER_CONCURRENCY);
+})();
+
+/** Waiting jobs allowed before POST /search returns QUEUE_FULL. */
+export const SEARCH_QUEUE_MAX_WAITING = (() => {
+  const n = parseInt(process.env.SEARCH_QUEUE_MAX_WAITING || "40", 10);
+  if (!Number.isFinite(n) || n < 5) return 40;
+  return Math.min(n, 200);
 })();
 export const MAPS_URL_BATCH_SIZE = 5;
 export const MAPS_BATCH_DELAY_MIN_MS = 2000;
 export const MAPS_BATCH_DELAY_MAX_MS = 4000;
-export const MAPS_SCROLL_COUNT = 5;
+export const MAPS_SCROLL_COUNT = 8;
 export const MAPS_SCROLL_DELAY_MIN_MS = 800;
 export const MAPS_SCROLL_DELAY_MAX_MS = 1500;
 export const MAPS_PAGE_READ_DELAY_MIN_MS = 500;
@@ -70,7 +78,7 @@ export const EMAIL_SCRAPE_MAX_MS = PHASE2_EMAIL_SCRAPE_MAX_MS;
 export const PHASE2_TRIGGER_WATCHDOG_MS = 10_000;
 /** Paid Phase 1 Maps collection budget (env-overridable; default 3 minutes). */
 export const PHASE1_DEADLINE_MS = parseInt(
-  process.env.PHASE1_DEADLINE_MS || String(180_000),
+  process.env.PHASE1_DEADLINE_MS || String(240_000),
   10
 );
 /**

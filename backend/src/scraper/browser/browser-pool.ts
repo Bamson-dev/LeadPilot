@@ -11,8 +11,8 @@ export class BrowserPool {
   private initPromise: Promise<void> | null = null;
 
   constructor(size?: number) {
-    const fromEnv = parseInt(process.env.SCRAPER_CONCURRENCY || "5", 10);
-    this.size = size ?? (Number.isFinite(fromEnv) ? fromEnv : 5);
+    const fromEnv = parseInt(process.env.SCRAPER_CONCURRENCY || "8", 10);
+    this.size = size ?? (Number.isFinite(fromEnv) ? fromEnv : 8);
   }
 
   async init(): Promise<void> {
