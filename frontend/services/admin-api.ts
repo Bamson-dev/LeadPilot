@@ -511,7 +511,15 @@ export async function sendBroadcast(subject: string, htmlBody: string) {
 }
 
 function observabilityUrl(path: string, params?: Record<string, string | number | undefined>) {
-  const url = new URL(`${getApiUrl()}/admin/observability${path}`);
+  const api = getApiUrl().replace(/\/$/, "");
+  const href = `${api}/admin/observability${path}`;
+  // NEXT_PUBLIC_API_URL is often a relative proxy (`/backend`). `new URL(relative)`
+  // throws in the browser and crashes admin analytics during render.
+  const origin =
+    typeof window !== "undefined"
+      ? window.location.origin
+      : process.env.BACKEND_ORIGIN?.trim() || "https://www.leadthur.com";
+  const url = new URL(href, origin);
   if (params) {
     for (const [k, v] of Object.entries(params)) {
       if (v !== undefined && v !== "") url.searchParams.set(k, String(v));

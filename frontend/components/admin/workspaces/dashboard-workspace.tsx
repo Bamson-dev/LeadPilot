@@ -200,7 +200,7 @@ export function DashboardWorkspace() {
                 label: "Est. Revenue",
                 value: isDemoMode
                   ? "₦6,705,000"
-                  : `₦${overview.estimatedRevenue.toLocaleString()}`,
+                  : `₦${Number(overview.estimatedRevenue ?? 0).toLocaleString()}`,
                 sub: isDemoMode
                   ? "at ₦15,000 per user"
                   : `at ₦${SALE_PRICE_NGN.toLocaleString()} per user`,

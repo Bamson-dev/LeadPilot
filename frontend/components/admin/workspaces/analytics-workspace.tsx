@@ -260,9 +260,13 @@ export function AnalyticsWorkspace() {
   }, [loadTabData]);
 
   const csvHref = useMemo(() => {
-    const token = getAdminToken();
-    if (!token) return null;
-    return getObservabilityEventsCsvUrl(range.from, range.to);
+    try {
+      const token = getAdminToken();
+      if (!token) return null;
+      return getObservabilityEventsCsvUrl(range.from, range.to);
+    } catch {
+      return null;
+    }
   }, [range.from, range.to]);
 
   async function downloadCsv() {
@@ -350,7 +354,7 @@ export function AnalyticsWorkspace() {
                         label: "Est. Revenue",
                         value: isDemoMode
                           ? "₦6,705,000"
-                          : `₦${overview.estimatedRevenue.toLocaleString()}`,
+                          : `₦${Number(overview.estimatedRevenue ?? 0).toLocaleString()}`,
                         sub: `at ₦${SALE_PRICE_NGN.toLocaleString()} per user`,
                       },
                       {
@@ -400,7 +404,7 @@ export function AnalyticsWorkspace() {
 
               {obsOverview && (
                 <div className="mb-6 grid gap-3 md:grid-cols-3 lg:grid-cols-4">
-                  {Object.entries(obsOverview.counts).map(([name, count]) => (
+                  {Object.entries(obsOverview.counts ?? {}).map(([name, count]) => (
                     <Panel key={name}>
                       <PanelContent className="p-3">
                         <p className="truncate text-[10px] text-[var(--lt-text-subtle)]">{name}</p>
