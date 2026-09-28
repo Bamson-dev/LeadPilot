@@ -93,7 +93,8 @@ export function LicensesWorkspace() {
                       />
                     </td>
                     <td className="px-3 py-3 pr-4 text-[var(--lt-text-muted)]">
-                      {row.search_count ?? row.searches_used} / {row.monthly_search_limit ?? 100}
+                      {Math.max(Number(row.search_count ?? 0), Number(row.searches_used ?? 0))} /{" "}
+                      {row.monthly_search_limit ?? 100}
                     </td>
                     <td className="px-3 py-3 pr-4 text-[var(--lt-text-muted)]">{row.exports_used}</td>
                     <td className="px-3 py-3 text-[var(--lt-text-muted)]">

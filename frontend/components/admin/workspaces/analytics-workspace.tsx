@@ -156,19 +156,21 @@ export function AnalyticsWorkspace() {
     setLoading(true);
     setErrorMsg(null);
     try {
-      const [overviewData, statsData, obs, funnels, kpiData, infraData, alertData] =
-        await Promise.all([
-          getOverview(),
-          getTrialStats(),
-          getObservabilityOverview(range.from, range.to).catch(() => null),
-          getObservabilityFunnels(range.from, range.to).catch(() => null),
-          getObservabilityKpis(range.from, range.to).catch(() => null),
-          getObservabilityInfrastructure().catch(() => null),
-          getObservabilityAlerts("open").catch(() => null),
-        ]);
-
+      const [overviewData, statsData] = await Promise.all([
+        getOverview(),
+        getTrialStats().catch(() => null),
+      ]);
       setOverview(overviewData);
-      setTrialStats(statsData);
+      if (statsData) setTrialStats(statsData);
+      setLoading(false);
+
+      const [obs, funnels, kpiData, infraData, alertData] = await Promise.all([
+        getObservabilityOverview(range.from, range.to).catch(() => null),
+        getObservabilityFunnels(range.from, range.to).catch(() => null),
+        getObservabilityKpis(range.from, range.to).catch(() => null),
+        getObservabilityInfrastructure().catch(() => null),
+        getObservabilityAlerts("open").catch(() => null),
+      ]);
       if (obs) setObsOverview(obs);
       if (funnels) setFunnelSteps(funnels.steps || []);
       if (kpiData) setKpis(kpiData.kpis as Record<string, unknown>);

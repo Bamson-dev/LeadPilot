@@ -316,12 +316,16 @@ adminRouter.post("/reset-searches", requireAdminAuth, async (req: Request, res: 
         search_count: 0,
         searches_used: 0,
         last_reset_at: new Date().toISOString(),
+        limit_email_sent: false,
       })
-      .eq("id", license.id as string);
+      .eq("email", email.toLowerCase().trim());
 
     if (error) throw error;
 
-    res.json({ success: true, message: `Search count reset for ${email}` });
+    res.json({
+      success: true,
+      message: `Search count reset for ${email}. They have a full monthly allowance again.`,
+    });
   } catch (err) {
     logger.error("Reset searches failed", {
       error: err instanceof Error ? err.message : "unknown",

@@ -183,8 +183,12 @@ export function AccountLookup({
     }
   };
 
-  const searchCount = license?.search_count ?? license?.searches_used ?? 0;
+  const searchCount = Math.max(
+    Number(license?.search_count ?? 0),
+    Number(license?.searches_used ?? 0)
+  );
   const monthlyLimit = license?.monthly_search_limit ?? 100;
+  const searchesRemaining = Math.max(0, monthlyLimit - searchCount);
   const maxDevices = license?.max_devices ?? 4;
 
   async function handleUpdateSearchLimit() {
@@ -310,9 +314,9 @@ export function AccountLookup({
               </dd>
             </div>
             <div>
-              <dt className={adminLabelClass}>Searches Used</dt>
+              <dt className={adminLabelClass}>Searches this period</dt>
               <dd className="text-[var(--lt-text)]">
-                {searchCount} of {monthlyLimit}
+                {searchCount} used of {monthlyLimit} · {searchesRemaining} left
               </dd>
             </div>
             <div>
