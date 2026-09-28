@@ -3,7 +3,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Menu, X } from "lucide-react";
-import { Bricolage_Grotesque } from "next/font/google";
 import {
   AdminSidebar,
   ADMIN_NAV,
@@ -15,11 +14,6 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/utils/utils";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { usePathname } from "next/navigation";
-
-const bricolage = Bricolage_Grotesque({
-  subsets: ["latin"],
-  weight: ["600", "700"],
-});
 
 const MOBILE_NAV: AdminNavId[] = [
   "dashboard",
@@ -104,7 +98,7 @@ export function AdminShell({
               </Button>
             )}
             <div className="min-w-0">
-              <p className={`${bricolage.className} truncate text-lg font-bold text-[var(--lt-text)]`}>
+              <p className="truncate text-lg font-bold text-[var(--lt-text)]">
                 {ADMIN_NAV.find((item) => item.id === navId)?.label ?? "Admin"}
               </p>
               <p className="truncate text-[11px] text-[var(--lt-text-subtle)]">

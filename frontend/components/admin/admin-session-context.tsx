@@ -18,6 +18,7 @@ import {
 
 interface AdminSessionContextValue {
   token: string | null;
+  ready: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
@@ -29,9 +30,11 @@ const AdminSessionContext = createContext<AdminSessionContextValue | null>(null)
 
 export function AdminSessionProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     setToken(getAdminToken());
+    setReady(true);
   }, []);
 
   const logout = useCallback(() => {
@@ -63,13 +66,14 @@ export function AdminSessionProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       token,
+      ready,
       isAuthenticated: Boolean(token),
       login,
       logout,
       handleSessionExpired,
       handleSessionError,
     }),
-    [token, login, logout, handleSessionExpired, handleSessionError]
+    [token, ready, login, logout, handleSessionExpired, handleSessionError]
   );
 
   return (

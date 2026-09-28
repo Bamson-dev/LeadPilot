@@ -2,14 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bricolage_Grotesque } from "next/font/google";
 import { AdminLoginForm } from "@/components/admin/admin-login-form";
 import { useAdminSession } from "@/components/admin/admin-session-context";
-
-const bricolage = Bricolage_Grotesque({
-  subsets: ["latin"],
-  weight: ["600", "700"],
-});
 
 export function AdminLoginScreen() {
   const router = useRouter();
@@ -43,7 +37,7 @@ export function AdminLoginScreen() {
       onEmailChange={setEmail}
       onPasswordChange={setPassword}
       onSubmit={handleSubmit}
-      titleClassName={`${bricolage.className} text-2xl font-bold text-[var(--lt-text)]`}
+      titleClassName="text-2xl font-bold text-[var(--lt-text)]"
     />
   );
 }

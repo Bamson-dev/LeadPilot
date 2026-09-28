@@ -59,7 +59,8 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { id: "settings", label: "Settings", href: "/admin/settings", icon: Settings },
 ];
 
-export function adminNavFromPath(pathname: string): AdminNavId {
+export function adminNavFromPath(pathname: string | null | undefined): AdminNavId {
+  if (!pathname) return "dashboard";
   const match = ADMIN_NAV.find(
     (item) => pathname === item.href || pathname.startsWith(`${item.href}/`)
   );
