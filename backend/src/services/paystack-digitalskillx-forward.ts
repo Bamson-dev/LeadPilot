@@ -16,6 +16,51 @@ export const DIGITALSKILLX_AIAPP_AMOUNT_KOBO = 4_999_900;
 export const DIGITALSKILLX_AIAPP_CURRENCY = "NGN";
 export const DIGITALSKILLX_AIAPP_COURSE_ID = "9818cf69-4158-40b5-8926-54a3be38f306";
 
+export const DIGITALSKILLX_AI_ADS_PRODUCT_KEY = "ai-ads-automation-masterclass";
+export const DIGITALSKILLX_AI_ADS_PAGE_SLUG = "ai-ads-masterclass";
+export const DIGITALSKILLX_AI_ADS_AMOUNT_KOBO = 1_499_900;
+export const DIGITALSKILLX_AI_ADS_CURRENCY = "NGN";
+export const DIGITALSKILLX_AI_ADS_COURSE_ID = "4e2a16b5-bbfb-4a00-939c-87c7eb5f2afb";
+
+/**
+ * Products this router may hand to DigitalSkillX. Each one has its own key,
+ * payment page slug, expected amount and course. Adding a product here is the
+ * only router change needed. The DigitalSkillX catalog must carry the same
+ * key, amount and course ID or the handoff is rejected on that side.
+ */
+export type DigitalSkillXRouterProduct = {
+  key: string;
+  pageSlugs: readonly string[];
+  amountKobo: number;
+  currency: string;
+  courseId: string;
+  /** Accept the legacy generic "digitalskillx" metadata tag as evidence. */
+  acceptsGenericTag: boolean;
+};
+
+export const DIGITALSKILLX_AIAPP_PRODUCT: DigitalSkillXRouterProduct = {
+  key: DIGITALSKILLX_AIAPP_PRODUCT_KEY,
+  pageSlugs: [DIGITALSKILLX_AIAPP_PAGE_SLUG],
+  amountKobo: DIGITALSKILLX_AIAPP_AMOUNT_KOBO,
+  currency: DIGITALSKILLX_AIAPP_CURRENCY,
+  courseId: DIGITALSKILLX_AIAPP_COURSE_ID,
+  acceptsGenericTag: true,
+};
+
+export const DIGITALSKILLX_AI_ADS_PRODUCT: DigitalSkillXRouterProduct = {
+  key: DIGITALSKILLX_AI_ADS_PRODUCT_KEY,
+  pageSlugs: [DIGITALSKILLX_AI_ADS_PAGE_SLUG],
+  amountKobo: DIGITALSKILLX_AI_ADS_AMOUNT_KOBO,
+  currency: DIGITALSKILLX_AI_ADS_CURRENCY,
+  courseId: DIGITALSKILLX_AI_ADS_COURSE_ID,
+  acceptsGenericTag: false,
+};
+
+export const DIGITALSKILLX_ROUTER_PRODUCTS: readonly DigitalSkillXRouterProduct[] = [
+  DIGITALSKILLX_AIAPP_PRODUCT,
+  DIGITALSKILLX_AI_ADS_PRODUCT,
+];
+
 const FORWARD_TIMEOUT_MS = 8_000;
 
 /** Forwards are only marked done after DigitalSkillX acknowledges with 2xx. */
@@ -84,26 +129,31 @@ function collectStrings(value: unknown, out: string[], depth = 0): void {
   }
 }
 
-function hasAiappPageIdentity(values: string[]): boolean {
+function hasProductPageIdentity(values: string[], product: DigitalSkillXRouterProduct): boolean {
   return values.some((value) => {
     const slug = pageSlugFromUrl(value);
-    if (slug === DIGITALSKILLX_AIAPP_PAGE_SLUG) return true;
-    return value.toLowerCase().includes(`pay/${DIGITALSKILLX_AIAPP_PAGE_SLUG}`);
+    if (slug && product.pageSlugs.includes(slug)) return true;
+    const lowered = value.toLowerCase();
+    return product.pageSlugs.some((pageSlug) => lowered.includes(`pay/${pageSlug}`));
   });
 }
 
-function metadataMatchesDigitalSkillX(meta: Record<string, unknown> | undefined): boolean {
+function metadataMatchesProduct(
+  meta: Record<string, unknown> | undefined,
+  product: DigitalSkillXRouterProduct
+): boolean {
   if (!meta) return false;
 
-  const productKey = metadataString(meta, "product_key") ?? metadataString(meta, "product");
-  if (productKey?.toLowerCase() === DIGITALSKILLX_AIAPP_PRODUCT_KEY) return true;
-  if (productKey?.toLowerCase() === "digitalskillx") return true;
+  const productKey = (metadataString(meta, "product_key") ?? metadataString(meta, "product"))?.toLowerCase();
+  if (productKey === product.key) return true;
+  if (productKey === "digitalskillx" && product.acceptsGenericTag) return true;
 
-  const paymentPage =
+  const paymentPage = (
     metadataString(meta, "payment_page") ??
     metadataString(meta, "payment_page_slug") ??
-    metadataString(meta, "page_slug");
-  if (paymentPage?.toLowerCase().includes(DIGITALSKILLX_AIAPP_PAGE_SLUG)) return true;
+    metadataString(meta, "page_slug")
+  )?.toLowerCase();
+  if (paymentPage && product.pageSlugs.some((slug) => paymentPage.includes(slug))) return true;
 
   const customFields = meta.custom_fields;
   if (Array.isArray(customFields)) {
@@ -112,15 +162,17 @@ function metadataMatchesDigitalSkillX(meta: Record<string, unknown> | undefined)
       const row = field as { variable_name?: string; value?: unknown };
       const name = String(row.variable_name ?? "").toLowerCase();
       const value = String(row.value ?? "").toLowerCase();
-      if (value.includes(DIGITALSKILLX_AIAPP_PRODUCT_KEY)) return true;
-      if (value.includes(DIGITALSKILLX_AIAPP_PAGE_SLUG)) return true;
-      if (name.includes("product") && value.includes("digitalskillx")) return true;
+      if (value.includes(product.key)) return true;
+      if (product.pageSlugs.some((slug) => value.includes(slug))) return true;
+      if (product.acceptsGenericTag && name.includes("product") && value.includes("digitalskillx")) {
+        return true;
+      }
     }
   }
 
   const haystack: string[] = [];
   collectStrings(meta, haystack);
-  return hasAiappPageIdentity(haystack);
+  return hasProductPageIdentity(haystack, product);
 }
 
 export type DigitalSkillXPaystackEvent = {
@@ -134,50 +186,69 @@ export type DigitalSkillXPaystackEvent = {
   };
 };
 
+type EvidenceKind = "metadata" | "page";
+
+type EventData = NonNullable<DigitalSkillXPaystackEvent["data"]>;
+
+function evidenceForProduct(
+  data: EventData,
+  meta: Record<string, unknown> | undefined,
+  product: DigitalSkillXRouterProduct
+): EvidenceKind | null {
+  if (metadataMatchesProduct(meta, product)) return "metadata";
+  const pageSlug = data.page?.slug?.toLowerCase();
+  if (pageSlug && product.pageSlugs.some((slug) => pageSlug.includes(slug))) return "page";
+  return null;
+}
+
+/**
+ * Products that have identity evidence in the payload (metadata, referrer URL
+ * or page slug). Amount is NOT checked here and never counts as evidence.
+ */
+export function findDigitalSkillXProductCandidates(
+  data: EventData | undefined | null
+): DigitalSkillXRouterProduct[] {
+  if (!data) return [];
+  const meta = parsePaystackMetadata(data.metadata);
+  return DIGITALSKILLX_ROUTER_PRODUCTS.filter(
+    (product) => evidenceForProduct(data, meta, product) !== null
+  );
+}
+
+function amountAndCurrencyMatch(
+  data: EventData,
+  product: DigitalSkillXRouterProduct,
+  evidence: EvidenceKind
+): boolean {
+  if (String(data.currency ?? "NGN").toUpperCase() !== product.currency) return false;
+  if (evidence === "metadata") {
+    return !(typeof data.amount === "number" && data.amount !== product.amountKobo);
+  }
+  return data.amount === product.amountKobo;
+}
+
 /**
  * Product identification, strongest signal first:
  *   1. explicit product metadata (product_key / product)
  *   2. payment page identity (page.slug, referrer URL, custom fields)
  *   3. exact amount + currency as a required corroborating check
  *
- * Amount alone never identifies the product.
+ * Amount alone never identifies the product. Two products may share a price.
  */
-export function isDigitalSkillXPaystackEvent(event: DigitalSkillXPaystackEvent): boolean {
-  const data = event.data;
-  if (!data) return false;
-
+export function resolveDigitalSkillXProduct(
+  data: EventData | undefined | null
+): DigitalSkillXRouterProduct | null {
+  if (!data) return null;
   const meta = parsePaystackMetadata(data.metadata);
-  if (metadataMatchesDigitalSkillX(meta)) {
-    if (
-      typeof data.amount === "number" &&
-      data.amount !== DIGITALSKILLX_AIAPP_AMOUNT_KOBO
-    ) {
-      return false;
-    }
-    const currency = String(data.currency ?? "NGN").toUpperCase();
-    if (currency !== DIGITALSKILLX_AIAPP_CURRENCY) return false;
-    return true;
+  for (const product of DIGITALSKILLX_ROUTER_PRODUCTS) {
+    const evidence = evidenceForProduct(data, meta, product);
+    if (evidence && amountAndCurrencyMatch(data, product, evidence)) return product;
   }
+  return null;
+}
 
-  const pageSlug = data.page?.slug?.toLowerCase();
-  if (pageSlug?.includes(DIGITALSKILLX_AIAPP_PAGE_SLUG)) {
-    return (
-      data.amount === DIGITALSKILLX_AIAPP_AMOUNT_KOBO &&
-      String(data.currency ?? "NGN").toUpperCase() === DIGITALSKILLX_AIAPP_CURRENCY
-    );
-  }
-
-  const haystack: string[] = [];
-  collectStrings(meta, haystack);
-  if (
-    hasAiappPageIdentity(haystack) &&
-    data.amount === DIGITALSKILLX_AIAPP_AMOUNT_KOBO &&
-    String(data.currency ?? "NGN").toUpperCase() === DIGITALSKILLX_AIAPP_CURRENCY
-  ) {
-    return true;
-  }
-
-  return false;
+export function isDigitalSkillXPaystackEvent(event: DigitalSkillXPaystackEvent): boolean {
+  return resolveDigitalSkillXProduct(event.data) !== null;
 }
 
 /** Only fields DigitalSkillX needs to enroll. No secrets, no LeadThur internals. */
@@ -195,16 +266,17 @@ export type DigitalSkillXFulfillmentPayload = {
 };
 
 export function buildDigitalSkillXPayload(
-  verified: PaystackVerifiedTransaction
+  verified: PaystackVerifiedTransaction,
+  product: DigitalSkillXRouterProduct = DIGITALSKILLX_AIAPP_PRODUCT
 ): DigitalSkillXFulfillmentPayload {
   return {
     event: "charge.success",
     source: "leadthur-paystack-router",
-    product_key: DIGITALSKILLX_AIAPP_PRODUCT_KEY,
-    course_id: DIGITALSKILLX_AIAPP_COURSE_ID,
+    product_key: product.key,
+    course_id: product.courseId,
     reference: verified.reference,
     amount: verified.amount,
-    currency: String(verified.currency ?? DIGITALSKILLX_AIAPP_CURRENCY).toUpperCase(),
+    currency: String(verified.currency ?? product.currency).toUpperCase(),
     status: verified.status,
     paid_at: verified.paidAt ?? null,
     customer: { email: verified.customer.email.trim().toLowerCase() },
@@ -296,39 +368,41 @@ export async function routeDigitalSkillXCharge(
   }
 
   const verifiedCurrency = String(verified.currency ?? "").toUpperCase();
-  if (verifiedCurrency !== DIGITALSKILLX_AIAPP_CURRENCY) {
+
+  // Identify the product from verified data, not the webhook payload.
+  const verifiedEventData: EventData = {
+    reference: verified.reference,
+    amount: verified.amount,
+    currency: verifiedCurrency,
+    metadata: parsePaystackMetadata(verified.metadata ?? undefined),
+    page: verified.page ?? null,
+  };
+  const candidates = findDigitalSkillXProductCandidates(verifiedEventData);
+  const product = candidates[0];
+
+  if (!product) {
+    logger.warn("DigitalSkillX routing rejected: product not confirmed on verified data", {
+      reference,
+    });
+    return { outcome: "rejected", reason: "product_not_confirmed" };
+  }
+
+  if (verifiedCurrency !== product.currency) {
     logger.warn("DigitalSkillX routing rejected: currency mismatch", {
       reference,
+      productKey: product.key,
       currency: verifiedCurrency,
     });
     return { outcome: "rejected", reason: "currency_mismatch" };
   }
 
-  if (verified.amount !== DIGITALSKILLX_AIAPP_AMOUNT_KOBO) {
+  if (verified.amount !== product.amountKobo) {
     logger.warn("DigitalSkillX routing rejected: amount mismatch", {
       reference,
+      productKey: product.key,
       amount: verified.amount,
     });
     return { outcome: "rejected", reason: "amount_mismatch" };
-  }
-
-  // Re-run identification against verified data, not the webhook payload.
-  const identified = isDigitalSkillXPaystackEvent({
-    event: "charge.success",
-    data: {
-      reference: verified.reference,
-      amount: verified.amount,
-      currency: verifiedCurrency,
-      metadata: parsePaystackMetadata(verified.metadata ?? undefined),
-      page: verified.page ?? null,
-    },
-  });
-
-  if (!identified) {
-    logger.warn("DigitalSkillX routing rejected: product not confirmed on verified data", {
-      reference,
-    });
-    return { outcome: "rejected", reason: "product_not_confirmed" };
   }
 
   const email = verified.customer?.email?.trim().toLowerCase();
@@ -339,7 +413,7 @@ export async function routeDigitalSkillXCharge(
     return { outcome: "rejected", reason: "missing_customer_email" };
   }
 
-  const payload = buildDigitalSkillXPayload({ ...verified, customer: { email } });
+  const payload = buildDigitalSkillXPayload({ ...verified, customer: { email } }, product);
   const secret = getDigitalSkillXForwardSecret();
   const fetchImpl = deps.fetchImpl ?? fetch;
 
@@ -352,7 +426,7 @@ export async function routeDigitalSkillXCharge(
       secret,
       body,
       eventId: reference,
-      productKey: DIGITALSKILLX_AIAPP_PRODUCT_KEY,
+      productKey: product.key,
       nowSeconds: Math.floor(now() / 1000),
     });
   } else if (deps.rawBody && deps.paystackSignature) {
@@ -391,11 +465,13 @@ export async function routeDigitalSkillXCharge(
     markForwarded(reference, now());
     logger.info("Paystack charge fulfilled via DigitalSkillX", {
       reference,
+      productKey: product.key,
       digitalskillxStatus: result.status,
     });
   } else {
     logger.error("DigitalSkillX rejected the forwarded charge", {
       reference,
+      productKey: product.key,
       digitalskillxStatus: result.status,
     });
   }
