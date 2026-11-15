@@ -412,6 +412,25 @@ await check("M19. forwarded masterclass request leaks no secret", async () => {
   assert.ok(!serialized.includes(SECRET));
 });
 
+await check("M20. conflicting ai-app metadata and masterclass page evidence are rejected", async () => {
+  resetDigitalSkillXForwardCache();
+  const { impl, calls } = stubFetch({ status: 200 });
+  const result = await routeDigitalSkillXCharge(
+    { reference: "T_conflicting_product_evidence" },
+    {
+      verify: async () => masterclassTx({
+        reference: "T_conflicting_product_evidence",
+        metadata: { product_key: DIGITALSKILLX_AIAPP_PRODUCT_KEY },
+        page: { slug: DIGITALSKILLX_AI_ADS_PAGE_SLUG },
+      }),
+      fetchImpl: impl,
+    }
+  );
+  assert.equal(result.outcome, "rejected");
+  assert.equal((result as { reason: string }).reason, "ambiguous_product_evidence");
+  assert.equal(calls.length, 0, "ambiguous evidence must never be forwarded");
+});
+
 console.log(JSON.stringify({ summary: true, passed, failed, total: passed + failed }));
 if (failures.length) console.error("\nFailures:\n" + failures.map((f) => ` - ${f}`).join("\n"));
 process.exit(failed === 0 ? 0 : 1);
