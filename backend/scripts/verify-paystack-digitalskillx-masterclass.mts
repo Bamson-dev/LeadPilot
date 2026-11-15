@@ -18,6 +18,7 @@ const {
   DIGITALSKILLX_AI_ADS_PAGE_SLUG,
   DIGITALSKILLX_AI_ADS_PRODUCT_KEY,
   DIGITALSKILLX_AIAPP_AMOUNT_KOBO,
+  DIGITALSKILLX_AIAPP_PAGE_SLUG,
   DIGITALSKILLX_AIAPP_COURSE_ID,
   DIGITALSKILLX_AIAPP_PRODUCT_KEY,
   DIGITALSKILLX_ROUTER_PRODUCTS,
@@ -459,6 +460,7 @@ await check("M22. the legacy generic DigitalSkillX tag still routes bare ai-app 
     {
       verify: async () => masterclassTx({
         reference: "T_aiapp_generic_tag",
+        amount: DIGITALSKILLX_AIAPP_AMOUNT_KOBO,
         metadata: { product: "digitalskillx" },
         page: null,
       }),
@@ -469,6 +471,42 @@ await check("M22. the legacy generic DigitalSkillX tag still routes bare ai-app 
   const body = JSON.parse(String(calls[0].init.body));
   assert.equal(body.product_key, DIGITALSKILLX_AIAPP_PRODUCT_KEY);
   assert.equal(body.course_id, DIGITALSKILLX_AIAPP_COURSE_ID);
+});
+
+await check("M23. legacy generic tag at the masterclass price is NOT enrolled in ai-app (price regression)", async () => {
+  resetDigitalSkillXForwardCache();
+  const { impl, calls } = stubFetch({ status: 200 });
+  const result = await routeDigitalSkillXCharge(
+    { reference: "T_generic_wrong_price" },
+    {
+      verify: async () => masterclassTx({
+        reference: "T_generic_wrong_price",
+        amount: DIGITALSKILLX_AI_ADS_AMOUNT_KOBO,
+        metadata: { product: "digitalskillx" },
+        page: null,
+      }),
+      fetchImpl: impl,
+    }
+  );
+  assert.equal(result.outcome, "rejected");
+  assert.equal(calls.length, 0);
+});
+
+await check("M24. masterclass page paid at the ai-app price, and ai-app page paid at the masterclass price, are rejected", async () => {
+  for (const [ref, amount, slug] of [
+    ["T_mc_at_app_price", DIGITALSKILLX_AIAPP_AMOUNT_KOBO, DIGITALSKILLX_AI_ADS_PAGE_SLUG],
+    ["T_app_at_mc_price", DIGITALSKILLX_AI_ADS_AMOUNT_KOBO, DIGITALSKILLX_AIAPP_PAGE_SLUG],
+  ] as const) {
+    resetDigitalSkillXForwardCache();
+    const { impl, calls } = stubFetch({ status: 200 });
+    const result = await routeDigitalSkillXCharge(
+      { reference: ref },
+      { verify: async () => masterclassTx({ reference: ref, amount, metadata: {}, page: { slug } }), fetchImpl: impl }
+    );
+    assert.equal(result.outcome, "rejected", ref);
+    assert.equal((result as { reason: string }).reason, "amount_mismatch", ref);
+    assert.equal(calls.length, 0, ref);
+  }
 });
 
 console.log(JSON.stringify({ summary: true, passed, failed, total: passed + failed }));
