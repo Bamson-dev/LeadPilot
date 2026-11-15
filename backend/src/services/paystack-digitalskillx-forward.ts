@@ -378,8 +378,18 @@ export async function routeDigitalSkillXCharge(
     page: verified.page ?? null,
   };
   const candidates = findDigitalSkillXProductCandidates(verifiedEventData);
-  const product = candidates[0];
 
+  // Conflicting identifiers must never be resolved by catalog iteration order.
+  // For example, an ai-app product_key and masterclass page slug are ambiguous.
+  if (candidates.length > 1) {
+    logger.warn("DigitalSkillX routing rejected: conflicting product evidence", {
+      reference,
+      productKeys: candidates.map((candidate) => candidate.key),
+    });
+    return { outcome: "rejected", reason: "ambiguous_product_evidence" };
+  }
+
+  const product = candidates[0];
   if (!product) {
     logger.warn("DigitalSkillX routing rejected: product not confirmed on verified data", {
       reference,
