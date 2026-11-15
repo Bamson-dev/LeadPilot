@@ -431,6 +431,46 @@ await check("M20. conflicting ai-app metadata and masterclass page evidence are 
   assert.equal(calls.length, 0, "ambiguous evidence must never be forwarded");
 });
 
+await check("M21. a specific masterclass page overrides the weak legacy DigitalSkillX tag", async () => {
+  resetDigitalSkillXForwardCache();
+  const { impl, calls } = stubFetch({ status: 200 });
+  const result = await routeDigitalSkillXCharge(
+    { reference: "T_mc_generic_tag" },
+    {
+      verify: async () => masterclassTx({
+        reference: "T_mc_generic_tag",
+        metadata: { product: "digitalskillx" },
+        page: { slug: DIGITALSKILLX_AI_ADS_PAGE_SLUG },
+      }),
+      fetchImpl: impl,
+    }
+  );
+  assert.equal(result.outcome, "forwarded");
+  const body = JSON.parse(String(calls[0].init.body));
+  assert.equal(body.product_key, DIGITALSKILLX_AI_ADS_PRODUCT_KEY);
+  assert.equal(body.course_id, DIGITALSKILLX_AI_ADS_COURSE_ID);
+});
+
+await check("M22. the legacy generic DigitalSkillX tag still routes bare ai-app payments", async () => {
+  resetDigitalSkillXForwardCache();
+  const { impl, calls } = stubFetch({ status: 200 });
+  const result = await routeDigitalSkillXCharge(
+    { reference: "T_aiapp_generic_tag" },
+    {
+      verify: async () => masterclassTx({
+        reference: "T_aiapp_generic_tag",
+        metadata: { product: "digitalskillx" },
+        page: null,
+      }),
+      fetchImpl: impl,
+    }
+  );
+  assert.equal(result.outcome, "forwarded");
+  const body = JSON.parse(String(calls[0].init.body));
+  assert.equal(body.product_key, DIGITALSKILLX_AIAPP_PRODUCT_KEY);
+  assert.equal(body.course_id, DIGITALSKILLX_AIAPP_COURSE_ID);
+});
+
 console.log(JSON.stringify({ summary: true, passed, failed, total: passed + failed }));
 if (failures.length) console.error("\nFailures:\n" + failures.map((f) => ` - ${f}`).join("\n"));
 process.exit(failed === 0 ? 0 : 1);
