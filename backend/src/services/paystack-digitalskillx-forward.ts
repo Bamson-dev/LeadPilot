@@ -146,8 +146,6 @@ function metadataMatchesProduct(
 
   const productKey = (metadataString(meta, "product_key") ?? metadataString(meta, "product"))?.toLowerCase();
   if (productKey === product.key) return true;
-  if (productKey === "digitalskillx" && product.acceptsGenericTag) return true;
-
   const paymentPage = (
     metadataString(meta, "payment_page") ??
     metadataString(meta, "payment_page_slug") ??
@@ -164,15 +162,27 @@ function metadataMatchesProduct(
       const value = String(row.value ?? "").toLowerCase();
       if (value.includes(product.key)) return true;
       if (product.pageSlugs.some((slug) => value.includes(slug))) return true;
-      if (product.acceptsGenericTag && name.includes("product") && value.includes("digitalskillx")) {
-        return true;
-      }
     }
   }
 
   const haystack: string[] = [];
   collectStrings(meta, haystack);
   return hasProductPageIdentity(haystack, product);
+}
+
+function hasLegacyGenericDigitalSkillXTag(meta: Record<string, unknown> | undefined): boolean {
+  if (!meta) return false;
+  const productKey = (metadataString(meta, "product_key") ?? metadataString(meta, "product"))?.toLowerCase();
+  if (productKey === "digitalskillx") return true;
+
+  const customFields = meta.custom_fields;
+  if (!Array.isArray(customFields)) return false;
+  return customFields.some((field) => {
+    if (!field || typeof field !== "object") return false;
+    const row = field as { variable_name?: string; value?: unknown };
+    return String(row.variable_name ?? "").toLowerCase().includes("product") &&
+      String(row.value ?? "").toLowerCase().includes("digitalskillx");
+  });
 }
 
 export type DigitalSkillXPaystackEvent = {
@@ -240,9 +250,19 @@ export function resolveDigitalSkillXProduct(
 ): DigitalSkillXRouterProduct | null {
   if (!data) return null;
   const meta = parsePaystackMetadata(data.metadata);
-  for (const product of DIGITALSKILLX_ROUTER_PRODUCTS) {
+  const candidates = findDigitalSkillXProductCandidates(data);
+  if (candidates.length > 1) return null;
+  if (candidates.length === 1) {
+    const product = candidates[0];
     const evidence = evidenceForProduct(data, meta, product);
-    if (evidence && amountAndCurrencyMatch(data, product, evidence)) return product;
+    return evidence && amountAndCurrencyMatch(data, product, evidence) ? product : null;
+  }
+
+  // Preserve the old generic DigitalSkillX marker for ai-app only. A specific
+  // page or product identity always takes precedence over this weak legacy tag.
+  if (hasLegacyGenericDigitalSkillXTag(meta) && DIGITALSKILLX_AIAPP_PRODUCT.acceptsGenericTag &&
+      amountAndCurrencyMatch(data, DIGITALSKILLX_AIAPP_PRODUCT, "metadata")) {
+    return DIGITALSKILLX_AIAPP_PRODUCT;
   }
   return null;
 }
@@ -378,9 +398,9 @@ export async function routeDigitalSkillXCharge(
     page: verified.page ?? null,
   };
   const candidates = findDigitalSkillXProductCandidates(verifiedEventData);
+  const verifiedMeta = parsePaystackMetadata(verified.metadata ?? undefined);
 
-  // Conflicting identifiers must never be resolved by catalog iteration order.
-  // For example, an ai-app product_key and masterclass page slug are ambiguous.
+  // Conflicting specific identifiers must never be resolved by catalog order.
   if (candidates.length > 1) {
     logger.warn("DigitalSkillX routing rejected: conflicting product evidence", {
       reference,
@@ -389,7 +409,11 @@ export async function routeDigitalSkillXCharge(
     return { outcome: "rejected", reason: "ambiguous_product_evidence" };
   }
 
-  const product = candidates[0];
+  // Generic legacy DigitalSkillX metadata only maps to ai-app when no specific
+  // product/page identity exists. A masterclass page slug therefore wins.
+  const product = candidates[0] ?? (
+    hasLegacyGenericDigitalSkillXTag(verifiedMeta) ? DIGITALSKILLX_AIAPP_PRODUCT : undefined
+  );
   if (!product) {
     logger.warn("DigitalSkillX routing rejected: product not confirmed on verified data", {
       reference,
