@@ -1,5 +1,7 @@
 import { parsePaystackMetadata } from "./paystack-webhook-forward";
 import {
+  DIGITALSKILLX_AI_ADS_PAGE_SLUG,
+  DIGITALSKILLX_AI_ADS_PRODUCT_KEY,
   DIGITALSKILLX_AIAPP_PAGE_SLUG,
   DIGITALSKILLX_AIAPP_PRODUCT_KEY,
   isDigitalSkillXPaystackEvent,
@@ -20,6 +22,8 @@ const FOREIGN_PRODUCT_MARKERS = [
   "digitalskillx",
   DIGITALSKILLX_AIAPP_PRODUCT_KEY,
   DIGITALSKILLX_AIAPP_PAGE_SLUG,
+  DIGITALSKILLX_AI_ADS_PRODUCT_KEY,
+  DIGITALSKILLX_AI_ADS_PAGE_SLUG,
 ];
 
 export type PaystackChargeIdentity = {
